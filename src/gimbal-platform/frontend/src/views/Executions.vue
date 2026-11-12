@@ -105,28 +105,22 @@
     <!-- B4(2026-11-06 日志报告整理):报告为首选视图;原执行信息 / 修订台账 /
          行级明细(含原始 engine.log / result.json 工件)收进「执行明细」,
          内容与行为不变,保留排障用途 -->
+    <!-- 实时日志为独立 tab 域(2026-11-12 二改:伪 tab/抽屉退役)—— 激活即
+         挂载面板、默认直接打印(挂载即 tail),离开即卸载断流(§8 连接
+         预算由 tab 生命周期结构化保证,无展开/收起态) -->
     <Tabs v-model="detailTab" class="detail-tabs">
       <TabsList>
-        <!-- 修复 2026-11-12:实时日志从右上角迁到本按钮行(顺序:实时日志/
-             执行明细/报告),并作为伪 tab —— 面板挂 TabsContent 之外,
-             不随 tab 切换卸载(此前 radix 非激活内容卸载 + v-if + nextTick
-             调 open() 的竞态导致面板永远「未连接」) -->
-        <button
-          type="button" :class="['logs-tab-toggle', { on: logsPanelOpen }]"
-          data-testid="toggle-logs-panel" @click="toggleLogsPanel"
-        >{{ logsPanelOpen ? '收起实时日志' : '实时日志' }}</button>
+        <TabsTrigger value="logs" data-testid="tab-logs">实时日志</TabsTrigger>
         <TabsTrigger value="detail" data-testid="tab-detail">执行明细</TabsTrigger>
         <TabsTrigger value="report" data-testid="tab-report">报告</TabsTrigger>
       </TabsList>
 
-      <!-- 实时日志面板(行内抽屉,置 tab 内容之上;展开即 tail、收起即
-           断流 —— 连接数预算 §8;tab 切换不断流) -->
-      <ExecutionLogsPanel
-        v-if="logsPanelOpen" ref="logsPanelRef"
-        :execution-id="executionId" :running="!isTerminalDetail"
-        data-testid="logs-panel-mount"
-      />
-
+      <TabsContent value="logs">
+        <ExecutionLogsPanel
+          :execution-id="executionId" :running="!isTerminalDetail"
+          data-testid="logs-panel-mount"
+        />
+      </TabsContent>
       <TabsContent value="report">
         <ExecutionReportPanel :execution-id="executionId" :running="!isTerminalDetail" />
       </TabsContent>
@@ -325,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { plateRecordCategory } from '@/types/plate'
 import { useRoute, useRouter } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
@@ -631,21 +625,14 @@ function refreshRowsIfExpanded(): void {
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
 
-// 实时日志面板(批 3):行内抽屉,展开即 tail、收起即断流(D3/§8)。
-// 展开态是页面局部 ref(非 store):离开详情页 = 断流,天然符合连接预算。
-const logsPanelOpen = ref(false)
-// B4:详情页视图(报告首选;深链 #detail / 行级操作切到明细)
-const detailTab = ref<'report' | 'detail'>(
-  route.hash === '#detail' || route.query.rows === 'failed' ? 'detail' : 'report')
-const logsPanelRef = ref<InstanceType<typeof ExecutionLogsPanel> | null>(null)
+// B4:详情页视图(报告首选;深链 #logs/#detail / 行级操作切到明细)。
+// 实时日志是独立 tab 域 —— 面板挂 TabsContent 内,激活即挂载(挂载即
+// tail,默认打印)、切走即卸载断流(§8),无展开/收起旁路状态。
+const detailTab = ref<'logs' | 'report' | 'detail'>(
+  route.hash === '#detail' || route.query.rows === 'failed'
+    ? 'detail'
+    : route.hash === '#logs' ? 'logs' : 'report')
 const isTerminalDetail = computed(() => isTerminalExecutionStatus(execStore.detail?.status ?? ''))
-
-function toggleLogsPanel(): void {
-  logsPanelOpen.value = !logsPanelOpen.value
-  // 面板挂 TabsContent 之外:open/close 直达,不随 tab 切换卸载
-  if (logsPanelOpen.value) void nextTick(() => logsPanelRef.value?.open())
-  else logsPanelRef.value?.close()
-}
 
 function gotoEvents(): void {
   void router.push(`/executions/${execStore.detail?.id}/events`)
@@ -796,21 +783,6 @@ onUnmounted(() => {
 <style scoped>
 .detail-tabs {
   margin-bottom: 8px;
-}
-/* 实时日志伪 tab(2026-11-12 迁入按钮行):与 TabsTrigger 同形;
-   on 态对齐 data-[state=active] 的激活样式 */
-.logs-tab-toggle {
-  display: inline-flex; align-items: center; justify-content: center;
-  white-space: nowrap; border: none; cursor: pointer;
-  border-radius: 6px; padding: 4px 12px;
-  font-size: 14px; font-weight: 500; color: var(--muted-foreground, #64748b);
-  transition: all .15s; background: transparent;
-}
-.logs-tab-toggle:hover { color: var(--foreground, #0f172a); }
-.logs-tab-toggle.on {
-  background: var(--background, #fff);
-  color: var(--foreground, #0f172a);
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
 }
 
 /* W21 修订台账 */

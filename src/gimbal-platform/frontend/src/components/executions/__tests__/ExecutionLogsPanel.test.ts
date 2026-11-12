@@ -2,7 +2,8 @@
  * ExecutionLogsPanel — 面板核心逻辑单测(批 3)。
  *
  * 走 mock fetch 流:验证 ①tail 帧插入按 (ts,id) 排序(晚到行插上位);
- * ②done 帧收口;③筛选变更重连(带参);④open/close 生命周期(收起断流)。
+ * ②done 帧收口;③筛选变更重连(带参);④挂载即 tail / 卸载即断流
+ * (tab 域生命周期:无 open/close 命令面,mount/unmount 即开关)。
  * 视口锚定依赖布局(offsetTop),jsdom 全 0,断言其逻辑分支不炸即可。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -48,7 +49,6 @@ describe('ExecutionLogsPanel', () => {
       ])
     }))
     const w = mount(ExecutionLogsPanel, { props: { executionId: 9, running: false } })
-    w.vm.open()
     await flushPromises()
     const msgs = w.findAll('.log-msg').map((n) => n.text())
     expect(msgs).toEqual(['first-ts', 'second-ts', 'third-ts'])
@@ -56,7 +56,7 @@ describe('ExecutionLogsPanel', () => {
     w.unmount()
   })
 
-  it('筛选变更重连并带服务端参数;close 断流(abort 在飞)', async () => {
+  it('筛选变更重连并带服务端参数;卸载断流(abort 在飞)', async () => {
     const calls: { url: string; signal: AbortSignal }[] = []
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
       calls.push({ url, signal: init.signal as AbortSignal })
@@ -64,7 +64,6 @@ describe('ExecutionLogsPanel', () => {
       return sseResp([logFrame(1, '2026-10-14T01:00:00Z', 'a')])
     }))
     const w = mount(ExecutionLogsPanel, { props: { executionId: 9, running: true } })
-    w.vm.open()
     await flushPromises()
     await new Promise((r) => setTimeout(r, 50))   // 让首连泵稳定(connState=live)
 
@@ -77,9 +76,9 @@ describe('ExecutionLogsPanel', () => {
     }
     expect(URLs.some((u) => u.includes('level_min=WARNING'))).toBe(true)
 
-    // close:断流 —— 后续不再有新 fetch(退避重连被 generation 作废)
+    // 卸载:断流 —— 后续不再有新 fetch(退避重连被 generation 作废)
     const callsBefore = calls.length
-    w.vm.close()
+    w.unmount()
     await new Promise((r) => setTimeout(r, 30))
     expect(calls.length).toBe(callsBefore)
   })
@@ -88,7 +87,6 @@ describe('ExecutionLogsPanel', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       { ok: false, status: 404 } as Response))
     const w = mount(ExecutionLogsPanel, { props: { executionId: 404, running: false } })
-    w.vm.open()
     await flushPromises()
     expect(w.find('[data-testid="logs-state"]').text()).toContain('连接失败')
     w.unmount()
@@ -117,7 +115,6 @@ describe('ExecutionLogsPanel', () => {
       ])
     }))
     const w = mount(ExecutionLogsPanel, { props: { executionId: 9, running: true } })
-    w.vm.open()
     await flushPromises()
     // 首连带 backfill;重连发生在 ~1s 退避后,轮询等第二次 fetch
     expect(URLs[0]).toContain('backfill=200')

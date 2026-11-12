@@ -104,9 +104,9 @@ const fakeDetail = {
   },
 } satisfies Execution
 
-async function mountPage(id = 1) {
+async function mountPage(id = 1, hash = '#detail') {
   const router = makeRouter()
-  router.push(`/executions/${id}#detail`)
+  router.push(`/executions/${id}${hash}`)
   await router.isReady()
   const wrapper = mount(Executions, {
     global: { plugins: [router] },
@@ -121,33 +121,44 @@ describe('Executions.vue — V3 detail page', () => {
     vi.restoreAllMocks()
   })
 
-  // ── 实时日志入口(2026-11-12 迁入按钮行 + 加载竞态修复)─────────────
-  it('实时日志伪 tab:报告视图下打开也可见(面板不挂 tab 内容区),切 tab 不断挂载', async () => {
+  // ── 实时日志独立 tab 域(2026-11-12 二改:伪 tab/展开收起退役)─────────
+  it('实时日志为独立 tab:激活即挂载默认打印,切走即卸载断流(无展开/收起)', async () => {
     const execStore = useExecutionsStore()
     execStore.detail = { ...fakeDetail }
     execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
-    // #detail 深链进明细 tab,先切回报告(默认视图)
-    const w = await mountPage()
-    await w.get('[data-testid="tab-report"]').trigger('mousedown', { button: 0 })
-    await flushPromises()
-    // 报告激活态打开实时日志:面板必须可见(旧挂法在 TabsContent 内,
-    // 非激活内容被 radix 卸载 → 永远「未连接」)
+    // 面板挂载即自连流 —— 拦截 fetch 免出网(jsdom 无服务;拒绝即走
+    // 退避重连路径,卸载后 generation 闸兜底)
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    const w = await mountPage()          // #detail 深链 → 明细 tab,日志面板未挂
     expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(false)
-    await w.get('[data-testid="toggle-logs-panel"]').trigger('click')
+    // 顺序契约:实时日志 / 执行明细 / 报告
+    expect(w.findAll('[data-testid^="tab-"]').map((n) => n.text()))
+      .toEqual(['实时日志', '执行明细', '报告'])
+    // 激活实时日志 tab → 面板挂载(挂载即 tail,默认打印)
+    await w.get('[data-testid="tab-logs"]').trigger('mousedown', { button: 0 })
     await flushPromises()
     expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(true)
-    expect(w.get('[data-testid="toggle-logs-panel"]').text()).toContain('收起实时日志')
-    // tab 来回切:面板常驻(不随 TabsContent 卸载)
-    await w.get('[data-testid="tab-detail"]').trigger('mousedown', { button: 0 })
-    await flushPromises()
+    // 切回报告 → 卸载断流(§8 连接预算由 tab 生命周期结构化保证)
     await w.get('[data-testid="tab-report"]').trigger('mousedown', { button: 0 })
     await flushPromises()
-    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(true)
-    // 收起即卸载(断流/连接预算)
-    await w.get('[data-testid="toggle-logs-panel"]').trigger('click')
-    await flushPromises()
     expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(false)
+    // 再切回日志 → 重新挂载打印
+    await w.get('[data-testid="tab-logs"]').trigger('mousedown', { button: 0 })
+    await flushPromises()
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(true)
     w.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('#logs 深链直达实时日志 tab', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    const w = await mountPage(1, '#logs')
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(true)
+    w.unmount()
+    vi.unstubAllGlobals()
   })
 
   it('手动刷新已退役:顶部不再渲染(恢复语义由 pollError 横幅「重新加载」承载)', async () => {

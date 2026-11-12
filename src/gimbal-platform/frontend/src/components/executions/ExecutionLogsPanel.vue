@@ -1,9 +1,11 @@
 /**
- * ExecutionLogsPanel — 执行详情页行内实时日志面板(结构化日志批 3/AD7;
+ * ExecutionLogsPanel — 执行实时日志面板(结构化日志批 3/AD7;
  * 批 5/S7 窗口化渲染)。
  *
- * 形态:行内抽屉(D3 拍板)—— 展开即 tail `/logs/stream`,**收起即断开
- * 日志流**(连接数预算 §8:详情页已有事件流,日志流只在面板展开期间存在)。
+ * 形态:tab 内容域 —— **挂载即 tail `/logs/stream`,卸载即断开日志流**
+ * (连接数预算 §8:详情页已有事件流,日志流只在本面板存活期间存在)。
+ * 生命周期完全交给 v-if 挂载方(实时日志 tab / 调试台展开区):进即打,
+ * 走即断,无 open/close 命令面。
  *
  * 行为契约(设计 §5/S7):
  * - tail 按 id 收行(AD5),展示按 (ts,id) 插入排序 —— 晚到行插入视口
@@ -16,7 +18,7 @@
  *   DOM 不膨胀(jsdom/零高容器兜底:至少渲染 30 行)。
  */
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { executionLogsStreamUrl } from '@/api/executions'
 import { readSseStream } from '@/utils/sse'
 import { useAuthStore } from '@/stores/auth'
@@ -201,12 +203,8 @@ watch(() => [levelMin.value, category.value, step.value], () => {
   if (connState.value !== 'idle') { stop(); start() }   // 筛选变更重连(带 backfill 回看)
 })
 
-defineExpose({
-  open: () => { start() },
-  close: () => { stop() },    // 收起即断流(D3/§8)
-})
-
-onUnmounted(stop)
+onMounted(start)             // 挂载即 tail(默认打印;断流交给卸载)
+onUnmounted(stop)            // 卸载即断流(§8 连接预算)
 </script>
 
 <template>
