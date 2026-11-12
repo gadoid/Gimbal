@@ -1,10 +1,10 @@
 <!-- ExecConfigsView.vue — 执行配置管理页(执行配置分层①/③,/exec-configs)。
      个人面·全员:一套默认 + 若干命名配置,每组配置按系统分组内联子配置
      (bindings + carryOverrides)。零凭证值零地址值 —— 凭证在认证管理、
-     地址在环境与地址,这里只存引用键。
+     地址在服务注册(原「环境与地址」,2026-11-12 更名),这里只存引用键。
      ③ 关联枢纽(§8):对既有配置面只做**关联** —— 存引用键 + 放深链,
      不搬数据、不代管维护面与权限门。页内四路关联:环境→地址就绪度+
-     深链环境与地址;绑定槽位→个人池就绪+缺失深链 /auths 预填直达;
+     深链服务注册;绑定槽位→个人池就绪+缺失深链 /auths 预填直达;
      服务→深链服务配置;carry 覆盖→内联展示+漂移检查+层宿主深链;
      生效预览 pickable(选定配置即预览逐值带来源)。全部由现有读 API
      拼装 + 一个配置漂移读面,零新写面。 -->
@@ -29,7 +29,7 @@
       <button type="button" class="btn sm" data-testid="ec-new"
               @click="openCreate">+ 新建配置</button>
       <p v-if="!rows.length" class="empty">
-        暂无执行配置 —— 新建一套默认配置(或从认证管理/环境与地址开始)
+        暂无执行配置 —— 新建一套默认配置(或从认证管理/服务注册开始)
       </p>
     </div>
 
@@ -129,9 +129,9 @@
     <div v-if="mode === 'edit' && selected" class="hub" data-testid="ec-hub">
       <h2>关联与就绪度</h2>
 
-      <!-- ① 环境 → 地址就绪度(部署表读面)+ 深链「环境与地址」 -->
+      <!-- ① 环境 → 地址就绪度(部署表读面)+ 深链「服务注册」 -->
       <div class="hub-sec" data-testid="ec-hub-env">
-        <h3>环境与地址</h3>
+        <h3>服务注册</h3>
         <p v-if="!selected.systems.length" class="muted">
           本配置还没有系统子配置 —— 地址就绪度按系统展示。
         </p>
@@ -157,8 +157,8 @@
         </template>
         <p class="sub">
           <router-link v-if="auth.can('ops.write')" to="/admin/deployments">
-            维护在「环境与地址」↗</router-link>
-          <span v-else class="muted">地址由平台管理员在「环境与地址」维护</span>
+            维护在「服务注册」↗</router-link>
+          <span v-else class="muted">地址由平台管理员在「服务注册」维护</span>
         </p>
       </div>
 

@@ -25,7 +25,7 @@ export interface PreviewRequest {
  *  分层②新增 exec_config 两档) */
 export const PREVIEW_SOURCE_LABELS: Record<string, string> = {
   authored: '场景声明',
-  deployment: '环境与地址',
+  deployment: '服务注册',
   explicit: '本次指定',
   scheme: '方案',
   project: '项目默认',

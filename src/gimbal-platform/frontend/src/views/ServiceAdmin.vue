@@ -9,7 +9,8 @@
        把三层查找顺序摊开:精确命中身份面 → 默认面 → 全局共享默认。
      * 地址就绪列(治理端就绪度):该目录服务在各环境的部署行覆盖
        (执行配置枢纽是个人端就绪度,两者成两半)。
-     地址维护在「环境与地址」页(部署表),凭证经「凭证槽位」(slot)指向
+     地址维护在「服务注册」页(部署表,2026-11-12 原名「环境与地址」),
+     凭证经「凭证槽位」(slot)指向
      执行者本人认证池的槽位,身份面一律团队共享(M2a S6 个人别名退役)。
      写面 admin(同传递字段纪律);读面全员——但页面入口收在 admin。 -->
 <template>
@@ -18,7 +19,7 @@
       icon="layers"
       title="服务配置"
       :count="loading ? '' : `${aliases.length} 个身份面`"
-      subtitle="服务接入治理面 — 身份面注册表(名字 → 目录服务 + 凭证槽位声明)与地址就绪度;地址在「环境与地址」维护;探索覆盖与告警请用服务画像"
+      subtitle="服务接入治理面 — 身份面注册表(名字 → 目录服务 + 凭证槽位声明)与地址就绪度;地址在「服务注册」维护;探索覆盖与告警请用服务画像"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -85,7 +86,7 @@
           <span class="flex-1" />
           <!-- M2a S6:地址不再挂别名 — 指去部署地址页维护 -->
           <router-link to="/admin/deployments" class="svc-link" data-testid="goto-deployments">
-            地址在「环境与地址」维护 ↗
+            地址在「服务注册」维护 ↗
           </router-link>
         </div>
 
@@ -123,7 +124,7 @@
                 </td>
                 <td>
                   <!-- ⑦ 地址就绪列:该目录服务在各环境的部署行覆盖
-                       (0 = 缺口;点跳「环境与地址」) -->
+                       (0 = 缺口;点跳「服务注册」) -->
                   <span v-if="!envCount" class="muted">—</span>
                   <router-link
                     v-else-if="readyEnvsOf(a.baseService) < envCount"
@@ -169,7 +170,7 @@
           <div class="svc-panel-head">
             <span class="svc-panel-title">{{ editing ? '编辑身份面' : '登记身份面' }}</span>
             <!-- 登记口径说明:原表单下常驻段落,逐页收纳批收进问号弹层 -->
-            <QTip text="登记不需要 URL —— 地址按环境在「环境与地址」页维护;身份面只声明凭证槽位(执行注入取执行者本人认证池的同名槽)。受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。身份面一律团队共享(M2a S6 个人面退役)。" />
+            <QTip text="登记不需要 URL —— 地址按环境在「服务注册」页维护;身份面只声明凭证槽位(执行注入取执行者本人认证池的同名槽)。受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。身份面一律团队共享(M2a S6 个人面退役)。" />
             <span v-if="editing" class="svc-panel-desc">身份面是主键,编辑态不可改</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">

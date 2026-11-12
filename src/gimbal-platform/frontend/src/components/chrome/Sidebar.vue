@@ -213,8 +213,12 @@ const groups: SidebarGroup[] = [
       { path: '/service-admin', label: '服务配置', icon: LayersIcon, cap: 'ops.write' },
       // IA P1(2026-11-11):部署地址更名「环境与地址」并挪入服务组 ——
       // 与服务配置同属治理面(名词层:身份面注册表 + 环境地址矩阵);
+      // 2026-11-12 再更名「服务注册」—— 环境与地址只描述了数据形状,
+      // 页面的能力是注册服务(环境定义 + (基础服务,环境)→地址的全平台
+      // 注册表),也归齐服务组命名族(服务画像/服务配置/服务注册);
+      // 与服务配置的分野:那边登记名字与槽位(身份面),这边注册地址。
       // 读全员/写 Admin+
-      { path: '/admin/deployments', label: '环境与地址', icon: GearIcon, cap: 'ops.write' },
+      { path: '/admin/deployments', label: '服务注册', icon: GearIcon, cap: 'ops.write' },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
       // 分层⑥:「默认值」页与个人层均已退役(全局默认在公共项目「配置」
       // 页签,个人默认在执行配置 /exec-configs)

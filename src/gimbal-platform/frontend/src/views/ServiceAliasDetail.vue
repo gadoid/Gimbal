@@ -85,7 +85,7 @@
           <div class="svc-panel mt-3">
             <div class="svc-panel-head">
               <span class="svc-panel-title">地址就绪矩阵</span>
-              <span class="svc-panel-desc">各环境部署行((目录服务, 环境) → 地址);缺口点跳「环境与地址」</span>
+              <span class="svc-panel-desc">各环境部署行((目录服务, 环境) → 地址);缺口点跳「服务注册」</span>
             </div>
             <p v-if="!envs.length" class="cred-note">平台还没有环境 — 地址无从配置。</p>
             <table v-else class="ov-table" data-testid="alias-ready-matrix">
@@ -96,7 +96,7 @@
                   <td>
                     <span v-if="deployUrl(e.id)" class="mono">{{ deployUrl(e.id) }}</span>
                     <router-link v-else to="/admin/deployments"
-                      class="svc-link warn-link">缺 — 去环境与地址 ↗</router-link>
+                      class="svc-link warn-link">缺 — 去服务注册 ↗</router-link>
                   </td>
                 </tr>
               </tbody>

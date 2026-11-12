@@ -286,7 +286,7 @@
 .svc-flag.red { color: var(--sl-bad); background: var(--sl-bad-soft); }
 .svc-flag.amber { color: var(--sl-warn); background: var(--sl-warn-soft); }
 .svc-flag.ink { color: var(--sl-ink); background: var(--sl-divider); }
-/* ⑦ 地址就绪列的缺口链接(部分环境缺部署行 → 点跳「环境与地址」)*/
+/* ⑦ 地址就绪列的缺口链接(部分环境缺部署行 → 点跳「服务注册」)*/
 .svc-link.warn-link { color: var(--sl-warn); font-weight: 700; }
 
 /* ── 面板卡(容器 + 卡头)──────────────────────────────────────
