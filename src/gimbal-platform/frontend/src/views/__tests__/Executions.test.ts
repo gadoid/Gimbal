@@ -418,6 +418,137 @@ describe('Executions.vue — 配方标签迁移(T13 残留面)', () => {
   })
 })
 
+// ── 配方字段审计(2026-11-12:来源 / 必要性 / 中文说明)──────────────
+// 契约:① schemeId+schemeName、environmentId+environmentSource 并成
+// 中文合成行(执行方案 / 执行环境),来源枚举译中文;② 快照键空值整行
+// 不渲染(null ≠ 场景本体);③ 机器面键(回放快照 / webhook 审计块 /
+// chain / ingest_stats / outputs / injectionEntryIds)与未知键不上屏。
+describe('Executions.vue — 配方字段审计(中文标签 + 白名单)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  // 新形态配方(dispatcher 实写全键;run_dispatcher._create_execution 对账)
+  const auditedConfig = {
+    runId: 'run-a1',
+    scenarioId: 'sc_demo',
+    dataSetIds: ['ds-a'],
+    serviceBindings: { svc: { alias: 'qa1' } },
+    injectedAuths: ['qa1'],
+    schemeId: 'rs-060',
+    schemeName: '默认方案',
+    batchId: 'batch-x',
+    reportDefinitionId: null,          // UI 直发 = null → 整行不渲染
+    dataSetSelection: [],              // 空 = 全部行 → 整行不渲染
+    injectionEntryIds: ['e1', 'e2'],   // 机器面(rerun 重建)→ 不上屏
+    environmentId: 1,
+    environmentSource: 'default',
+    chain: 'server',                   // 调试留档 → 不上屏
+    ingest_stats: { logs_dropped_overflow: 0 },
+    outputs: { order_id: '1' },        // 回调产物(报告提取值承接)→ 不上屏
+    resolvedServices: { svc: {} },     // webhook 审计块 → 不上屏
+    futureKey: '未来新增未接标签的键',   // 白名单兜底:不上屏
+  }
+
+  it('新形态配方:合成行中文标签;快照键空值不渲染;机器面/未知键不上屏', async () => {
+    const execStore = useExecutionsStore()
+    const detail = {
+      ...fakeDetail, id: 11, config: auditedConfig,
+    } as unknown as Execution
+    execStore.detail = detail
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail)
+
+    const w = await mountPage(11)
+    const dtTexts = w.findAll('.recipe dt').map((d) => d.text())
+    const ddTexts = w.findAll('.recipe dd').map((d) => d.text())
+
+    // 合成行:执行方案 = 名称 · 编号;执行环境 = #id · 来源中文
+    expect(dtTexts).toContain('执行方案')
+    expect(ddTexts).toContain('默认方案 · rs-060')
+    expect(dtTexts).toContain('执行环境')
+    expect(ddTexts).toContain('#1 · 场景默认')
+    // 原键不再以英文裸键出现
+    expect(dtTexts).not.toContain('schemeId')
+    expect(dtTexts).not.toContain('schemeName')
+    expect(dtTexts).not.toContain('environmentId')
+    expect(dtTexts).not.toContain('environmentSource')
+    // 快照键空值 = 未适用,整行不渲染(也不误译「场景本体」)
+    expect(dtTexts).not.toContain('报告方案')
+    expect(dtTexts).not.toContain('数据集选择')
+    expect(w.find('.recipe').text()).not.toContain('场景本体')
+    // 机器面键与未知键不上屏
+    expect(dtTexts).not.toContain('chain')
+    expect(dtTexts).not.toContain('ingest_stats')
+    expect(dtTexts).not.toContain('outputs')
+    expect(dtTexts).not.toContain('injectionEntryIds')
+    expect(dtTexts).not.toContain('resolvedServices')
+    expect(dtTexts).not.toContain('futureKey')
+    // 有值快照键正常渲染
+    expect(dtTexts).toContain('批次')
+    expect(ddTexts).toContain('batch-x')
+    w.unmount()
+  })
+
+  it('环境来源枚举译中文:explicit → 手动选择', async () => {
+    const execStore = useExecutionsStore()
+    const detail = {
+      ...fakeDetail, id: 12,
+      config: { runId: 'run-a2', scenarioId: 'sc_demo',
+                environmentId: 3, environmentSource: 'explicit' },
+    } as unknown as Execution
+    execStore.detail = detail
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail)
+
+    const w = await mountPage(12)
+    const dds = w.findAll('.recipe dd').map((d) => d.text())
+    expect(dds).toContain('#3 · 手动选择')
+    w.unmount()
+  })
+
+  it('降级审计键:judgeDegraded=true 上屏,布尔译「是」;告警文本列表直连', async () => {
+    const execStore = useExecutionsStore()
+    const detail = {
+      ...fakeDetail, id: 13,
+      config: { runId: 'run-a3', scenarioId: 'sc_demo',
+                judgeDegraded: true,
+                entriesSkippedWhileDegraded: ['ent-1', 'ent-2'],
+                environmentWarnings: ['环境版本线告警文本'] },
+    } as unknown as Execution
+    execStore.detail = detail
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail)
+
+    const w = await mountPage(13)
+    const dtTexts = w.findAll('.recipe dt').map((d) => d.text())
+    const ddTexts = w.findAll('.recipe dd').map((d) => d.text())
+    expect(dtTexts).toContain('判定降级')
+    expect(ddTexts).toContain('是')
+    expect(dtTexts).toContain('降级期跳过条目')
+    expect(ddTexts).toContain('ent-1, ent-2')
+    expect(dtTexts).toContain('环境告警')
+    expect(ddTexts).toContain('环境版本线告警文本')
+    w.unmount()
+  })
+
+  it('数据集选择有值:对象数组渲染紧凑 JSON,不出现 [object Object]', async () => {
+    const execStore = useExecutionsStore()
+    const detail = {
+      ...fakeDetail, id: 14,
+      config: { runId: 'run-a4', scenarioId: 'sc_demo',
+                dataSetSelection: [{ datasetId: 'ds-a', rows: '1-3' }] },
+    } as unknown as Execution
+    execStore.detail = detail
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail)
+
+    const w = await mountPage(14)
+    expect(w.findAll('.recipe dt').map((d) => d.text())).toContain('数据集选择')
+    const recipe = w.find('.recipe')
+    expect(recipe.text()).toContain('"datasetId"')
+    expect(recipe.text()).not.toContain('[object Object]')
+    w.unmount()
+  })
+})
+
 describe('Executions.vue — 执行时场景快照导出', () => {
   // 注意:本文件第一个 describe 用 restoreAllMocks,会把 factory mock 的
   // mockResolvedValue 实现抹掉(单测隔离跑得通、全文件跑挂的那种序)——

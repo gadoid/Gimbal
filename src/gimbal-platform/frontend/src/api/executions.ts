@@ -71,6 +71,42 @@ export interface Execution {
     reconciled?: { at: string; reason: string }
     /** 计数器漂移:passed+failed ≠ total_runs(P8 校账,真值以 JSONL 为准) */
     counterDrift?: boolean
+    // ── 2026-11-12 配方字段审计补记(run_dispatcher._create_execution
+    //    实写键对账;去向:dl = 执行明细「执行信息」表)─────────────
+    /** 数据集行级选择快照(请求回显,by_alias dump;空 = 全部行)→ dl「数据集选择」 */
+    dataSetSelection?: Array<Record<string, unknown>>
+    /** 行级账号覆盖({datasetId:rowIndex: {槽: 绑定 id}},M2b Q3)→ dl「行级账号覆盖」 */
+    rowBindings?: Record<string, unknown>
+    /** 注入条目 id(悬空过滤**前**请求原样;rerun 重建配方唯一来源)→ 机器面不进 dl */
+    injectionEntryIds?: Array<string | number>
+    /** 报告方案引用(UI 直发为 null)→ dl「报告方案」(空不渲染) */
+    reportDefinitionId?: string | null
+    /** S2.1 环境选择快照(无环境键缺席)→ 与 source 并合成行「执行环境」 */
+    environmentId?: number | null
+    /** 环境来源枚举(explicit/scheme/project/preference/exec_config[_default]/default)→ 译中文 */
+    environmentSource?: string | null
+    /** §6.3 环境版本线告警(人类可读文本)→ dl「环境告警」 */
+    environmentWarnings?: string[]
+    /** spec §1.1 Y 判定降级审计(键缺席 = 未发生)→ dl「判定降级」 */
+    judgeDegraded?: boolean
+    /** 降级期间被跳过的条目 id → dl「降级期跳过条目」 */
+    entriesSkippedWhileDegraded?: Array<string | number>
+    // ── 机器面键(回放快照 / webhook 审计块 / 调试留档 / 回调产物):
+    //    无读侧展示价值,不进 dl —— 重跑回放走 API,webhook 台账由
+    //    「入站来源」行 +「含范围外目标」旗标承接,回调产物在报告
+    //    步骤提取值可读,ingest_stats 是引擎自监控调试计数。
+    chain?: string
+    ingest_stats?: Record<string, unknown>
+    outputs?: Record<string, unknown>
+    execSlotMap?: Record<string, unknown>
+    execCarryOverrides?: Record<string, unknown>
+    execConfigId?: number
+    credentialSource?: string
+    credentialProjectId?: number
+    resolvedServices?: Record<string, unknown>
+    builtinAuths?: Array<unknown>
+    token?: Record<string, unknown>
+    outOfScope?: Record<string, unknown>
   }
   /** 修订台账(W21):当时生效修订 {系统: "<line>#<n>"};null = 未钉/预览执行 */
   plate_pins?: Record<string, string> | null

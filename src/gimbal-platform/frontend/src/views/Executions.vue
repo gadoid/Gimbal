@@ -92,7 +92,7 @@
 
     <!-- B-3(2026-10-14):失败原因首屏化 —— 此前只藏在 config.dispatcherError,
          用户打开频率最高的页面第一屏只有"失败"两个字。结论先行;
-         具体到行/步骤的原因在行级明细的引擎日志与步骤明细里。 -->
+         具体到步骤的原因在「报告」(失败聚焦 + 定位失败上下文深链)。 -->
     <Alert v-if="execStore.detail.status === 'failed'" variant="destructive" class="sys-alert" data-testid="exec-failure-reason">
       <AlertTitle>执行失败 — {{ failureReason }}</AlertTitle>
     </Alert>
@@ -243,7 +243,8 @@ const statusText = computed(() => {
 })
 
 /** B-3:失败单首屏原因 —— 顶层 error(dispatcherError)缺省时按已知
- *  信号归因(reconcile/认证快失败),再缺省指路行级明细。 */
+ *  信号归因(reconcile/认证快失败),再缺省指路报告/日志分析
+ *  (行级明细已退役,不再指路)。 */
 const failureReason = computed(() => {
   const d = execStore.detail
   if (!d) return ''
@@ -251,7 +252,7 @@ const failureReason = computed(() => {
   const cfg = d.config ?? {}
   if (cfg.reconciled) return `后端重启收敛:${cfg.reconciled.reason ?? '未知原因'}`
   if (cfg.authFailFast) return `认证快速失败:${cfg.authFailFast.error ?? '未知原因'}`
-  return '未记录顶层原因 — 展开行级明细查看各行失败原因(引擎日志/步骤明细)'
+  return '未记录顶层原因 — 逐步失败定位见「报告」失败聚焦与「日志分析」'
 })
 
 // P4 协作式取消:按服务端 cancelable 标志(全量评估 2026-11-02 #1):queued
@@ -304,9 +305,17 @@ const ledgerRows = computed(() => {
 })
 
 // V3 dispatcher recipe (config_json) rendered as a definition list —
-// the run-level surface lives in the 行级明细 table below.
 // 系统键(reconciled/counterDrift)转上方 alert;stepTo 由 pill 表达,
-// 均不进 dl。已知键给中文标签,未知键原样。
+// 均不进 dl。
+// 2026-11-12 字段审计(全量 293 行 config_json 对账,来源=run_dispatcher
+// 实写键):① 有用户决策含义的键全部给中文标签;② 机器面键(重跑回放
+// 快照 execSlotMap/execCarryOverrides/execConfigId、凭证溯源
+// credentialSource/credentialProjectId、rerun 重建用 injectionEntryIds、
+// webhook 审计块 resolvedServices/builtinAuths/token/outOfScope、调试
+// 留档 chain、引擎自监控 ingest_stats、回调产物 outputs)不进 dl ——
+// 各有承接面(重跑走 API / 入站来源行与「含范围外目标」旗标 / 报告
+// 步骤提取值),上屏只会是英文键名堆;③ 未知键兜底从「原样渲染」改为
+// 「不上屏」—— 后端新增键加标签即显式接入,页面不会退化。
 // T3→T13 配方键迁移(spec §6):新键 serviceBindings/injectedAuths
 // 取代 auths/prefix/mergePolicy/injectCredentials/exec_auth_alias;
 // 旧键标签保留 — 历史记录的 config_json 仍含旧键,按键驱动渲染保持可读
@@ -316,10 +325,20 @@ const RECIPE_LABELS: Record<string, string> = {
   runId: '运行ID',
   scenarioId: '场景',
   dataSetIds: '数据集',
-  envId: '环境',
+  envId: '环境',               // D2 退役键,仅历史行有值
+  // 合成行(多键并一行,见 recipeEntries):方案名/编号、环境/来源
+  scheme: '执行方案',
+  environment: '执行环境',
   // 新配方键(读侧认证列 = injectedAuths,实际注入清单)
   serviceBindings: '服务绑定',
   injectedAuths: '注入凭证',
+  batchId: '批次',
+  dataSetSelection: '数据集选择',
+  rowBindings: '行级账号覆盖',
+  reportDefinitionId: '报告方案',
+  environmentWarnings: '环境告警',
+  judgeDegraded: '判定降级',
+  entriesSkippedWhileDegraded: '降级期跳过条目',
   // 旧配方键(snake/camel 两种历史拼写都留标签,仅展示用)
   exec_auth_alias: '执行认证',
   execAuthAlias: '执行认证',
@@ -329,7 +348,41 @@ const RECIPE_LABELS: Record<string, string> = {
   prefix: '提单号前缀',
   mergePolicy: '认证合并',
 }
-const RECIPE_HIDDEN_KEYS = new Set(['stepTo', 'reconciled', 'counterDrift', 'dispatcherError', 'authFailFast'])
+// 多键并一行,不按原键渲染(schemeId+schemeName / environmentId+Source)
+const RECIPE_MERGED_KEYS = new Set(['schemeId', 'schemeName', 'environmentId', 'environmentSource'])
+// 快照键:空值 = 本次未适用 → 整行不渲染(null ≠「场景本体」;
+// 覆盖语义的旧键空值仍译「场景本体」,见 formatRecipeValue)
+const RECIPE_SKIP_EMPTY = new Set([
+  'batchId', 'reportDefinitionId', 'dataSetSelection', 'rowBindings',
+  'environmentWarnings', 'entriesSkippedWhileDegraded',
+])
+// 系统键 + 机器面键(审计注释②);token/outOfScope 的用户可见面在
+// 「入站来源」行与「含范围外目标」旗标,不在 dl 重复
+const RECIPE_HIDDEN_KEYS = new Set([
+  'stepTo', 'reconciled', 'counterDrift', 'dispatcherError', 'authFailFast',
+  'injectionEntryIds', 'chain', 'ingest_stats', 'outputs',
+  'execSlotMap', 'execCarryOverrides', 'execConfigId',
+  'credentialSource', 'credentialProjectId',
+  'resolvedServices', 'builtinAuths', 'token', 'outOfScope',
+])
+// 环境来源枚举(S2.1 环境链 env_chain.py)→ 中文
+const ENV_SOURCE_TEXT: Record<string, string> = {
+  explicit: '手动选择',
+  scheme: '方案默认',
+  project: '项目默认',
+  preference: '个人偏好',
+  exec_config: '执行配置',
+  exec_config_default: '执行配置默认',
+  default: '场景默认',
+}
+
+/** 快照键空值(null/空串/空数组/空对象)= 本次未适用。 */
+function isEmptyValue(v: unknown): boolean {
+  if (v === null || v === '') return true
+  if (Array.isArray(v)) return v.length === 0
+  if (typeof v === 'object') return Object.keys(v).length === 0
+  return false
+}
 
 const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
   const cfg = execStore.detail?.config
@@ -347,9 +400,30 @@ const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
     }
     entries.push([k, v])
   }
+  // 合成行插在首个被并键的位置(无则追加在尾),保持配方书写顺序:
+  // 执行方案 = 名称 · 编号;执行环境 = #id · 来源(枚举译中文)
+  const synthetics: Array<[string, unknown]> = []
+  const schemeParts = [cfg.schemeName, cfg.schemeId].filter(
+    (x) => typeof x === 'string' && x !== '')
+  if (schemeParts.length) synthetics.push(['scheme', schemeParts.join(' · ')])
+  const envId = cfg.environmentId
+  if (envId !== null && envId !== undefined) {
+    const src = cfg.environmentSource
+    const srcText = typeof src === 'string' ? (ENV_SOURCE_TEXT[src] ?? src) : null
+    synthetics.push(['environment', srcText ? `#${envId} · ${srcText}` : `#${envId}`])
+  }
+  const insertAt = entries.findIndex(([k]) => RECIPE_MERGED_KEYS.has(k))
+  entries.splice(insertAt === -1 ? entries.length : insertAt, 0, ...synthetics)
   return entries
-    .filter(([k, v]) => v !== undefined && !RECIPE_HIDDEN_KEYS.has(k))
-    .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
+    .filter(([k, v]) => {
+      if (v === undefined) return false
+      if (RECIPE_HIDDEN_KEYS.has(k) || RECIPE_MERGED_KEYS.has(k)) return false
+      if (RECIPE_SKIP_EMPTY.has(k) && isEmptyValue(v)) return false
+      return true
+    })
+    // 白名单:已知键才上屏(兜底见审计注释③)
+    .filter(([k]) => k in RECIPE_LABELS)
+    .map(([k, v]) => [k, RECIPE_LABELS[k], v])
 })
 
 /** 入站来源一行:令牌 · 身份模式 · clientRef(webhook v4 §7.1)。 */
@@ -369,10 +443,18 @@ const hasOutOfScope = computed(() => {
   return Boolean(targets?.length || builtinAuths?.length || strategyEntries?.length)
 })
 
-/** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景本体定义生效。 */
+/** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景本体定义生效
+ *  (仅覆盖语义的键会走到这里;快照键空值已被 SKIP_EMPTY 整行跳过)。
+ *  布尔译是/否;对象/对象数组紧凑 JSON 保结构可读,不出现 [object Object]
+ *  (dataSetSelection 等对象数组此前 join 成 [object Object],2026-11-12 修)。 */
 function formatRecipeValue(v: unknown): string {
-  if (Array.isArray(v)) return v.length ? v.join(', ') : '场景本体'
-  // serviceBindings 等对象值:紧凑 JSON 保结构可读,不出现 [object Object]
+  if (typeof v === 'boolean') return v ? '是' : '否'
+  if (Array.isArray(v)) {
+    if (!v.length) return '场景本体'
+    return v.some((x) => x !== null && typeof x === 'object')
+      ? valueJson(v) : v.join(', ')
+  }
+  // serviceBindings 等对象值:紧凑 JSON 保结构可读
   if (v !== null && typeof v === 'object') {
     return Object.keys(v).length ? valueJson(v) : '场景本体'
   }
