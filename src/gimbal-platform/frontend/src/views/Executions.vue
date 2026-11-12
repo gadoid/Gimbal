@@ -50,11 +50,6 @@
       >取消</Button>
       <Button variant="link" size="sm" class="h-7 px-2" data-testid="goto-events"
               @click="gotoEvents">日志分析</Button>
-      <Button
-        variant="link" size="sm" class="h-7 px-2" data-testid="toggle-logs-panel"
-        @click="toggleLogsPanel"
-      >{{ logsPanelOpen ? '收起实时日志' : '实时日志' }}</Button>
-      <Button variant="link" size="sm" class="h-7 px-2" @click="refreshNow">手动刷新</Button>
       <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
     </template>
 
@@ -112,9 +107,26 @@
          内容与行为不变,保留排障用途 -->
     <Tabs v-model="detailTab" class="detail-tabs">
       <TabsList>
-        <TabsTrigger value="report" data-testid="tab-report">报告</TabsTrigger>
+        <!-- 修复 2026-11-12:实时日志从右上角迁到本按钮行(顺序:实时日志/
+             执行明细/报告),并作为伪 tab —— 面板挂 TabsContent 之外,
+             不随 tab 切换卸载(此前 radix 非激活内容卸载 + v-if + nextTick
+             调 open() 的竞态导致面板永远「未连接」) -->
+        <button
+          type="button" :class="['logs-tab-toggle', { on: logsPanelOpen }]"
+          data-testid="toggle-logs-panel" @click="toggleLogsPanel"
+        >{{ logsPanelOpen ? '收起实时日志' : '实时日志' }}</button>
         <TabsTrigger value="detail" data-testid="tab-detail">执行明细</TabsTrigger>
+        <TabsTrigger value="report" data-testid="tab-report">报告</TabsTrigger>
       </TabsList>
+
+      <!-- 实时日志面板(行内抽屉,置 tab 内容之上;展开即 tail、收起即
+           断流 —— 连接数预算 §8;tab 切换不断流) -->
+      <ExecutionLogsPanel
+        v-if="logsPanelOpen" ref="logsPanelRef"
+        :execution-id="executionId" :running="!isTerminalDetail"
+        data-testid="logs-panel-mount"
+      />
+
       <TabsContent value="report">
         <ExecutionReportPanel :execution-id="executionId" :running="!isTerminalDetail" />
       </TabsContent>
@@ -171,12 +183,6 @@
       </template>
 
       <h3 class="rows-title">行级明细</h3>
-      <!-- 批 3/AD7:实时日志面板(行内抽屉;展开即 tail,收起即断流 —— 连接数预算) -->
-      <ExecutionLogsPanel
-        v-if="logsPanelOpen" ref="logsPanelRef"
-        :execution-id="executionId" :running="!isTerminalDetail"
-        data-testid="logs-panel-mount"
-      />
       <div class="rows-head">
         <p class="rows-hint">
           每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
@@ -636,8 +642,7 @@ const isTerminalDetail = computed(() => isTerminalExecutionStatus(execStore.deta
 
 function toggleLogsPanel(): void {
   logsPanelOpen.value = !logsPanelOpen.value
-  // 日志面板挂在「执行明细」里:打开时切过去,否则点了看不到
-  if (logsPanelOpen.value) detailTab.value = 'detail'
+  // 面板挂 TabsContent 之外:open/close 直达,不随 tab 切换卸载
   if (logsPanelOpen.value) void nextTick(() => logsPanelRef.value?.open())
   else logsPanelRef.value?.close()
 }
@@ -791,6 +796,21 @@ onUnmounted(() => {
 <style scoped>
 .detail-tabs {
   margin-bottom: 8px;
+}
+/* 实时日志伪 tab(2026-11-12 迁入按钮行):与 TabsTrigger 同形;
+   on 态对齐 data-[state=active] 的激活样式 */
+.logs-tab-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  white-space: nowrap; border: none; cursor: pointer;
+  border-radius: 6px; padding: 4px 12px;
+  font-size: 14px; font-weight: 500; color: var(--muted-foreground, #64748b);
+  transition: all .15s; background: transparent;
+}
+.logs-tab-toggle:hover { color: var(--foreground, #0f172a); }
+.logs-tab-toggle.on {
+  background: var(--background, #fff);
+  color: var(--foreground, #0f172a);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
 }
 
 /* W21 修订台账 */

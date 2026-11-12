@@ -121,6 +121,44 @@ describe('Executions.vue — V3 detail page', () => {
     vi.restoreAllMocks()
   })
 
+  // ── 实时日志入口(2026-11-12 迁入按钮行 + 加载竞态修复)─────────────
+  it('实时日志伪 tab:报告视图下打开也可见(面板不挂 tab 内容区),切 tab 不断挂载', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
+    // #detail 深链进明细 tab,先切回报告(默认视图)
+    const w = await mountPage()
+    await w.get('[data-testid="tab-report"]').trigger('mousedown', { button: 0 })
+    await flushPromises()
+    // 报告激活态打开实时日志:面板必须可见(旧挂法在 TabsContent 内,
+    // 非激活内容被 radix 卸载 → 永远「未连接」)
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(false)
+    await w.get('[data-testid="toggle-logs-panel"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(true)
+    expect(w.get('[data-testid="toggle-logs-panel"]').text()).toContain('收起实时日志')
+    // tab 来回切:面板常驻(不随 TabsContent 卸载)
+    await w.get('[data-testid="tab-detail"]').trigger('mousedown', { button: 0 })
+    await flushPromises()
+    await w.get('[data-testid="tab-report"]').trigger('mousedown', { button: 0 })
+    await flushPromises()
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(true)
+    // 收起即卸载(断流/连接预算)
+    await w.get('[data-testid="toggle-logs-panel"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('手动刷新已退役:顶部不再渲染(恢复语义由 pollError 横幅「重新加载」承载)', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
+    const w = await mountPage()
+    expect(w.text()).not.toContain('手动刷新')
+    w.unmount()
+  })
+
   it('renders counters from the detail snapshot', async () => {
     const execStore = useExecutionsStore()
     execStore.detail = { ...fakeDetail }
