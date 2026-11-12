@@ -12,8 +12,8 @@
  *  5. Cancel button: visible for non-terminal (queued/running) rows,
  *     calls cancelExecution then refreshes; hidden once terminal.
  *  6. started_at / finished_at render in the header.
- *  7. (T13) 行级明细:展开拉取 rows 渲染行级表格,engine-log 工件
- *     按需可读;rows 为空(预部署/认证快速失败)显示空态;
+ *  7. (T13) 行级明细已退役(2026-11-12):由报告分组表 + 实时日志/
+ *     日志分析承接;?rows=failed 失败数字入口落「报告」tab。
  *     配方标签覆盖新键 serviceBindings/injectedAuths 且保留旧键 prefix。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -24,7 +24,7 @@ import Executions from '@/views/Executions.vue'
 import ExecutionsList from '@/views/ExecutionsList.vue'
 import { getBatchSummary, listExecutions } from '@/api/executions'
 import { useExecutionsStore } from '@/stores/executions'
-import { cancelExecution, getExecutionRows, getCaseArtifact, getScenarioSnapshot, getExecutionEvents } from '@/api/executions'
+import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
 import { previewPlateDraft } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { Execution } from '@/api/executions'
@@ -35,11 +35,8 @@ vi.mock('@/api/executions', async (importOriginal) => {
     ...orig,
     cancelExecution: vi.fn().mockResolvedValue({}),
     listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-    // T13 行级可观测:rows/artifact 默认空实现,各用例按需 mockResolvedValue。
-    getExecutionRows: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 }),
-    getCaseArtifact: vi.fn().mockResolvedValue(''),
-    // S1 深链锚点查询(gotoRowLogs);各用例按需覆写返回
-    getExecutionEvents: vi.fn().mockResolvedValue({ items: [], count: 0 }),
+    // 行级明细已退役(2026-11-12):rows/artifact/events 消费面移至
+    // 报告面板与日志分析页,本文件不再 mock。
     // 场景快照导出:默认无快照(存量行形态),快照用例按需覆写。
     getScenarioSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
     // B5 批次横幅:默认 404(无横幅),批次用例按需覆写
@@ -231,6 +228,9 @@ describe('Executions.vue — V3 detail page', () => {
     expect(wrapper.find('.runs-table').exists()).toBe(false)
     expect(wrapper.find('.log-panel').exists()).toBe(false)
     expect(wrapper.find('.report-frame').exists()).toBe(false)
+    // 行级明细已退役(2026-11-12):表与四按钮不再渲染
+    expect(wrapper.text()).not.toContain('行级明细')
+    expect(wrapper.find('.ex-table-row').exists()).toBe(false)
 
     wrapper.unmount()
   })
@@ -383,113 +383,10 @@ describe('Executions.vue — P1 detail upgrades', () => {
   })
 })
 
-describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
+describe('Executions.vue — 配方标签迁移(T13 残留面)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-  })
-
-  it('行级表格:拉取 rows 并渲染;展开可读 engine-log', async () => {
-    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
-      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
-        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' },
-      { seq: 1, datasetId: 'ds-1', rowIndex: 0, rep: 0, status: 'failed',
-        caseDir: 'case-001-ds-1-r0-n0', startedAt: 't1', finishedAt: 't3' } ], total: 2, page: 1, pageSize: 500 })
-    vi.mocked(getCaseArtifact).mockResolvedValue('engine says hi')
-
-    const execStore = useExecutionsStore()
-    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
-    execStore.detail = detail7
-    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
-
-    const w = await mountPage(7)
-    await w.find('[data-testid="exec-row-7"]').trigger('click')   // 展开执行 7 的行级表格
-    await flushPromises()
-
-    expect(getExecutionRows).toHaveBeenCalledWith(7)
-    expect(w.findAll('.ex-table-row')).toHaveLength(2)
-    expect(w.text()).toContain('ds-1')
-
-    await w.find('[data-testid="row-artifact-1-engine-log"]').trigger('click')
-    await flushPromises()
-    expect(getCaseArtifact).toHaveBeenCalledWith(7, 'case-001-ds-1-r0-n0', 'engine-log')
-    expect(w.text()).toContain('engine says hi')
-    w.unmount()
-  })
-
-  it('工件可收起:点击引擎日志展开,再点收起,又点重新展开并重拉', async () => {
-    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
-      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
-        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
-    vi.mocked(getCaseArtifact).mockResolvedValue('engine says hi')
-
-    const execStore = useExecutionsStore()
-    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
-    execStore.detail = detail7
-    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
-
-    const w = await mountPage(7)
-    await w.find('[data-testid="exec-row-7"]').trigger('click')
-    await flushPromises()
-
-    const btn = w.find('[data-testid="row-artifact-0-engine-log"]')
-    await btn.trigger('click')            // 第一次点:展开
-    await flushPromises()
-    expect(w.text()).toContain('engine says hi')
-
-    await btn.trigger('click')            // 第二次点:收起
-    await flushPromises()
-    expect(w.text()).not.toContain('engine says hi')
-
-    await btn.trigger('click')            // 第三次点:重新展开(重拉最新)
-    await flushPromises()
-    expect(w.text()).toContain('engine says hi')
-    // 展开 + 重展各拉一次;收起不拉。
-    expect(getCaseArtifact).toHaveBeenCalledTimes(2)
-    w.unmount()
-  })
-
-  it('工件可收起:步骤明细同样支持展开/收起', async () => {
-    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
-      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
-        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
-    vi.mocked(getCaseArtifact).mockResolvedValue('{"launchStatus":"ok"}')
-
-    const execStore = useExecutionsStore()
-    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
-    execStore.detail = detail7
-    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
-
-    const w = await mountPage(7)
-    await w.find('[data-testid="exec-row-7"]').trigger('click')
-    await flushPromises()
-
-    const btn = w.find('[data-testid="row-artifact-0-result"]')
-    await btn.trigger('click')
-    await flushPromises()
-    expect(w.text()).toContain('launchStatus')
-
-    await btn.trigger('click')
-    await flushPromises()
-    expect(w.text()).not.toContain('launchStatus')
-    w.unmount()
-  })
-
-  it('行级数据为空(预部署/认证快速失败)显示空态而非报错', async () => {
-    vi.mocked(getExecutionRows).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 })
-
-    const execStore = useExecutionsStore()
-    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
-    execStore.detail = detail7
-    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
-
-    const w = await mountPage(7)
-    await w.find('[data-testid="exec-row-7"]').trigger('click')
-    await flushPromises()
-
-    expect(w.findAll('.ex-table-row')).toHaveLength(0)
-    expect(w.text()).toContain('无行级数据')
-    w.unmount()
   })
 
   it('配方 chips:serviceBindings/injectedAuths 显示新标签,旧键 prefix 仍有人读得懂的标签', async () => {
@@ -517,79 +414,6 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
     expect(dtTexts).toContain('注入凭证')        // 新键标签(injectedAuths)
     expect(dtTexts).toContain('提单号前缀')      // 旧键标签保留(历史记录可读)
     expect(w.text()).not.toContain('[object Object]')  // 对象值序列化可读
-    w.unmount()
-  })
-})
-
-describe('Executions.vue — S1 失败根因深链(锚点限定本 unit)', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.clearAllMocks()
-  })
-
-  function failedRow(): Record<string, unknown> {
-    return { seq: 1, datasetId: 'ds-1', rowIndex: 0, rep: 0, status: 'failed',
-             unitId: 'u2', caseDir: 'case-001-ds-1-r0-n0',
-             startedAt: 't1', finishedAt: 't3' }
-  }
-
-  async function mountWithFailedRow() {
-    vi.mocked(getExecutionRows).mockResolvedValue({
-      items: [failedRow()] as never, total: 1, page: 1, pageSize: 500 })
-    const execStore = useExecutionsStore()
-    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
-    execStore.detail = detail7
-    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
-    const router = makeRouter()
-    router.push('/executions/7#detail')
-    await router.isReady()
-    const w = mount(Executions, { global: { plugins: [router] } })
-    await flushPromises()
-    await w.find('[data-testid="exec-row-7"]').trigger('click')
-    await flushPromises()
-    await w.find('[data-testid="row-view-logs-1"]').trigger('click')
-    await flushPromises()
-    return { w, router }
-  }
-
-  it('锚点查询带 unit=本行 unit;命中 → 取最终那次失败(末条)around 深链', async () => {
-    // seq 升序两条(重试):第一次失败 id=20,最终失败 id=25 —— 锚须取末条
-    vi.mocked(getExecutionEvents).mockResolvedValue({
-      items: [
-        { id: 20, seq: 5, ts: '2026-10-14T01:02:03', kind: 'event',
-          level: 'ERROR', category: null, module: null, service: null,
-          protocol: null, unit: 'u2', attempt: '1.1', step: 'step-002',
-          event_type: 'step.failed', message: null },
-        { id: 25, seq: 9, ts: '2026-10-14T01:03:03', kind: 'event',
-          level: 'ERROR', category: null, module: null, service: null,
-          protocol: null, unit: 'u2', attempt: '2.1', step: 'step-002',
-          event_type: 'step.failed', message: null },
-      ],
-      count: 2,
-    })
-    const { w, router } = await mountWithFailedRow()
-
-    // 查询限定本 unit(不按全局前 50 条找锚)
-    expect(getExecutionEvents).toHaveBeenCalledWith(7, expect.objectContaining(
-      { kind: 'event', event_type: 'step.failed', unit: 'u2' }))
-    // 深链:锚点取末条(最终失败)+ unit 过滤
-    expect(router.currentRoute.value.query).toMatchObject({
-      view: 'mixed', unit: 'u2', around_id: '25', n: '80',
-    })
-    w.unmount()
-  })
-
-  it('本 unit 无失败事件 → 退化 unit 视图,不跨 unit 回落锚点', async () => {
-    // 返回空(别的 unit 的失败事件不该被拿来当本行锚点)
-    vi.mocked(getExecutionEvents).mockResolvedValue({ items: [], count: 0 })
-    const { w, router } = await mountWithFailedRow()
-
-    expect(getExecutionEvents).toHaveBeenCalledWith(7, expect.objectContaining(
-      { unit: 'u2' }))
-    const q = router.currentRoute.value.query
-    expect(q).toMatchObject({ view: 'mixed', unit: 'u2' })
-    expect(q.around_ts).toBeUndefined()
-    expect(q.around_id).toBeUndefined()
     w.unmount()
   })
 })
@@ -660,9 +484,8 @@ describe('Executions.vue — 执行时场景快照导出', () => {
 
 // ── 执行信息文案:标题改名 + 未配置项基线兜底 ──────────────────────
 // 契约:① 「执行配方」标题改为「执行信息」;② 未配置项(空数组/空对象/
-// null)不再显示 '(空)'/'—',改显示「场景本体」;③ 行级明细基线虚行
-// (datasetId null)的数据集列同样显示「场景本体」。工件空文件的
-// '(空)'(engine.log 内容为空 ≠ 未配置)不在本契约内。
+// null)不再显示 '(空)'/'—',改显示「场景本体」。(行级明细基线虚行
+// 的同类兜底随行级明细退役,2026-11-12。)
 describe('Executions.vue — 执行信息(标题 + 场景本体)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -695,26 +518,6 @@ describe('Executions.vue — 执行信息(标题 + 场景本体)', () => {
     expect(recipe.text()).toContain('场景本体')
     expect(recipe.text()).not.toContain('(空)')
     expect(recipe.text()).not.toContain('{}')
-    w.unmount()
-  })
-
-  it('行级明细:基线虚行(datasetId null)数据集列显示「场景本体」', async () => {
-    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
-      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
-        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
-
-    const execStore = useExecutionsStore()
-    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
-    execStore.detail = detail7
-    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
-
-    const w = await mountPage(7)
-    await w.find('[data-testid="exec-row-7"]').trigger('click')
-    await flushPromises()
-
-    // 第 2 列(数据集):基线虚行 → 场景本体(旧行为是 '—')
-    const cells = w.findAll('.ex-table-row')[0].findAll('td')
-    expect(cells[1].text()).toBe('场景本体')
     w.unmount()
   })
 })
@@ -776,29 +579,6 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
     await flushPromises()
     expect(execStore.fetchDetail).toHaveBeenCalledWith(13)
     expect(w.find('h1').text()).toContain('#13')
-    w.unmount()
-  })
-
-  it('详情:?rows=failed → 行级表格自动展开(失败用例清单即行级表)', async () => {
-    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
-      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'failed',
-        caseDir: 'case-000', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
-    const execStore = useExecutionsStore()
-    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
-    execStore.detail = detail7
-    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
-
-    const router = makeRouter()
-    router.push('/executions/7?rows=failed')
-    await router.isReady()
-    const w = mount(Executions, { global: { plugins: [router] } })
-    await flushPromises()
-
-    // 未手点 exec-row-7,行级表已展开并拉取
-    expect(getExecutionRows).toHaveBeenCalledWith(7)
-    expect(w.findAll('.ex-table-row')).toHaveLength(1)
-    // B-3:行状态显示人话文案(裸 'failed' 内部码已映射,title 保留原码)
-    expect(w.text()).toContain('失败')
     w.unmount()
   })
 })
@@ -912,7 +692,7 @@ describe('Executions.vue — B4 报告 tab', () => {
     vi.unstubAllGlobals()
   })
 
-  it('?rows=failed 深链直达「执行明细」', async () => {
+  it('?rows=failed 落「报告」tab(失败聚焦即失败用例清单;行级表已退役)', async () => {
     const execStore = useExecutionsStore()
     execStore.detail = { ...fakeDetail, id: 7 }
     execStore.fetchDetail = vi.fn().mockResolvedValue(execStore.detail)
@@ -921,8 +701,8 @@ describe('Executions.vue — B4 报告 tab', () => {
     await router.isReady()
     const w = mount(Executions, { global: { plugins: [router] } })
     await flushPromises()
-    expect(w.text()).toContain('执行信息')
-    expect(w.find('[data-testid="exec-report"]').exists()).toBe(false)
+    expect(w.find('[data-testid="exec-report"]').exists()).toBe(true)
+    expect(w.find('[data-testid="logs-panel-mount"]').exists()).toBe(false)
     w.unmount()
   })
 })

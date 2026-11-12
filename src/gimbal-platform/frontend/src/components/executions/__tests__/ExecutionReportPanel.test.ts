@@ -3,16 +3,21 @@
  *
  * 钉住:①概览计数;②失败聚焦回答「哪步 / 哪条断言 / 期望与实际 /
  * 请求与响应」;③步骤详情展开看全部断言与提取;④无步骤数据的提示;
- * ⑤404 文案。
+ * ⑤404 文案;⑥S1 失败根因深链(2026-11-12 自行级明细「查看日志」
+ * 迁入:失败 unit 锚定 around 窗口,锚取末条,不跨 unit 回落)。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { createPinia, setActivePinia } from 'pinia'
 import ExecutionReportPanel from '@/components/executions/ExecutionReportPanel.vue'
 import type { ExecutionReport } from '@/api/executions'
 
 const getReport = vi.fn()
+const getEvents = vi.fn()
 vi.mock('@/api/executions', () => ({
   getExecutionReport: (id: number) => getReport(id),
+  getExecutionEvents: (id: number, q: Record<string, unknown>) => getEvents(id, q),
 }))
 
 function step(over: Record<string, unknown> = {}) {
@@ -65,7 +70,26 @@ function report(over: Partial<ExecutionReport> = {}): ExecutionReport {
   } as ExecutionReport
 }
 
-beforeEach(() => { getReport.mockReset() })
+beforeEach(() => {
+  getReport.mockReset()
+  getEvents.mockReset()
+  setActivePinia(createPinia())
+})
+
+async function mountPanel(executionId = 9) {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/executions/:id/events', component: { template: '<div/>' } }],
+  })
+  await router.push('/executions/9')
+  await router.isReady()
+  const w = mount(ExecutionReportPanel, {
+    props: { executionId, running: false },
+    global: { plugins: [router] },
+  })
+  await flushPromises()
+  return { w, router }
+}
 
 describe('ExecutionReportPanel', () => {
   it('概览 + 失败聚焦:哪步、哪条断言、期望/实际、请求响应', async () => {
@@ -105,13 +129,16 @@ describe('ExecutionReportPanel', () => {
     expect(g).toContain('oid')
   })
 
-  it('无步骤数据:提示去「执行明细」看工件', async () => {
+  it('无步骤数据:提示早于步骤落库 + 工件 14 天保留期(不再指路执行明细)', async () => {
     getReport.mockResolvedValue(report({ hasStepData: false, failure: null, groups: [],
       summary: { steps: 0, stepsPassed: 0, stepsFailed: 0, stepsOther: 0,
                  assertions: 0, assertionsPassed: 0 } }))
     const w = mount(ExecutionReportPanel, { props: { executionId: 9, running: false } })
     await flushPromises()
-    expect(w.get('[data-testid="report-no-steps"]').text()).toContain('执行明细')
+    const t = w.get('[data-testid="report-no-steps"]').text()
+    expect(t).toContain('没有步骤结果')
+    expect(t).toContain('14 天')
+    expect(t).not.toContain('执行明细')
     expect(w.find('[data-testid="report-failure"]').exists()).toBe(false)
   })
 
@@ -139,5 +166,51 @@ describe('ExecutionReportPanel', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // ── S1 失败根因深链(2026-11-12 自行级明细「查看日志」迁入)──────
+  it('定位失败上下文:锚点查询限定失败 unit;命中 → 取末条(最终失败)around 深链', async () => {
+    // seq 升序两条(重试):第一次失败 id=20,最终失败 id=25 —— 锚须取末条
+    getReport.mockResolvedValue(report())
+    getEvents.mockResolvedValue({
+      items: [
+        { id: 20, seq: 5, ts: '2026-10-14T01:02:03', kind: 'event',
+          level: 'ERROR', category: null, module: null, service: null,
+          protocol: null, unit: 'sc-r', attempt: '1.1', step: 'step-001',
+          event_type: 'step.failed', message: null },
+        { id: 25, seq: 9, ts: '2026-10-14T01:03:03', kind: 'event',
+          level: 'ERROR', category: null, module: null, service: null,
+          protocol: null, unit: 'sc-r', attempt: '2.1', step: 'step-001',
+          event_type: 'step.failed', message: null },
+      ],
+      count: 2,
+    })
+    const { w, router } = await mountPanel()
+    await w.get('[data-testid="report-failure-locate"]').trigger('click')
+    await flushPromises()
+
+    // 查询限定失败 unit(不按全局前 50 条找锚)
+    expect(getEvents).toHaveBeenCalledWith(9, expect.objectContaining(
+      { kind: 'event', event_type: 'step.failed', unit: 'sc-r' }))
+    // 深链:锚点取末条(最终失败)+ unit 过滤
+    expect(router.currentRoute.value.path).toBe('/executions/9/events')
+    expect(router.currentRoute.value.query).toMatchObject({
+      view: 'mixed', unit: 'sc-r', around_id: '25', n: '80',
+    })
+    w.unmount()
+  })
+
+  it('定位失败上下文:本 unit 无失败事件 → 退化 unit 视图,不跨 unit 回落锚点', async () => {
+    getReport.mockResolvedValue(report())
+    getEvents.mockResolvedValue({ items: [], count: 0 })
+    const { w, router } = await mountPanel()
+    await w.get('[data-testid="report-failure-locate"]').trigger('click')
+    await flushPromises()
+
+    const q = router.currentRoute.value.query
+    expect(q).toMatchObject({ view: 'mixed', unit: 'sc-r' })
+    expect(q.around_ts).toBeUndefined()
+    expect(q.around_id).toBeUndefined()
+    w.unmount()
   })
 })

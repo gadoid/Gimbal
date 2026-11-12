@@ -1,6 +1,7 @@
 <!-- Executions.vue — 单次执行的实时状态页（V3）。
-     可观测面 = Execution 计数器 + 执行信息 + 行级明细表（展开后随
-     1s 轮询刷新；engine.log / result.json 工件按需加载）。
+     可观测面 = Execution 计数器 + 实时日志/报告/执行明细三 tab 域
+     （执行明细 = 执行信息 + 修订台账；行级明细与原始工件已于
+     2026-11-12 退役，由报告/日志分析/实时日志承接）。
      V1 的每-run 报告/SSE 已退役。 -->
 <template>
   <HubDetailPage v-if="execStore.detail" :title="`执行 #${execStore.detail.id}`" icon="history">
@@ -177,131 +178,6 @@
         </p>
       </template>
 
-      <h3 class="rows-title">行级明细</h3>
-      <div class="rows-head">
-        <p class="rows-hint">
-          每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
-        </p>
-        <Button
-          variant="link"
-          size="sm"
-          class="h-7 px-2"
-          :data-testid="`exec-row-${execStore.detail.id}`"
-          @click="toggleRows"
-        >{{ isExpanded ? '收起行级表格' : '展开行级表格' }}</Button>
-      </div>
-      <div v-if="isExpanded" class="rows-panel">
-        <p v-if="rowsLoading" class="rows-empty">行级数据加载中…</p>
-        <p v-else-if="rows.length === 0" class="rows-empty">
-          无行级数据 — 预部署/认证快速失败等未分发行的单不产生行级记录
-        </p>
-        <table v-else class="ex-table slib-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>数据集</th>
-              <th>注入条目</th>
-              <th>行</th>
-              <th>重复</th>
-              <th>状态</th>
-              <th>耗时</th>
-              <th>case 目录</th>
-              <th>工件</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="row in pagedRows" :key="row.seq">
-              <tr class="ex-table-row">
-                <td class="mono">{{ row.seq }}</td>
-                <td>{{
-                  row.datasetName
-                    ?? (row.datasetId
-                      ? row.datasetId
-                      : (row.injectionId ? '注入直跑' : '场景本体'))
-                }}</td>
-                <td>
-                  <span v-if="row.injectionId" class="inj-badge">⚠ {{ row.injectionId }}</span>
-                  <span v-else>—</span>
-                </td>
-                <td class="mono">{{ row.rowIndex }}</td>
-                <td class="mono">{{ row.rep }}</td>
-                <td>
-                  <span :class="['row-tag', rowStatusClass(row.status)]" :title="row.status">{{ rowStatusText(row.status) }}</span>
-                </td>
-                <td class="mono">{{ rowDuration(row) }}</td>
-                <td class="mono dim">{{ row.caseDir || '—' }}</td>
-                <td>
-                  <span class="row-actions">
-                    <Button
-                      v-if="row.status === 'failed'"
-                      variant="link" size="sm" class="h-6 px-1.5"
-                      :data-testid="`row-view-logs-${row.seq}`"
-                      @click="gotoRowLogs(row)"
-                    >查看日志</Button>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      class="h-6 px-1.5"
-                      :disabled="!row.caseDir"
-                      :title="slotHint(row)"
-                      :data-testid="`row-artifact-${row.seq}-engine-log`"
-                      @click="toggleArtifact(row, 'engine-log')"
-                    >{{ isArtifactShown(row, 'engine-log') ? '收起日志' : '引擎日志' }}</Button>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      class="h-6 px-1.5"
-                      :disabled="!row.caseDir"
-                      :data-testid="`row-artifact-${row.seq}-result`"
-                      @click="toggleArtifact(row, 'result')"
-                    >{{ isArtifactShown(row, 'result') ? '收起明细' : '步骤明细' }}</Button>
-                  </span>
-                </td>
-              </tr>
-              <tr
-                v-for="a in loadedArtifacts(row)"
-                :key="`${row.seq}-${a.file}-artifact`"
-                class="ex-table-artifact"
-              >
-                <td colspan="9">
-                  <div class="artifact-head">
-                    <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志，原始文件 — 含未入库级别）' : 'result.json（步骤明细）' }}</span>
-                    <div class="artifact-tools">
-                      <label
-                        v-if="a.file === 'engine-log' && a.hasAnsi"
-                        class="raw-toggle"
-                      >
-                        <input
-                          type="checkbox"
-                          :checked="rawAnsiKeys.has(a.key)"
-                          @change="toggleRawAnsi(a.key, ($event.target as HTMLInputElement).checked)"
-                        />
-                        显示原始(含颜色码)
-                      </label>
-                      <span class="mono dim">{{ row.caseDir }}</span>
-                    </div>
-                  </div>
-                  <pre :class="['artifact-pre', 'mono', { 'artifact-error': a.isError }]">{{
-                    a.file === 'engine-log' && !rawAnsiKeys.has(a.key)
-                      ? stripAnsi(a.content) : a.content
-                  }}</pre>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-        <!-- 2026-09-23 分页批次:行级表客户端切片(store 的 rows 缓存与
-             轮询刷新语义不变,只换渲染切片) -->
-        <div v-if="rowsPageCount > 1 || rows.length > 0" class="mt-2 flex justify-end">
-          <Pagination
-            v-model:page="rowsPage"
-            v-model:page-size="rowsPageSize"
-            :total="rows.length"
-            show-page-size
-            show-jump
-          />
-        </div>
-      </div>
       </TabsContent>
     </Tabs>
   </HubDetailPage>
@@ -326,9 +202,8 @@ import { useRoute, useRouter } from 'vue-router'
 import HubDetailPage from '@/layouts/HubDetailPage.vue'
 import PageBack from '@/components/chrome/PageBack.vue'
 import { toast } from '@/utils/toast'
-import { executionStatusText, isTerminalExecutionStatus, rowStatusText } from '@/utils/executionStatus'
-import { cancelExecution, getExecutionEvents, getScenarioSnapshot } from '@/api/executions'
-import type { ExecutionRow } from '@/api/executions'
+import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
+import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
 import { useExecutionsStore } from '@/stores/executions'
@@ -339,12 +214,9 @@ import { valueJson } from '@/utils/value-display'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Pagination } from '@/components/ui/pagination'
-import { useClientPager } from '@/composables/useClientPager'
 import ExecutionLogsPanel from '@/components/executions/ExecutionLogsPanel.vue'
 import ExecutionReportPanel from '@/components/executions/ExecutionReportPanel.vue'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { hasAnsi, stripAnsi } from '@/utils/ansi'
 
 const route = useRoute()
 const router = useRouter()
@@ -501,174 +373,26 @@ function formatRecipeValue(v: unknown): string {
   return String(v)
 }
 
-// ── 行级明细(spec §9.1)───────────────────────────────────
-const rows = computed<ExecutionRow[]>(() => execStore.rowsByExecution[executionId.value] ?? [])
-/** 行 unit 标签(S1 深链维度;registry snake_case / 回放 camelCase 双键)。 */
-function rowUnitId(row: ExecutionRow): string {
-  const r = row as unknown as Record<string, unknown>
-  return String(r.unitId ?? r.unit_id ?? '') || ''
-}
-const rowsLoading = computed(() => execStore.rowsByExecution[executionId.value] === undefined)
-const isExpanded = computed(() => execStore.expanded.has(executionId.value))
-// 客户端分页(2026-09-23 批次):rows 端点单页 500 上限,视图侧切片;
-// 每页行数存用户偏好
-const { page: rowsPage, pageSize: rowsPageSize, paged: pagedRows, pageCount: rowsPageCount }
-  = useClientPager(() => rows.value, 50, 'execution-rows')
-
-/** B6:server 链槽位提示——引擎日志是该槽位所有 case 的合并日志。 */
-function slotHint(row: ExecutionRow): string | undefined {
-  const slot = row.serverSlot
-  if (slot === null || slot === undefined) return undefined
-  const file = slot === 0 ? 'server-engine.log' : `server-engine-${slot}.log`
-  return `server 槽位 ${slot}:${file}(该槽位上所有 case 的合并日志)`
-}
-
-function toggleRows(): void {
-  if (!execStore.detail) return
-  execStore.toggleExpanded(execStore.detail.id)
-}
-
-const ARTIFACT_FILES = ['engine-log', 'result'] as const
-type ArtifactFile = (typeof ARTIFACT_FILES)[number]
-
-interface RowArtifactView {
-  file: ArtifactFile
-  key: string
-  content: string
-  isError: boolean
-  hasAnsi: boolean
-}
-
-// 工件查看器 ANSI 感知(AD8 层 4):默认剥除 ESC 序列显示纯文本,
-// 「显示原始」按工件粒度保留原样(存量文件立即受益)
-const rawAnsiKeys = ref(new Set<string>())
-function toggleRawAnsi(key: string, on: boolean): void {
-  const s = new Set(rawAnsiKeys.value)
-  if (on) { s.add(key) } else { s.delete(key) }
-  rawAnsiKeys.value = s
-}
-
-/** 工件视图展开/收起(展开重拉最新;收起藏视图,缓存留在 store)。 */
-function toggleArtifact(row: ExecutionRow, file: ArtifactFile): void {
-  execStore.toggleArtifact(executionId.value, row.caseDir, file)
-}
-
-function isArtifactShown(row: ExecutionRow, file: ArtifactFile): boolean {
-  return execStore.expandedArtifacts.has(`${executionId.value}:${row.caseDir}:${file}`)
-}
-
-/** 已展开且已拉取的工件 → 渲染视图(按需拉取,不轮询)。 */
-function loadedArtifacts(row: ExecutionRow): RowArtifactView[] {
-  const out: RowArtifactView[] = []
-  for (const file of ARTIFACT_FILES) {
-    const key = `${executionId.value}:${row.caseDir}:${file}`
-    if (!isArtifactShown(row, file)) continue
-    const err = execStore.artifactError[key]
-    if (err !== undefined) {
-      out.push({ file, key, content: err, isError: true, hasAnsi: false })
-      continue
-    }
-    const text = execStore.artifactText[key]
-    if (text !== undefined) {
-      const content = text === '' ? '(空)' : prettyArtifact(file, text)
-      out.push({ file, key, content, isError: false, hasAnsi: hasAnsi(content) })
-    }
-  }
-  return out
-}
-
-/** result.json 是 P1 证据字典(launchStatus/status/…),形状不定:
- *  能 parse 就缩进 pretty-print,不能就原样展示,绝不假设结构。 */
-function prettyArtifact(file: ArtifactFile, text: string): string {
-  if (file !== 'result') return text
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2)
-  } catch {
-    return text
-  }
-}
-
-/** 行耗时 = finishedAt − startedAt;两者齐备才算,否则 '—'
- *  (T15 起 final 行 ts = 完成时刻,新单回放时长真实;修正前的存量
- *  调度日志行 finishedAt ≈ startedAt,直显 0ms,不过度设计)。 */
-function rowDuration(row: ExecutionRow): string {
-  if (!row.startedAt || !row.finishedAt) return '—'
-  const ms = Date.parse(row.finishedAt) - Date.parse(row.startedAt)
-  if (!Number.isFinite(ms) || ms < 0) return '—'
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
-}
-
-// 行级状态词汇来自 dispatcher/引擎(queued/dispatched/…
-// /launch_timeout 等),与 Execution 状态集部分重叠:语义对得上的
-// 复用既有配色桶;状态串原样透传(不翻译),表外词汇套中性兜底色。
-const ROW_STATUS_CLASS: Record<string, string> = {
-  queued: 'status-queued',
-  dispatched: 'status-running',
-  passed: 'status-done',
-  failed: 'status-failed',
-  canceled: 'status-canceled',
-  gimbal_rejected: 'status-failed',
-  plate_unavailable: 'status-failed',
-  plate_rejected: 'status-failed',
-  launch_timeout: 'status-failed',
-  launch_error: 'status-failed',
-  dispatcher_error: 'status-failed',
-}
-
-function rowStatusClass(s: string): string {
-  return ROW_STATUS_CLASS[s] ?? 'row-status-other'
-}
-
-function refreshRowsIfExpanded(): void {
-  if (execStore.expanded.has(executionId.value)) void execStore.fetchRows(executionId.value)
-}
+// ── 行级明细已退役(2026-11-12)────────────────────────────
+// 行级状态/耗时 → 报告分组表;原始 engine.log / result.json 工件 →
+// 报告(步骤落库)+ 实时日志/日志分析(入库日志)承载;below-INFO
+// 差量经后端 /case-artifact API 调取(14 天保留期)。store 的 rows/
+// artifact 状态保留 —— SuiteRunsTab / ActivityTimeline 仍消费。
 
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
 
 // B4→2026-11-12 三改:默认落地 tab = 实时日志(打开详情页即打印);
-// #report / #detail 深链与 ?rows=failed 覆盖默认。实时日志是独立 tab
-// 域 —— 面板挂 TabsContent 内,激活即挂载(挂载即 tail)、切走即卸载
-// 断流(§8),无展开/收起旁路状态。
+// #report / #detail 深链覆盖默认;?rows=failed(列表失败数字入口)落
+// 「报告」—— 失败聚焦块即失败用例清单,替代原行级表直达。
 const detailTab = ref<'logs' | 'report' | 'detail'>(
-  route.hash === '#detail' || route.query.rows === 'failed'
-    ? 'detail'
-    : route.hash === '#report' ? 'report' : 'logs')
+  route.hash === '#detail' ? 'detail'
+    : route.hash === '#report' || route.query.rows === 'failed' ? 'report'
+    : 'logs')
 const isTerminalDetail = computed(() => isTerminalExecutionStatus(execStore.detail?.status ?? ''))
 
 function gotoEvents(): void {
   void router.push(`/executions/${execStore.detail?.id}/events`)
-}
-
-/** S1 失败根因直达:失败行 → 该 unit 的 step.failed 事件 (ts,id) 为锚,
- *  深链进混合时间轴上下文窗口(根因几乎总在失败点之前,设计 S1/S2)。 */
-async function gotoRowLogs(row: ExecutionRow): Promise<void> {
-  const exId = execStore.detail?.id
-  if (!exId) return
-  const uid = rowUnitId(row)
-  try {
-    // 锚点查询限定本 unit(S1 修正):按全局前 50 条 step.failed 找锚会
-    // 锚到别的 unit 的失败时间点(around 窗口与本 unit 过滤条件错位),
-    // 且失败超 50 条时本 unit 的事件永远翻不进前 50。查不到 → 退化为
-    // unit 过滤视图(不带 around),不跨 unit 回落。
-    const r = await getExecutionEvents(exId, {
-      kind: 'event', event_type: 'step.failed', limit: 50,
-      ...(uid ? { unit: uid } : {}),
-    })
-    // 取最后一条(接口按 seq 升序):有重试时窗口锚在**最终那次**失败
-    // (第一次失败的根因上下文已被后续重试日志推远)
-    const hit = r.items[r.items.length - 1]
-    const query: Record<string, string> = { view: 'mixed' }
-    if (hit) {
-      query.around_ts = hit.ts
-      query.around_id = String(hit.id)
-      query.n = '80'
-    }
-    if (uid) query.unit = uid
-    void router.push({ path: `/executions/${exId}/events`, query })
-  } catch {
-    void router.push(`/executions/${exId}/events`)
-  }
 }
 
 async function refreshNow() {
@@ -682,7 +406,6 @@ async function refreshNow() {
     if (st && !isTerminalExecutionStatus(st)) {
       stop = execStore.startPolling(executionId.value)
     }
-    refreshRowsIfExpanded()
   } catch (e) {
     // fetchDetail rethrows; detail stays as-is — surface via pollError.
     const err = e as Error
@@ -743,12 +466,6 @@ async function cancelExec() {
  *  不盯参数就只有 markRead 在发请求、页面纹丝不动。 */
 async function loadExecution(): Promise<void> {
   if (!executionId.value) return
-  // 原型修订(v2.2):列表页失败数字入口带 ?rows=failed →
-  // 自动展开行级表格(失败用例清单即行级表),省一次手动点击
-  if (route.query.rows === 'failed') {
-    execStore.toggleExpanded(executionId.value)
-    detailTab.value = 'detail'
-  }
   try {
     await execStore.fetchDetail(executionId.value)
   } catch (e) {
@@ -761,8 +478,6 @@ async function loadExecution(): Promise<void> {
     return
   }
   stop = execStore.startPolling(executionId.value)
-  // 行级表格的展开态跨导航保留(store 持有):回到本页立即补一次 rows。
-  refreshRowsIfExpanded()
 }
 
 onMounted(() => {
@@ -849,15 +564,10 @@ onUnmounted(() => {
   color: #dc2626;
 }
 
-.recipe-title,
-.rows-title {
+.recipe-title {
   @apply text-heading;
   margin: 0 0 12px;
   color: var(--color-text-primary);
-}
-
-.rows-title {
-  margin-top: 8px;
 }
 
 .recipe {
@@ -889,33 +599,11 @@ onUnmounted(() => {
   color: var(--color-text-tertiary);
 }
 
-/* ── 行级明细(spec §9.1)────────────────────────────── */
-.rows-head {
-  display: flex;
-  gap: 16px;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
+/* ── 行级明细已退役;ex-table 仅修订台账在用 ─────────────── */
 .rows-hint {
   @apply text-label font-normal;
   margin: 0;
   color: var(--color-text-tertiary);
-}
-
-.rows-panel {
-  margin-bottom: 16px;
-}
-
-.rows-empty {
-  @apply text-label font-normal;
-  margin: 0;
-  padding: 18px;
-  color: var(--color-text-tertiary);
-  background: #fff;
-  border: 0.5px dashed #e2e8f0;
-  border-radius: 8px;
 }
 
 .ex-table {
@@ -928,7 +616,6 @@ onUnmounted(() => {
 }
 
 .ex-table th {
-  /* 形制走 .slib-table thead th;这里只压密度 */
   padding: 8px 10px;
 }
 
@@ -937,83 +624,6 @@ onUnmounted(() => {
   color: var(--color-text-primary);
   text-align: left;
   border-bottom: 0.5px solid #f1f5f9;
-}
-
-.row-tag {
-  @apply text-micro font-semibold;
-  display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-/* 注入族行角标(spec v2 §8):注入条目 id,警示色系 */
-.inj-badge {
-  @apply text-micro font-semibold;
-  display: inline-flex;
-  padding: 2px 8px;
-  color: #92400e;
-  background: #fef3c7;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-/* 词汇表外的行状态:中性兜底(状态串原样透传,不翻译) */
-.row-status-other {
-  color: #475569;
-  background: #f1f5f9;
-}
-
-.row-actions {
-  display: inline-flex;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.ex-table-artifact td {
-  padding: 8px 10px 12px;
-  background: #f8fafc;
-}
-
-.artifact-head {
-  @apply text-caption font-normal;
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  margin-bottom: 6px;
-  color: var(--color-text-secondary);
-}
-.artifact-tools {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  margin-left: auto;
-}
-.raw-toggle {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  font-size: 12px;
-  color: var(--muted-fg, #71717a);
-  cursor: pointer;
-  user-select: none;
-}
-
-.artifact-pre {
-  max-height: 50vh;
-  padding: 10px 12px;
-  margin: 0;
-  overflow: auto;
-  @apply text-caption font-normal;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: #fff;
-  border: 0.5px solid #e2e8f0;
-  border-radius: 6px;
-}
-
-.artifact-error {
-  color: #991b1b;
 }
 
 .state {

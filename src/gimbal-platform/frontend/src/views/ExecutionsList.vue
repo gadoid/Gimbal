@@ -309,7 +309,8 @@ const pageTip = '跑了什么、跑成什么样、当时用的什么配置 — �
   + '行级 / 步骤级结果不落库:行计数来自 Execution 计数器,行级明细在详情页(JSONL 回放),跨执行聚合(数据分析)等落库。同配置重跑按 config_json 重建配方 — 一次独立执行,不进原批次。批次 = 归并键,不是执行策略。'
 const store = useExecutionsStore()
 
-/** focusFailed:失败数字入口 → 详情页带 ?rows=failed 自动展开行级表。 */
+/** focusFailed:失败数字入口 → 详情页带 ?rows=failed 落「报告」tab
+ *  (失败聚焦块即失败用例清单;行级表已退役 2026-11-12)。 */
 function open(id: number, focusFailed = false) {
   router.push(focusFailed ? `${executionUrl(id)}?rows=failed` : executionUrl(id))
 }

@@ -27,7 +27,7 @@
       <p v-if="!report.hasStepData" class="rp-empty" data-testid="report-no-steps">
         {{ running
           ? '还没有完成的步骤——步骤结束后这里会出现结果。'
-          : '该执行没有步骤结果(早于步骤落库,或由旧版引擎执行)。请在「执行明细」查看行级工件。' }}
+          : '该执行没有步骤结果(早于步骤落库,或由旧版引擎执行);原始行级工件仅保留 14 天,过期后无可追溯细节。' }}
       </p>
 
       <!-- 失败聚焦 -->
@@ -36,6 +36,11 @@
           <span class="rp-tag status-failed">首个失败</span>
           <span class="rp-step-title">{{ stepTitle(report.failure) }}</span>
           <span class="rp-dim">{{ groupLabelOf(report.failure) }} · 尝试 {{ report.failure.attempt || '—' }}</span>
+          <button
+            class="rp-locate" data-testid="report-failure-locate"
+            title="深链到日志分析:以该 unit 最终失败事件为锚的上下文窗口(根因几乎总在失败点之前)"
+            @click="gotoFailureLogs"
+          >定位失败上下文 →</button>
         </div>
         <p v-if="report.failure.callSummary" class="rp-call mono">{{ report.failure.callSummary }}</p>
         <p v-if="report.failure.error" class="rp-err mono" data-testid="report-failure-error">{{ report.failure.error }}</p>
@@ -130,12 +135,14 @@
 
 <script setup lang="ts">
 import { onUnmounted, ref, watch } from 'vue'
-import { getExecutionReport } from '@/api/executions'
+import { useRouter } from 'vue-router'
+import { getExecutionEvents, getExecutionReport } from '@/api/executions'
 import { httpStatusOf } from '@/api/http'
 import type { ExecutionReport, ReportGroup, ReportStep } from '@/api/executions'
 import { executionStatusText, rowStatusText } from '@/utils/executionStatus'
 
 const props = defineProps<{ executionId: number; running: boolean }>()
+const router = useRouter()
 
 const report = ref<ExecutionReport | null>(null)
 const loading = ref(false)
@@ -169,6 +176,34 @@ watch(() => props.executionId, () => { report.value = null; open.value = new Set
 // 运行 → 终态:再拉一次拿最终结果,并停止轮询
 watch(() => props.running, (now, before) => { if (before && !now) void load() })
 onUnmounted(() => { if (timer) clearTimeout(timer) })
+
+/** S1 失败根因直达(2026-11-12 自行级明细「查看日志」迁入):失败
+ *  unit → 该 unit 的 step.failed 事件 (ts,id) 为锚,深链进混合时间轴
+ *  上下文窗口。锚点查询限定本 unit(按全局前 50 条找锚会锚到别的
+ *  unit 的失败点);取末条(有重试时锚在最终那次失败 —— 首次失败的
+ *  根因上下文已被后续重试日志推远);查不到 → 退化为 unit 过滤视图,
+ *  不跨 unit 回落。 */
+async function gotoFailureLogs(): Promise<void> {
+  const exId = props.executionId
+  const uid = report.value?.failure?.unit ?? ''
+  try {
+    const r = await getExecutionEvents(exId, {
+      kind: 'event', event_type: 'step.failed', limit: 50,
+      ...(uid ? { unit: uid } : {}),
+    })
+    const hit = r.items[r.items.length - 1]
+    const query: Record<string, string> = { view: 'mixed' }
+    if (hit) {
+      query.around_ts = hit.ts
+      query.around_id = String(hit.id)
+      query.n = '80'
+    }
+    if (uid) query.unit = uid
+    void router.push({ path: `/executions/${exId}/events`, query })
+  } catch {
+    void router.push(`/executions/${exId}/events`)
+  }
+}
 
 function toggle(key: string): void {
   const s = new Set(open.value)
@@ -253,6 +288,11 @@ function hasKeys(v: unknown): boolean {
   display: flex; flex-direction: column; gap: 8px;
 }
 .rp-failure-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+/* S1 深链入口(自「查看日志」迁入):链接式按钮,推到行尾 */
+.rp-locate {
+  @apply text-label font-normal; color: #2f6fed; background: none;
+  border: 0; cursor: pointer; padding: 0; margin-left: auto; white-space: nowrap;
+}
 .rp-step-title { color: var(--color-text-primary); font-weight: 600; }
 .rp-dim { color: var(--color-text-tertiary); @apply text-label font-normal; }
 .rp-pad { padding: 8px 12px; margin: 0; }
