@@ -3,14 +3,22 @@
  * 方案工作台 · 数据区:数据集多选(行级勾选)、失效标注与移除、内联维护。
  *
  * D1 能力承接(数据集独立路由退役后,"维护方案数据集"全部在此可做):
- * 新建 / 编辑(改名 + 行数据)/ 删除;行数据粘贴支持 JSON / TSV / CSV,
- * CSV 导出为简单序列化(union 列头),与粘贴导入互为往返 — 不复活已
- * 作废的 var-palette 模板协议(dataset v2 T6-T8,D1 作废)。
- * 编辑保存保留既有 varUnlocks(PUT 整体替换语义,不带会被清空)。
+ * 新建 / 编辑(改名 + 行数据)/ 删除。
+ * 2026-11-12 编辑面重构:「变量即列」网格回迁(DataSetGridEditor)—— 列
+ * 派生自场景 config.vars 标量变量 + @slot.* 账号列,与后端 `_scalar_vars`
+ * 调色板门同规则;稀疏行三态(缺省=继承基线/""=显式空/覆写)。
+ * 原始粘贴(JSON/TSV/CSV 自动识别)收进「高级粘贴」折叠区,应用后整表
+ * 替换网格行。CSV 导出为简单序列化,列序 = 列宇宙序,与粘贴导入互为往返
+ * —— 不复活已作废的 var-palette 模板协议(dataset v2 T6-T8,D1 作废)。
+ * 失效键(行键 ∉ 列宇宙)保存会被后端 422 拒收(undeclared_var)→ 提交
+ * 禁用,给一键移除。
+ * 编辑保存保留既有 varUnlocks(PUT 整体替换语义;网格内可放开/收回)。
  */
 import { computed, ref } from 'vue'
 import type { DataSetRow, DataSetSummary } from '@/types/scenario-composer'
 import { createDataSet, updateDataSet, getDataSet } from '@/api/scenario-composer'
+import { deriveVarColumns, deadKeysOf, exportColumnOrder, type GridColumn } from '@/utils/dataset-grid'
+import DataSetGridEditor from '@/components/schemes/DataSetGridEditor.vue'
 import { downloadFile } from '@/utils/download'
 import Papa from 'papaparse'
 import { toast } from '@/utils/toast'
@@ -26,6 +34,12 @@ const props = defineProps<{
   modelValue: Sel[]
   dataSets: DataSetSummary[]
   scenarioId: string
+  /** 场景 config.vars(网格列宇宙来源;null = 场景草稿未含) */
+  configVars: Record<string, unknown> | null
+  /** 场景级 var_locks(锁列默认隐藏) */
+  varLocks: string[]
+  /** definition.steps(引用位/账号列候选/契约描述) */
+  steps: unknown[]
 }>()
 const emit = defineEmits<{ 'update:modelValue': [v: Sel[]]; saved: []; delete: [datasetId: string] }>()
 
@@ -76,32 +90,47 @@ async function removeDataset(d: DataSetSummary) {
 const dialogOpen = ref(false)
 const mode = ref<'create' | 'edit'>('create')
 const formName = ref('')
-const rowsText = ref('[]')
+/** 网格工作行(v-model:行对象由网格原位改写;行级操作换新数组)。
+ *  `__rowKey`(服务端敏感列并回键)之类未知键在克隆后原样保留。 */
+const workingRows = ref<Array<Record<string, unknown>>>([])
+const workingVarUnlocks = ref<string[]>([])
 const saving = ref(false)
-/** 编辑目标:varUnlocks 随保存原样带回(PUT 整体替换,不带会清空)。 */
-const editing = ref<{ datasetId: string; varUnlocks?: string[] } | null>(null)
 const loadingExisting = ref(false)
+/** 编辑目标 id(文件名兜底;varUnlocks 在工作区,PUT 整体替换随保存带回) */
+const editingId = ref<string | null>(null)
+/** 高级粘贴 textarea(应用后清空) */
+const rowsText = ref('')
+
+/** 列宇宙(与网格同一纯函数派生)→ 失效键 → 导出列序 */
+const columns = computed<GridColumn[]>(() =>
+  deriveVarColumns(props.configVars, workingRows.value, props.varLocks, workingVarUnlocks.value))
+const deadKeys = computed(() => deadKeysOf(columns.value, workingRows.value))
 
 function openCreate() {
   mode.value = 'create'
-  editing.value = null
+  editingId.value = null
   formName.value = `数据集 ${props.dataSets.length + 1}`
-  rowsText.value = '[]'
+  workingRows.value = []
+  workingVarUnlocks.value = []
+  rowsText.value = ''
   dialogOpen.value = true
 }
 
 async function openEdit(d: DataSetSummary) {
   mode.value = 'edit'
-  editing.value = null
+  editingId.value = d.datasetId
   formName.value = d.name || d.datasetId
-  rowsText.value = '[]'
+  workingRows.value = []
+  workingVarUnlocks.value = []
+  rowsText.value = ''
   dialogOpen.value = true
   loadingExisting.value = true
   try {
     const full = await getDataSet(d.datasetId)
     formName.value = full.name
-    rowsText.value = JSON.stringify(full.rows, null, 2)
-    editing.value = { datasetId: full.datasetId, varUnlocks: full.varUnlocks }
+    // 克隆到工作区:未知键(__rowKey 等)原样随 PUT 回传(服务端并回)
+    workingRows.value = (full.rows ?? []).map((r) => ({ ...(r as Record<string, unknown>) }))
+    workingVarUnlocks.value = [...(full.varUnlocks ?? [])]
   } catch (e) {
     showError('加载', e)
     dialogOpen.value = false
@@ -110,7 +139,8 @@ async function openEdit(d: DataSetSummary) {
   }
 }
 
-// ── 行数据解析:JSON → TSV → CSV(自动识别)──────────────────────
+// ── 高级粘贴:JSON → TSV → CSV(自动识别),应用后整表替换 ────────
+
 /** 数组形态校验:每行对象 + 值限标量(DataSetRow 契约)。 */
 function coerceRows(parsed: unknown): { rows?: DataSetRow[]; error?: string } {
   if (!Array.isArray(parsed) || !parsed.length) return { error: '需要非空数组,每行一个对象' }
@@ -154,7 +184,7 @@ function parseCsv(text: string): { rows?: DataSetRow[]; error?: string } {
 /** 粘贴内容自动识别:JSON(以 [ 开头)/ TSV(含 Tab)/ CSV 兜底。 */
 function parseInput(text: string): { rows?: DataSetRow[]; error?: string; format?: string } {
   const trimmed = text.trim()
-  if (!trimmed) return { error: '内容为空' }
+  if (!trimmed) return {}
   if (trimmed.startsWith('[')) {
     try {
       return { format: 'JSON', ...coerceRows(JSON.parse(trimmed)) }
@@ -169,6 +199,15 @@ function parseInput(text: string): { rows?: DataSetRow[]; error?: string; format
 
 const parsed = computed(() => parseInput(rowsText.value))
 
+/** 高级粘贴应用:整表替换网格行(未声明列在网格里以失效键条呈现) */
+function applyPaste() {
+  const { rows, format } = parsed.value
+  if (!rows) return
+  workingRows.value = rows.map((r) => ({ ...r }))
+  rowsText.value = ''
+  toast.success(`已应用 ${format} ${rows.length} 行(未声明列会在网格中标失效键)`)
+}
+
 /** M2b Q3:行账号列 ``@slot.<槽名>``(值 = 绑定名)→ 槽名清单(首见序) */
 function accountSlotsOf(rows: DataSetRow[] | null | undefined): string[] {
   const out: string[] = []
@@ -180,12 +219,10 @@ function accountSlotsOf(rows: DataSetRow[] | null | undefined): string[] {
   return out
 }
 
-/** 简单 CSV 序列化(union 列头,首见序;与粘贴导入互为往返)。 */
-function toCsv(rows: DataSetRow[]): string {
-  const cols: string[] = []
-  for (const r of rows) {
-    for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k)
-  }
+/** CSV 序列化:列序 = 列宇宙序 + 失效键缀后(`__` 前缀键不出导出)。
+ *  与高级粘贴导入互为往返 —— 不复活 var-palette 模板协议(D1 作废)。 */
+function toCsv(rows: Array<Record<string, unknown>>): string {
+  const cols = exportColumnOrder(columns.value, rows)
   const esc = (v: unknown) => {
     const s = String(v ?? '')
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
@@ -194,27 +231,25 @@ function toCsv(rows: DataSetRow[]): string {
 }
 
 function exportCsv() {
-  const { rows } = parsed.value
-  if (!rows) return
-  const base = (formName.value.trim() || editing.value?.datasetId || 'dataset').replace(/[\\/:*?"<>|]/g, '_')
-  downloadFile(`${base}.csv`, toCsv(rows), 'text/csv')
+  if (!workingRows.value.length) return
+  const base = (formName.value.trim() || editingId.value || 'dataset').replace(/[\\/:*?"<>|]/g, '_')
+  downloadFile(`${base}.csv`, toCsv(workingRows.value), 'text/csv')
 }
 
 async function submit() {
-  const { rows } = parsed.value
-  if (!rows || saving.value || loadingExisting.value) return
+  if (saving.value || loadingExisting.value || deadKeys.value.length) return
   const name = formName.value.trim() || `数据集 ${props.dataSets.length + 1}`
   saving.value = true
   try {
+    // varUnlocks 非空才携带(PUT 整体替换,不带的语义 = 清空;空 = 本就无放开)
+    const draft: Parameters<typeof updateDataSet>[1] = { name, rows: workingRows.value as DataSetRow[] }
+    if (workingVarUnlocks.value.length) draft.varUnlocks = workingVarUnlocks.value
     if (mode.value === 'create') {
-      const made = await createDataSet(props.scenarioId, { name, rows })
-      toast.success(`已创建数据集「${made.name || made.datasetId}」(${rows.length} 行)`)
-    } else if (editing.value) {
-      // varUnlocks 原样带回:PUT 整体替换,不带会把既有放开清单清掉
-      const draft: Parameters<typeof updateDataSet>[1] = { name, rows }
-      if (editing.value.varUnlocks?.length) draft.varUnlocks = editing.value.varUnlocks
-      await updateDataSet(editing.value.datasetId, draft)
-      toast.success(`已保存数据集「${name}」(${rows.length} 行)`)
+      const made = await createDataSet(props.scenarioId, draft)
+      toast.success(`已创建数据集「${made.name || made.datasetId}」(${workingRows.value.length} 行)`)
+    } else if (editingId.value) {
+      await updateDataSet(editingId.value, draft)
+      toast.success(`已保存数据集「${name}」(${workingRows.value.length} 行)`)
     }
     dialogOpen.value = false
     emit('saved')
@@ -274,41 +309,61 @@ async function submit() {
       </div>
     </div>
 
-    <!-- 内联维护:名称 + 行数据(JSON/TSV/CSV 粘贴),校验通过才落库 -->
+    <!-- 内联维护:网格为主(变量即列),高级粘贴折叠兜底 -->
     <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
-      <DialogContent class="max-w-[560px]">
+      <DialogContent class="max-w-[960px]">
         <DialogHeader>
           <DialogTitle>{{ mode === 'create' ? '新建数据集' : '编辑数据集' }}</DialogTitle>
         </DialogHeader>
         <div class="create-form" data-testid="create-form">
           <label class="create-label">名称</label>
           <Input v-model="formName" placeholder="数据集 N" data-testid="create-name" />
-          <label class="create-label">行数据(支持粘贴 JSON 数组 / TSV / CSV,自动识别)</label>
-          <textarea
-            v-model="rowsText"
-            rows="8"
-            data-testid="create-rows"
-            class="w-full rounded-field border border-input bg-transparent p-2 font-mono text-body"
-            :placeholder="loadingExisting ? '载入中…' : '粘贴 JSON 数组,或直接从 Excel 粘贴(Tab 分隔)/ CSV 文本'"
-          ></textarea>
-          <p class="create-hint" data-testid="create-account-hint">
-            账号列:列名 <code>@slot.&lt;槽名&gt;</code>,值填本次执行凭证池里的绑定名(个人凭证或项目凭证)——
-            每行可换账号;留空沿用默认绑定。
-          </p>
-          <p v-if="parsed.rows" class="create-hint ok" data-testid="create-preview">
-            {{ parsed.format }} 可解析:{{ parsed.rows.length }} 行
-            <template v-if="accountSlotsOf(parsed.rows).length">
-              · 账号列 {{ accountSlotsOf(parsed.rows).join('、') }}
-            </template>
-          </p>
-          <p v-else-if="parsed.error" class="create-hint bad" data-testid="create-error">
-            {{ parsed.error }}
-          </p>
+
+          <div v-if="loadingExisting" class="slib-loading">载入中…</div>
+          <DataSetGridEditor
+            v-else
+            v-model:rows="workingRows"
+            v-model:var-unlocks="workingVarUnlocks"
+            :scenario-id="scenarioId"
+            :config-vars="configVars"
+            :var-locks="varLocks"
+            :steps="steps"
+          />
+
+          <!-- 高级粘贴:原始 JSON / TSV / CSV 直接替换网格数据(幂等往返) -->
+          <details class="adv-paste">
+            <summary>高级粘贴 — JSON / TSV / CSV(整表替换)</summary>
+            <textarea
+              v-model="rowsText"
+              rows="6"
+              data-testid="create-rows"
+              class="w-full rounded-field border border-input bg-transparent p-2 font-mono text-body"
+              placeholder="粘贴 JSON 数组,或直接从 Excel 粘贴(Tab 分隔)/ CSV 文本"
+            ></textarea>
+            <p class="create-hint" data-testid="create-account-hint">
+              账号列:列名 <code>@slot.&lt;槽名&gt;</code>,值填本次执行凭证池里的绑定名(个人凭证或项目凭证)——
+              每行可换账号;留空沿用默认绑定。
+            </p>
+            <p v-if="parsed.rows" class="create-hint ok" data-testid="create-preview">
+              {{ parsed.format }} 可解析:{{ parsed.rows.length }} 行
+              <template v-if="accountSlotsOf(parsed.rows).length">
+                · 账号列 {{ accountSlotsOf(parsed.rows).join('、') }}
+              </template>
+            </p>
+            <p v-else-if="parsed.error" class="create-hint bad" data-testid="create-error">
+              {{ parsed.error }}
+            </p>
+            <Button v-if="parsed.rows" variant="outline" size="sm"
+              data-testid="apply-paste" @click="applyPaste">应用到网格(替换全部行)</Button>
+          </details>
         </div>
         <DialogFooter>
-          <Button variant="outline" :disabled="!parsed.rows" data-testid="export-csv" @click="exportCsv">导出 CSV</Button>
+          <Button variant="outline" :disabled="!workingRows.length" data-testid="export-csv" @click="exportCsv">导出 CSV</Button>
           <Button variant="outline" @click="dialogOpen = false">取消</Button>
-          <Button :disabled="!parsed.rows || saving || loadingExisting" data-testid="create-submit"
+          <Button :disabled="saving || loadingExisting || deadKeys.length > 0
+            || (mode === 'create' && !workingRows.length)"
+          data-testid="create-submit"
+            :title="deadKeys.length ? `存在未声明列(${deadKeys.join('、')})— 后端会 422 拒收,请移除或去编排器声明` : undefined"
             @click="submit">{{ mode === 'create' ? '创建' : saving ? '保存中…' : '保存' }}</Button>
         </DialogFooter>
       </DialogContent>
@@ -403,4 +458,10 @@ async function submit() {
 .create-hint { margin: 0; font-size: 12px; }
 .create-hint.ok { color: var(--color-success, #15803d); }
 .create-hint.bad { color: var(--color-danger, #dc2626); }
+/* 高级粘贴折叠区:标题行弱化,展开后与网格同一表单节奏 */
+.adv-paste { margin-top: 6px; border: 1px dashed var(--color-border-tertiary); border-radius: 8px; padding: 8px 10px; }
+.adv-paste summary { font-size: 11.5px; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }
+.adv-paste[open] summary { margin-bottom: 8px; }
+.adv-paste .create-hint { margin-top: 6px; }
+.adv-paste button { margin-top: 8px; }
 </style>

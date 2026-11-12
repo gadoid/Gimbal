@@ -39,11 +39,17 @@ const {
   serviceRows,
   stepNames,
   stepCount,
+  steps,
   surface,
   loadError: assemblyLoadError,
   load: loadAssembly,
   refreshSchemes,
 } = useRunAssembly(ref<string | null>(scenarioId))
+
+// ── 数据区(网格编辑器)输入:变量列宇宙 + 变量锁(数据区编辑,2026-11-12)
+const configVars = computed(() => scenarioDraft.value?.definition?.config?.vars ?? null)
+const varLocks = computed(() => scenarioDraft.value?.definition?.config?.var_locks ?? [])
+
 const loading = ref(false)
 const selectedId = ref<string | null>(null)
 
@@ -348,6 +354,9 @@ async function onDeleteDataSet(datasetId: string) {
             v-model="draft.dataSetSelection"
             :data-sets="dataSets"
             :scenario-id="scenarioId"
+            :config-vars="configVars"
+            :var-locks="varLocks"
+            :steps="steps"
             @saved="reloadDataSets"
             @delete="onDeleteDataSet"
           />
