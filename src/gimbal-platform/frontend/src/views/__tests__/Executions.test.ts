@@ -714,8 +714,8 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
   })
 })
 
-// ── W21 修订台账:当时修订 vs 重跑将使用,不一致提示 ────────────────
-describe('Executions.vue — 修订台账 (W21)', () => {
+// ── W21 系统版本信息(原「修订台账」):执行版本 vs 重跑将使用 ────────
+describe('Executions.vue — 系统版本信息 (W21)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })
@@ -728,6 +728,18 @@ describe('Executions.vue — 修订台账 (W21)', () => {
     await flushPromises()
     return w
   }
+
+  it('区块标题「系统版本信息」,表头 系统/执行版本/重跑将使用/一致性', async () => {
+    const w = await mountLedger({
+      plate_pins: { fin: '1.0#1' },
+      current_plate: { fin: '1.0#1' },
+    })
+    expect(w.text()).toContain('系统版本信息')
+    expect(w.text()).not.toContain('修订台账')
+    const heads = w.findAll('[data-testid="revision-ledger"] th').map((h) => h.text())
+    expect(heads).toEqual(['系统', '执行版本', '重跑将使用', '一致性'])
+    w.unmount()
+  })
 
   it('台账行:一致时显示「一致」;当时未钉显示预览徽标', async () => {
     const w = await mountLedger({

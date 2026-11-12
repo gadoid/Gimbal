@@ -1,6 +1,6 @@
 <!-- Executions.vue — 单次执行的实时状态页（V3）。
      可观测面 = Execution 计数器 + 实时日志/报告/执行明细三 tab 域
-     （执行明细 = 执行信息 + 修订台账；行级明细与原始工件已于
+     （执行明细 = 执行信息 + 系统版本信息；行级明细与原始工件已于
      2026-11-12 退役，由报告/日志分析/实时日志承接）。
      V1 的每-run 报告/SSE 已退役。 -->
 <template>
@@ -110,7 +110,7 @@
       <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
     </Alert>
 
-    <!-- B4(2026-11-06 日志报告整理):原执行信息 / 修订台账 /
+    <!-- B4(2026-11-06 日志报告整理):原执行信息 / 系统版本信息(修订台账) /
          行级明细(含原始 engine.log / result.json 工件)收进「执行明细」,
          内容与行为不变,保留排障用途 -->
     <!-- 实时日志为独立 tab 域(2026-11-12 二改:伪 tab/抽屉退役;三改:
@@ -150,19 +150,20 @@
         </template>
       </dl>
 
-      <!-- W21 修订台账:当时修订 vs 重跑将使用的修订(场景当前声明) -->
+      <!-- W21 系统版本信息(原「修订台账」):执行版本 vs 重跑将使用的
+           版本(场景当前声明) -->
       <template v-if="ledgerRows.length">
-        <h3 class="recipe-title">修订台账</h3>
+        <h3 class="recipe-title">系统版本信息</h3>
         <table class="ex-table ledger-table" data-testid="revision-ledger">
           <thead>
-            <tr><th>系统</th><th>当时修订</th><th>重跑将使用</th><th>一致性</th></tr>
+            <tr><th>系统</th><th>执行版本</th><th>重跑将使用</th><th>一致性</th></tr>
           </thead>
           <tbody>
             <tr v-for="row in ledgerRows" :key="row.system">
               <td class="mono">{{ row.system }}</td>
               <td>
                 <span v-if="row.then" class="mono pin-badge pinned">{{ row.then }}</span>
-                <span v-else class="pin-badge working" title="执行时未钉修订(working/预览执行)">未钉 · 预览</span>
+                <span v-else class="pin-badge working" title="执行时未钉版本(working/预览执行)">未钉 · 预览</span>
               </td>
               <td>
                 <span v-if="row.now" class="mono">{{ row.now }}</span>
@@ -171,7 +172,7 @@
               </td>
               <td>
                 <span v-if="row.integration" class="dim"
-                      title="第三方系统恒取当前定义(定义标识见当时修订列),无版本可比">第三方 · 实时定义</span>
+                      title="第三方系统恒取当前定义(定义标识见执行版本列),无版本可比">第三方 · 实时定义</span>
                 <span v-else-if="row.diverged" class="warn-text">不一致 — 重跑结果不可与本次对比</span>
                 <span v-else class="dim">一致</span>
               </td>
@@ -283,7 +284,8 @@ const stepToLabel = computed(() => {
   return String(Math.floor(n) + 1)
 })
 
-// W21 修订台账行:当时修订(plate_pins)∪ 场景当前声明(current_plate);
+// W21 系统版本信息(原「修订台账」)行:执行版本(plate_pins)∪
+// 场景当前声明(current_plate);
 // 不一致 = 重跑按新修订执行,结果不可与本次对比。
 const ledgerRows = computed(() => {
   const d = execStore.detail
@@ -591,7 +593,7 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 
-/* W21 修订台账 */
+/* W21 系统版本信息(原修订台账) */
 .ledger-table { margin-bottom: 8px; }
 .pin-badge {
   display: inline-block; padding: 1px 8px; border-radius: 4px;
@@ -717,7 +719,7 @@ onUnmounted(() => {
   color: var(--color-text-tertiary);
 }
 
-/* ── 行级明细已退役;ex-table 仅修订台账在用 ─────────────── */
+/* ── 行级明细已退役;ex-table 仅系统版本信息表在用 ─────────── */
 .rows-hint {
   @apply text-label font-normal;
   margin: 0;
@@ -735,6 +737,9 @@ onUnmounted(() => {
 
 .ex-table th {
   padding: 8px 10px;
+  /* th 浏览器默认居中,与左对齐的行内容错位 —— 表头随行左对齐
+     (标题「系统」压住「fin/jira」列首,2026-11-12) */
+  text-align: left;
 }
 
 .ex-table td {
