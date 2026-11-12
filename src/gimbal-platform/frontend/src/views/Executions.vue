@@ -1,6 +1,6 @@
 <!-- Executions.vue — 单次执行的实时状态页（V3）。
      可观测面 = Execution 计数器 + 实时日志/报告/执行明细三 tab 域
-     （执行明细 = 执行信息 + 系统版本信息；行级明细与原始工件已于
+     （执行明细 = 版本信息 + 执行信息；行级明细与原始工件已于
      2026-11-12 退役，由报告/日志分析/实时日志承接）。
      V1 的每-run 报告/SSE 已退役。 -->
 <template>
@@ -110,7 +110,7 @@
       <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
     </Alert>
 
-    <!-- B4(2026-11-06 日志报告整理):原执行信息 / 系统版本信息(修订台账) /
+    <!-- B4(2026-11-06 日志报告整理):原执行信息 / 版本信息(修订台账) /
          行级明细(含原始 engine.log / result.json 工件)收进「执行明细」,
          内容与行为不变,保留排障用途 -->
     <!-- 实时日志为独立 tab 域(2026-11-12 二改:伪 tab/抽屉退役;三改:
@@ -134,26 +134,11 @@
         <ExecutionReportPanel :execution-id="executionId" :running="!isTerminalDetail" />
       </TabsContent>
       <TabsContent value="detail">
-      <h3 class="recipe-title">执行信息</h3>
-      <dl class="recipe">
-        <!-- 入站来源(webhook v4 §7.1):经哪张令牌、以谁的身份;JWT 发起的执行不显示 -->
-        <template v-if="execStore.detail?.token_id">
-          <dt>入站来源</dt>
-          <dd class="mono" data-testid="inbound-origin">
-            {{ inboundOriginText }}
-            <span v-if="hasOutOfScope" class="oos-flag">含范围外目标</span>
-          </dd>
-        </template>
-        <template v-for="([k, label, v]) in recipeEntries" :key="k">
-          <dt>{{ label }}</dt>
-          <dd class="mono">{{ formatRecipeValue(v) }}</dd>
-        </template>
-      </dl>
-
-      <!-- W21 系统版本信息(原「修订台账」):执行版本 vs 重跑将使用的
-           版本(场景当前声明) -->
+      <!-- W21 版本信息(原「修订台账」→「系统版本信息」):执行版本 vs
+           重跑将使用的版本(场景当前声明)。置于执行信息上方 ——
+           重跑可对比性是打开明细页的首要问题,版本事实先于配方。 -->
       <template v-if="ledgerRows.length">
-        <h3 class="recipe-title">系统版本信息</h3>
+        <h3 class="recipe-title">版本信息</h3>
         <table class="ex-table ledger-table" data-testid="revision-ledger">
           <thead>
             <tr><th>系统</th><th>执行版本</th><th>重跑将使用</th><th>一致性</th></tr>
@@ -185,6 +170,22 @@
           }}</span>
         </p>
       </template>
+
+      <h3 class="recipe-title">执行信息</h3>
+      <dl class="recipe">
+        <!-- 入站来源(webhook v4 §7.1):经哪张令牌、以谁的身份;JWT 发起的执行不显示 -->
+        <template v-if="execStore.detail?.token_id">
+          <dt>入站来源</dt>
+          <dd class="mono" data-testid="inbound-origin">
+            {{ inboundOriginText }}
+            <span v-if="hasOutOfScope" class="oos-flag">含范围外目标</span>
+          </dd>
+        </template>
+        <template v-for="([k, label, v]) in recipeEntries" :key="k">
+          <dt>{{ label }}</dt>
+          <dd class="mono">{{ formatRecipeValue(v) }}</dd>
+        </template>
+      </dl>
 
       </TabsContent>
     </Tabs>
@@ -284,8 +285,7 @@ const stepToLabel = computed(() => {
   return String(Math.floor(n) + 1)
 })
 
-// W21 系统版本信息(原「修订台账」)行:执行版本(plate_pins)∪
-// 场景当前声明(current_plate);
+// W21 版本信息行:执行版本(plate_pins)∪ 场景当前声明(current_plate);
 // 不一致 = 重跑按新修订执行,结果不可与本次对比。
 const ledgerRows = computed(() => {
   const d = execStore.detail
@@ -593,7 +593,7 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 
-/* W21 系统版本信息(原修订台账) */
+/* W21 版本信息(原修订台账/系统版本信息) */
 .ledger-table { margin-bottom: 8px; }
 .pin-badge {
   display: inline-block; padding: 1px 8px; border-radius: 4px;
@@ -719,10 +719,10 @@ onUnmounted(() => {
   color: var(--color-text-tertiary);
 }
 
-/* ── 行级明细已退役;ex-table 仅系统版本信息表在用 ─────────── */
+/* ── 行级明细已退役;ex-table 仅版本信息表在用 ────────────── */
 .rows-hint {
   @apply text-label font-normal;
-  margin: 0;
+  margin: 0 0 16px;
   color: var(--color-text-tertiary);
 }
 

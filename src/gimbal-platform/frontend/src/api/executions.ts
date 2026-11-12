@@ -108,7 +108,7 @@ export interface Execution {
     token?: Record<string, unknown>
     outOfScope?: Record<string, unknown>
   }
-  /** 系统版本信息(W21,原「修订台账」):执行时生效版本 {系统: "<line>#<n>"};null = 未钉/预览执行 */
+  /** 版本信息(W21,原「修订台账」):执行时生效版本 {系统: "<line>#<n>"};null = 未钉/预览执行 */
   plate_pins?: Record<string, string> | null
   /** M2 构建身份(W21 派发回填;历史执行 = null) */
   m2_hash?: string | null
