@@ -56,7 +56,8 @@ describe('DeploymentsAdmin', () => {
   it('默认进默认环境:chip 激活 + 部署行;冲突区已随 M2a S6 移除', async () => {
     const w = await mountPage()
     expect(deps.listDeployments).toHaveBeenCalledWith(1)
-    expect(w.get('[data-testid="dep-env-1"]').classes()).toContain('active')
+    // 形制对齐 .slib:环境 chip 复用 service-area.css 的 .svc-chip,选中态是 .on
+    expect(w.get('[data-testid="dep-env-1"]').classes()).toContain('on')
     expect(w.get('[data-testid="dep-row-11"]').text()).toContain('fin-service')
     // M2a S6:别名地址退役,conflicts 端点下线 — 待裁定区不再渲染
     expect(w.find('[data-testid="dep-conflicts"]').exists()).toBe(false)
