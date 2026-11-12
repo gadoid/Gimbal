@@ -3,8 +3,9 @@
      30s 轮询 unread-count(不上长连接:活跃执行页已有 1s 轮询先例,
      为一个铃铛引入 WebSocket/SSE 不划算);顺带比对 roleVersion,
      变了 → refetch me(localStorage 角色快照的收敛钩子,§1.3 第六轮)。
-     下拉:最近通知(未读优先)+ 全部已读 + 按 type 开关(与铃铛同批
-     上线 —— 开关先于吵闹型通知,§7 P1b)。 -->
+     下拉:最近通知(未读优先)+ 全部已读;底部「查看全部」→ 通知中心、
+     「管理通知类型」→ 个人设置 #notify(2026-11-12 弹层内嵌按 type
+     开关退役 —— 偏好管理收口到个人设置,弹层只管流水)。 -->
 <template>
   <Popover v-model:open="open">
     <!-- 侧栏底部落点:320px 面板对 200px 侧栏,无论贴锚上弹还是左对齐
@@ -67,21 +68,16 @@
         @click="open = false; router.push('/notifications')"
       >查看全部 →</button>
 
-      <!-- 按 type 开关(开关先于吵闹型通知) -->
-      <div class="border-t px-3 py-2">
-        <div class="mb-1 text-caption font-medium text-slate-600">通知开关</div>
-        <label
-          v-for="item in typeOptions"
-          :key="item.type"
-          class="flex cursor-pointer items-center justify-between py-0.5 text-caption text-slate-600"
-        >
-          <span>{{ item.label }}</span>
-          <Switch
-            :model-value="!off.has(item.type)"
-            @update:model-value="(v: boolean) => onToggle(item.type, v)"
-          />
-        </label>
-      </div>
+      <!-- 类型开关的管理收口到个人设置(2026-11-12):弹层不再内嵌
+           按 type 开关 —— 偏好是低频设置,混在通知流水里既挤占弹层
+           又让人误以为在这里调;个人设置 #notify 已有同一份偏好的
+           开关面板(身份卡「通知偏好」同锚点)。 -->
+      <button
+        type="button"
+        class="block w-full border-t px-3 py-2 text-center text-caption text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+        data-testid="bell-manage"
+        @click="open = false; router.push('/profile/account#notify')"
+      >管理通知类型 →</button>
     </PopoverContent>
   </Popover>
 </template>
@@ -91,10 +87,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { BellIcon } from '@radix-icons/vue'
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Switch } from '@/components/ui/switch'
 import * as api from '@/api/notifications'
-import { NOTIFICATION_TYPE_LABELS } from '@/api/notifications'
-import type { NotificationItem, SwitchableType } from '@/api/notifications'
+import type { NotificationItem } from '@/api/notifications'
 import { useAuthStore } from '@/stores/auth'
 import { relTime } from '@/utils/datetime'
 
@@ -110,11 +104,7 @@ const open = ref(false)
 const loading = ref(false)
 const count = ref(0)
 const items = ref<NotificationItem[]>([])
-const off = ref<Set<SwitchableType>>(new Set())
 let timer: ReturnType<typeof setInterval> | null = null
-
-const typeOptions = (Object.keys(NOTIFICATION_TYPE_LABELS) as SwitchableType[])
-  .map((type) => ({ type, label: NOTIFICATION_TYPE_LABELS[type] }))
 
 async function poll() {
   // authz W6 只能改密门:强制改密期间其余接口一律 403 —— 轮询停摆
@@ -148,20 +138,9 @@ async function loadList() {
   }
 }
 
-async function loadPrefs() {
-  if (auth.mustChangePassword) return
-  try {
-    const p = await api.getPreferences()
-    off.value = new Set(p.off)
-  } catch {
-    /* 偏好读失败 → 全开(默认) */
-  }
-}
-
 function onOpen() {
   if (!open.value) return
   void loadList()
-  void loadPrefs()
 }
 
 async function onReadAll() {
@@ -182,22 +161,8 @@ async function onClickItem(n: NotificationItem) {
   }
 }
 
-async function onToggle(type: SwitchableType, enabled: boolean) {
-  const next = new Set(off.value)
-  if (enabled) next.delete(type)
-  else next.add(type)
-  off.value = next
-  try {
-    await api.putPreferences([...next])
-  } catch {
-    off.value = new Set([...off.value].filter((t) => (t === type ? !enabled : true)))
-    void loadPrefs()
-  }
-}
-
 onMounted(() => {
   void poll()
-  void loadPrefs()
   timer = setInterval(poll, POLL_MS)
 })
 onBeforeUnmount(() => {
