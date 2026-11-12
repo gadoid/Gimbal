@@ -540,7 +540,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 8px;
 }
 /* TooltipTrigger 的 span 包装器与状态徽标都以行内盒居中参与 */
 .exec-actions > span {
@@ -548,9 +548,12 @@ onUnmounted(() => {
   align-items: center;
 }
 /* PageBack 全局形态带 padding-top:4px(为非居中容器兜底);
-   本行 items-center 已居中,补丁在这里造成下坠 —— 就地归零 */
+   本行 items-center 已居中,补丁在这里造成下坠 —— 就地归零。
+   右距 10px:返回链接是导航,与「状态+动作」组拉开一档(实测
+   12px 时整行读成连串,2026-11-12 浏览器实测定值) */
 .exec-actions :deep(.pgback) {
   padding-top: 0;
+  margin-right: 10px;
 }
 
 .status-tag {
