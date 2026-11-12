@@ -18,40 +18,47 @@
       </p>
     </template>
 
+    <!-- 页头动作行(2026-11-12 对齐统一):返回链接 / 状态徽标 /
+         链接动作同一居中基线 —— PageBack 全局形态带 padding-top
+         (为其他非居中容器兜底),本行就地归零;状态徽标定高与链接
+         动作同一视觉带;动作统一 variant=link + h-7 px-2 形制,
+         语义色区分(普通=primary / 取消=amber / 删除=红)。 -->
     <template #actions>
-      <PageBack to="/executions" label="执行记录" />
-      <span :class="['status-tag', `status-${execStore.detail.status}`]" :title="execStore.detail.cancel_note ?? undefined">
-        {{ statusText }}
-      </span>
-      <TooltipProvider>
-        <Tooltip :open="execStore.detail.has_scenario_snapshot ? undefined : false">
-          <TooltipTrigger as-child>
-            <span>
-              <Button
-                variant="link"
-                size="sm"
-                class="h-7 px-2"
-                :disabled="!execStore.detail.has_scenario_snapshot"
-                data-testid="exec-export-scenario"
-                @click="exportScenario"
-              >导出场景</Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent v-if="!execStore.detail.has_scenario_snapshot">
-            该执行早于快照功能上线，无执行时场景快照
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <Button
-        v-if="canCancel"
-        variant="link"
-        size="sm"
-        class="h-7 px-2 text-amber-700"
-        @click="cancelExec"
-      >取消</Button>
-      <Button variant="link" size="sm" class="h-7 px-2" data-testid="goto-events"
-              @click="gotoEvents">日志分析</Button>
-      <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
+      <div class="exec-actions">
+        <PageBack to="/executions" label="执行记录" />
+        <span :class="['status-tag', `status-${execStore.detail.status}`]" :title="execStore.detail.cancel_note ?? undefined">
+          {{ statusText }}
+        </span>
+        <TooltipProvider>
+          <Tooltip :open="execStore.detail.has_scenario_snapshot ? undefined : false">
+            <TooltipTrigger as-child>
+              <span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  class="h-7 px-2"
+                  :disabled="!execStore.detail.has_scenario_snapshot"
+                  data-testid="exec-export-scenario"
+                  @click="exportScenario"
+                >导出场景</Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent v-if="!execStore.detail.has_scenario_snapshot">
+              该执行早于快照功能上线，无执行时场景快照
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <Button
+          v-if="canCancel"
+          variant="link"
+          size="sm"
+          class="h-7 px-2 text-amber-700"
+          @click="cancelExec"
+        >取消</Button>
+        <Button variant="link" size="sm" class="h-7 px-2" data-testid="goto-events"
+                @click="gotoEvents">日志分析</Button>
+        <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
+      </div>
     </template>
 
     <template #summary>
@@ -524,8 +531,34 @@ onUnmounted(() => {
   vertical-align: middle;
 }
 
+/* ── 页头动作行(2026-11-12 对齐统一)────────────────────────
+   返回链接 / 状态徽标 / 链接动作同一居中基线;细项间距收口。
+   HubDetailPage 的 #actions 容器已是 items-center,这里只管行内
+   形态:徽标与动作同带高,PageBack 的全局 padding-top 归零。 */
+.exec-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+/* TooltipTrigger 的 span 包装器与状态徽标都以行内盒居中参与 */
+.exec-actions > span {
+  display: inline-flex;
+  align-items: center;
+}
+/* PageBack 全局形态带 padding-top:4px(为非居中容器兜底);
+   本行 items-center 已居中,补丁在这里造成下坠 —— 就地归零 */
+.exec-actions :deep(.pgback) {
+  padding-top: 0;
+}
+
 .status-tag {
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  margin-left: 8px;
   @apply text-caption font-semibold;
   border-radius: 4px;
 }
