@@ -104,8 +104,8 @@
       class="flex items-center justify-between gap-2 border-t border-white/10 py-3"
       :class="collapsed ? 'flex-col px-0' : 'flex-col px-4'"
     >
-      <UserBadge :compact="collapsed" layout="footer" />
       <ThemeToggle :compact="collapsed" />
+      <UserBadge :compact="collapsed" layout="footer" />
     </div>
 
   </aside>

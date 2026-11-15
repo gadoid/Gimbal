@@ -7,10 +7,13 @@
     <title>Gimbal Platform</title>
     <script>
       // 首帧防闪:CSS 加载前恢复主题(useTheme 同键 gimbal-theme;
-      // 仅 dark 写 data-theme,light 缺省 —— 与 dual-theme.css 选择器单一覆盖面)
+      // dark 或 system∧系统暗 → 写 data-theme,其余缺省 —— 与
+      // dual-theme.css 选择器单一覆盖面)
       try {
-        if (localStorage.getItem('gimbal-theme') === 'dark') {
-          document.documentElement.dataset.theme = 'dark'
+        var t = localStorage.getItem('gimbal-theme') || 'system';
+        if (t === 'dark' || (t === 'system' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.dataset.theme = 'dark';
         }
       } catch (e) { /* 隐私模式等:按日间首帧 */ }
     </script>

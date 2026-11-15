@@ -48,7 +48,7 @@
           v-if="pendingTokens" class="token-dot" title="有令牌即将到期或已失效"
           aria-label="有令牌即将到期或已失效"
         ></span>
-        <span class="role-chip">{{ roleLabel }}</span>
+        <span class="role-chip" :class="role === 'super_admin' ? 'role-chip--super' : ''">{{ roleLabel }}</span>
       </span>
     </button>
     <div class="flex w-full items-center justify-between gap-2">
@@ -80,7 +80,7 @@
             <span class="username max-w-24 truncate text-body font-medium text-slate-50">
               {{ auth.currentUser.display_name || auth.currentUser.username }}
             </span>
-            <span class="role-chip">{{ roleLabel }}</span>
+            <span class="role-chip" :class="role === 'super_admin' ? 'role-chip--super' : ''">{{ roleLabel }}</span>
             <span
               v-if="pendingTokens" class="token-dot" aria-label="有令牌即将到期或已失效"
             ></span>
@@ -132,6 +132,7 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const ROLE_LABELS: Record<string, string> = { user: '用户', member: '成员', admin: '管理员' }
+const role = computed(() => auth.role)
 const roleLabel = computed(() => ROLE_LABELS[auth.role] ?? auth.role)
 
 const initial = computed(() =>
@@ -190,6 +191,14 @@ async function onLogout() {
   border-radius: 999px;
   font-size: 10px;
   background: rgba(255, 255, 255, 0.12);
-  color: var(--color-border-secondary);
+  /* 恒亮色:role-chip 常驻深色 chrome(不随主题令牌翻转)——
+     此前引用 --color-border-secondary,夜间翻深灰在深底隐形 */
+  color: rgba(255, 255, 255, 0.72);
+}
+/* super_admin 专属高亮(琥珀金;两主题恒定 —— chrome 恒暗) */
+.role-chip--super {
+  background: rgba(250, 204, 21, 0.16);
+  color: #fbbf24;
+  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.4);
 }
 </style>
