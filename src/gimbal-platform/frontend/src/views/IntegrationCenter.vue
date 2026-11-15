@@ -177,7 +177,7 @@
              class="ig-hint" data-testid="ig-form-cred-hint">
             所需凭证别名:{{ preview.authAliases.join('、') }}
             <template v-if="preview.missingCredentials.length">
-              — <b>未配置:{{ preview.missingCredentials.join('、') }}</b>(任务会暂停在「缺凭证」,到「认证管理」配置后自动恢复)
+              — <b>未配置:{{ preview.missingCredentials.join('、') }}</b>(任务会暂停在「缺凭证」,到「凭证管理」配置后自动恢复)
             </template>
             <template v-else>— 均已配置</template>
           </p>
@@ -531,56 +531,56 @@ onMounted(() => {
 }
 .ig-name { display: flex; align-items: center; gap: 6px; font-weight: 500; }
 .ig-name-link { color: inherit; text-decoration: none; }
-.ig-name-link:hover { color: var(--color-signal, #2f6fed); text-decoration: underline; }
+.ig-name-link:hover { color: var(--color-signal, var(--c-8)); text-decoration: underline; }
 .ig-token { font-size: 11.5px; color: rgb(100 116 139); margin-top: 2px; }
 .ig-chip {
   font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 400;
   color: rgb(100 116 139); border: 1px solid rgb(100 116 139 / 30%);
 }
-.ig-chip.mine { color: #4338ca; border-color: var(--accent-soft-border, #c7d2fe); }
+.ig-chip.mine { color: var(--c-8); border-color: var(--accent-soft-border, var(--c-53)); }
 .ig-sid { font-size: 11.5px; color: rgb(100 116 139); }
 .ig-status { font-size: 12.5px; font-weight: 600; }
-.ig-status.ok { color: #15803d; }
-.ig-status.bad { color: #dc2626; }
-.ig-status.run { color: #2f6fed; }
+.ig-status.ok { color: var(--c-18); }
+.ig-status.bad { color: var(--c-3); }
+.ig-status.run { color: var(--c-8); }
 .ig-status.muted { color: rgb(100 116 139); font-weight: 400; }
 .ig-ops { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
 .ig-act {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #4338ca; background: var(--accent-soft, #eef2ff);
-  border: 1px solid var(--accent-soft-border, #c7d2fe);
+  color: var(--c-8); background: var(--accent-soft, var(--c-40));
+  border: 1px solid var(--accent-soft-border, var(--c-53));
 }
 .ig-act:disabled { opacity: .5; cursor: not-allowed; }
-.ig-act.danger { color: #dc2626; background: rgb(220 38 38 / 6%); border-color: rgb(220 38 38 / 35%); }
+.ig-act.danger { color: var(--c-3); background: rgb(220 38 38 / 6%); border-color: rgb(220 38 38 / 35%); }
 
 .ig-mask {
   position: fixed; inset: 0; z-index: 60; display: flex; align-items: center;
   justify-content: center; background: rgb(15 23 42 / 45%); padding: 16px;
 }
 .ig-dialog {
-  width: min(520px, 100%); background: #fff; border-radius: 10px; padding: 18px;
-  display: flex; flex-direction: column; gap: 10px; color: #1f2933;
+  width: min(520px, 100%); background: var(--c-1); border-radius: 10px; padding: 18px;
+  display: flex; flex-direction: column; gap: 10px; color: var(--c-47);
   box-shadow: 0 20px 50px rgb(0 0 0 / 15%);
 }
 .ig-dialog h2 { margin: 0; font-size: 16px; }
 .ig-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 500; color: rgb(100 116 139); }
 .ig-field input, .ig-field select {
-  height: 32px; padding: 0 10px; border: 1px solid #e2e8f0; border-radius: 6px;
-  font: inherit; font-size: 12.5px; color: #1f2933;
+  height: 32px; padding: 0 10px; border: 1px solid var(--c-5); border-radius: 6px;
+  font: inherit; font-size: 12.5px; color: var(--c-47);
 }
 .ig-field-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
-.ig-err { margin: 0; font-size: 12.5px; color: #dc2626; }
-.ig-warn { margin: 0; font-size: 12.5px; color: #b45309; }
+.ig-err { margin: 0; font-size: 12.5px; color: var(--c-3); }
+.ig-warn { margin: 0; font-size: 12.5px; color: var(--c-7); }
 .ig-hint { margin: 0; font-size: 11.5px; color: rgb(100 116 139); line-height: 1.6; }
 .ig-hint-inline { font-size: 11.5px; color: rgb(100 116 139); font-weight: 400; }
 .ig-dialog-acts { display: flex; justify-content: flex-end; gap: 8px; }
 .ig-ghost {
   padding: 7px 14px; border-radius: 6px; cursor: pointer;
-  border: 1px solid #e2e8f0; background: #fff; color: inherit; font: inherit;
+  border: 1px solid var(--c-5); background: var(--c-1); color: inherit; font: inherit;
 }
 .ig-primary {
   padding: 7px 16px; border-radius: 6px; cursor: pointer; font: inherit;
-  border: none; background: #4338ca; color: #fff; font-weight: 600;
+  border: none; background: var(--c-8); color: #fff; font-weight: 600;
 }
 .ig-primary:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -590,7 +590,7 @@ onMounted(() => {
 .ig-cred-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .ig-cred-form input {
   flex: 1; min-width: 140px; height: 32px; padding: 0 10px;
-  border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; font-size: 12.5px;
+  border: 1px solid var(--c-5); border-radius: 6px; font: inherit; font-size: 12.5px;
 }
 .ig-cred-form button { flex: none; }
 .mono { font-family: ui-monospace, Menlo, monospace; }

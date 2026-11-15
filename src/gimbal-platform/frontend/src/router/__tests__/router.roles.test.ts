@@ -60,7 +60,7 @@ describe('router — 能力矩阵守卫(authz W8)', () => {
     expect(await nav('/admin/deployments')).toBe('/service-admin')
   })
 
-  it('别名详情页全员可达(2026-11-13 放开:认证管理「被引用」深链进来;' +
+  it('别名详情页全员可达(2026-11-13 放开:凭证管理「被引用」深链进来;' +
      '写面由后端 admin ∨ 属主与页内 tab 能力门把关,路由不再收 ops.write)', async () => {
     loginAs('admin')
     expect(await nav('/service-admin/agent-sys')).toBe('/service-admin/agent-sys'

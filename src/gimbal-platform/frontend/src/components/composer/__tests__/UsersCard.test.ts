@@ -191,7 +191,7 @@ describe('UsersCard — 凭证池导入', () => {
   it('单条 422 → 跳过该条、其余继续导入', async () => {
     vi.mocked(get).mockImplementation((id: number) =>
       id === 1
-        ? Promise.reject(new Error('加密凭据已损坏或密钥已轮换，请先在认证管理重新编辑保存'))
+        ? Promise.reject(new Error('加密凭据已损坏或密钥已轮换，请先在凭证管理重新编辑保存'))
         : Promise.resolve({ ...poolB, password: 'plain-pw-2' } as any),
     )
     const { w, users } = mountCard({})

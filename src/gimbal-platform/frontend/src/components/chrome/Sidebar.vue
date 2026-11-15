@@ -172,7 +172,8 @@ interface SidebarGroup {
 const ActivityLineIcon: Component = (_props, { attrs }) =>
   h(SlibIcon, { name: 'activity', size: 14, ...attrs })
 
-// 结构基准 = F-sitemap v2:服务组顺序 认证管理/传递字段/变更适配;
+// 结构基准 = F-sitemap v2:服务组顺序(2026-11-15 起认证管理更名凭证
+// 管理并迁「我的」组)服务画像/变更适配/集成服务;
 // 常量池不进侧边栏(工作台卡片承接,/constants 仅深链可达)。
 const groups: SidebarGroup[] = [
   {
@@ -190,11 +191,14 @@ const groups: SidebarGroup[] = [
     // 2026-11-10 IA:组更名「我的」—— 我的名下内容一组收口:场景 /
     // 关注(原「场景」组)+ 场景集(原「用例集」组并入,页面同名)。
     // 「公共场景 / 公共用例集」仍并入公共项目(S7.1 不变)。
+    // 2026-11-15:凭证管理(原服务组「认证管理」,更名)迁入 ——
+    // 槽位绑定是执行人个人资产(凭证池按人归属),语义归「我的」。
     label: '我的',
     entries: [
       { path: '/scenarios/follows', label: '关注', icon: StarIcon },
       { path: '/scenarios/mine', label: '场景', icon: ArchiveIcon },
       { path: '/suites', label: '场景集', icon: StackIcon },
+      { path: '/auths', label: '凭证管理', icon: LockClosedIcon },
     ],
   },
   // 项目组(M2a S7.1 IA 修正):项目成为一级入口 —— 公共项目置顶,
@@ -209,7 +213,8 @@ const groups: SidebarGroup[] = [
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      { path: '/auths', label: '认证管理', icon: LockClosedIcon },
+      // 2026-11-15:凭证管理(原「认证管理」)迁「我的」组 —— 槽位
+      // 绑定是执行人个人资产;服务组回归纯「被调面」信息
       // 分层⑥:「默认值」页与个人层均已退役(全局默认在公共项目「配置」
       // 页签,个人默认在执行配置 /exec-configs)
       { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },

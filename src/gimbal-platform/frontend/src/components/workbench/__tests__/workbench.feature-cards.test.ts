@@ -1,5 +1,5 @@
 /**
- * 工作台补登的功能页卡 —— 服务画像 / 认证管理 / 变更适配 / 执行器,
+ * 工作台补登的功能页卡 —— 服务画像 / 凭证管理 / 变更适配 / 执行器,
  * 以及三张能力门卡(服务注册 / 默认值 = ops.write;用户管理 = users.manage)。
  * 钉住 §7 的三条契约:
  * - 每张卡复用完整页的取数与判定谓词,不另开口子、不另算一套计数;
@@ -152,7 +152,7 @@ describe('服务画像卡', () => {
   })
 })
 
-describe('认证管理卡', () => {
+describe('凭证管理卡', () => {
   it('未被引用 = alias_ref_count 与 scenario_ref_count 都空', async () => {
     const AUTHS = [
       { id: 1, alias: 'codfish', token_type: 'Bearer', url: 'u', username: 'x', updated_at: '', alias_ref_count: 0, scenario_ref_count: 0 },

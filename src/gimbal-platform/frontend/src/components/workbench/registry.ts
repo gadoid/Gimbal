@@ -146,7 +146,7 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
   },
   {
     id: 'auths',
-    title: '认证管理',
+    title: '凭证管理',
     description: '凭证池概况 — 多少条、多少条已没人引用可清理',
     accent: 'blue',
     component: () => import('./AuthSessionsCard.vue'),

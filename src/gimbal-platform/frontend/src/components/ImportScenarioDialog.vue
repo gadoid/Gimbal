@@ -23,7 +23,7 @@
     <div class="imp-dialog lib-card">
       <div class="imp-head">
         <span class="text-body font-semibold">导入场景</span>
-        <span class="text-caption text-slate-500">导入 = 新建:与源场景无关,配置由你接手维护</span>
+        <span class="text-caption text-signal-muted">导入 = 新建:与源场景无关,配置由你接手维护</span>
         <span class="flex-1"></span>
         <button type="button" class="imp-x" data-testid="import-close" @click="onClose">✕</button>
       </div>
@@ -58,10 +58,10 @@
               ⚠ 认证标签 <b class="mono">{{ u.tag }}</b>({{ u.services.join('、') }})未落地为槽位:{{ undeclaredReasonLabel(u.reason) }} —— 这些步骤执行时会报错。
             </p>
           </div>
-          <p v-if="result.droppedUsers?.length" class="text-caption text-slate-500" data-testid="import-dropped">
+          <p v-if="result.droppedUsers?.length" class="text-caption text-signal-muted" data-testid="import-dropped">
             未被任何步骤使用的内置凭证已丢弃:{{ result.droppedUsers.join('、') }}
           </p>
-          <p class="text-caption text-slate-500">
+          <p class="text-caption text-signal-muted">
             <button type="button" class="imp-link" data-testid="import-my-bindings" @click="goBind()">管理我的槽位绑定</button>
           </p>
         </div>
@@ -71,7 +71,7 @@
           <p class="imp-fatal-title">无法导入</p>
           <p v-for="e in precheck?.convert.errors || []" :key="e" class="imp-fatal-line">{{ e }}</p>
           <p v-if="revisionsHint" class="imp-fatal-line">{{ revisionsHint }}</p>
-          <p class="text-caption text-slate-500">请修改文件后重试;文件请用「导出 JSON」产物 —— 带方案导出含导出人明文凭证,不建议用于传递。</p>
+          <p class="text-caption text-signal-muted">请修改文件后重试;文件请用「导出 JSON」产物 —— 带方案导出含导出人明文凭证,不建议用于传递。</p>
         </div>
 
         <template v-else>
@@ -90,7 +90,7 @@
                carry 降级门控(服务绑定全表字段可能注入请求体) -->
           <div v-if="anchorUnresolved.length || anchorAnchored.length" class="imp-section" data-testid="import-anchoring">
             <p class="imp-sec-title">步骤锚定(可执行形态反查)</p>
-            <p v-if="anchorAnchored.length" class="text-caption text-slate-500">
+            <p v-if="anchorAnchored.length" class="text-caption text-signal-muted">
               已回填锚点 {{ anchorAnchored.length }} 步(与编排器保存形态一致)。
             </p>
             <div v-if="anchorUnresolved.length" class="imp-warn">
@@ -123,7 +123,7 @@
                   <td class="mono">{{ row.serviceKey }}</td>
                   <td>{{ suggestionLabel(row.suggestion) }}</td>
                   <td>{{ toAliasCount(row) }}</td>
-                  <td>{{ keptLiteralCount(row) }}<span v-if="row.sensitivePaths.length" class="text-caption text-slate-500">(含敏感 {{ row.sensitivePaths.length }})</span><span v-if="row.inconsistentPaths.length" class="text-caption text-slate-500">(取值不一致 {{ row.inconsistentPaths.length }})</span></td>
+                  <td>{{ keptLiteralCount(row) }}<span v-if="row.sensitivePaths.length" class="text-caption text-signal-muted">(含敏感 {{ row.sensitivePaths.length }})</span><span v-if="row.inconsistentPaths.length" class="text-caption text-signal-muted">(取值不一致 {{ row.inconsistentPaths.length }})</span></td>
                   <td>
                     <template v-if="exists(row)">
                       <label class="imp-inline"><input type="radio" :name="`d-${row.serviceKey}`" value="reuse" :checked="decision(row) !== 'create'" @change="setDecision(row, 'map')" />映射到已有</label>
@@ -131,7 +131,7 @@
                            无能力者不见此选项,后端同门 403 兜底 -->
                       <label v-if="canCreateAlias" class="imp-inline"><input type="radio" :name="`d-${row.serviceKey}`" value="create" :checked="decision(row) === 'create'" @change="setDecision(row, 'create')" />新建</label>
                     </template>
-                    <span v-else class="text-caption text-slate-500">
+                    <span v-else class="text-caption text-signal-muted">
                       新建{{ canCreateAlias ? '' : '(需别名管理权 alias.write — 联系管理员登记后再导入)' }}
                     </span>
                   </td>
@@ -147,7 +147,7 @@
                         </select>
                       </label>
                     </div>
-                    <p class="text-caption text-slate-500">
+                    <p class="text-caption text-signal-muted">
                       base_url 与 carry 绑定对全平台生效(其他场景引用同名服务键也会命中);敏感字段不写入 carry,保留字面值。
                       <span v-if="!createNameOk(row)">⚠ 该名不可原样登记(不在目录派生范围或已被占用),需换名。</span>
                     </p>
@@ -168,7 +168,7 @@
                 {{ a.tag }}:{{ a.inMyPool ? '你的凭证池已有' : '你的凭证池没有' }}
               </span>
             </div>
-            <p class="text-caption text-slate-500">「没有」的引用执行时该步会报错——到认证管理补配你自己的凭证。</p>
+            <p class="text-caption text-signal-muted">「没有」的引用执行时该步会报错——到凭证管理补配你自己的凭证。</p>
           </div>
 
           <!-- 内置凭证 → 槽位声明(S7.5) -->
@@ -179,7 +179,7 @@
                 {{ u.tag }}<template v-if="u.services.length">({{ u.services.join('、') }})</template>:{{ u.bound ? '你已绑定该槽位' : '你未绑定该槽位' }}
               </span>
             </div>
-            <p class="text-caption text-slate-500">
+            <p class="text-caption text-signal-muted">
               文件里的凭证明文不会导入;这些键转为槽位声明,执行时用你自己的槽位绑定。新建别名未选认证配置时自动声明该服务使用的槽位;映射到已声明别的槽位的别名时,步骤改用本机槽位。导入后列出最终需要绑定的槽位。
             </p>
           </div>
@@ -191,7 +191,7 @@
         <button type="button" class="imp-btn imp-btn-primary" data-testid="import-open-scenario" @click="openScenario">进入场景</button>
       </div>
       <div v-else class="imp-foot">
-        <span v-if="reprechecking" class="text-caption text-slate-500">已重新预检(配置有变化)…</span>
+        <span v-if="reprechecking" class="text-caption text-signal-muted">已重新预检(配置有变化)…</span>
         <span class="flex-1"></span>
         <button type="button" class="imp-btn" @click="onClose">{{ fatal ? '知道了' : '取消' }}</button>
         <button
@@ -425,64 +425,64 @@ watch(() => props.open, (v) => {
 }
 .imp-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 14px 18px; border-bottom: 1px solid #eef0f4;
+  padding: 14px 18px; border-bottom: 1px solid var(--c-39);
 }
 .imp-x {
   border: none; background: transparent; cursor: pointer;
-  color: #64748b; font-size: 14px;
+  color: var(--c-6); font-size: 14px;
 }
 .imp-body { padding: 14px 18px; overflow-y: auto; }
 .imp-section { margin-bottom: 14px; }
 .imp-sec-title {
-  font-size: 12.5px; font-weight: 600; color: #334155; margin-bottom: 6px;
+  font-size: 12.5px; font-weight: 600; color: var(--c-10); margin-bottom: 6px;
 }
 .imp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .imp-chip {
   padding: 1px 8px; border-radius: 999px; font-size: 11.5px;
-  border: 1px solid #e1e5eb; background: #f8fafc; color: #334155;
+  border: 1px solid var(--c-5); background: var(--c-1); color: var(--c-10);
 }
-.imp-chip-miss { border-color: #f59e0b; background: #fffbeb; color: #b45309; }
+.imp-chip-miss { border-color: #f59e0b; background: var(--c-36); color: var(--c-7); }
 .imp-warn {
-  margin-top: 6px; font-size: 11.5px; color: #b45309;
-  background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 4px 8px;
+  margin-top: 6px; font-size: 11.5px; color: var(--c-7);
+  background: var(--c-36); border: 1px solid var(--c-35); border-radius: 6px; padding: 4px 8px;
 }
 .imp-warn-line { font-size: 12px; line-height: 1.5; }
 .imp-warn-line + .imp-warn-line { margin-top: 2px; }
 .imp-fatal {
-  border: 1px solid #fecaca; background: #fef2f2; border-radius: 8px;
+  border: 1px solid var(--c-2); background: var(--c-31); border-radius: 8px;
   padding: 12px;
 }
-.imp-fatal-title { font-weight: 600; color: #b91c1c; font-size: 13px; }
+.imp-fatal-title { font-weight: 600; color: var(--c-3); font-size: 13px; }
 .imp-fatal-line { font-size: 12px; color: #7f1d1d; margin-top: 4px; word-break: break-all; }
-.imp-check { font-size: 12.5px; color: #334155; display: flex; gap: 6px; align-items: center; }
-.imp-id { font-family: ui-monospace, monospace; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; }
+.imp-check { font-size: 12.5px; color: var(--c-10); display: flex; gap: 6px; align-items: center; }
+.imp-id { font-family: ui-monospace, monospace; background: var(--c-9); padding: 1px 6px; border-radius: 4px; }
 .imp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .imp-table th {
-  text-align: left; font-weight: 600; color: #64748b; font-size: 11px;
-  padding: 4px 8px; border-bottom: 1px solid #eef0f4;
+  text-align: left; font-weight: 600; color: var(--c-6); font-size: 11px;
+  padding: 4px 8px; border-bottom: 1px solid var(--c-39);
 }
-.imp-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-.imp-create-cfg td { background: #f8fafc; }
-.imp-cfg-line { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 4px; font-size: 12px; color: #334155; }
+.imp-table td { padding: 6px 8px; border-bottom: 1px solid var(--c-5); vertical-align: top; }
+.imp-create-cfg td { background: var(--c-1); }
+.imp-cfg-line { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 4px; font-size: 12px; color: var(--c-10); }
 .imp-inline { display: inline-flex; gap: 4px; align-items: center; margin-right: 10px; font-size: 12px; }
 .imp-input {
-  border: 1px solid #e1e5eb; border-radius: 6px; padding: 2px 8px;
-  font-size: 12px; background: #fff; min-width: 140px;
+  border: 1px solid var(--c-5); border-radius: 6px; padding: 2px 8px;
+  font-size: 12px; background: var(--c-1); min-width: 140px;
 }
 .imp-foot {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 18px; border-top: 1px solid #eef0f4;
+  padding: 12px 18px; border-top: 1px solid var(--c-39);
 }
 .imp-btn {
-  padding: 5px 16px; border-radius: 6px; border: 1px solid #e1e5eb;
-  background: #fff; font-size: 12.5px; cursor: pointer; color: #334155;
+  padding: 5px 16px; border-radius: 6px; border: 1px solid var(--c-5);
+  background: var(--c-1); font-size: 12.5px; cursor: pointer; color: var(--c-10);
 }
-.imp-btn-primary { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+.imp-btn-primary { background: var(--c-8); border-color: var(--c-8); color: #fff; }
 .imp-btn-primary:disabled { opacity: 0.6; cursor: default; }
 .mono { font-family: ui-monospace, monospace; }
-.imp-ok { font-size: 12.5px; color: #166534; margin-bottom: 10px; }
+.imp-ok { font-size: 12.5px; color: var(--c-18); margin-bottom: 10px; }
 .imp-link {
   border: none; background: transparent; padding: 0; cursor: pointer;
-  color: #2f6fed; font-size: 12px; text-decoration: underline;
+  color: var(--c-8); font-size: 12px; text-decoration: underline;
 }
 </style>

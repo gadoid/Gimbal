@@ -327,11 +327,11 @@ const routes = [
   },
   {
     // 键详情(配套方案 §2.2):别名全名或 base 服务名同一详情页,
-    // 字段默认值 tab 在此编辑;?tab=credential 供认证管理反查深链
+    // 字段默认值 tab 在此编辑;?tab=credential 供凭证管理反查深链
     path: '/service-admin/:alias',
     component: () => import('@/views/ServiceAliasDetail.vue'),
     // 全员可达(2026-11-13 兑现全量评估 #3 的放开):别名属主要在本页看
-    // 绑定面,入站调用方(个人 gtk_ 令牌)经认证管理「被引用」深链进来。
+    // 绑定面,入站调用方(个人 gtk_ 令牌)经凭证管理「被引用」深链进来。
     // 读面全员(别名/环境/部署表读 API 均无能力门);写面仍由后端
     // (admin ∨ 属主)与子面板把关 —— 字段默认值 tab 的 fields 取数是
     // ops.write 门,页内按能力收 tab(见 ServiceAliasDetail)。

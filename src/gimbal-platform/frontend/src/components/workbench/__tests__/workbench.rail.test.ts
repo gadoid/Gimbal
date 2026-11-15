@@ -27,7 +27,7 @@ vi.mock('@/api/executions', () => ({ listExecutions: vi.fn() }))
 vi.mock('@/api/activity', () => ({ getActivity: vi.fn() }))
 vi.mock('@/api/adaptations', () => ({ listBatches: vi.fn() }))
 vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]) }))
-// 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
+// 新增的 registry 卡(凭证管理 / 服务画像)同样不能打真网络
 vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),

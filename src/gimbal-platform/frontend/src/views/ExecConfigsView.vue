@@ -1,6 +1,6 @@
 <!-- ExecConfigsView.vue — 执行配置管理页(执行配置分层①/③,/exec-configs)。
      个人面·全员:一套默认 + 若干命名配置,每组配置按系统分组内联子配置
-     (bindings + carryOverrides)。零凭证值零地址值 —— 凭证在认证管理、
+     (bindings + carryOverrides)。零凭证值零地址值 —— 凭证在凭证管理、
      地址在服务注册(2026-11-13 起身份面与地址同页治理),这里只存引用键。
      ③ 关联枢纽(§8):对既有配置面只做**关联** —— 存引用键 + 放深链,
      不搬数据、不代管维护面与权限门。页内四路关联:环境→地址就绪度+
@@ -18,13 +18,13 @@
       title="配置"
       :count="loading ? '' : `${rows.length} 套配置`"
       :meta="mode === 'edit' && selected ? `当前配置 · ${selected.name}` : undefined"
-      subtitle="场景外部支撑的跨场景载体:在哪(环境)、以谁(槽位绑定)、带什么业务参数(carry 覆盖)。一套默认 + 若干命名变体;执行时选一套注入。凭证在「认证管理」按槽位解析、地址随环境取部署表 —— 本页零凭证值零地址值。"
+      subtitle="场景外部支撑的跨场景载体:在哪(环境)、以谁(槽位绑定)、带什么业务参数(carry 覆盖)。一套默认 + 若干命名变体;执行时选一套注入。凭证在「凭证管理」按槽位解析、地址随环境取部署表 —— 本页零凭证值零地址值。"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
 
     <template v-else>
-      <!-- 配置 chip 行 = 视图切换(单选),与认证管理同族 -->
+      <!-- 配置 chip 行 = 视图切换(单选),与凭证管理同族 -->
       <div class="slib-toolbar" data-testid="ec-chips">
         <span class="svc-stats tight">
           <button v-for="c in rows" :key="c.id" type="button" class="svc-chip"
@@ -38,7 +38,7 @@
       </div>
 
       <div v-if="!rows.length" class="slib-empty">
-        <p>暂无执行配置 —— 新建一套默认配置(或从认证管理/服务注册开始)</p>
+        <p>暂无执行配置 —— 新建一套默认配置(或从凭证管理/服务注册开始)</p>
       </div>
 
       <!-- 新建 / 编辑(整体替换式) -->
@@ -201,7 +201,7 @@
         <div class="svc-panel" data-testid="ec-hub-slots">
           <div class="svc-panel-head">
             <span class="svc-panel-title">槽位绑定就绪</span>
-            <span class="svc-panel-desc">配置槽位 → 个人认证池同名槽;缺失点直达认证管理</span>
+            <span class="svc-panel-desc">配置槽位 → 个人认证池同名槽;缺失点直达凭证管理</span>
           </div>
           <p v-if="!hasBindings" class="hub-note">
             未配置绑定 —— 注入按别名声明槽位解析(配置层不覆盖)。
@@ -227,7 +227,7 @@
                   </td>
                   <td>
                     <!-- 未登记 → 该服务子页的身份面注册表(登记的家,
-                         2026-11-13 自矩阵页迁入);缺个人池凭证 → 认证管理预填 -->
+                         2026-11-13 自矩阵页迁入);缺个人池凭证 → 凭证管理预填 -->
                     <router-link
                       v-if="facesLoaded && !aliasExists(String(alias))"
                       :to="`/service-admin/${encodeURIComponent(s.service)}?tab=faces`"
@@ -235,7 +235,7 @@
                       :data-testid="`ec-goto-faces-${alias}`"
                     >去登记 ↗</router-link>
                     <a class="svc-link" :data-testid="`ec-goto-auth-${slot}`"
-                       :href="authHref(String(slot), s.service)">去认证管理补 ↗</a>
+                       :href="authHref(String(slot), s.service)">去凭证管理补 ↗</a>
                   </td>
                 </tr>
               </template>
@@ -655,7 +655,7 @@ onMounted(async () => {
   padding: 0 10px;
   font-size: 13px;
   color: var(--sl-ink);
-  background: #fff;
+  background: var(--c-1);
   border: 1px solid var(--sl-line);
   border-radius: 6px;
   outline: none;

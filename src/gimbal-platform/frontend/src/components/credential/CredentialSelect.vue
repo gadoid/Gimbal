@@ -6,7 +6,7 @@
      刻意不基于 reka-ui Select:自管展开面板(无 portal),jsdom 可直接
      以 click 驱动(项目测试约定,参 AuthSelectorModal 原 select 注释);
      键盘至少保证 Esc 收起、Enter 开合。
-     注意:这只是「选凭证」的形态件;凭证池的管理(建/改/测)仍在认证管理。 -->
+     注意:这只是「选凭证」的形态件;凭证池的管理(建/改/测)仍在凭证管理。 -->
 <template>
   <!-- data-testid 由调用方经 fallthrough 传入(避免与根上的静态值二义) -->
   <div ref="root" class="cred-select">
@@ -152,16 +152,16 @@ watch(() => props.disabled, (d) => { if (d) close() })
   height: 36px;
   padding: 0 10px;
   font-size: 13px;
-  color: #10151c;
-  background: #fff;
-  border: 1px solid #e1e5eb;
+  color: var(--c-47);
+  background: var(--c-1);
+  border: 1px solid var(--c-5);
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
 }
-.cred-trigger:hover:not(:disabled) { border-color: #c4c9d2; }
-.cred-trigger:focus-visible { outline: none; border-color: #2f6fed; }
-.cred-trigger:disabled { color: #9ca3af; cursor: not-allowed; background: #f9fafb; }
+.cred-trigger:hover:not(:disabled) { border-color: var(--c-5); }
+.cred-trigger:focus-visible { outline: none; border-color: var(--c-8); }
+.cred-trigger:disabled { color: var(--c-4); cursor: not-allowed; background: var(--c-25); }
 
 .cred-value {
   display: inline-flex;
@@ -174,28 +174,28 @@ watch(() => props.disabled, (d) => { if (d) close() })
 .cred-value .mono { font-size: 12.5px; font-weight: 600; }
 .cred-inline-sub {
   font-size: 11px;
-  color: #8b93a1;
+  color: var(--c-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cred-out {
   font-size: 11px;
-  color: #b45309;
+  color: var(--c-7);
   white-space: nowrap;
 }
-.cred-placeholder { flex: 1; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cred-placeholder { flex: 1; color: var(--c-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cred-clear {
   flex: none;
   padding: 2px 3px;
   border-radius: 4px;
   font-size: 11px;
   line-height: 1;
-  color: #9ca3af;
+  color: var(--c-4);
   cursor: pointer;
 }
-.cred-clear:hover { color: #4b5563; background: #f3f4f6; }
-.cred-caret { flex: none; margin-left: auto; color: #9ca3af; font-size: 10px; }
+.cred-clear:hover { color: #4b5563; background: var(--c-9); }
+.cred-caret { flex: none; margin-left: auto; color: var(--c-4); font-size: 10px; }
 
 .cred-panel {
   position: absolute;
@@ -205,10 +205,10 @@ watch(() => props.disabled, (d) => { if (d) close() })
   width: 100%;
   min-width: 300px;
   padding: 6px;
-  background: #fff;
-  border: 1px solid #e1e5eb;
+  background: var(--c-1);
+  border: 1px solid var(--c-5);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
+  box-shadow: 0 8px 24px var(--sh-a42);
 }
 
 .cred-filter {
@@ -216,10 +216,10 @@ watch(() => props.disabled, (d) => { if (d) close() })
   margin-bottom: 6px;
   padding: 5px 10px;
   font-size: 12px;
-  border: 1px solid #e1e5eb;
+  border: 1px solid var(--c-5);
   border-radius: 6px;
 }
-.cred-filter:focus { outline: none; border-color: #2f6fed; }
+.cred-filter:focus { outline: none; border-color: var(--c-8); }
 
 .cred-options { max-height: 220px; overflow-y: auto; }
 
@@ -235,26 +235,26 @@ watch(() => props.disabled, (d) => { if (d) close() })
   cursor: pointer;
   text-align: left;
 }
-.cred-option:hover { background: #f5f8ff; }
-.cred-option.selected { background: #e7efff; }
+.cred-option:hover { background: var(--c-25); }
+.cred-option.selected { background: var(--c-34); }
 
 .cred-line1 {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.cred-line1 .mono { font-size: 12.5px; font-weight: 600; color: #10151c; }
+.cred-line1 .mono { font-size: 12.5px; font-weight: 600; color: var(--c-47); }
 .cred-type {
   padding: 0 6px;
   border-radius: 999px;
   font-size: 10px;
-  background: #e7efff;
-  color: #2f6fed;
+  background: var(--c-34);
+  color: var(--c-8);
 }
 
 .cred-line2 {
   font-size: 11px;
-  color: #8b93a1;
+  color: var(--c-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -264,7 +264,7 @@ watch(() => props.disabled, (d) => { if (d) close() })
   margin: 0;
   padding: 10px 0;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--c-4);
   text-align: center;
 }
 </style>

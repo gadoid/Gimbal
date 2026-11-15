@@ -81,10 +81,12 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       '/scenarios/follows', '/scenarios/mine',
       // 2026-11-10 IA:场景集并入「我的」组(原「用例集」组退役)
       '/suites',
+      // 2026-11-15:凭证管理(原服务组「认证管理」)更名迁「我的」组
+      '/auths',
       // 项目组(S7.1 一级入口:公共项目置顶 + 我参与的)
       '/projects',
       // 服务组(2026-11-13 起纯全员使用面;治理面在「平台」组)
-      '/services', '/auths', '/adaptations', '/integrations',
+      '/services', '/adaptations', '/integrations',
       // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页)
       '/run', '/executions', '/analytics',
       // 平台组(治理面):服务注册(身份面+地址合并页)+ 用户管理
@@ -240,7 +242,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
     }
-    expect(w.find('[title="认证管理"]').exists()).toBe(true)
+    expect(w.find('[title="凭证管理"]').exists()).toBe(true)
     expect(w.find('[title="工作台"]').exists()).toBe(true)
     // 折叠后切换钮方向翻转(展开入口)
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(false)
@@ -262,10 +264,11 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const links = w.findAll('a.nav-item')
     expect(links.length).toBe(16)  // 2026-11-13:服务配置/注册两治理面合一(17-1)
     // 场景集随「我的」组第三位(置顶组 0/1/2 位=工作台/通知/执行配置):
-    // suites=5 / 项目=6 / services=7(服务组前区位序不受「平台」组变动影响)
+    // suites=5 / auths=6(2026-11-15 迁入)/ 项目=7 / services=8
     expect(links[5].attributes('href')).toBe('/suites')
-    expect(links[6].attributes('href')).toBe('/projects')
-    expect(links[7].attributes('href')).toBe('/services')
+    expect(links[6].attributes('href')).toBe('/auths')
+    expect(links[7].attributes('href')).toBe('/projects')
+    expect(links[8].attributes('href')).toBe('/services')
     expect(localStorage.getItem('chrome.sidebar.collapsed:v1')).toBe('1')
     w.unmount()
   })

@@ -31,7 +31,7 @@ vi.mock('@/api/activity', () => ({ getActivity: vi.fn().mockResolvedValue({
 vi.mock('@/api/scenario-composer', () => ({
   listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
 }))
-// 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
+// 新增的 registry 卡(凭证管理 / 服务画像)同样不能打真网络
 vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 // 工作台布局已改走服务端偏好(user_prefs)+ 本地镜像:不桩掉 pull 就会去摸
 // 真 axios,用例一路等到超时。

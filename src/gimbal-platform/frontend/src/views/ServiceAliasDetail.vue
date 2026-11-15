@@ -4,14 +4,14 @@
   §2.2,C2 拆分落点)。
   「服务就是没有后缀的别名」:同一详情页两种键 ——
   * 身份面键(route param = aliasName):字段默认值 tab = 本面覆盖层,
-    凭证 tab = 凭证槽位 slot(认证管理反查面板的跳转落点);
+    凭证 tab = 凭证槽位 slot(凭证管理反查面板的跳转落点);
   * base 服务键(param = 目录服务名,未登记为身份面的裸服务):字段
     默认值 tab = 服务级默认层。
   锚点与槽位声明同处(以前配一个别名要在两个页面来回跳)。
   authz M2a S6:身份面不再带 baseUrl/环境归属/凭证别名 — 地址在「服务
   注册」(2026-11-13 起身份面与地址同一页),凭证改经「凭证槽位」指向
   执行者本人认证池的槽;编辑 slot 留在服务注册列表 — 本页只读键身份。
-  2026-11-13 路由放开给全员(全量评估 #3):普通用户经认证管理「被引用」
+  2026-11-13 路由放开给全员(全量评估 #3):普通用户经凭证管理「被引用」
   深链进来;字段默认值 tab 按 ops.write 收起,返回按钮按能力分流。
   同日承接服务注册矩阵迁出的身份面注册(服务模式「身份面」tab:服务端
   分页 + 行内搜索 + 登记/编辑/删除;说明列的编辑位也落在本页)。
@@ -164,7 +164,7 @@
               data-testid="faces-form"
             >
               <span
-                class="mono box-border inline-flex h-9 w-[150px] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-slate-100 px-2 text-[13px] font-bold text-slate-600"
+                class="mono box-border inline-flex h-9 w-[150px] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-signal-hairline px-2 text-[13px] font-bold text-signal-think"
                 data-testid="face-prefix"
               >{{ key }}-</span>
               <Input
@@ -260,11 +260,11 @@
               凭证槽位:<code class="mono font-semibold">{{ row!.slot || '未声明' }}</code>
             </p>
             <p class="cred-note">
-              执行时按<b>执行者本人</b>认证管理池的同名槽解析 — 同一身份面被不同人执行时各拿各的同槽凭证;
-              凭证本体的建 / 测连通 / 轮换在认证管理。
+              执行时按<b>执行者本人</b>凭证管理池的同名槽解析 — 同一身份面被不同人执行时各拿各的同槽凭证;
+              凭证本体的建 / 测连通 / 轮换在凭证管理。
             </p>
             <div class="mt-2">
-              <Button variant="outline" size="sm" data-testid="open-auths" @click="router.push('/auths')">打开认证管理</Button>
+              <Button variant="outline" size="sm" data-testid="open-auths" @click="router.push('/auths')">打开凭证管理</Button>
             </div>
           </div>
         </TabsContent>
@@ -280,7 +280,7 @@
  * 矩阵)+ 字段默认值编辑 + 凭证槽位展示。
  * 键的合法性判定:listAliases 命中 → 身份面模式;否则目录服务名命中 →
  * 服务模式;都 miss → missing(不猜)。?tab=credential 支持外部深链
- * (认证管理反查面板的身份面 chip;M2a S6 起该 tab 展示凭证槽位 slot)。
+ * (凭证管理反查面板的身份面 chip;M2a S6 起该 tab 展示凭证槽位 slot)。
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -307,10 +307,10 @@ const router = useRouter()
 const auth = useAuthStore()
 
 /** 字段默认值 tab 门:fields 取数是 ops.write 面(carry.py /fields)。
- *  返回分流:持写权者回治理页;普通用户(被引用深链进来)回认证管理 —
+ *  返回分流:持写权者回治理页;普通用户(被引用深链进来)回凭证管理 —
  *  不给一个点了会被路由守卫弹回 /home 的「返回服务注册」。 */
 const canManage = computed(() => auth.can('ops.write'))
-const backLabel = computed(() => (canManage.value ? '返回服务注册' : '返回认证管理'))
+const backLabel = computed(() => (canManage.value ? '返回服务注册' : '返回凭证管理'))
 function backFromDetail(): void {
   router.push(canManage.value ? '/service-admin' : '/auths')
 }

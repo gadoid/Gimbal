@@ -1,4 +1,4 @@
-<!-- AuthSessionsCard.vue — 工作台注册卡:认证管理(→ /auths)。
+<!-- AuthSessionsCard.vue — 工作台注册卡:凭证管理(→ /auths)。
      数据走 store(与完整页同一个 useAuthSessionsStore),不另开口子;
      「未被引用」谓词与 Auths.vue 摘要行一致(alias_ref_count 与
      scenario_ref_count 都空)—— §7 第 6 条计数同源。
@@ -9,7 +9,7 @@
       <span class="chead-icon ci-blue">
         <SlibIcon name="lock" :size="14" />
       </span>
-      <span class="chead-title">认证管理</span>
+      <span class="chead-title">凭证管理</span>
       <span class="chead-count">{{ rows.length }}</span>
       <span class="chead-spacer" />
       <router-link to="/auths" class="manage-link">管理 →</router-link>
@@ -37,7 +37,7 @@
         </p>
       </div>
       <div v-else-if="store.fetchStatus === 'error'" class="card-empty">
-        <p>凭证池加载失败 — 稍后在认证管理页重试</p>
+        <p>凭证池加载失败 — 稍后在凭证管理页重试</p>
       </div>
       <div v-else class="card-empty">
         <p>还没有认证凭证 — 登记一条,Bearer/Basic 都能被编排引用</p>

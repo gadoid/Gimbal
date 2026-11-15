@@ -4,7 +4,7 @@
  *     行内搜索;登记/编辑槽位/删除仅 canManage)+ 说明(service_meta
  *     展示/编辑)+ 字段默认值(canManage);
  *   - 别名模式(param=身份面):概览 + 字段默认值 + 凭证;返回按钮按
- *     能力分流(admin → 服务注册,普通用户 → 认证管理)。
+ *     能力分流(admin → 服务注册,普通用户 → 凭证管理)。
  * jsdom:reka TabsTrigger 打不开 → 直改 vm.activeTab;DropdownMenu 不涉及。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
@@ -245,7 +245,7 @@ describe('ServiceAliasDetail — 别名模式', () => {
     w.unmount()
   })
 
-  it('普通用户别名键:返回落认证管理(不撞路由守卫)', async () => {
+  it('普通用户别名键:返回落凭证管理(不撞路由守卫)', async () => {
     setAuth(false)
     const { w, router } = await mountAt('/service-admin/fin-service-uat')
     await w.get('[data-testid="back-admin"]').trigger('click')
