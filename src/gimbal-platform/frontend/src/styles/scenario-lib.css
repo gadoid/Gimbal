@@ -29,6 +29,8 @@
   --sl-canvas: #f3f5f8;
   --sl-star: #eab308;
   --sl-star-off: #c7cdd6;
+  /* 列表行悬停底(日间近白微蓝;夜面在 dual-theme.css 覆写为深色抬升) */
+  --sl-row-hover: #f7faff;
 
   /* 表头三档(冷墨阶)。此前是「浅灰带 + 纯黑 700 字 + 2px 纯黑线」——
      报纸味重,而且暖灰带压在冷白页底上显脏。换成偏冷的蓝白带、深海军蓝字、
@@ -219,7 +221,7 @@
 }
 .slib-table tbody tr:last-child td { border-bottom: none; }
 .slib-table tbody tr.slib-row { cursor: pointer; }
-.slib-table tbody tr.slib-row:hover { background: #f7faff; }
+.slib-table tbody tr.slib-row:hover { background: var(--sl-row-hover); }
 .slib-table .c-center { text-align: center; }
 .slib-table .num {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

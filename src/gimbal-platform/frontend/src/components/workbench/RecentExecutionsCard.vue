@@ -111,7 +111,8 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .ex-counts { color: var(--sl-ink-2); white-space: nowrap; }
-.ex-counts em { font-style: normal; color: var(--color-border-secondary); padding: 0 0.0625rem; }
+/* 分隔符原用边框令牌作文字色 —— 夜间翻成 #3b3b3b 深灰没进暗底,换文字令牌 */
+.ex-counts em { font-style: normal; color: var(--sl-ink-3); padding: 0 0.0625rem; }
 </style>
 
 <style src="@/styles/status-colors.css"></style>

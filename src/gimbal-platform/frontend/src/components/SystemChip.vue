@@ -37,4 +37,14 @@ const tone = computed(() => {
 .tone-wms    { color: var(--sl-ok); background: #dcfce7; border: 0.5px solid #22c55e; }
 .tone-mall   { color: #0e7490; background: #cffafe; border: 0.5px solid #06b6d4; }
 .tone-common { color: var(--color-text-secondary); background: var(--surface-raised); border: 0.5px solid var(--color-border-tertiary); }
+
+/* 夜面:fin/logi/wms/mall 四个色调是「白底硬编码 + 令牌文字」—— 文字
+   在夜间翻成亮色,配白底看不清(framework 文章:服务卡片徽章、场景列表
+   系统列均中招)。夜面底色换 dual-theme 软底同款深色调性底,文字提亮
+   同色相、边框换深色同档,色相保持辨识"哪个系统"。common 全走令牌,
+   自动翻转,无需覆写。 */
+html[data-theme="dark"] .tone-fin    { color: #a5b4fc; background: #232329; border-color: #3a3a4a; }
+html[data-theme="dark"] .tone-logi   { color: #fbbf24; background: #2d2210; border-color: #644f11; }
+html[data-theme="dark"] .tone-wms    { color: #4ade80; background: #12291a; border-color: #1a4b2d; }
+html[data-theme="dark"] .tone-mall   { color: #22d3ee; background: #0f2f38; border-color: #155e75; }
 </style>

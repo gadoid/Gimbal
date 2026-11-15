@@ -75,6 +75,7 @@ html[data-theme="dark"] {
   --sl-th-bg: #1a1a1a;
   --sl-th-ink: #a8a8a8;
   --sl-th-rule: #3a3a3a;
+  --sl-row-hover: #1e1e1e; /* 行悬停抬升一档(日间 #f7faff 的夜面映射) */
 
   /* composer 族(编排页) */
   --c-surface: #161616;
