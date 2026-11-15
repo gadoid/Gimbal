@@ -338,29 +338,29 @@ async function submitImport() {
 }
 
 .users-table :deep(.el-table__row:hover > td.el-table__cell) {
-  background: var(--c-accent-soft, var(--c-9));
+  background: var(--c-accent-soft, #f1f5f9);
 }
 
 .alias {
   padding: 2px 6px;
-  color: var(--c-accent, var(--c-20));
+  color: var(--c-accent, #4338ca);
   font-family: var(--font-mono, monospace);
   font-weight: 600;
-  background: var(--c-accent-soft, var(--c-40));
+  background: var(--c-accent-soft, #eef2ff);
   border-radius: 4px;
 }
 
 .pw {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: var(--c-text-secondary, var(--c-6));
+  color: var(--c-text-secondary, #64748b);
 }
 
 .import-hint {
   margin: 0 0 10px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--c-text-secondary, var(--c-6));
+  color: var(--c-text-secondary, #64748b);
 }
 
 .pool-list {
@@ -377,18 +377,18 @@ async function submitImport() {
   align-items: center;
   padding: 8px 10px;
   cursor: pointer;
-  border: 1px solid var(--c-border, var(--c-5));
+  border: 1px solid var(--c-border, #e2e8f0);
   border-radius: 6px;
   transition: all 0.15s;
 }
 
 .pool-item:hover:not(.disabled) {
-  border-color: var(--c-accent, var(--c-20));
+  border-color: var(--c-accent, #4338ca);
 }
 
 .pool-item.selected {
-  border-color: var(--c-accent, var(--c-20));
-  background: var(--c-accent-soft, var(--c-40));
+  border-color: var(--c-accent, #4338ca);
+  background: var(--c-accent-soft, #eef2ff);
 }
 
 .pool-item.disabled {
@@ -406,7 +406,7 @@ async function submitImport() {
   overflow: hidden;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: var(--c-text-secondary, var(--c-6));
+  color: var(--c-text-secondary, #64748b);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -415,8 +415,8 @@ async function submitImport() {
   flex-shrink: 0;
   padding: 1px 8px;
   font-size: 10.5px;
-  color: var(--c-63);
-  background: var(--c-64);
+  color: #854d0e;
+  background: #fef9c3;
   border-radius: 4px;
 }
 .users-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -424,10 +424,10 @@ async function submitImport() {
   /* 形制走 .slib-table thead th;这里只压密度 */
   padding: 5px 8px;
 }
-.users-table td { padding: 6px 8px; border-bottom: 0.5px solid var(--c-65); }
+.users-table td { padding: 6px 8px; border-bottom: 0.5px solid #f1f5f9; }
 .cell-url { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .uc-ops { display: flex; align-items: center; justify-content: center; gap: 2px; }
 .uc-op { height: 24px; padding: 0 6px; font-size: 11px; }
-.uc-del { color: var(--c-17); }
-.req { margin-left: 3px; color: var(--c-17); font-weight: 700; }
+.uc-del { color: #dc2626; }
+.req { margin-left: 3px; color: #dc2626; font-weight: 700; }
 </style>

@@ -44,13 +44,13 @@
     <section v-if="banner" class="idtl-banner" :class="`tone-${banner.tone}`">
       <div class="flex flex-col gap-1">
         <span class="idtl-banner-title" :class="`tt-${banner.tone}`">{{ banner.title }}</span>
-        <span class="text-[12px] text-[color:var(--c-4)]">{{ banner.desc }}</span>
+        <span class="text-[12px] text-[#4A5A72]">{{ banner.desc }}</span>
       </div>
       <!-- resource_not_allowed:缺项两类清单(令牌详情预检) -->
       <div v-if="banner.missing?.length" class="flex flex-col gap-1.5">
         <div
           v-for="m in banner.missing" :key="`${m.kind}:${m.name}`"
-          class="flex items-center gap-2.5 rounded-md border border-[color:var(--c-92)] bg-signal-card px-2.5 py-1.5 text-[12px]"
+          class="flex items-center gap-2.5 rounded-md border border-[#FECACA] bg-white px-2.5 py-1.5 text-[12px]"
         >
           <span class="mono font-semibold">{{ m.name }}</span>
           <span class="idtl-pill" :class="m.deleted ? 'ip-warn' : 'ip-bad'">
@@ -104,7 +104,7 @@
         </dl>
         <div
           v-if="task?.tokenId && task?.canManage"
-          class="mt-2.5 flex items-center gap-2.5 border-t border-[color:var(--c-72)] pt-2.5"
+          class="mt-2.5 flex items-center gap-2.5 border-t border-[#EEF0F3] pt-2.5"
         >
           <span class="flex-1 text-[12px] text-signal-ink/60">令牌退役或吊销后，可以把任务转为由你的账号管理</span>
           <button type="button" class="idtl-btn" @click="unbindOpen = true">解绑令牌（转为我管理）</button>
@@ -135,7 +135,7 @@
           </dd>
           <template v-if="task?.instance?.lastError">
             <dt>错误信息</dt>
-            <dd class="text-[color:var(--c-3)]">{{ task.instance.lastError }}</dd>
+            <dd class="text-[#B91C1C]">{{ task.instance.lastError }}</dd>
           </template>
         </dl>
       </section>
@@ -193,7 +193,7 @@ async function reload(): Promise<void> {
 
 onMounted(() => reload())
 
-// ── 状态 pill(原型:平台模式 #EEF4FF/#1F3B73;个人 #F6F8FC/var(--c-4);
+// ── 状态 pill(原型:平台模式 #EEF4FF/#1F3B73;个人 #F6F8FC/#4A5A72;
 //    运行中绿;已暂停琥珀)────────────────────────────────────────
 const statePill = computed<{ text: string; cls: string } | null>(() => {
   const i = task.value?.instance
@@ -461,60 +461,60 @@ const lastRunPill = computed<{ text: string; cls: string } | null>(() => {
 <style scoped>
 .idtl { display: flex; flex-direction: column; gap: 16px; max-width: 880px; }
 .idtl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.idtl-link { color: var(--color-signal, var(--c-8)); text-decoration: none; }
+.idtl-link { color: var(--color-signal, #2f6fed); text-decoration: none; }
 .idtl-link:hover { text-decoration: underline; }
 
 .idtl-pill {
   font-size: 11px; font-weight: 600; padding: 2px 8px;
   border-radius: 9999px; white-space: nowrap;
 }
-.ip-mode-plat { background: var(--c-25); color: #1f3b73; }
-.ip-mode-pers { background: var(--c-62); color: var(--c-4); }
-.ip-ok { background: var(--c-27); color: var(--c-18); }
-.ip-warn { background: var(--c-29); color: var(--c-7); }
-.ip-bad { background: var(--c-31); color: var(--c-3); }
-.ip-mute { background: var(--c-72); color: var(--c-4); }
-.ip-run { background: var(--c-34); color: var(--c-70); }
+.ip-mode-plat { background: #eef4ff; color: #1f3b73; }
+.ip-mode-pers { background: #f6f8fc; color: #4a5a72; }
+.ip-ok { background: #e4f5ea; color: #15803d; }
+.ip-warn { background: #fef3c7; color: #b45309; }
+.ip-bad { background: #fee2e2; color: #b91c1c; }
+.ip-mute { background: #eef0f3; color: #5b6472; }
+.ip-run { background: #e7efff; color: #1f55c4; }
 
-/* 暂停横幅(原型:red #FEF2F2/#FECACA·var(--c-3);amber var(--c-36)/#FDE68A·var(--c-30);neutral #F6F8FC/#E1E5EB·#10151C) */
+/* 暂停横幅(原型:red #FEF2F2/#FECACA·#991B1B;amber #FFFBEB/#FDE68A·#92400E;neutral #F6F8FC/#E1E5EB·#10151C) */
 .idtl-banner {
   border-radius: 10px; padding: 14px 18px;
   display: flex; flex-direction: column; gap: 10px;
 }
-.tone-red { background: var(--c-31); border: 1px solid var(--c-2); }
-.tone-amber { background: var(--c-36); border: 1px solid var(--c-35); }
-.tone-neutral { background: var(--c-62); border: 1px solid var(--c-5); }
+.tone-red { background: #fef2f2; border: 1px solid #fecaca; }
+.tone-amber { background: #fffbeb; border: 1px solid #fde68a; }
+.tone-neutral { background: #f6f8fc; border: 1px solid #e1e5eb; }
 .idtl-banner-title { font-size: 14px; font-weight: 600; }
-.tt-red { color: var(--c-3); }
-.tt-amber { color: var(--c-30); }
-.tt-neutral { color: var(--c-47); }
+.tt-red { color: #991b1b; }
+.tt-amber { color: #92400e; }
+.tt-neutral { color: #10151c; }
 
 .idtl-main { display: flex; flex-direction: column; gap: 16px; }
 .idtl-card {
-  background: var(--color-signal-card, var(--c-1));
-  border: 1px solid var(--c-5); border-radius: 10px;
+  background: var(--color-signal-card, #fff);
+  border: 1px solid #e1e5eb; border-radius: 10px;
   padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;
 }
 .idtl-dl {
   margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr);
   gap: 10px 12px; font-size: 12px;
 }
-.idtl-dl dt { color: var(--c-4); }
+.idtl-dl dt { color: #5b6472; }
 .idtl-dl dd { margin: 0; }
 
 /* 按钮(原型 30px/6px;行内 12px) */
 .idtl-btn {
   display: inline-flex; align-items: center; height: 30px; padding: 0 12px;
-  border-radius: 6px; border: 1px solid var(--c-5); background: var(--c-1);
-  color: var(--c-47); font-size: 12px; font-weight: 500;
+  border-radius: 6px; border: 1px solid #e1e5eb; background: #fff;
+  color: #10151c; font-size: 12px; font-weight: 500;
   cursor: pointer; text-decoration: none; box-sizing: border-box;
 }
-.idtl-btn:hover { background: var(--c-62); }
-.idtl-btn.primary { border-color: var(--c-8); background: var(--c-8); color: #fff; }
-.idtl-btn.primary:hover { background: var(--c-70); }
-.idtl-btn.danger { color: var(--c-3); }
+.idtl-btn:hover { background: #f6f8fc; }
+.idtl-btn.primary { border-color: #2f6fed; background: #2f6fed; color: #fff; }
+.idtl-btn.primary:hover { background: #1f55c4; }
+.idtl-btn.danger { color: #dc2626; }
 .idtl-btn.is-disabled, .idtl-btn:disabled {
-  color: var(--c-4); opacity: .7; cursor: not-allowed;
+  color: #8b93a1; opacity: .7; cursor: not-allowed;
 }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

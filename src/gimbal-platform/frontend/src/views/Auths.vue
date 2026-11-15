@@ -948,10 +948,10 @@ onMounted(async () => {
   border: 0;
   background: none;
   font-size: 11.5px;
-  color: var(--sl-ink-3, var(--c-4));
+  color: var(--sl-ink-3, #5b6472);
   cursor: pointer;
 }
-.adv-toggle:hover { color: var(--sl-ink, var(--c-47)); }
+.adv-toggle:hover { color: var(--sl-ink, #10151c); }
 
 /* ── 槽位卡片看板(借 .svc-tile 语言:白卡 + 状态色 3px 顶边)────── */
 .auth-board {
@@ -961,11 +961,11 @@ onMounted(async () => {
   align-items: start;
 }
 .slot-card {
-  background: var(--c-1);
-  border: 1px solid var(--sl-line, var(--c-5));
-  border-top: 3px solid var(--sl-divider, var(--c-39));
+  background: #fff;
+  border: 1px solid var(--sl-line, #e1e5eb);
+  border-top: 3px solid var(--sl-divider, #c3c9d4);
   border-radius: 10px;
-  box-shadow: 0 1px 3px var(--sh-a21);
+  box-shadow: 0 1px 3px rgba(16, 21, 28, 0.06);
   padding: 10px 13px;
   display: flex;
   flex-direction: column;
@@ -981,7 +981,7 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
 }
-.sc-slot { font-size: 12.5px; color: var(--sl-ink, var(--c-47)); }
+.sc-slot { font-size: 12.5px; color: var(--sl-ink, #10151c); }
 .sc-slot b { font-size: 13px; }
 .sc-n { font-size: 11px; }
 .sc-binds {
@@ -990,13 +990,13 @@ onMounted(async () => {
   gap: 6px;
 }
 .sc-bind {
-  border: 1px solid var(--sl-divider, var(--c-39));
+  border: 1px solid var(--sl-divider, #e8ebf0);
   border-radius: 8px;
   padding: 7px 9px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: var(--sl-canvas, var(--c-25));
+  background: var(--sl-canvas, #fbfcfe);
 }
 .bind-line {
   display: flex;
@@ -1019,7 +1019,7 @@ onMounted(async () => {
   border: 0;
   background: none;
   font-size: 11.5px;
-  color: var(--sl-accent, var(--c-8));
+  color: var(--sl-accent, #2f6fed);
   cursor: pointer;
 }
 .sc-more:hover { text-decoration: underline; }
