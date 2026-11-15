@@ -1,7 +1,7 @@
 /**
  * AuthSelectorModal — 认证注入选择器(配套方案 §1.1 C3a 预填)。
  * 核心契约:
- *   - preselectAlias:打开即预填别名绑定的凭证(从服务信息管理带出),
+ *   - preselectAlias:打开即预填别名绑定的凭证(从服务注册的身份面绑定带出),
  *     一步「确认插入」落 ${auth.<bound>.token};
  *   - originNote:预填来源说明;预填名不在本人池 → 提示仍可插入
  *     (执行时按执行者本人池解析);

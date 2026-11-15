@@ -1,4 +1,5 @@
-<!-- ServiceAliasCard.vue — 工作台注册卡:服务信息管理(adminOnly,→ /service-admin)。
+<!-- ServiceAliasCard.vue — 工作台注册卡:服务注册(adminOnly,→ /service-admin;
+     2026-11-13 身份面与各环境地址并为同一页,卡片随页更名)。
      数据 = listAliases() 全集(与完整页同一端点,不另开口子);未声明槽位
      判定与完整页同一条谓词 —— §7 第 6 条计数同源。
      authz M2a S6:别名瘦身(环境归属/凭证别名退役)后,行 tag = 声明槽位。
@@ -9,7 +10,7 @@
       <span class="chead-icon ci-blue">
         <SlibIcon name="layers" :size="14" />
       </span>
-      <span class="chead-title">服务信息管理</span>
+      <span class="chead-title">服务注册</span>
       <span class="chead-count">{{ rows.length }}</span>
       <span class="chead-spacer" />
       <router-link to="/service-admin" class="manage-link">管理 →</router-link>

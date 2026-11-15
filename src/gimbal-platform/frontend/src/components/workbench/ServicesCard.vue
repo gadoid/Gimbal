@@ -71,7 +71,7 @@ const visible = computed(() => rows.value.slice(0, size.value === 'L' ? 8 : 5))
 
 const wbT = (suffix: string) => `wb-card-services-${suffix}`
 
-// loadCatalogEntries 是模块级缓存的同一次拉取:与服务画像页、服务信息管理
+// loadCatalogEntries 是模块级缓存的同一次拉取:与服务画像页、服务注册
 // 卡同帧挂载时合流,不打第二次 plate。
 onMounted(async () => {
   try {

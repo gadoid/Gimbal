@@ -54,18 +54,20 @@ describe('router — 能力矩阵守卫(authz W8)', () => {
   it('admin(ops.write)访问 ops 页放行、users.manage 页弹回', async () => {
     loginAs('admin')
     expect(await nav('/admin/users')).toBe('/home')
-    // 服务信息管理 = ops.write(原 member+ 更名面)
+    // 服务注册(2026-11-13 身份面+地址合并页)= ops.write
     expect(await nav('/service-admin')).toBe('/service-admin')
+    // 旧独立部署页已并入 → 重定向服务注册(书签兼容)
+    expect(await nav('/admin/deployments')).toBe('/service-admin')
   })
 
-  it('ops.write 持有者可达别名详情页;无能力者弹回(后端按 admin ∨ 属主' +
-     '放行入站管理;路由守卫与后端表 A 对拍)', async () => {
+  it('别名详情页全员可达(2026-11-13 放开:认证管理「被引用」深链进来;' +
+     '写面由后端 admin ∨ 属主与页内 tab 能力门把关,路由不再收 ops.write)', async () => {
     loginAs('admin')
     expect(await nav('/service-admin/agent-sys')).toBe('/service-admin/agent-sys'
     )
     loginAs('user')
     // 换一个路由参数,避免同路径重复导航被 vue-router 短路、守卫不再执行
-    expect(await nav('/service-admin/other-sys')).toBe('/home')
+    expect(await nav('/service-admin/other-sys')).toBe('/service-admin/other-sys')
   })
 
   it('super_admin(表 A 全能力)全通 + /profile 全员可达', async () => {

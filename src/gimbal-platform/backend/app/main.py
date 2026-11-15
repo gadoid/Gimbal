@@ -45,6 +45,7 @@ from .routers import (
     deployments,
     exec_configs,
     service_aliases,
+    service_meta,
     service_profile,
     shares,
     strategy_catalog,
@@ -260,6 +261,8 @@ def create_app() -> FastAPI:
     app.include_router(service_profile.cards_router, prefix="/api")
     # 服务别名基础层(§4.1):读全员 / 写 admin;读侧挂 carry/凭证两条解析链
     app.include_router(service_aliases.router, prefix="/api")
+    # 服务级元数据(服务注册页「说明」列):读全员 / 写 Admin+(ops.write)
+    app.include_router(service_meta.router, prefix="/api")
     # P2-6(webhook 设计 v3):回调投递排查面
     app.include_router(webhook_deliveries.router, prefix="/api")
     # 访问令牌(webhook v4 §5.1)

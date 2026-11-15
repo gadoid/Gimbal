@@ -1042,12 +1042,12 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
   // 保存前 lint(C10/§4.3):不拦截保存,只提醒;自动保存(步进)不弹 toast
   const lintWarns = lintDraft(definition.value as Parameters<typeof lintDraft>[0])
   // W11:未接入服务告警(unknown = 别名表未登记;执行按外部处理、不计
-  // 入库标准 —— 与保存告警同款非阻断口径,去服务信息管理登记或接入 plate)。
+  // 入库标准 —— 与保存告警同款非阻断口径,去服务注册登记或接入 plate)。
   const unknownSvcs = unanchoredServices.value.filter(
     (s) => serviceKinds.value[s] === 'unknown')
   if (unknownSvcs.length && manual) {
     lintWarns.push(`服务 ${unknownSvcs.join('、')} 未接入(未登记身份面)——`
-      + '执行将按外部服务处理、不计入入库标准;可在「服务信息管理」'
+      + '执行将按外部服务处理、不计入入库标准;可在「服务注册」'
       + '登记为第三方(external),或接入 plate 做版本管理')
   }
   if (lintWarns.length && manual) {

@@ -4,6 +4,9 @@
  * authz M2a S6 起部署表是地址的**唯一**来源(别名地址已随瘦身退役,
  * /deployments/conflicts 端点同步移除 —— 不再有按别名自带地址的
  * 裁定面)。读 = 登录用户;写 = Admin+(ops.write)。
+ * 2026-11-13 起维护面在「服务注册」页(/service-admin,与身份面同页);
+ * list 固定拉全环境矩阵 —— 按环境切片由调用方客户端过滤(独立部署页
+ * 退役后不再有按 envId 取数的调用方;后端 env_id 查询参保留给外部)。
  */
 import http from '@/api/http'
 
@@ -14,10 +17,8 @@ export interface Deployment {
   baseUrl: string
 }
 
-export function listDeployments(envId?: number): Promise<Deployment[]> {
-  return http.get<Deployment[]>('/deployments', {
-    params: envId ? { envId } : {},
-  }).then(({ data }) => data)
+export function listDeployments(): Promise<Deployment[]> {
+  return http.get<Deployment[]>('/deployments').then(({ data }) => data)
 }
 
 export function createDeployment(

@@ -1,251 +1,228 @@
-<!-- ServiceAdmin.vue — 服务配置(执行配置分层⑦:服务信息管理重定位
-     为「服务接入治理面」;页面重定位 + 术语降位,数据模型/路由/权限门
-     零改动)。
-     术语映射:别名→身份面(服务·后缀)、无后缀别名→默认面、声明槽位→
-     凭证槽位、基础服务→目录服务;alias_name 仍是数据键与 URL 键。
-     定位 = 配置池(与画像的「探索」心智分开,故意不合并):
-     * 左栏只到服务级(系统 → 服务两层),服务是配置的最小锚点;
-     * 表内显式画出「默认面」行(aliasName === baseService 的真实行),
-       把三层查找顺序摊开:精确命中身份面 → 默认面 → 全局共享默认。
-     * 地址就绪列(治理端就绪度):该目录服务在各环境的部署行覆盖
-       (执行配置枢纽是个人端就绪度,两者成两半)。
-     地址维护在「服务注册」页(部署表,2026-11-12 原名「环境与地址」),
-     凭证经「凭证槽位」(slot)指向
-     执行者本人认证池的槽位,身份面一律团队共享(M2a S6 个人别名退役)。
-     写面 admin(同传递字段纪律);读面全员——但页面入口收在 admin。 -->
+<!-- ServiceAdmin.vue — 服务注册(服务×环境地址矩阵 + 服务说明列)。
+     2026-11-13 二次收敛:身份面注册整体迁入服务子页(/service-admin/{服务名},
+     键详情页的服务模式)—— 服务是共用组件,一个服务可能挂大量身份面,
+     矩阵行内展开展示不下;本页回归纯地址治理 + 说明:
+     * 行 = 服务(目录∪部署,身份面 baseService 按构造落目录,全集完整);
+       服务名点击进子页(身份面注册表;「字段」= 子页字段默认值深链);
+     * 列 = 环境(chip 聚焦 = 只显该环境缺地址的服务 + 聚焦态环境管理条);
+     * 格 = 地址(行内编辑/删除)或「缺 · 登记」就地补录;
+     * 说明列:服务级元数据(service_meta,读全员/写 ops.write),格内
+       点击即编辑。
+     环境表单(新建/编辑含版本线/删除)沿用原独立部署页。沿革:身份面
+     注册表(原「服务配置」)与独立部署页先并为一页,同日再矩阵化并迁出
+     身份面。 -->
 <template>
   <section class="slib">
     <PageHead
       icon="layers"
-      title="服务配置"
-      :count="loading ? '' : `${aliases.length} 个身份面`"
-      subtitle="服务接入治理面 — 身份面注册表(名字 → 目录服务 + 凭证槽位声明)与地址就绪度;地址在「服务注册」维护;探索覆盖与告警请用服务画像"
+      title="服务注册"
+      :count="loading ? '' : `${serviceUniverse.length} 服务 · ${envs.length} 环境`"
+      subtitle="服务接入治理面 —— 各环境地址矩阵((服务,环境) → URL)+ 服务说明;身份面(别名)登记在点进服务后的子页;探索覆盖与告警请用服务画像"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
 
-    <div v-else class="svc-split">
-      <!-- 左栏:系统 → 服务两层树,只到服务级 -->
-      <aside class="svc-rail">
-        <div class="svc-rail-title">
-          全部服务
-          <span class="svc-rail-hint">{{ totalSystems }} 系统 · {{ serviceCount }} 服务</span>
-        </div>
-        <p class="svc-rail-hint">按系统分组 · 只列到服务级 · b2.5 按类别分区</p>
-        <!-- b2.5(归一 v1.0 §3.4):被测 / 第三方两区,全量不隐藏 -->
-        <div v-for="section in [
-            { key: 'sut', label: '被测服务', groups: treeServices.sut },
-            { key: 'integration', label: '第三方集成', groups: treeServices.integration }]"
-             :key="section.key">
-          <p v-if="section.groups.length"
-             class="svc-rail-hint svc-kind-label"
-             :data-testid="`svc-kind-${section.key}`">
-            {{ section.label }}({{ section.groups.length }})</p>
-          <div v-for="g in section.groups" :key="g.system">
-            <div class="svc-tree-group">
-              <SystemChip :sys="g.system" />
-              <span class="n">({{ g.services.length }})</span>
-            </div>
-            <div
-              v-for="s in g.services"
-              :key="s.name"
-              class="svc-tree-row"
-              :class="{ on: selectedService === s.name }"
-            >
-              <button
-                type="button"
-                class="svc-tree-item"
-                :data-testid="`svc-tree-${s.name}`"
-                @click="selectService(selectedService === s.name ? '' : s.name)"
-              >
-                <span class="nm">{{ s.name }}</span>
-                <span class="n">{{ aliasCount(s.name) }}</span>
-              </button>
-              <button
-                type="button"
-                class="svc-tree-act"
-                title="配置该服务的字段默认值(服务级默认层)"
-                :data-testid="`svc-config-${s.name}`"
-                @click.stop="router.push(`/service-admin/${encodeURIComponent(s.name)}`)"
-              >字段</button>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <!-- 右侧:服务筛选 + 别名表 -->
-      <div>
-        <div class="svc-stats" data-testid="alias-group-chips">
-          <span>
-            {{ selectedService ? `${selectedService} 下` : '全部服务' }} ·
-            <b>{{ filtered.length }}</b> 个身份面
-          </span>
-          <button v-if="selectedService" type="button" class="svc-link" @click="clearFilters">
-            清掉筛选
+    <template v-else>
+      <!-- 工具条:服务搜索 + 环境列聚焦 + 环境管理 -->
+      <div class="slib-toolbar" data-testid="mx-toolbar">
+        <input
+          v-model="svcSearch" class="slib-search"
+          placeholder="搜索服务名" data-testid="svc-search"
+        />
+        <span class="svc-stats tight" data-testid="dep-envs">
+          <button
+            v-for="e in envs" :key="e.id" type="button" class="svc-chip"
+            :class="{ on: focusedEnv === e.id }"
+            :data-testid="`dep-env-${e.id}`" @click="toggleFocus(e.id)"
+          >
+            {{ e.name }}<span v-if="e.is_default" class="svc-flag green">默认</span>
+            <span
+              v-if="missingInEnv(e.id)"
+              class="svc-flag amber"
+              :title="`该环境还有 ${missingInEnv(e.id)} 个服务缺地址`"
+            >缺{{ missingInEnv(e.id) }}</span>
           </button>
-          <span class="flex-1" />
-          <!-- M2a S6:地址不再挂别名 — 指去部署地址页维护 -->
-          <router-link to="/admin/deployments" class="svc-link" data-testid="goto-deployments">
-            地址在「服务注册」维护 ↗
-          </router-link>
+        </span>
+        <button type="button" class="slib-create" data-testid="dep-env-new"
+                @click="openCreateEnv">+ 新建环境</button>
+      </div>
+
+      <div v-if="error" class="svc-banner bad" data-testid="dep-err">{{ error }}</div>
+
+      <!-- 环境表单(新建/编辑,含版本线行编辑)-->
+      <div v-if="envFormOpen" class="svc-panel" :data-testid="`dep-env-form-${envFormMode}`">
+        <div class="svc-panel-head">
+          <span class="svc-panel-title">
+            {{ envFormMode === 'create' ? '新建环境' : `编辑环境:${focusedCurrent?.name}` }}
+          </span>
+          <span class="svc-panel-desc">
+            版本线 lines = 每个系统部署的版本(执行期按此解析版本;第三方
+            integration 系统不可声明)
+          </span>
         </div>
 
-        <div class="lib-card">
-          <table class="slib-table">
-            <thead>
-              <tr>
-                <th style="width:28%">身份面</th>
-                <th style="width:18%">目录服务</th>
-                <th style="width:16%">凭证槽位</th>
-                <th style="width:14%">地址就绪</th>
-                <th style="width:112px" class="c-center">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="a in paged" :key="a.aliasName" :data-testid="`alias-row-${a.aliasName}`">
-                <td>
-                  <span class="mono svc-key">{{ a.aliasName }}</span>
-                  <span
-                    v-if="a.kind === 'external'"
-                    class="svc-flag amber ml-1"
-                    title="第三方服务(无版本管理):不触发预览、不阻塞集成;单独统计不入基线"
-                    data-testid="alias-kind-external"
-                  >外部</span>
-                  <span
-                    v-else-if="a.aliasName === a.baseService"
-                    class="svc-flag blue ml-1"
-                    title="无后缀身份面 = 该目录服务的默认面;三层查找:精确命中身份面 → 默认面 → 全局共享默认"
-                  >默认面</span>
-                </td>
-                <td class="mono muted">{{ a.baseService }}</td>
-                <td>
-                  <span v-if="a.slot" class="mono">{{ a.slot }}</span>
-                  <span v-else class="muted">未声明</span>
-                </td>
-                <td>
-                  <!-- ⑦ 地址就绪列:该目录服务在各环境的部署行覆盖
-                       (0 = 缺口;点跳「服务注册」) -->
-                  <span v-if="!envCount" class="muted">—</span>
-                  <router-link
-                    v-else-if="readyEnvsOf(a.baseService) < envCount"
-                    to="/admin/deployments" class="svc-link warn-link"
-                    :data-testid="`alias-ready-${a.aliasName}`"
-                    :title="`缺环境部署行:${missingEnvsOf(a.baseService).join('、')}`"
-                  >{{ readyEnvsOf(a.baseService) }}/{{ envCount }} 缺</router-link>
-                  <span v-else class="svc-flag green ml-0" :data-testid="`alias-ready-${a.aliasName}`"
-                    title="各环境部署行齐备">{{ envCount }}/{{ envCount }}</span>
-                </td>
-                <td class="c-center">
-                  <div class="row-acts">
-                    <button type="button" class="svc-link" :data-testid="`alias-detail-${a.aliasName}`" @click="router.push(`/service-admin/${encodeURIComponent(a.aliasName)}`)">详情</button>
-                    <button type="button" class="svc-link" :data-testid="`alias-edit-${a.aliasName}`" @click="startEdit(a)">编辑</button>
-                    <button type="button" class="svc-link danger" :data-testid="`alias-del-${a.aliasName}`" @click="remove(a)">删除</button>
-                  </div>
-                </td>
-              </tr>
-              <tr v-if="filtered.length === 0">
-                <td colspan="5" class="c-center">
-                  <span class="muted">
-                    {{ selectedService ? '该服务下还没有登记身份面' : '还没有登记身份面 —— 身份面 = <服务名>-<后缀>,前缀必须落在 Plate 目录内' }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="form-grid">
+          <template v-if="envFormMode === 'create'">
+            <label class="lb">名称</label>
+            <Input v-model="envForm.name" placeholder="如 SIT / UAT"
+                   data-testid="dep-env-name" />
+          </template>
+          <label class="lb">描述</label>
+            <Input v-model="envForm.description" placeholder="可选"
+                   data-testid="dep-env-desc" />
         </div>
 
-        <!-- 2026-09-23 分页批次:客户端过滤后分页(树/筛选收紧 → 越界回落) -->
-        <div v-if="pageCount > 1 || filtered.length > 0" class="mt-2 flex justify-end">
-          <Pagination
-            v-model:page="page"
-            v-model:page-size="pageSize"
-            :total="filtered.length"
-            show-page-size
-            show-jump
-          />
+        <div v-for="(r, i) in lineRows" :key="i" class="line-row">
+          <Input v-model="r.sys" class="flex-1" placeholder="系统名"
+                 :data-testid="`dep-env-sys-${i}`" />
+          <Input v-model="r.line" class="flex-1" placeholder="版本线,如 1.0"
+                 :data-testid="`dep-env-line-${i}`" />
+          <button type="button" class="svc-link danger" :data-testid="`dep-env-rm-${i}`"
+                  @click="lineRows.splice(i, 1)">移除</button>
         </div>
 
-        <!-- 新建 / 编辑 -->
-        <div class="svc-panel mt-3.5">
-          <div class="svc-panel-head">
-            <span class="svc-panel-title">{{ editing ? '编辑身份面' : '登记身份面' }}</span>
-            <!-- 登记口径说明:原表单下常驻段落,逐页收纳批收进问号弹层 -->
-            <QTip text="登记不需要 URL —— 地址按环境在「服务注册」页维护;身份面只声明凭证槽位(执行注入取执行者本人认证池的同名槽)。受管服务登记强约束:Plate 目录不可达时暂不能登记。第三方不经目录校验(无契约面/版本管理,执行按步骤内联协议字段)。身份面一律团队共享(M2a S6 个人面退役)。" />
-            <span v-if="editing" class="svc-panel-desc">身份面是主键,编辑态不可改</span>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <!-- 三态接入(P1.0)/b2.5(归一 v1.0 §1.6):plate 受管(目录
-                 派生强约束)/ external 第三方(不派生,须显式选 base_service
-                 = plate 里 kind=integration 的服务)。编辑态 kind 不可改;
-                 external→plate 升级走后端 patch(系统转 sut 后),UI 走删重建。 -->
-            <Select v-model="draft.kind" :disabled="!!editing" :key="`kind:${draft.kind}:${!!editing}`">
-              <SelectTrigger class="w-[128px]" data-testid="alias-kind-trigger"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="plate" title="落在 Plate 目录内的受管服务身份面">受管服务</SelectItem>
-                <SelectItem value="external" title="第三方服务,无版本管理">第三方</SelectItem>
-              </SelectContent>
-            </Select>
-            <!-- b2.5(§1.6):external 不派生 —— 显式选 base_service(下拉
-                 只列 plate 里 kind=integration 的服务);别名全名仍手填。 -->
-            <template v-if="draft.kind === 'external' && !editing">
-              <Select v-model="draft.baseService">
-                <SelectTrigger class="w-[220px]" data-testid="alias-baseservice-trigger">
-                  <SelectValue placeholder="选择第三方服务(base_service)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    v-for="svc in integrationServices"
-                    :key="svc"
-                    :value="svc"
-                    :title="`plate 系统的第三方服务(${svc})`"
-                  >{{ svc }}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                v-model="draft.aliasName"
-                class="w-[240px]"
-                placeholder="身份面全名(如 jira-x)"
-                data-testid="alias-name-full-input"
-              />
-            </template>
-            <!-- 常驻只读前缀槽 + 后缀输入(2026-09-23 三次微调):槽恒在
-                 (未选服务时占位「服务」),点选服务只换槽内文字,输入框
-                 位置零跳动;框内永远只写后缀,完整全串 = 前缀 + 后缀
-                 (draft.aliasName 恒为全名,保存逻辑不变)。编辑态槽显
-                 该别名自身的所属服务,输入框只读展示后缀。 -->
-            <div v-if="draft.kind !== 'external' || !!editing" class="flex items-center gap-1.5">
-              <span
-                class="mono box-border inline-flex h-9 w-[150px] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-slate-100 px-2"
-                :class="aliasBase
-                  ? 'text-[13px] font-bold text-slate-600'
-                  : 'text-[11px] font-medium text-slate-400'"
-                :title="aliasBase ? `${aliasBase}-` : '点选左侧服务后,此处显示服务名前缀'"
-                data-testid="alias-prefix"
-              >{{ aliasBase ? `${aliasBase}-` : '服务名' }}</span>
-              <Input
-                v-model="aliasSuffix"
-                class="w-[240px]"
-                placeholder="后缀(如 uat)"
-                :disabled="!!editing"
-                data-testid="alias-name-input"
-              />
-            </div>
-            <!-- M2a S6:声明槽位(slot)— 执行注入取执行者本人认证池的
-                 同名槽;留空 = 未声明(不注入该别名携带的凭证)。 -->
-            <Input
-              v-model="draft.slot"
-              class="w-[200px]"
-              placeholder="凭证槽位(可选,如 maker)"
-              data-testid="alias-slot-input"
-            />
-            <Button data-testid="alias-save" :disabled="!draft.aliasName.trim() || aliasIncomplete || !!saving" @click="save">
-              {{ editing ? '保存' : '登记' }}
-            </Button>
-            <Button v-if="editing" variant="outline" data-testid="alias-cancel" @click="cancelEdit">取消</Button>
-          </div>
+        <div class="svc-foot">
+          <Button variant="outline" size="sm" data-testid="dep-env-add-line"
+                  @click="lineRows.push({ sys: '', line: '' })">+ 添加版本线</Button>
+          <span class="svc-foot-right">
+            <Button size="sm" data-testid="dep-env-save" @click="saveEnv">保存</Button>
+            <Button variant="outline" size="sm" @click="envFormOpen = false">取消</Button>
+          </span>
         </div>
       </div>
-    </div>
+
+      <!-- 聚焦态环境管理条(环境优先工作流:新开环境 → 聚焦补地址)-->
+      <div v-if="focusedCurrent" class="svc-stats" data-testid="dep-current">
+        <span>当前环境</span>
+        <b>{{ focusedCurrent.name }}</b>
+        <span v-if="focusedCurrent.is_default" class="svc-flag green">默认</span>
+        <span v-if="focusedCurrent.description" class="muted">{{ focusedCurrent.description }}</span>
+        <span class="flex-1" />
+        <Button v-if="!focusedCurrent.is_default" variant="outline" size="sm"
+                data-testid="dep-set-default" @click="makeDefault">设为默认环境</Button>
+        <Button v-else variant="outline" size="sm"
+                data-testid="dep-unset-default" @click="clearDefault">取消默认</Button>
+        <Button variant="outline" size="sm" data-testid="dep-env-edit"
+                @click="openEditEnv">编辑环境</Button>
+        <template v-if="!envDelArmed">
+          <Button variant="outline" size="sm" class="text-signal-failed"
+                  data-testid="dep-env-del" @click="envDelArmed = true">删除环境</Button>
+        </template>
+        <template v-else>
+          <span class="svc-flag red">该环境的全部部署地址将一并删除</span>
+          <Button variant="destructive" size="sm" data-testid="dep-env-del-ok"
+                  @click="delEnv">确认删除</Button>
+          <Button variant="outline" size="sm" @click="envDelArmed = false">取消</Button>
+        </template>
+      </div>
+
+      <!-- 服务×环境地址矩阵(+说明列)-->
+      <div class="lib-card mx-wrap" data-testid="mx-matrix">
+        <table class="slib-table mx-table">
+          <thead>
+            <tr>
+              <th class="mx-svc-col">服务</th>
+              <th class="mx-desc-col">说明</th>
+              <th
+                v-for="e in envs" :key="e.id"
+                :class="{ 'mx-focus': focusedEnv === e.id }"
+              >{{ e.name }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="sec in matrixSections" :key="sec.key">
+              <tr v-if="sec.rows.length" class="mx-kind" :data-testid="`svc-kind-${sec.key}`">
+                <td :colspan="envs.length + 2">{{ sec.label }}({{ sec.rows.length }})</td>
+              </tr>
+              <tr v-for="svc in sec.rows" :key="svc" :data-testid="`mx-row-${svc}`">
+                <td class="mx-svc-cell">
+                  <SystemChip :sys="systemOf(svc)" />
+                  <!-- 服务名 → 子页(该服务的身份面注册表)-->
+                  <RouterLink
+                    class="mx-svc-link mono"
+                    :to="`/service-admin/${encodeURIComponent(svc)}`"
+                    :data-testid="`mx-svc-link-${svc}`"
+                    :title="`打开 ${svc} 的身份面注册`"
+                  >{{ svc }}</RouterLink>
+                  <button
+                    type="button" class="svc-link"
+                    title="配置该服务的字段默认值(服务级默认层)"
+                    :data-testid="`svc-config-${svc}`"
+                    @click.stop="router.push(`/service-admin/${encodeURIComponent(svc)}?tab=fields`)"
+                  >字段</button>
+                </td>
+                <!-- 说明列:服务级元数据,格内点击即编辑 -->
+                <td class="mx-desc-cell">
+                  <template v-if="descEdit && descEdit.svc === svc">
+                    <Input v-model="descEdit.text" class="h-8 w-full min-w-[160px]"
+                           placeholder="该服务的基本信息(做什么/负责人/注意点)"
+                           :data-testid="`meta-input-${svc}`" />
+                    <div class="row-acts mt-1">
+                      <button type="button" class="svc-link"
+                              :data-testid="`meta-save-${svc}`" @click="saveDesc">保存</button>
+                      <button type="button" class="svc-link" @click="descEdit = null">取消</button>
+                    </div>
+                  </template>
+                  <button
+                    v-else type="button" class="mx-desc"
+                    :title="descOf(svc) || '点击填写服务说明'"
+                    :data-testid="`meta-cell-${svc}`"
+                    @click="startDescEdit(svc)"
+                  >{{ descOf(svc) || '—' }}</button>
+                </td>
+                <td
+                  v-for="e in envs" :key="e.id"
+                  class="mx-cell" :class="{ 'mx-focus': focusedEnv === e.id }"
+                >
+                  <!-- 有地址:点击行内编辑 -->
+                  <template v-if="depOf(svc, e.id)">
+                    <template v-if="cellEdit && cellEdit.svc === svc && cellEdit.envId === e.id">
+                      <Input v-model="cellEdit.url" class="h-8 w-full min-w-[160px]"
+                             :data-testid="`mx-url-${svc}-${e.id}`" />
+                      <div class="row-acts mt-1">
+                        <button type="button" class="svc-link"
+                                :data-testid="`mx-save-${svc}-${e.id}`" @click="saveCell">保存</button>
+                        <button type="button" class="svc-link danger"
+                                :data-testid="`mx-del-${svc}-${e.id}`" @click="delCell">删除</button>
+                        <button type="button" class="svc-link" @click="cellEdit = null">取消</button>
+                      </div>
+                    </template>
+                    <button
+                      v-else type="button" class="mono mx-url"
+                      :title="depOf(svc, e.id)!.baseUrl"
+                      :data-testid="`mx-cell-${svc}-${e.id}`"
+                      @click="startCellEdit(svc, e.id)"
+                    >{{ depOf(svc, e.id)!.baseUrl }}</button>
+                  </template>
+                  <!-- 缺:就地登记(点开才变输入,不满屏噪音) -->
+                  <template v-else>
+                    <template v-if="cellNew && cellNew.svc === svc && cellNew.envId === e.id">
+                      <Input v-model="cellNew.url" class="h-8 w-full min-w-[160px]"
+                             placeholder="https://…" :data-testid="`mx-new-url-${svc}-${e.id}`" />
+                      <div class="row-acts mt-1">
+                        <button type="button" class="svc-link"
+                                :data-testid="`mx-register-${svc}-${e.id}`" @click="registerCell">登记</button>
+                        <button type="button" class="svc-link" @click="cellNew = null">取消</button>
+                      </div>
+                    </template>
+                    <button
+                      v-else type="button" class="svc-link warn-link"
+                      :data-testid="`mx-miss-${svc}-${e.id}`"
+                      @click="startCellNew(svc, e.id)"
+                    >缺 · 登记</button>
+                  </template>
+                </td>
+              </tr>
+            </template>
+            <tr v-if="!matrixSections.some((s) => s.rows.length)">
+              <td :colspan="envs.length + 2" class="c-center">
+                <span class="muted">没有匹配的服务 —— 清掉搜索或先登记部署地址</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
   </section>
 </template>
 
@@ -253,228 +230,381 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
-import QTip from '@/components/scenario-lib/QTip.vue'
 import SystemChip from '@/components/SystemChip.vue'
-import { toast } from '@/utils/toast'
-import { showError } from '@/utils/errorFallback'
-import { confirmAction } from '@/utils/confirmAction'
-import { loadCatalogEntries } from '@/utils/catalog-services'
 import {
-  createAlias, deleteAlias, listAllAliases, patchAlias,
-  type ServiceAliasRow,
-} from '@/api/service-aliases'
+  listDeployments, createDeployment, updateDeployment, deleteDeployment,
+  type Deployment,
+} from '@/api/deployments'
+import {
+  listEnvironments, setDefaultEnvironment, unsetDefaultEnvironment,
+  createEnvironment, updateEnvironment, deleteEnvironment,
+  type EnvironmentRow,
+} from '@/api/environments'
+import { listServiceMeta, putServiceMeta } from '@/api/service-meta'
+import { loadCatalogEntries } from '@/utils/catalog-services'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Pagination } from '@/components/ui/pagination'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useClientPager } from '@/composables/useClientPager'
-import { listEnvironments, type EnvironmentRow } from '@/api/environments'
-import { listDeployments, type Deployment } from '@/api/deployments'
 
 const loading = ref(true)
 const router = useRouter()
-const aliases = ref<ServiceAliasRow[]>([])
-const selectedService = ref('')
-const saving = ref(false)
-const editing = ref<ServiceAliasRow | null>(null)
+const error = ref('')
 
-const draft = ref<{
-  aliasName: string; slot: string; kind: 'plate' | 'external'; baseService: string;
-}>({
-  aliasName: '', slot: '', kind: 'plate', baseService: '',
-})
-
-/** 常驻前缀槽的基服务:登记态 = 左栏点选;编辑态 = 该别名自身所属服务;
- *  未选 = 空(槽显占位「服务」)。 */
-const aliasBase = computed(() => editing.value?.baseService ?? selectedService.value)
-
-/** 输入框只写后缀;写入时拼回完整全串(draft.aliasName 恒为全名,保存/
- *  校验逻辑不感知前缀拆分)。无基时暂存裸后缀,点选服务后组装。 */
-const aliasSuffix = computed({
-  get: () => {
-    const base = aliasBase.value
-    if (!base) return draft.value.aliasName
-    const prefix = `${base}-`
-    return draft.value.aliasName.startsWith(prefix)
-      ? draft.value.aliasName.slice(prefix.length) : ''
-  },
-  set: (v: string) => {
-    draft.value.aliasName = aliasBase.value ? `${aliasBase.value}-${v}` : v
-  },
-})
-
-/** 登记完成度:受管态没选服务或后缀为空不可提交;external 无
- * 前缀/后缀拆分,全名非空即可(Button 的通用校验覆盖)。 */
-const aliasIncomplete = computed(() =>
-  !editing.value && draft.value.kind === 'plate'
-  && (!aliasBase.value || !aliasSuffix.value.trim()))
-
-interface ServiceRow { name: string; system: string; count: number; kind: string }
-interface ServiceGroup { system: string; services: ServiceRow[]; kind: string }
-
-// 左栏树:plate 目录(系统 → 服务两层,只到服务级)。b2.5(归一 v1.0
-// §3.4):按系统 kind 分「被测服务 / 第三方集成」两区 —— 第三方同样要
-// 配实例与凭证,全量不隐藏,只是分区呈现。
-const treeServices = computed<{ sut: ServiceGroup[]; integration: ServiceGroup[] }>(() => {
-  const byName = new Map<string, ServiceRow>()
-  for (const e of catalogEntries.value) {
-    const kind = e.kind ?? 'sut'
-    const row = byName.get(e.service)
-    if (row) row.count += 1
-    else byName.set(e.service, { name: e.service, system: e.system, count: 1, kind })
-  }
-  const groups = new Map<string, ServiceRow[]>()
-  for (const row of byName.values()) {
-    if (!groups.has(row.system)) groups.set(row.system, [])
-    groups.get(row.system)!.push(row)
-  }
-  const build = (kind: string): ServiceGroup[] =>
-    [...groups.entries()]
-      .filter(([, services]) => services.every((r) => r.kind === kind))
-      .map(([system, services]) => ({
-        system, kind,
-        services: services.sort((a, b) => a.name.localeCompare(b.name)),
-      }))
-      .sort((a, b) => a.system.localeCompare(b.system))
-  return { sut: build('sut'), integration: build('integration') }
-})
-
-const catalogEntries = ref<{ service: string; system: string; kind?: string }[]>([])
-
-// ⑦ 地址就绪列:目录服务在各环境的部署行覆盖(读面全员;拉不到降级
-// 「—」,不阻塞身份面清单)
+// ── 矩阵三面(全量,无分页上限)────────────────────────────────
 const envs = ref<EnvironmentRow[]>([])
 const deployments = ref<Deployment[]>([])
-const envCount = computed(() => envs.value.length)
-function readyEnvsOf(baseService: string): number {
+const catalogEntries = ref<{ service: string; system: string; kind?: string }[]>([])
+
+function msg(e: unknown): string {
+  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof d === 'string') return d
+  if (d && typeof d === 'object' && 'message' in d) return String((d as { message: unknown }).message)
+  return String((e as Error)?.message ?? e)
+}
+
+async function refreshDeps(): Promise<void> {
+  deployments.value = await listDeployments()
+}
+async function refreshEnvs(): Promise<void> {
+  envs.value = await listEnvironments()
+}
+
+function depOf(service: string, envId: number): Deployment | undefined {
+  return deployments.value.find(
+    (d) => d.baseService === service && d.envId === envId)
+}
+function readyEnvsOf(service: string): number {
   return new Set(deployments.value
-    .filter((d) => d.baseService === baseService)
+    .filter((d) => d.baseService === service)
     .map((d) => d.envId)).size
 }
-function missingEnvsOf(baseService: string): string[] {
+function missingInEnv(envId: number): number {
   const hit = new Set(deployments.value
-    .filter((d) => d.baseService === baseService)
-    .map((d) => d.envId))
-  return envs.value.filter((e) => !hit.has(e.id)).map((e) => e.name)
+    .filter((d) => d.envId === envId)
+    .map((d) => d.baseService))
+  return serviceUniverse.value.filter((s) => !hit.has(s)).length
 }
 
-// b2.5:external 别名的 base_service 下拉选项(plate kind=integration)
-const integrationServices = computed(() =>
-  [...new Set(catalogEntries.value
-    .filter((e) => (e.kind ?? 'sut') === 'integration')
-    .map((e) => e.service))].sort())
+/** 服务全集 = 目录 ∪ 已部署(baseService 按构造落目录,不依赖别名)。 */
+const serviceUniverse = computed(() => [...new Set([
+  ...catalogEntries.value.map((e) => e.service),
+  ...deployments.value.map((d) => d.baseService),
+])])
 
-const totalSystems = computed(() =>
-  treeServices.value.sut.length + treeServices.value.integration.length)
-const serviceCount = computed(() =>
-  [...treeServices.value.sut, ...treeServices.value.integration]
-    .reduce((n, g) => n + g.services.length, 0))
-
-function aliasCount(service: string): number {
-  return aliases.value.filter((a) => a.baseService === service).length
+const kindBySvc = computed(() => {
+  const m = new Map<string, string>()
+  for (const e of catalogEntries.value) m.set(e.service, e.kind ?? 'sut')
+  return m
+})
+const systemBySvc = computed(() => {
+  const m = new Map<string, string>()
+  for (const e of catalogEntries.value) m.set(e.service, e.system)
+  return m
+})
+function kindOf(svc: string): string {
+  return kindBySvc.value.get(svc) ?? 'sut'
+}
+function systemOf(svc: string): string {
+  return systemBySvc.value.get(svc) ?? svc
 }
 
-// 顶部筛选(M2a S6 后仅按服务):别名不再归属环境,环境 chips 已随退役
-const filtered = computed<ServiceAliasRow[]>(() =>
-  aliases.value
-    .filter((a) => !selectedService.value || a.baseService === selectedService.value),
-)
+// ── 工具条:服务搜索 + 环境列聚焦 ─────────────────────────────
+const svcSearch = ref('')
+const focusedEnv = ref<number | null>(null)
 
-// 客户端分页(2026-09-23 批次):全量拉回 + 前端过滤,页内切片渲染;
-// 每页行数存用户偏好
-const { page, pageSize, paged, pageCount } = useClientPager(() => filtered.value, 10, 'service-admin')
-
-function selectService(name: string): void {
-  const prev = selectedService.value
-  selectedService.value = name
-  if (editing.value) return
-  // 点选只换前缀槽文字,输入框位置不动;已写后缀随身携带
-  // (无基时输入的裸串视作后缀;恰好是新前缀的全名则剥掉重组,不重复拼)。
-  let rest = draft.value.aliasName
-  if (prev && rest.startsWith(`${prev}-`)) rest = rest.slice(prev.length + 1)
-  if (name && rest.startsWith(`${name}-`)) rest = rest.slice(name.length + 1)
-  draft.value.aliasName = name ? `${name}-${rest}` : rest
+function toggleFocus(id: number): void {
+  focusedEnv.value = focusedEnv.value === id ? null : id
+  cellEdit.value = null
+  cellNew.value = null
+  descEdit.value = null
 }
+const focusedCurrent = computed(() =>
+  envs.value.find((e) => e.id === focusedEnv.value) ?? null)
 
-function clearFilters(): void {
-  selectedService.value = ''
+/** 矩阵行:分区(被测/第三方)→ 缺口数降序 → 名字;svcSearch 客户端
+ *  收窄;聚焦环境时只显该环境缺地址的服务行。 */
+const matrixSections = computed<Array<{ key: string; label: string; rows: string[] }>>(() => {
+  const q = svcSearch.value.trim().toLowerCase()
+  const gapOf = (svc: string) => envs.value.length - readyEnvsOf(svc)
+  const pool = serviceUniverse.value
+    .filter((svc) => !q || svc.toLowerCase().includes(q))
+    .filter((svc) => focusedEnv.value == null || !depOf(svc, focusedEnv.value))
+    .sort((x, y) => gapOf(y) - gapOf(x) || x.localeCompare(y))
+  const build = (kind: string, label: string) => ({
+    key: kind, label,
+    rows: pool.filter((svc) => kindOf(svc) === kind),
+  })
+  return [build('sut', '被测服务'), build('integration', '第三方集成')]
+})
+
+// ── 地址格行内编辑 / 缺格登记(单活跃格)────────────────────────
+const cellEdit = ref<{ svc: string; envId: number; url: string } | null>(null)
+const cellNew = ref<{ svc: string; envId: number; url: string } | null>(null)
+
+function startCellEdit(svc: string, envId: number): void {
+  const dep = depOf(svc, envId)
+  if (!dep) return
+  cellNew.value = null
+  descEdit.value = null
+  cellEdit.value = { svc, envId, url: dep.baseUrl }
 }
-
-function startEdit(a: ServiceAliasRow): void {
-  editing.value = a
-  draft.value = {
-    aliasName: a.aliasName,
-    slot: a.slot ?? '',
-    kind: a.kind ?? 'plate',
-    baseService: a.baseService ?? '',
-  }
-}
-
-function cancelEdit(): void {
-  editing.value = null
-  draft.value = {
-    aliasName: '', slot: '', kind: 'plate', baseService: '',
-  }
-}
-
-async function save(): Promise<void> {
-  const d = draft.value
-  if (!d.aliasName.trim() || saving.value) return
-  saving.value = true
+async function saveCell(): Promise<void> {
+  const c = cellEdit.value
+  if (!c) return
+  const dep = depOf(c.svc, c.envId)
+  if (!dep) return
+  error.value = ''
   try {
-    if (editing.value) {
-      await patchAlias(editing.value.aliasName, {
-        // M2a S6:slot null = 清空声明;多写字段后端 422(瘦身收窄)
-        slot: d.slot.trim() || null,
+    await updateDeployment(dep.id, c.url.trim())
+    cellEdit.value = null
+    await refreshDeps()
+  } catch (e) { error.value = msg(e) }
+}
+/** 删地址 = 该 (服务,环境) 部署行删除(编辑态内,误登记的出口)。 */
+async function delCell(): Promise<void> {
+  const c = cellEdit.value
+  if (!c) return
+  const dep = depOf(c.svc, c.envId)
+  if (!dep) return
+  error.value = ''
+  try {
+    await deleteDeployment(dep.id)
+    cellEdit.value = null
+    await refreshDeps()
+  } catch (e) { error.value = msg(e) }
+}
+function startCellNew(svc: string, envId: number): void {
+  cellEdit.value = null
+  descEdit.value = null
+  cellNew.value = { svc, envId, url: '' }
+}
+async function registerCell(): Promise<void> {
+  const c = cellNew.value
+  if (!c || !c.url.trim()) return
+  error.value = ''
+  try {
+    await createDeployment({ baseService: c.svc, envId: c.envId, baseUrl: c.url.trim() })
+    cellNew.value = null
+    await refreshDeps()
+  } catch (e) { error.value = msg(e) }
+}
+
+// ── 说明列(服务级元数据,读全员/写 ops.write)──────────────────
+/** serviceName → description;拉取失败静默降级为「—」(不阻塞矩阵)。 */
+const metas = ref<Record<string, string>>({})
+const descEdit = ref<{ svc: string; text: string } | null>(null)
+
+function descOf(svc: string): string {
+  return metas.value[svc] ?? ''
+}
+function startDescEdit(svc: string): void {
+  cellEdit.value = null
+  cellNew.value = null
+  descEdit.value = { svc, text: descOf(svc) }
+}
+async function saveDesc(): Promise<void> {
+  const d = descEdit.value
+  if (!d) return
+  error.value = ''
+  try {
+    const row = await putServiceMeta(d.svc, d.text.trim())
+    metas.value = { ...metas.value, [d.svc]: row.description }
+    descEdit.value = null
+  } catch (e) { error.value = msg(e) }
+}
+
+// ── 环境管理(聚焦态环境条 + 表单)────────────────────────────
+const envFormOpen = ref(false)
+const envFormMode = ref<'create' | 'edit'>('create')
+const envForm = ref({ name: '', description: '' })
+const lineRows = ref<Array<{ sys: string; line: string }>>([])
+const envDelArmed = ref(false)
+
+async function makeDefault(): Promise<void> {
+  if (focusedEnv.value == null) return
+  await setDefaultEnvironment(focusedEnv.value)
+  await refreshEnvs()
+}
+async function clearDefault(): Promise<void> {
+  if (focusedEnv.value == null) return
+  await unsetDefaultEnvironment(focusedEnv.value)
+  await refreshEnvs()
+}
+function openCreateEnv(): void {
+  envFormMode.value = 'create'
+  envForm.value = { name: '', description: '' }
+  lineRows.value = []
+  envDelArmed.value = false
+  envFormOpen.value = true
+}
+function openEditEnv(): void {
+  const cur = focusedCurrent.value
+  if (!cur) return
+  envFormMode.value = 'edit'
+  envForm.value = { name: cur.name, description: cur.description }
+  lineRows.value = Object.entries(cur.lines ?? {})
+    .map(([sys, line]) => ({ sys, line }))
+  envDelArmed.value = false
+  envFormOpen.value = true
+}
+function linesOf(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const r of lineRows.value) {
+    const sys = r.sys.trim()
+    if (sys) out[sys] = r.line.trim()
+  }
+  return out
+}
+async function saveEnv(): Promise<void> {
+  error.value = ''
+  const sysList = lineRows.value.map((r) => r.sys.trim()).filter(Boolean)
+  if (new Set(sysList).size !== sysList.length) {
+    error.value = '版本线里系统名重复'
+    return
+  }
+  try {
+    if (envFormMode.value === 'create') {
+      if (!envForm.value.name.trim()) {
+        error.value = '环境名不能为空'
+        return
+      }
+      const created = await createEnvironment({
+        name: envForm.value.name.trim(),
+        description: envForm.value.description.trim(),
+        lines: linesOf(),
       })
-      toast.success('已保存')
+      envFormOpen.value = false
+      await refreshEnvs()
+      focusedEnv.value = created.id   // 建完聚焦新列(逐服务补地址)
     } else {
-      await createAlias({
-        aliasName: d.aliasName.trim(),
-        slot: d.slot.trim() || null,
-        kind: d.kind,
-        baseService: d.kind === 'external' ? d.baseService : null,
+      if (focusedEnv.value == null) return
+      await updateEnvironment(focusedEnv.value, {
+        description: envForm.value.description.trim(),
+        lines: linesOf(),
       })
-      toast.success('已登记')
+      envFormOpen.value = false
+      await refreshEnvs()
     }
-    cancelEdit()
-    aliases.value = await listAllAliases()
-  } catch (e) {
-    showError('保存别名', e) // 409(裸声明/plate 不可达)走统一错误文案
-  } finally {
-    saving.value = false
-  }
+  } catch (e) { error.value = msg(e) }
+}
+async function delEnv(): Promise<void> {
+  if (!focusedCurrent.value) return
+  error.value = ''
+  try {
+    await deleteEnvironment(focusedCurrent.value.id)
+    envDelArmed.value = false
+    await refreshEnvs()
+    await refreshDeps()   // 级联删了该环境全部部署行
+    focusedEnv.value = null
+  } catch (e) { error.value = msg(e) }
 }
 
-async function remove(a: ServiceAliasRow): Promise<void> {
-  const ok = await confirmAction(
-    `已声明的槽位随行删除;carry 别名键的绑定行不在此表,不受影响。`,
-    `删除别名 ${a.aliasName}?`,
-    { danger: true, confirmButtonText: '删除' },
-  )
-  if (!ok) return
+onMounted(async () => {
   try {
-    await deleteAlias(a.aliasName)
-    toast.success('已删除')
-    aliases.value = await listAllAliases()
+    ;[catalogEntries.value, envs.value, deployments.value] = await Promise.all([
+      loadCatalogEntries(), listEnvironments(), listDeployments(),
+    ])
   } catch (e) {
-    showError('删除别名', e)
-  }
-}
-
-async function reload(): Promise<void> {
-  try {
-    aliases.value = await listAllAliases()
-    catalogEntries.value = await loadCatalogEntries()
-  } catch (e) {
-    showError('加载', e)
+    error.value = msg(e)
   } finally {
     loading.value = false
   }
-  // 就绪列旁路数据(失败静默降级)
-  listEnvironments().then((rows) => { envs.value = rows }).catch(() => {})
-  listDeployments().then((rows) => { deployments.value = rows }).catch(() => {})
-}
-
-onMounted(() => { void reload() })
+  // 说明旁路加载(失败静默:列显「—」)
+  listServiceMeta()
+    .then((rows) => {
+      const m: Record<string, string> = {}
+      for (const r of rows) m[r.serviceName] = r.description
+      metas.value = m
+    })
+    .catch(() => { /* 元数据拉不到 — 说明列全「—」 */ })
+})
 </script>
+
+<style scoped>
+/* 矩阵:首两列 sticky(服务/说明)+ 环境列聚焦高亮(卡片内双向滚动) */
+.mx-wrap { overflow: auto; max-height: 620px; }
+.mx-table th:first-child,
+.mx-table td.mx-svc-cell,
+.mx-table th:nth-child(2),
+.mx-table td.mx-desc-cell {
+  position: sticky;
+  background: #fff;
+}
+.mx-table th:first-child,
+.mx-table td.mx-svc-cell { left: 0; }
+.mx-table th:nth-child(2),
+.mx-table td.mx-desc-cell { left: 300px; }
+.mx-table thead th { z-index: 2; }
+.mx-table td.mx-svc-cell {
+  min-width: 300px;
+  max-width: 340px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mx-svc-link {
+  color: var(--sl-ink, #10151c);
+  text-decoration: none;
+  margin: 0 2px;
+  font-weight: 600;
+}
+.mx-svc-link:hover {
+  color: var(--sl-accent, #2f6fed);
+  text-decoration: underline;
+}
+.mx-svc-cell .svc-link { margin-left: 8px; }
+.mx-desc-cell { min-width: 180px; max-width: 260px; }
+.mx-desc {
+  display: block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--sl-ink, #10151c);
+}
+.mx-desc:hover { color: var(--sl-accent, #2f6fed); }
+.mx-cell { min-width: 170px; }
+.mx-cell.mx-focus, .mx-table th.mx-focus { background: var(--sl-accent-soft, #eef4ff); }
+.mx-url {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--sl-ink, #10151c);
+}
+.mx-url:hover { color: var(--sl-accent, #2f6fed); }
+.mx-kind td {
+  background: var(--sl-canvas, #f7f8fa);
+  font-size: 12px;
+  font-weight: 600;
+}
+/* 环境表单(自原独立部署页随迁) */
+.form-grid {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+  max-width: 640px;
+  margin-bottom: 10px;
+}
+.form-grid .lb { font-size: 11.5px; color: var(--sl-ink-3); }
+.line-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 640px;
+  margin-top: 6px;
+}
+</style>

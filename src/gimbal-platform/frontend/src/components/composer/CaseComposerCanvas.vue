@@ -1944,7 +1944,7 @@ const serviceOptions = computed(() => {
     if (deriveBase(key, catalogNames.value) === anchor)
       push(key, `${key}(身份面)`)                              // 本服务身份面
   }
-  // F4 第三来源:服务配置注册表(已登记身份面)。本服务的优先展示,
+  // F4 第三来源:服务注册的身份面注册表(已登记身份面)。本服务的优先展示,
   // 跨服务的与下方 declared 跨服务键一起置底。
   for (const a of registeredAliases.value) {
     if (!anchor || a.baseService === anchor)

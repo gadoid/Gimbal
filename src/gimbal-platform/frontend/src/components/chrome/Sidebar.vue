@@ -209,16 +209,6 @@ const groups: SidebarGroup[] = [
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      // ⑦:服务信息管理重定位「服务配置」(术语降位,数据模型零改动)
-      { path: '/service-admin', label: '服务配置', icon: LayersIcon, cap: 'ops.write' },
-      // IA P1(2026-11-11):部署地址更名「环境与地址」并挪入服务组 ——
-      // 与服务配置同属治理面(名词层:身份面注册表 + 环境地址矩阵);
-      // 2026-11-12 再更名「服务注册」—— 环境与地址只描述了数据形状,
-      // 页面的能力是注册服务(环境定义 + (基础服务,环境)→地址的全平台
-      // 注册表),也归齐服务组命名族(服务画像/服务配置/服务注册);
-      // 与服务配置的分野:那边登记名字与槽位(身份面),这边注册地址。
-      // 读全员/写 Admin+
-      { path: '/admin/deployments', label: '服务注册', icon: GearIcon, cap: 'ops.write' },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
       // 分层⑥:「默认值」页与个人层均已退役(全局默认在公共项目「配置」
       // 页签,个人默认在执行配置 /exec-configs)
@@ -226,6 +216,8 @@ const groups: SidebarGroup[] = [
       // 集成入服务组(2026-11-11 IA):不再单列成组,更名「集成服务」—
       // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
       { path: '/integrations', label: '集成服务', icon: Share2Icon },
+      // 2026-11-13:服务配置/服务注册两治理面挪出本组(并入一页,见
+      // 「平台」组)—— 服务组回归纯全员使用面
     ],
   },
   // 执行组(执行设计 §0):执行器(/run)/ 执行记录;字段来源分析(E2a)
@@ -239,9 +231,14 @@ const groups: SidebarGroup[] = [
     { path: '/analytics', label: '数据分析', icon: PieChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
   ] },
   { label: '平台', entries: [
+    // 2026-11-13 深度合并:原「服务配置」(身份面注册表)与「服务注册」
+    // (独立部署页)并为同一页 —— 服务为锚,身份面(以谁)+ 各环境地址
+    // (发到哪)两个切面;翻 11-11 IA P1 挪入服务组的旧案:合并后归
+    // 治理面,「平台」组=平台基础信息(服务注册 + 用户管理),「服务」
+    // 组回归纯全员使用面。写面 ops.write(admin+),读 API 全员(执行
+    // 配置枢纽/别名详情页只读引用)。
+    { path: '/service-admin', label: '服务注册', icon: LayersIcon, cap: 'ops.write' },
     { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },
-    // M2a S7.1:项目管理收编进「项目」组;IA P1 起部署表维护(环境与
-    // 地址)挪入「服务」组(治理面与身份面注册表相邻)
   ] },
 ]
 

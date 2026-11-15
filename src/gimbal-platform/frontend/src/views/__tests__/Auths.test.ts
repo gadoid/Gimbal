@@ -14,6 +14,7 @@ import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import Auths from '@/views/Auths.vue'
 import * as api from '@/api/auth_sessions'
+import * as aliasApi from '@/api/service-aliases'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 
@@ -53,6 +54,12 @@ async function clickMenuItem(testid: string) {
   await flushPromises()
 }
 
+/** 状态优先改造:测试连通升为行内一键(auth-test-inline-{id}),不再进菜单。 */
+async function clickInlineTest(w: ReturnType<typeof mount>, id = 1) {
+  await w.find(`[data-testid="auth-test-inline-${id}"]`).trigger('click')
+  await flushPromises()
+}
+
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.restoreAllMocks()
@@ -60,6 +67,8 @@ beforeEach(() => {
       items: [sample], total: 1, page: 1, pageSize: 50,
       tokenTypeCounts: { Bearer: 1 },
     })
+  // 槽位声明反查默认空(✕ 未声明 chip 的用例单独覆写)
+  vi.spyOn(aliasApi, 'listAllAliases').mockResolvedValue([])
   vi.spyOn(api, 'create').mockResolvedValue(sample)
   vi.spyOn(api, 'patch').mockResolvedValue(sample)
   vi.spyOn(api, 'remove').mockResolvedValue(undefined)
@@ -80,6 +89,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = ''
+  localStorage.removeItem('auths.test-memory:v1')
 })
 
 describe('Auths — 测试弹框状态流', () => {
@@ -90,8 +100,7 @@ describe('Auths — 测试弹框状态流', () => {
     )
     const w = mountPage()
     await flushPromises()
-    await openRowMenu(w)
-    await clickMenuItem('auth-test')
+    await clickInlineTest(w)
 
     expect(document.body.textContent).toContain('认证中')
     expect(document.body.textContent).not.toContain('连通失败')
@@ -101,6 +110,9 @@ describe('Auths — 测试弹框状态流', () => {
     await flushPromises()
     expect(document.body.textContent).toContain('认证成功')
     expect(document.body.textContent).toContain('HTTP 200')
+    // 终态回写本机记忆:行内出现 ✓ 测通 chip + localStorage 落盘
+    expect(w.find('[data-testid="test-mem-1"]').text()).toContain('✓ 测通')
+    expect(localStorage.getItem('auths.test-memory:v1')).toContain('"ok":true')
     w.unmount()
   })
 
@@ -110,12 +122,13 @@ describe('Auths — 测试弹框状态流', () => {
     })
     const w = mountPage()
     await flushPromises()
-    await openRowMenu(w)
-    await clickMenuItem('auth-test')
+    await clickInlineTest(w)
     await flushPromises()
 
     expect(document.body.textContent).toContain('认证失败')
     expect(document.body.textContent).toContain('网络/认证错误: HTTPStatusError: 401')
+    // 失败同样回写:行内 ✗ 测败 chip
+    expect(w.find('[data-testid="test-mem-1"]').text()).toContain('✗ 测败')
     w.unmount()
   })
 
@@ -123,8 +136,7 @@ describe('Auths — 测试弹框状态流', () => {
     vi.spyOn(api, 'testConnection').mockRejectedValue(new Error('Network Error'))
     const w = mountPage()
     await flushPromises()
-    await openRowMenu(w)
-    await clickMenuItem('auth-test')
+    await clickInlineTest(w)
     await flushPromises()
 
     expect(document.body.textContent).toContain('认证失败')
@@ -317,6 +329,130 @@ describe('Auths — 槽位绑定(S3)', () => {
     expect(rows.length).toBe(2)
     // 菜单是懒挂载(tools 的 DropdownMenu 展开才渲染):直接查触发器在,
     // 行为面(点击 → apiSetDefault)由下面直接断言 store/api 面覆盖
+    w.unmount()
+  })
+})
+
+// ── 状态优先改造:行内测试一键 + 本机记忆 + 卡面聚合 + 只看问题 ────
+describe('Auths — 状态优先(卡面聚合 · 只看问题)', () => {
+  it('本机测败记忆 → 卡面 ✕N 测败 + 红顶边;「只看问题」只留问题卡', async () => {
+    localStorage.setItem('auths.test-memory:v1',
+      JSON.stringify({ 1: { ok: false, at: Date.now() } }))
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items: [
+        { ...sample, id: 1, alias: 'qa1', slot: 'qa1', isDefault: true },
+        { ...sample, id: 2, alias: 'ok-alias', slot: 'ok-slot', isDefault: true },
+      ],
+      total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
+    } as never)
+    const w = mountPage()
+    await flushPromises()
+    // qa1 槽有测败记忆 → 卡面红 chip + 红顶边;健康槽不亮
+    expect(w.find('[data-testid="slot-fail-qa1"]').exists()).toBe(true)
+    expect(w.find('[data-testid="slot-fail-ok-slot"]').exists()).toBe(false)
+    expect(w.find('[data-testid="slot-card-qa1"]').classes()).toContain('tone-bad')
+    // 只看问题:健康槽整卡滤掉
+    await w.find('[data-testid="problem-filter"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="slot-card-qa1"]').exists()).toBe(true)
+    expect(w.find('[data-testid="slot-card-ok-slot"]').exists()).toBe(false)
+    expect(w.findAll('[data-testid^="auth-row-"]')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('无默认的槽也算问题:只看问题保留无默认卡;健康卡排后', async () => {
+    // s2 已在服务注册声明槽位 → 健康绿;s1 未声明 ∨ 无默认 → 琥珀
+    vi.spyOn(aliasApi, 'listAllAliases').mockResolvedValue([
+      { aliasName: 'b', baseService: 'b-svc', slot: 's2', kind: 'plate',
+        createdAt: '', updatedAt: '' },
+    ] as never)
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items: [
+        { ...sample, id: 2, alias: 'b', slot: 's2', isDefault: true },
+        { ...sample, id: 1, alias: 'a', slot: 's1', isDefault: false },
+      ],
+      total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
+    } as never)
+    const w = mountPage()
+    await flushPromises()
+    const cards = w.findAll('[data-testid^="slot-card-"]')
+    // 问题卡(无默认 s1)排前
+    expect(cards[0].attributes('data-testid')).toBe('slot-card-s1')
+    expect(cards[1].attributes('data-testid')).toBe('slot-card-s2')
+    // 顶边状态色:无默认琥珀 / 健康绿
+    expect(cards[0].classes()).toContain('tone-warn')
+    expect(cards[1].classes()).toContain('tone-ok')
+    await w.find('[data-testid="problem-filter"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="slot-card-s1"]').exists()).toBe(true)
+    expect(w.find('[data-testid="slot-card-s2"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('>5 绑定的槽:卡内收前 5,展开/收起切换', async () => {
+    const items = Array.from({ length: 7 }, (_, i) => ({
+      ...sample, id: i + 1, alias: `a${i + 1}`, slot: 'big', isDefault: i === 0,
+    }))
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items, total: 7, page: 1, pageSize: 20, tokenTypeCounts: {},
+    } as never)
+    const w = mountPage()
+    await flushPromises()
+    expect(w.findAll('[data-testid^="auth-row-"]')).toHaveLength(5)
+    expect(w.find('[data-testid="slot-more-big"]').text()).toContain('还有 2 条绑定')
+    await w.find('[data-testid="slot-more-big"]').trigger('click')
+    await flushPromises()
+    expect(w.findAll('[data-testid^="auth-row-"]')).toHaveLength(7)
+    expect(w.find('[data-testid="slot-more-big"]').text()).toContain('收起')
+    w.unmount()
+  })
+})
+
+// ── 渐进披露:高级区默认收起(v-show 字段常驻,校验不感知)─────────
+describe('Auths — 表单渐进披露', () => {
+  it('新建:高级区默认收起;点开关展开', async () => {
+    const w = mountPage()
+    await flushPromises()
+    await w.find('[data-testid="open-create"]').trigger('click')
+    await flushPromises()
+    expect((q('[data-testid="f-advanced-body"]').element as HTMLElement).style.display)
+      .toBe('none')
+    await q('[data-testid="f-advanced-toggle"]').trigger('click')
+    await flushPromises()
+    expect((q('[data-testid="f-advanced-body"]').element as HTMLElement).style.display)
+      .toBe('')
+    w.unmount()
+  })
+
+  it('编辑:高级项有非缺省值(expires 3600≠7200)自动展开', async () => {
+    const w = mountPage()
+    await flushPromises()
+    await openRowMenu(w)
+    await clickMenuItem('auth-edit')
+    expect((q('[data-testid="f-advanced-body"]').element as HTMLElement).style.display)
+      .toBe('')
+    w.unmount()
+  })
+})
+
+// ── 槽位主轴直连:该槽在服务注册的身份面注册表有无声明 ────────────
+describe('Auths — 槽位声明反查(与服务注册直连)', () => {
+  it('槽无任何身份面声明 → 组头 ✕ 未声明;有声明的槽不亮', async () => {
+    vi.spyOn(aliasApi, 'listAllAliases').mockResolvedValue([
+      { aliasName: 'fin-service-uat', baseService: 'fin-service',
+        slot: 'ok-slot', kind: 'plate', createdAt: '', updatedAt: '' },
+    ] as never)
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items: [
+        { ...sample, id: 1, alias: 'qa1', slot: 'qa1', isDefault: true },
+        { ...sample, id: 2, alias: 'ok-alias', slot: 'ok-slot', isDefault: true },
+      ],
+      total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
+    } as never)
+    const w = mountPage()
+    await flushPromises()
+    expect(w.find('[data-testid="slot-undeclared-qa1"]').exists()).toBe(true)
+    expect(w.find('[data-testid="slot-undeclared-ok-slot"]').exists()).toBe(false)
     w.unmount()
   })
 })

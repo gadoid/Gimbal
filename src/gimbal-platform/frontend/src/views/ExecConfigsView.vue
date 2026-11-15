@@ -1,11 +1,13 @@
 <!-- ExecConfigsView.vue — 执行配置管理页(执行配置分层①/③,/exec-configs)。
      个人面·全员:一套默认 + 若干命名配置,每组配置按系统分组内联子配置
      (bindings + carryOverrides)。零凭证值零地址值 —— 凭证在认证管理、
-     地址在服务注册(原「环境与地址」,2026-11-12 更名),这里只存引用键。
+     地址在服务注册(2026-11-13 起身份面与地址同页治理),这里只存引用键。
      ③ 关联枢纽(§8):对既有配置面只做**关联** —— 存引用键 + 放深链,
      不搬数据、不代管维护面与权限门。页内四路关联:环境→地址就绪度+
-     深链服务注册;绑定槽位→个人池就绪+缺失深链 /auths 预填直达;
-     服务→深链服务配置;carry 覆盖→内联展示+漂移检查+层宿主深链;
+     深链服务注册(矩阵);绑定槽位→个人池就绪+未登记深链服务子页 /
+     缺失深链 /auths 预填直达(注册表状态按名定向检索,规模安全);
+     服务→逐系统子页(身份面注册表+说明)深链;carry 覆盖→内联展示
+     +漂移检查+层宿主深链;
      生效预览 pickable(选定配置即预览逐值带来源)。全部由现有读 API
      拼装 + 一个配置漂移读面,零新写面。
      形制与服务组其余页共用 .slib 基座(scenario-lib.css / service-area.css)。 -->
@@ -165,7 +167,7 @@
             <span class="svc-panel-title">服务注册</span>
             <span class="svc-panel-desc">本配置所选环境下各系统的地址就绪度</span>
             <span class="svc-panel-right">
-              <router-link v-if="auth.can('ops.write')" to="/admin/deployments"
+              <router-link v-if="auth.can('ops.write')" to="/service-admin"
                 class="svc-link">维护在「服务注册」↗</router-link>
               <span v-else class="svc-panel-desc">地址由平台管理员在「服务注册」维护</span>
             </span>
@@ -207,14 +209,14 @@
           <table v-else class="slib-table" data-testid="ec-hub-bindings">
             <thead>
               <tr><th>身份面</th><th>配置槽位</th><th>声明槽位</th>
-                  <th style="width:90px">个人池</th><th style="width:130px">操作</th></tr>
+                  <th style="width:90px">个人池</th><th style="width:210px">操作</th></tr>
             </thead>
             <tbody>
               <template v-for="s in selected.systems">
                 <tr v-for="(slot, alias) in s.bindings" :key="`${alias}=${slot}`">
                   <td>
                     <span class="mono">{{ alias }}</span>
-                    <span v-if="aliasRows.length && !aliasExists(String(alias))"
+                    <span v-if="facesLoaded && !aliasExists(String(alias))"
                           class="svc-flag red ml-1" title="别名注册表中不存在">✕ 未登记</span>
                   </td>
                   <td><span class="mono">{{ slot }}</span></td>
@@ -224,6 +226,14 @@
                     <span v-else class="svc-flag red" :data-testid="`ec-slot-miss-${slot}`">缺绑定</span>
                   </td>
                   <td>
+                    <!-- 未登记 → 该服务子页的身份面注册表(登记的家,
+                         2026-11-13 自矩阵页迁入);缺个人池凭证 → 认证管理预填 -->
+                    <router-link
+                      v-if="facesLoaded && !aliasExists(String(alias))"
+                      :to="`/service-admin/${encodeURIComponent(s.service)}?tab=faces`"
+                      class="svc-link warn-link"
+                      :data-testid="`ec-goto-faces-${alias}`"
+                    >去登记 ↗</router-link>
                     <a class="svc-link" :data-testid="`ec-goto-auth-${slot}`"
                        :href="authHref(String(slot), s.service)">去认证管理补 ↗</a>
                   </td>
@@ -233,17 +243,37 @@
           </table>
         </div>
 
-        <!-- ③ 服务 → 深链服务配置(Admin+ 写面 / 普通用户只读指引) -->
+        <!-- ③ 服务接入 → 逐系统子页(身份面注册表 + 说明;读面全员)-->
         <div class="svc-panel" data-testid="ec-hub-svc">
           <div class="svc-panel-head">
             <span class="svc-panel-title">服务接入</span>
-            <span class="svc-panel-desc">身份面(别名)与凭证槽位声明在「服务配置」注册表维护</span>
+            <span class="svc-panel-desc">身份面(别名)与凭证槽位声明在各服务子页登记;说明为服务级元数据</span>
             <span class="svc-panel-right">
               <router-link v-if="auth.can('ops.write')" to="/service-admin"
-                class="svc-link">去服务配置 ↗</router-link>
-              <span v-else class="svc-panel-desc">由平台管理员维护(本页只读引用)</span>
+                class="svc-link">地址在「服务注册」↗</router-link>
             </span>
           </div>
+          <p v-if="!selected.systems.length" class="hub-note">
+            本配置还没有系统子配置 —— 身份面按系统在各自子页登记。
+          </p>
+          <table v-else class="slib-table" data-testid="ec-hub-svcs">
+            <thead>
+              <tr><th>系统</th><th>说明</th><th style="width:110px" class="c-center">身份面</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in selected.systems" :key="`svc-${s.service}`"
+                  :data-testid="`ec-svc-${s.service}`">
+                <td><span class="mono">{{ s.service }}</span></td>
+                <td class="muted">{{ svcDesc(s.service) || '—' }}</td>
+                <td class="c-center">
+                  <router-link
+                    :to="`/service-admin/${encodeURIComponent(s.service)}?tab=faces`"
+                    class="svc-link" :data-testid="`ec-goto-faces-${s.service}`"
+                  >身份面 ↗</router-link>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <!-- ④ carry 覆盖 → 内联展示 + 漂移检查 + 层宿主深链 -->
@@ -326,7 +356,8 @@ import {
 import { listEnvironments, type EnvironmentRow } from '@/api/environments'
 import { listDeployments, type Deployment } from '@/api/deployments'
 import { listAll as listAllAuths } from '@/api/auth_sessions'
-import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import { listAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import { listServiceMeta } from '@/api/service-meta'
 import { listScenarioOptions } from '@/api/scenario-composer'
 import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -362,10 +393,35 @@ const hasCarries = computed(() =>
 const deps = ref<Deployment[]>([])
 const authRows = ref<Array<{ alias: string; slot?: string | null;
                             system?: string | null; envId?: number | null }>>([])
-const aliasRows = ref<ServiceAliasRow[]>([])
 const drift = ref<{ services: ExecConfigDriftService[]; plateReachable: boolean } | null>(null)
 const scenOptions = ref<Array<{ id: string; name: string }>>([])
 const previewOpen = ref(false)
+
+// 绑定别名的注册表状态:按名精确检索(2026-11-13 规模安全 —— 注册表
+// 过 200 后全量 listAllAliases 截断会误报「未登记」;绑定别名个数有限,
+// 每个别名一次 q 检索 + 精确命中,永不全量)。
+const faceMeta = ref<Record<string, ServiceAliasRow | null>>({})
+const facesLoaded = ref(false)
+async function loadFacesFor(c: ExecConfigRow): Promise<void> {
+  const names = [...new Set(c.systems.flatMap((s) => Object.keys(s.bindings)))]
+  const out: Record<string, ServiceAliasRow | null> = {}
+  await Promise.all(names.map(async (alias) => {
+    try {
+      const env = await listAliases({ q: alias, page_size: 10 })
+      out[alias] = env.items.find((a) => a.aliasName === alias) ?? null
+    } catch {
+      out[alias] = null
+    }
+  }))
+  faceMeta.value = out
+  facesLoaded.value = true
+}
+
+// 服务说明(service-meta;③ 服务接入面板回显,失败静默降级为「—」)
+const svcMetas = ref<Record<string, string>>({})
+function svcDesc(service: string): string {
+  return svcMetas.value[service] ?? ''
+}
 
 const envNames = computed<Record<number, string>>(() =>
   Object.fromEntries(envs.value.map((e) => [e.id, e.name])))
@@ -380,10 +436,10 @@ function slotBound(slot: string): boolean {
   return authRows.value.some((r) => (r.slot || r.alias) === slot)
 }
 function aliasExists(alias: string): boolean {
-  return aliasRows.value.some((a) => a.aliasName === alias)
+  return faceMeta.value[alias] != null
 }
 function declaredSlot(alias: string): string | null {
-  return aliasRows.value.find((a) => a.aliasName === alias)?.slot ?? null
+  return faceMeta.value[alias]?.slot ?? null
 }
 function driftOf(service: string): ExecConfigDriftService | undefined {
   return drift.value?.services.find((s) => s.service === service)
@@ -399,10 +455,14 @@ async function loadHub(c: ExecConfigRow): Promise<void> {
     execConfigDrift(c.id)
       .then((d) => { drift.value = d })
       .catch(() => { drift.value = null }),
+    // 绑定别名的注册表状态(定向检索,永不全量)
+    loadFacesFor(c),
   ]
   if (c.environmentId != null) {
-    jobs.push(listDeployments(c.environmentId)
-      .then((d) => { deps.value = d })
+    // 2026-11-13 起 listDeployments 固定拉全环境矩阵(独立部署页并入服务
+    // 注册,按环境取数的调用方收口)—— 本配置环境的地址客户端过滤
+    jobs.push(listDeployments()
+      .then((d) => { deps.value = d.filter((r) => r.envId === c.environmentId) })
       .catch(() => { deps.value = [] }))
   } else {
     deps.value = []
@@ -561,7 +621,13 @@ onMounted(async () => {
     loading.value = false
   }
   // ③ 枢纽旁路数据(一次性;失败静默降级 —— 深链区退化为无提示)
-  listAllAliases().then((r) => { aliasRows.value = r }).catch(() => {})
+  listServiceMeta()
+    .then((rows) => {
+      const m: Record<string, string> = {}
+      for (const r of rows) m[r.serviceName] = r.description
+      svcMetas.value = m
+    })
+    .catch(() => { /* 说明拉不到 — 面板显「—」 */ })
   listAllAuths().then((r) => { authRows.value = r as never }).catch(() => {})
   listScenarioOptions({ page_size: 50, scope: 'mine' })
     .then((envelope) => {

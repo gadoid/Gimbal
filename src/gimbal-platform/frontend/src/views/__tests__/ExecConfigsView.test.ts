@@ -30,8 +30,20 @@ vi.mock('@/api/deployments', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   listAll: vi.fn().mockResolvedValue([]),
 }))
+// 绑定别名注册表状态 = 按名定向检索(2026-11-13 规模安全适配)
 vi.mock('@/api/service-aliases', () => ({
-  listAllAliases: vi.fn().mockResolvedValue([]),
+  listAliases: vi.fn().mockResolvedValue({
+    items: [{
+      aliasName: 'fin-service.merchant-b', baseService: 'fin-service',
+      kind: 'plate', slot: 'merchant-b', createdAt: '', updatedAt: '',
+    }],
+    total: 1, page: 1, pageSize: 10,
+  }),
+}))
+vi.mock('@/api/service-meta', () => ({
+  listServiceMeta: vi.fn().mockResolvedValue([
+    { serviceName: 'fin-service', description: '交易核心服务', updatedAt: null },
+  ]),
 }))
 vi.mock('@/api/scenario-composer', () => ({
   listScenarioOptions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -72,8 +84,9 @@ async function mountPage() {
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: { template: '<div/>' } },
-      { path: '/admin/deployments', component: { template: '<div/>' } },
+      // 枢纽深链目标:服务注册(矩阵 + 服务子页;2026-11-13 身份面入子页)
       { path: '/service-admin', component: { template: '<div/>' } },
+      { path: '/service-admin/:alias', component: { template: '<div/>' } },
       { path: '/auths', component: { template: '<div/>' } },
       { path: '/carry-config', component: { template: '<div/>' } },
     ],
@@ -263,6 +276,43 @@ describe('ExecConfigsView', () => {
     const w = await mountPage()
     expect(w.find('[data-testid="ec-slot-miss-merchant-b"]').exists()).toBe(false)
     expect(w.text()).toContain('已绑定')
+    w.unmount()
+  })
+
+  it('③ 枢纽:绑定别名的注册表状态按名定向检索(不再全量拉取)', async () => {
+    const aliasApi = await import('@/api/service-aliases')
+    const w = await mountPage()
+    // q = 绑定别名精确名;不是 listAllAliases 全量
+    expect(vi.mocked(aliasApi.listAliases)).toHaveBeenCalledWith({
+      q: 'fin-service.merchant-b', page_size: 10,
+    })
+    // 精确命中 → 声明槽位回显,无「未登记」flag
+    expect(w.find('[data-testid="ec-goto-faces-fin-service.merchant-b"]').exists())
+      .toBe(false)
+    expect(w.get('[data-testid="ec-hub-bindings"]').text()).toContain('merchant-b')
+    w.unmount()
+  })
+
+  it('③ 服务接入面板:逐系统说明回显 + 身份面子页深链', async () => {
+    const w = await mountPage()
+    const row = w.get('[data-testid="ec-svc-fin-service"]')
+    expect(row.text()).toContain('fin-service')
+    expect(row.text()).toContain('交易核心服务')
+    expect(w.get('[data-testid="ec-goto-faces-fin-service"]').attributes('href'))
+      .toBe('/service-admin/fin-service?tab=faces')
+    w.unmount()
+  })
+
+  it('③ 未登记的绑定别名 → 去该服务子页身份面 tab 登记', async () => {
+    const aliasApi = await import('@/api/service-aliases')
+    vi.mocked(aliasApi.listAliases).mockResolvedValue({
+      items: [], total: 0, page: 1, pageSize: 10,
+    })
+    const w = await mountPage()
+    await flushPromises()
+    expect(w.get('[data-testid="ec-goto-faces-fin-service.merchant-b"]').attributes('href'))
+      .toBe('/service-admin/fin-service?tab=faces')
+    expect(w.get('[data-testid="ec-hub-bindings"]').text()).toContain('✕ 未登记')
     w.unmount()
   })
 })

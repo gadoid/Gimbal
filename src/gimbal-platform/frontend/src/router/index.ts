@@ -112,10 +112,11 @@ const routes = [
     redirect: '/projects',
   },
   {
+    // 2026-11-13 深度合并:部署表((服务,环境)→地址)并入「服务注册」
+    // (/service-admin,服务为锚:身份面 + 各环境地址一页治理)。沿革:
+    // 部署地址 → 环境与地址 → 服务注册(独立页)→ 并入;旧深链兜底重定向。
     path: '/admin/deployments',
-    component: () => import('@/views/DeploymentsAdmin.vue'),
-    // M2a S2.3:部署表维护 = ops.write(Admin+;写面同后端闸)
-    meta: { requiresAuth: true, requiresCap: 'ops.write' },
+    redirect: '/service-admin',
   },
   {
     // authz W6 强制改密页:管理员重置密码后(me.must_change_password)
@@ -317,10 +318,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 服务信息管理(方案 §4;P1 唯一净新增页面)— 配置池,admin 写面
+    // 服务注册(2026-11-13 深度合并):身份面注册表(原「服务配置」)+
+    // 环境定义与 (服务,环境)→地址矩阵(原独立部署页)一页治理,服务为锚
     path: '/service-admin',
     component: () => import('@/views/ServiceAdmin.vue'),
-    // authz W8:服务信息管理 = ops.write(表 A:admin+;原 member+ 更名)
+    // authz W8:写面 = ops.write(表 A:admin+;同后端闸)
     meta: { requiresAuth: true, requiresCap: 'ops.write' },
   },
   {
@@ -328,12 +330,12 @@ const routes = [
     // 字段默认值 tab 在此编辑;?tab=credential 供认证管理反查深链
     path: '/service-admin/:alias',
     component: () => import('@/views/ServiceAliasDetail.vue'),
-    // ops.write+:别名属主要在本页管理入站/回调(后端按 admin ∨ 属主判定),
-    // 入站调用方(个人 gtk_ 令牌)也走这里的绑定面 —— 旧 requiresAdmin 把
-    // 属主与调用方一并挡在门外(全量评估 2026-11-02 #3)。令牌的签发/管理
-    // 面在 /profile/tokens(webhook v4)。写面权限仍由后端与子面板的
-    // canManage 把关,放开路由不扩大写权限。
-    meta: { requiresAuth: true, requiresCap: 'ops.write' },
+    // 全员可达(2026-11-13 兑现全量评估 #3 的放开):别名属主要在本页看
+    // 绑定面,入站调用方(个人 gtk_ 令牌)经认证管理「被引用」深链进来。
+    // 读面全员(别名/环境/部署表读 API 均无能力门);写面仍由后端
+    // (admin ∨ 属主)与子面板把关 —— 字段默认值 tab 的 fields 取数是
+    // ops.write 门,页内按能力收 tab(见 ServiceAliasDetail)。
+    meta: { requiresAuth: true },
   },
   // /dev/dual-stack 双栈验证页已随 Phase 3 退役(EP 摘除,使命完成)
 

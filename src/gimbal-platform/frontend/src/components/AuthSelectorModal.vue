@@ -2,7 +2,7 @@
      用户在编辑 header value 时，弹此 modal 选 alias + 字段。
      模板格式: ${auth.<alias>.<field>}，运行时由 executor 解密。
      配套方案 §1.1(C3a):步骤服务是已绑凭证的别名/服务时,preselectAlias
-     自动预填绑定凭证(从服务信息管理的绑定带出);手工改选仍是逃生舱。 -->
+     自动预填绑定凭证(从服务注册的身份面绑定带出);手工改选仍是逃生舱。 -->
 <template>
   <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
     <DialogContent class="max-w-[520px]">
