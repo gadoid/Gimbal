@@ -48,6 +48,7 @@ from loguru import logger
 from sqlalchemy import case, func, select
 from sqlalchemy import text as sa_text
 from sqlalchemy import update as sqlalchemy_update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
@@ -66,6 +67,7 @@ from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (RunRequest, RunResponse, ServiceBinding,
                                         scrub_retired_bindings)
 from . import gimbal_launcher, plate_client
+from .run_params import RAW_SCHEME_ID
 from .auth_ref_scan import scan_auth_aliases
 from .endpoint_declarations import declared_paths_of
 from .run_injection import (
@@ -1039,9 +1041,26 @@ async def dispatch_target(
 
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
-    (fanout_datasets, injections, selected_entries,
-     skipped_while_degraded) = await compute_run_fanout(
-        db, target.scenario_id, scenario_payload, req)
+    # 入站参数(设计 2026-11-13 决策 5):params 已在路由入口五道闸校验,
+    # 此处合成为**单虚行**走数据集行既有通路,跳过 compute_run_fanout
+    # —— 互斥族已拒 params+dataSets/injection 组合;方案配方带入的
+    # 数据集行不消费(评审 ①「砍掉比缝合便宜」)。datasetId=None 与
+    # 基线空覆盖行同拍(compute_run_fanout 的 L780 口径)。
+    _params_mode = bool(getattr(req, "params", None))
+    if _params_mode:
+        from .run_params import virtual_row
+        fanout_datasets = [{"datasetId": None,
+                            "rows": [(0, virtual_row(req.params))]}]
+        injections = [None]
+        selected_entries: list = []
+        skipped_while_degraded: list = []
+    else:
+        (fanout_datasets, injections, selected_entries,
+         skipped_while_degraded) = await compute_run_fanout(
+            db, target.scenario_id, scenario_payload, req)
+    # raw 保留字(决策 3):carry 关闭 + 不取任何方案配方。skip_carry
+    # 必须随任务下发 —— worker 不回查请求上下文(:1343 注释)。
+    _skip_carry = (getattr(req, "scheme_id", None) == RAW_SCHEME_ID)
 
     # authz W6:执行人 ≠ 场景属主(引用执行 / suite 聚合跑他人成员)——
     # 原件不剥(发布不改原件),执行形态在此脱敏:数据集敏感列剥、
@@ -1239,7 +1258,30 @@ async def dispatch_target(
             raise Conflict("debug_single_run", "调试执行要求 nRuns=1")
         chain = "server"
 
-    execution = await _create_execution(
+    # clientRef 幂等预查(设计 2026-11-13 决策 8):外部投递天然
+    # at-least-once,重复 clientRef = 重复业务订单 → 409 回显原
+    # executionId;并发竞态由 0056 部分唯一索引兜底(IntegrityError
+    # 回查映射同 409)。身份维度与索引同拍:令牌 = (token_id,
+    # client_ref);JWT = (owner_id, client_ref) ∧ token_id IS NULL。
+    if req.client_ref:
+        _idem_cond = Execution.client_ref == req.client_ref
+        if token is not None:
+            _idem_cond &= Execution.token_id == token.id
+        else:
+            _idem_cond &= (Execution.token_id.is_(None)
+                           & (Execution.owner_id == user_id))
+        _dup_id = (await db.execute(
+            select(Execution.id).where(_idem_cond)
+            .order_by(Execution.id).limit(1))).scalar_one_or_none()
+        if _dup_id is not None:
+            raise Conflict(
+                "duplicate_client_ref",
+                f"clientRef 已被执行 #{_dup_id} 使用;重复提交即首次投递"
+                "已受理,请用原 executionId 查询结果(重跑走 rerun)",
+                extra={"executionId": _dup_id})
+
+    try:
+        execution = await _create_execution(
         db,
         # (Case 层解散后执行的挂载点就是场景;临时调用为占位 id)。
         scenario_id=target.scenario_id,
@@ -1336,8 +1378,39 @@ async def dispatch_target(
             # 键缺席 = 本次执行没有「降级 + 跳过」同时发生,不是「零跳过」。
             **({"judgeDegraded": True, "entriesSkippedWhileDegraded": skipped_while_degraded}
                if skipped_while_degraded else {}),
+            # ── 入站执行参数快照(设计 2026-11-13 §5)────────────────
+            # rerun 回放 params/schemeId("raw" 原样);clientRef 不回放
+            # (与 batchId 同口径:重跑是新的一次独立发起)。carryPolicy
+            # "off" 仅 raw(决策 3);paramsStrict = 场景契约快照。
+            **({"inboundParams": req.params} if _params_mode else {}),
+            **({"carryPolicy": "off"} if _skip_carry else {}),
+            **({"paramsStrict": bool((scenario_payload or {}).get("paramsStrict"))}
+               if _params_mode else {}),
         },
     )
+    except IntegrityError:
+        # 并发竞态兜底:预查与插入之间撞 0056 唯一索引 → 回查映射同 409。
+        # 回查也落空 = 违规来自别的约束(与本索引无关)→ 原样上抛,
+        # 不编造 duplicate_client_ref。
+        if not req.client_ref:
+            raise
+        await db.rollback()
+        _idem_cond = Execution.client_ref == req.client_ref
+        if token is not None:
+            _idem_cond &= Execution.token_id == token.id
+        else:
+            _idem_cond &= (Execution.token_id.is_(None)
+                           & (Execution.owner_id == user_id))
+        _dup_id = (await db.execute(
+            select(Execution.id).where(_idem_cond)
+            .order_by(Execution.id).limit(1))).scalar_one_or_none()
+        if _dup_id is None:
+            raise
+        raise Conflict(
+            "duplicate_client_ref",
+            f"clientRef 已被执行 #{_dup_id} 使用;重复提交即首次投递"
+            "已受理,请用原 executionId 查询结果(重跑走 rerun)",
+            extra={"executionId": _dup_id}) from None
 
     # C11（P3-01）：不再 spawn 进程内 fanout —— 执行配方入队，worker 认领驱动。
     # 配方是 dispatch 校验后的完整快照（worker 不回查请求上下文）；
@@ -1393,6 +1466,10 @@ async def dispatch_target(
                 # 语义与方案引用同款,配置后改不影响已派发执行)
                 "slot_map": _slot_map,
                 "exec_carry_overrides": _exec_carry,
+                # 入站参数(设计 2026-11-13 决策 3):raw 保留字 →
+                # prepare_exec 跳过 carry 上下文构建。升级前入队的旧
+                # 配方缺键 = False(缺省不跳),回放语义不受影响。
+                "skip_carry": _skip_carry,
             },
         }
     await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
@@ -2002,6 +2079,7 @@ async def _fanout(
     cred_project_id: int | None = None,
     slot_map: dict[str, str] | None = None,
     exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
+    skip_carry: bool = False,
 ) -> None:
     """Per-row × per-repeat compose + convert + 执行器调用（双链）。
 
@@ -2159,7 +2237,9 @@ async def _fanout(
         bindings={k: b.model_dump(by_alias=True)
                   for k, b in (service_bindings or {}).items()},
         # 分层②:显式选定配置的槽位覆盖与 carry 覆盖(纯值随配方)
-        slot_overrides=None, exec_carry_overrides=exec_carry_overrides)
+        slot_overrides=None, exec_carry_overrides=exec_carry_overrides,
+        # 入站参数(设计 2026-11-13 决策 3):raw 保留字 → 跳过 carry
+        skip_carry=skip_carry)
 
     # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
     # 失败均不阻断执行(台账性质;留默认值 = 未判定)。

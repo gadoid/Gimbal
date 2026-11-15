@@ -611,8 +611,10 @@ class TestDispatchSplitEquivalence:
         from app.services.scenario_store import get_row
         async with db_module.SessionLocal() as db:
             scen = await get_row(db, "sc-eq")
+            # clientRef 各异:同 clientRef 二次投递会撞幂等唯一索引
+            # (设计 2026-11-13 决策 8)—— 对拍意图是配方等价,不是幂等
             resp = await rd.dispatch_target(
-                db, uid, RunRequest(scenarioId="sc-eq", clientRef="a"),
+                db, uid, RunRequest(scenarioId="sc-eq", clientRef="b"),
                 RunTarget(scenario_id=scen.scenario_id,
                           payload=scen.payload or {}, kind="scenario"))
         await _wait(lambda: len(cap) == 2)

@@ -191,6 +191,8 @@ async def list_executions(
     created_from: Annotated[datetime | None, Query()] = None,
     created_to: Annotated[datetime | None, Query()] = None,
     token_id: Annotated[int | None, Query(alias="tokenId", ge=1)] = None,
+    client_ref: Annotated[str | None, Query(alias="clientRef",
+                                            max_length=128)] = None,
 ) -> ExecutionListOut:
     """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
 
@@ -275,6 +277,10 @@ async def list_executions(
         base = base.where(Execution.status == status_filter)
     if batch_id:
         base = base.where(Execution.batch_id == batch_id)
+    if client_ref:
+        # clientRef 对账过滤(入站执行参数设计 2026-11-13 决策 8):
+        # 可见性口径内按幂等键查执行(调用方对账「这笔业务单据跑了没」)。
+        base = base.where(Execution.client_ref == client_ref)
     # M2 timestamptz:查询串解析出的 naive 时间一律按 UTC 补 aware
     # (asyncpg 对 timestamptz 绑定要求 aware)
     if created_from is not None:
@@ -879,16 +885,25 @@ async def rerun_execution(
         "n_runs": cfg.get("nRuns") or 1,
         "parallel": cfg.get("parallel") or 1,
     }
+    # 入站执行参数回放(设计 2026-11-13 §5):params/schemeId("raw"
+    # 原样)按快照重放;虚行路径不消费数据集/注入 —— 回放时一并剥掉
+    # (首发混合模式方案带入的 dataSetIds 与 params 互斥,不剥会 409)。
+    # 快照语义不重校验(与 dataSetSelection 回放同口径);clientRef
+    # 不回放(与 batchId 同口径:重跑是新的一次独立发起)。
+    _replay_params = cfg.get("inboundParams") or None
     req = RunRequest(
         **{
             "scenarioId": ex.scenario_id,
-            "dataSetIds": cfg.get("dataSetIds") or [],
-            "dataSetSelection": cfg.get("dataSetSelection") or [],
+            "dataSetIds": ([] if _replay_params
+                           else cfg.get("dataSetIds") or []),
+            "dataSetSelection": ([] if _replay_params
+                                 else cfg.get("dataSetSelection") or []),
             # S6:归档形态可能带退役的 url/authAlias —— 回放剥离(历史
             # 数据不 422;地址/凭证改由环境快照与槽位绑定给出)
             "serviceBindings": scrub_retired_bindings(
                 cfg.get("serviceBindings")),
-            "injectionEntryIds": cfg.get("injectionEntryIds") or [],
+            "injectionEntryIds": ([] if _replay_params
+                                  else cfg.get("injectionEntryIds") or []),
             "runOptions": run_options,
             "schemeId": cfg.get("schemeId"),
             "schemeName": cfg.get("schemeName"),
@@ -896,6 +911,7 @@ async def rerun_execution(
             "environmentId": cfg.get("environmentId"),
             # S8:凭证来源按快照回放(重跑人须仍是项目成员,派发闸判)
             "credentialSource": cfg.get("credentialSource"),
+            **({"params": _replay_params} if _replay_params else {}),
         }
     )
     scen = await scenario_store.get_row(session, ex.scenario_id)

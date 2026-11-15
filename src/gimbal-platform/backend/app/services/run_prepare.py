@@ -531,6 +531,7 @@ async def prepare_exec(
     cred_project_id: int | None = None,
     slot_overrides: dict[str, str] | None = None,
     exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
+    skip_carry: bool = False,
 ) -> ExecPrep:
     """准备段统一入口(每次执行一次;逐 case 段保持
     compose → convert → materialize_run_copy 不变)。
@@ -655,21 +656,26 @@ async def prepare_exec(
                 prep.meta_plate, prep.plate_pins, resolve_result)
 
     # ⑤ carry(独立短会话;故障降级 None)
-    try:
-        async with db_factory() as s:
-            # S4:carry 作用域 = 公共项目层 < (项目层 ∨ 执行人个人层;
-            # 项目区不吃个人层 —— 区模型收敛裁定);分层②:执行配置
-            # 覆盖层压在场景显式之下、层序之上(区规则由调用方裁)
-            prep.carry_ctx = await build_carry_context(
-                s, definition, ui_field_states=ui_field_states,
-                project_id=project_id,
-                user_id=(owner_id if project_id is None else None),
-                bindings=bindings,
-                exec_overrides=exec_carry_overrides)
-    except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
-        logger.opt(exception=True).warning(
-            "run_prepare: carry context build failed; skipped")
+    if skip_carry:
+        # 入站参数设计 2026-11-13 决策 3:raw 保留字虚拟裸方案 → carry
+        # 关闭。materialize 的 None 分支既有(异常降级同款),零新机制。
         prep.carry_ctx = None
+    else:
+        try:
+            async with db_factory() as s:
+                # S4:carry 作用域 = 公共项目层 < (项目层 ∨ 执行人个人层;
+                # 项目区不吃个人层 —— 区模型收敛裁定);分层②:执行配置
+                # 覆盖层压在场景显式之下、层序之上(区规则由调用方裁)
+                prep.carry_ctx = await build_carry_context(
+                    s, definition, ui_field_states=ui_field_states,
+                    project_id=project_id,
+                    user_id=(owner_id if project_id is None else None),
+                    bindings=bindings,
+                    exec_overrides=exec_carry_overrides)
+        except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
+            logger.opt(exception=True).warning(
+                "run_prepare: carry context build failed; skipped")
+            prep.carry_ctx = None
     return prep
 
 

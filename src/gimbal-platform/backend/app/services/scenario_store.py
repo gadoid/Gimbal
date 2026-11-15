@@ -26,12 +26,14 @@ from . import activity
 # 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
 from ..schemas.scenario_composer import (
     Orchestration,
+    ParamSlot,
     Scenario,
     ScenarioDraft,
     ScenarioListItem,
     ScenarioMeta,
 )
 from . import endpoint_ref_index
+from . import run_params
 from . import scheme_store
 
 
@@ -130,6 +132,10 @@ async def create_in_transaction(
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     await enforce_meta_plate(draft.definition)      # ⑥:唯一写入口收口
+    # 入站参数契约写时校验(设计 2026-11-13 §2.1):槽位 ⊆ vars 标量键
+    run_params.validate_param_slots(
+        draft.definition,
+        [s.model_dump(by_alias=True) for s in draft.param_slots])
     server_owned = ScenarioMeta.model_validate({
         **def_meta,
         "scenarioId": scenario_id,
@@ -151,6 +157,10 @@ async def create_in_transaction(
         # 注册表随容器重铸透传(spec v2 §3)— 不传则回落 default {}
         # 丢条目(copy 路径经 model_validate 后同样走到这里)。
         assertion_registry=draft.assertion_registry,
+        # 入站参数契约随容器透传(设计 2026-11-13 §4:契约随场景
+        # payload 走,复制/转让/fork 自动携带)
+        param_slots=draft.param_slots,
+        params_strict=draft.params_strict,
         # M4:编辑器状态(ui.fieldStates)随容器透传
         ui=draft.ui,
     ).model_dump(by_alias=True, mode="json")
@@ -243,6 +253,29 @@ async def update(
         draft.definition,
         prev_meta_plate=(((row.payload or {}).get("definition") or {})
                          .get("meta") or {}).get("plate"))
+    # 入站参数契约缺键保留(设计 2026-11-13 挂账:前端契约编辑面本期
+    # 不接线):**逐键**判定 —— 请求未携带该键而存量行有值则保留存量
+    # (防前端整包保存/适配操作把 API 侧维护的契约抹掉);显式携带
+    # (含空槽清空)走整包替换。model_fields_set 精确区分「缺键」与
+    # 「显式 []/false」。逐键而非「任一键在即整包」:只带 paramsStrict
+    # 不带 paramSlots 的部分携带 PUT 不得清空槽位。
+    # **必须在下方写时校验之前**:保留后的契约要对着新定义重验
+    # (防「缺键 PUT + 删变量/适配 renameVar」留下悬空槽位)。
+    _old = row.payload or {}
+    _keep: dict = {}
+    if ("param_slots" not in draft.model_fields_set
+            and _old.get("paramSlots")):
+        _keep["param_slots"] = [ParamSlot.model_validate(s)
+                                for s in _old["paramSlots"]]
+    if ("params_strict" not in draft.model_fields_set
+            and _old.get("paramsStrict")):
+        _keep["params_strict"] = bool(_old["paramsStrict"])
+    if _keep:
+        draft = draft.model_copy(update=_keep)
+    # 入站参数契约写时校验(设计 §2.1):PUT 重验 —— 防删变量后槽位悬空
+    run_params.validate_param_slots(
+        draft.definition,
+        [s.model_dump(by_alias=True) for s in draft.param_slots])
     def_meta = draft.definition.get("meta") or {}
     req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     if req_sid != scenario_id:
@@ -272,6 +305,10 @@ async def update(
         # 注册表编辑器整包替换语义(spec v2 §3):PUT 带就存、不带(旧
         # 客户端)回落空 dict — 键归编排器。
         assertion_registry=draft.assertion_registry,
+        # 入站参数契约随容器透传(设计 2026-11-13):PUT 整包替换语义
+        # 与 assertion_registry 同款;旧客户端缺键回落缺省([]/false)
+        param_slots=draft.param_slots,
+        params_strict=draft.params_strict,
         # M4:编辑器状态(ui.fieldStates)随容器透传
         ui=draft.ui,
     ).model_dump(by_alias=True, mode="json")

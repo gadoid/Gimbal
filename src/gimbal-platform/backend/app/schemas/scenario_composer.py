@@ -138,6 +138,28 @@ class Orchestration(BaseModel):
     resourceMeta: dict[str, str] = Field(default_factory=dict)
 
 
+class ParamSlot(BaseModel):
+    """入站参数槽位(入站执行参数设计 2026-11-13 §2.1)。
+
+    契约上移场景级(assertion_registry 同款先例):「这个场景允许外部
+    填什么」是场景的属性。``name`` 必须命中 definition.config.vars 的
+    已声明标量键(写时校验,scenario_store create/PUT 双跑;生成式
+    spec 变量不可指 —— data_set_store._scalar_vars 调色板口径)。
+    ``pattern`` 是作者约束值格式的工具,对外部可达槽位建议必配
+    (路径注入缓解,设计 §4);平台不强制。
+    """
+    model_config = _CAMEL
+
+    name: str = Field(min_length=1, max_length=64,
+                      pattern=r"^[A-Za-z0-9_]+$")
+    type: Literal["string", "number", "boolean"] = Field(default="string")
+    required: bool = Field(default=False)
+    # 仅 type=string 合法(写时校验);≤256
+    pattern: str | None = Field(default=None, max_length=256)
+    max_length: int = Field(default=256, ge=1, le=4096, alias="maxLength")
+    description: str = Field(default="", max_length=512)
+
+
 class ScenarioDraft(BaseModel):
     """Platform draft container.
 
@@ -150,11 +172,21 @@ class ScenarioDraft(BaseModel):
     assertion_registry: 断言管理注册表(spec v2 §3)— 平台侧偏离注入条目,
                 与 orchestration 同级;引擎不感知,不进 plate convert。自由 dict,
                 条目形状权威在前端 types/assertion-registry.ts 与运行时物化函数。
+    param_slots / params_strict: 入站参数契约(设计 2026-11-13 决策 1/2)
+                —— 与 assertion_registry 同层平台侧字段,不进 plate;槽位
+                校验(≤64、name ⊆ vars 标量键、pattern 仅 string)在
+                scenario_store 写时双跑(create/PUT)。
     """
     model_config = _CAMEL
 
     definition: dict[str, Any]
     orchestration: Orchestration = Field(default_factory=Orchestration)
+    # 槽位上限 64 与 RunOptions 上限口径同源(设计 §2.1)
+    param_slots: list[ParamSlot] = Field(default_factory=list,
+                                         alias="paramSlots", max_length=64)
+    # strict = 平台验证的完备性(决策 7):派发前扫描 steps + setup/
+    # teardown 的 ${var.*} 占位,每个占位须 params 给值或基线非空
+    params_strict: bool = Field(default=False, alias="paramsStrict")
     # 默认形状对齐前端权威契约(types/assertion-registry.ts:{ entries: [] })—
     # V2 之前的存量 draft 无此键,default 补 {} 曾让前端 ?? 归一失效
     # (truthy 无 entries)。前端水化已统一 normalizeRegistry,这里补形状
@@ -495,6 +527,16 @@ class RunRequest(BaseModel):
     # 判定在入口路由(valid_callback_path,含协议/主机即 422)。
     callback_path: str | None = Field(
         default=None, alias="callbackPath", max_length=256)
+    # ── 入站执行参数(设计 2026-11-13 决策 1)─────────────────────
+    # 值字典:键须命中场景 paramSlots 白名单,值 string|number|boolean
+    # (null 拒 —— 要表达空用空串)。键值合法性不入 pydantic(422 code/
+    # fields 风格对齐 _reject_inbound_recipe),统一在路由入口
+    # validate_inbound_params 五道闸校验(设计 §2.3)。空 dict = 缺省
+    # (不入校验、不触 strict)。派发段合成为单虚行走数据集行既有通路
+    # (决策 5)。M1 禁令表不含 params —— 新键天然放行(设计 §9)。
+    params: dict[str, Any] | None = Field(
+        default=None, alias="params",
+        description="入站执行参数(须命中场景 paramSlots 契约)")
 
     # ── 派生读取面(W19):调用方按习惯属性读执行参数 ─────────────
     # 值的唯一权威 = run_options(缺省 = RunOptions() 全默认);

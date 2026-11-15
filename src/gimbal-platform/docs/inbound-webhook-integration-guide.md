@@ -102,9 +102,10 @@ v4 没有「两枚凭证组合出身份」的问题:一枚令牌一个身份,`PO
 | 字段 | 说明 |
 | --- | --- |
 | `scenarioId` | 目标场景(或 `steps` 二选一,见 §8) |
-| `schemeId` | 可选;指定方案,必须属于该场景(否则 422 `scheme_not_owned`);缺省用默认方案 |
+| `schemeId` | 可选;指定方案,必须属于该场景(否则 422 `scheme_not_owned`);缺省用默认方案;保留字 `"raw"` = 虚拟裸方案(§3.1.1) |
+| `params` | 可选;入站执行参数(§3.1.1),键须命中场景 `paramSlots` 契约 |
 | `runOptions.stepTo` | 可选;只执行到第 N 步(截断,无地址/凭证语义) |
-| `clientRef` | 可选,≤128,回调原样带回 |
+| `clientRef` | 可选,≤128,回调原样带回;**(身份, clientRef) 幂等键(§3.1.2)** |
 | `callbackPath` | 可选,回调路径覆盖(§4.1) |
 
 出现以下任一非空字段 → 422 `inbound_field_not_allowed`(列出字段名):
@@ -136,13 +137,88 @@ Authorization: Bearer gtk_…
 判定链(依次,前者先拒):
 
 ```
-① 认证(§1)→ ② 不带配方(§3.0)→ ③ 方案物化(服务端方案)
+① 认证(§1)→ ② 不带配方(§3.0)→ ③ 方案物化(服务端方案;raw 跳过)
 → ④ 场景前提(个人 = 属主;平台 = 公共 + 只读)
-→ ⑤ 令牌范围(§3.2)→ ⑥ 追溯计算 → 派发 → 回调 → 审计
+→ ⑤ 令牌范围(§3.2)→ ⑥ params 五道闸(§3.1.1)
+→ ⑦ 追溯计算 → 派发(clientRef 幂等预查,§3.1.2)→ 回调 → 审计
 ```
 
 ④ 先于 ⑤:先回答「能不能跑这个场景」,再回答「碰到的资源是否被
-授权」。**无幂等键**,重试会产生重复执行,用 `clientRef` 对账。
+授权」。clientRef 是幂等键(§3.1.2):同键重复提交 409 回显原
+executionId,重试不再产生重复执行。
+
+#### 3.1.1 参数化调用(params + raw,2026-11-13 设计)
+
+订单创建类集成的直通面:「同一场景 + 每次不同的全量参数」。场景
+属主在场景上声明**参数契约**(`paramSlots` 槽位白名单 + `paramsStrict`
+完备性开关);调用方只带值,不定义形状 —— M1 边界不破(槽位是场景
+属主预先声明的可信白名单)。契约发现:v1 无查询端点,线下约定获取。
+
+```bash
+# bash / curl
+curl -X POST https://<平台>/api/runs \
+  -H "Authorization: Bearer gtk_…" -H "Content-Type: application/json" \
+  -d '{"scenarioId": "sc-order-create",
+       "schemeId": "raw",
+       "params": {"orderNo": "PO12345678", "amount": 199.0,
+                  "customer": "某客户", "memo": "加急"},
+       "clientRef": "ord-20261113-0001",
+       "callbackPath": "/hooks/gimbal"}'
+```
+
+```powershell
+# PowerShell 5.1+(curl.exe 会剥双引号,用原生 Invoke-RestMethod)
+Invoke-RestMethod -Method Post -Uri "https://<平台>/api/runs" `
+  -Headers @{Authorization = "Bearer gtk_…"} `
+  -ContentType "application/json" `
+  -Body (@{
+    scenarioId = "sc-order-create"; schemeId = "raw"
+    params = @{orderNo = "PO12345678"; amount = 199.0}
+    clientRef = "ord-20261113-0001"
+  } | ConvertTo-Json -Depth 5)
+```
+
+三态(`schemeId` × `params`):
+
+| 请求 | 语义 | carry(渠道字段) |
+| --- | --- | --- |
+| `scenarioId` + `params` | 混合:默认方案配方 + 业务参数 | 照旧补 |
+| `scenarioId` + `schemeId:"raw"` + `params` | 全量:裸执行,纯参数 | **不补** |
+| `scenarioId` + `schemeId:"rs-NN"` + `params` | 指定方案配方 + 业务参数 | 照旧 |
+
+- `"raw"` 是保留字虚拟裸方案:零存储、任何场景天然拥有,免创建免查询;
+  真实方案 id 在 `rs-NN` 命名空间,与保留字无冲突。raw 单独用(不带
+  params)= 关 carry 的基线执行。
+- `params` 值类型 `string|number|boolean`;**null 拒**(要表达空用空串);
+  值含 `${` 一律 422(fail-closed,防模板展开外送凭证)。数字串
+  (`"199.0"`)与布尔串(`"true"`)按数据集行还原口径放行。
+- `"params": {}` 等价缺省。互斥:`params` × `steps`/`graph`/`dataSets`/
+  `injectionEntryIds` 互斥(422/409);`schemeId:"raw"` × `dataSets` 互斥。
+- 参数只经 `${var.*}` 占位起作用(「占位即主权」):body 写死的值参数
+  改不动;地址链与凭证链不在参数可达面。
+
+params 错误码自助表(全部 422,`fields` 自描述):
+
+| code | 含义 | 处理 |
+| --- | --- | --- |
+| `param_slot_not_declared` | 场景未声明契约 | 找场景属主声明 `paramSlots` |
+| `param_required_missing` | 必填参数缺失 | 补全 `fields` 列出的键 |
+| `param_not_declared` | 未知参数键 | 删掉不在契约内的键 |
+| `param_value_null` | null 值 | 用空串表达空 |
+| `param_template_forbidden` | 值含 `${` | 只传纯值 |
+| `param_type_mismatch` / `param_pattern_mismatch` / `param_too_long` | 类型/格式/超长不符契约 | 按槽位契约修值 |
+| `param_placeholder_missing` | strict 场景占位缺值 | 给 `fields` 列出的占位供值或让属主补基线 |
+
+#### 3.1.2 clientRef 幂等
+
+外部投递天然 at-least-once,网络重试 = 重复业务订单。`(身份,
+clientRef)` 部分唯一约束:令牌 = (令牌, clientRef);JWT = (用户,
+clientRef)。**每笔业务单据给稳定 clientRef;重试原样重发**,重复
+提交 → `409 duplicate_client_ref`(detail 带原 `executionId`)——
+即首投已受理,拿原 id 查结果即可;想重跑走 rerun(rerun 是新的
+一次独立发起,不占幂等键)。首投失败后要重试:走 rerun 或换新
+clientRef。对账查询:`GET /api/executions?clientRef=…`(可见性
+口径内过滤)。
 
 ### 3.2 授权范围判定
 

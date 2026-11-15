@@ -21,6 +21,7 @@ from sqlalchemy import (
     JSON, BigInteger, Boolean, Float, ForeignKey, Index, Integer, String, Text, false,
     func,
 )
+from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -59,6 +60,23 @@ class Execution(Base):
         # 入站调用排查面(webhook v4 §7.1):令牌按本列查「经由我令牌的
         # 执行」;JWT 发起的执行恒 NULL
         Index("ix_executions_caller", "token_id"),
+        # clientRef 幂等(入站执行参数设计 2026-11-13 决策 8;0056 建):
+        # 外部投递天然 at-least-once,(身份, client_ref) 部分唯一 ——
+        # 令牌维度与 JWT(user)维度各一条;派发侧预查 + IntegrityError
+        # 兜底映射 409 duplicate_client_ref。rerun 不回放 clientRef
+        # (与 batchId 同口径),不与索引冲突。
+        Index("uq_executions_token_client_ref", "token_id", "client_ref",
+              unique=True,
+              postgresql_where=sa_text(
+                  "token_id IS NOT NULL AND client_ref IS NOT NULL"),
+              sqlite_where=sa_text(
+                  "token_id IS NOT NULL AND client_ref IS NOT NULL")),
+        Index("uq_executions_user_client_ref", "owner_id", "client_ref",
+              unique=True,
+              postgresql_where=sa_text(
+                  "token_id IS NULL AND client_ref IS NOT NULL"),
+              sqlite_where=sa_text(
+                  "token_id IS NULL AND client_ref IS NOT NULL")),
     )
 
     # BIGINT(整体评审 2026-10-15 #10):执行面所有外键的根

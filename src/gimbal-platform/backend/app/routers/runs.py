@@ -34,7 +34,7 @@ from ..schemas.scenario_composer import (
     DataSetSelection, RunOptions, RunRequest, RunResponse, ServiceBinding,
 )
 from ..services import access_token as at
-from ..services import run_dispatcher, scenario_store
+from ..services import run_dispatcher, run_params, scenario_store
 from ..services.access_token import Principal
 
 
@@ -99,9 +99,12 @@ def _reject_inbound_recipe(body: RunRequest) -> None:
 
 async def _apply_scheme_recipe(
     db: AsyncSession, scen, body: RunRequest,
-) -> None:
+):
     """M1:按方案覆盖请求配方(令牌分支专用,见模块注释)。
 
+    - ``schemeId == "raw"``:保留字虚拟裸方案(设计 2026-11-13 决策 3)
+      —— 零存储零迁移,不取任何方案配方,直接返回 None;carry 由派发
+      段 skip_carry 关闭。真实方案 id 是 rs-NNN 命名空间,与保留字无冲突;
     - ``schemeId`` 显式给出:必须属于本场景,否则 422 ``scheme_not_owned``
       (调用方给了错的 id 就明确拒绝 —— 静默回落默认方案会跑错配方);
     - 未给:默认方案(``scheme_store.resolve_for_run`` 同一实现,与集成
@@ -109,10 +112,18 @@ async def _apply_scheme_recipe(
     - 覆盖 serviceBindings / dataSetIds / dataSetSelection /
       injectionEntryIds,runOptions 以方案 options 为底、仅用请求的
       ``stepTo`` 覆盖;``schemeId`` / ``schemeName`` 写方案真值(溯源)。
+
+    返回所应用的方案行(无方案/raw = None;§7-③,唯一调用方)。
     """
     from ..services import scheme_store
+    from ..services.run_params import RAW_SCHEME_ID
 
     scheme = None
+    if body.scheme_id == RAW_SCHEME_ID:
+        # 决策 3:raw 保留字 —— 跳过方案应用,配方字段保持请求原样
+        # (M1 下 = 空);schemeId 留 "raw" 供 config_json 溯源与 rerun 回放
+        body.scheme_name = None
+        return None
     if body.scheme_id:
         try:
             scheme = await scheme_store.get_row(
@@ -152,6 +163,7 @@ async def _apply_scheme_recipe(
     body.run_options = RunOptions(**opts) if opts else None
     body.scheme_id = scheme.scheme_id if scheme is not None else None
     body.scheme_name = scheme.name if scheme is not None else None
+    return scheme
 
 
 async def _record_inbound_activity(
@@ -480,6 +492,24 @@ async def post_run(
                 "code": "run_target_ambiguous",
                 "message": "scenarioId 与 steps 必须且只能提供一个",
             })
+    # ── 入站 params 互斥族(设计 2026-11-13 §2.4)──────────────────
+    # params 只配场景执行(scenarioId);steps(graph 同理)是另一条
+    # 目标链。空 dict 等价缺省(不入校验)。
+    if body.params:
+        if body.steps is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "run_target_ambiguous",
+                    "message": "steps 与 params 互斥;params 需搭配 scenarioId",
+                })
+        if body.graph is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "param_graph_conflict",
+                    "message": "graph 编排与 params 互斥;params 只配单元场景执行",
+                })
     if body.steps is not None:
         return await _post_adhoc_run(principal, db, body)
     # Access check (mirrors V1 executions create / composer ownership):
@@ -501,6 +531,29 @@ async def post_run(
             # 项目令牌恒用项目凭证(M3;请求体 credentialSource 已被 M1
             # 配方禁令拒绝 → 这里是服务端唯一写点)
             body.credential_source = "project"
+        # ── params 配方互斥(设计 §2.4;请求侧组合)─────────────────
+        # 令牌侧携带 dataSets/injectionEntryIds 已被 M1 拒;方案配方带入
+        # 的数据集与 params 共存(虚行路径不消费 —— 评审 ①「砍掉比缝合
+        # 便宜」)。raw + dataSets 即使无 params 也拒(裸配方无数据集语义)。
+        if body.params and (
+                body.data_set_ids or body.data_set_selection
+                or body.injection_entry_ids):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "run_source_conflict",
+                    "message": ("params 与 dataSetIds/dataSetSelection/"
+                                "injectionEntryIds 互斥(虚行路径不消费"
+                                "数据集行与注入条目)"),
+                })
+        if (body.scheme_id == run_params.RAW_SCHEME_ID
+                and (body.data_set_ids or body.data_set_selection)):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "run_source_conflict",
+                    "message": 'schemeId:"raw" 是裸配方,无数据集语义',
+                })
         if principal.is_token:
             # M1:配方一律取服务端方案(方案由场景属主维护,可信来源)
             await _apply_scheme_recipe(db, scen, body)
@@ -574,6 +627,19 @@ async def post_run(
                         scenario_id=scen.scenario_id,
                         scheme_id=body.scheme_id))
                 raise _deny_token_scope(missing)
+        # ── 入站参数五道闸(设计 2026-11-13 §2.3)────────────────────
+        # 契约自场景行(scen.payload):raw 与真实方案两态同源(闸 5)。
+        # 令牌/JWT 都过;顺序在 M1/互斥/归属/范围之后,派发之前。
+        try:
+            run_params.validate_inbound_params(scen.payload, body.params)
+        except run_params.ParamsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": e.code,
+                    "message": e.message,
+                    **({"fields": e.fields} if e.fields else {}),
+                }) from None
         # ⑥ 追溯计算(§7.1):resolvedServices / builtinAuths / outOfScope
         # —— JWT 执行同样写前两者;令牌另带 token 快照
         trace = await _build_trace(db, scen, body, principal, used)
