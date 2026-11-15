@@ -279,10 +279,12 @@ def _iso_to_dt(ts: str | None):
 
 
 def _dt_to_iso(dt) -> str | None:
-    """DB datetime → naive-UTC ISO 串(与 registry/JSONL 口径一致)。"""
-    from ..core.timeutil import iso_naive_utc
+    """DB datetime → UTC ISO 串(Z 后缀;时区对齐 2026-11-15:API 时间
+    一律带明确时区标记,前端 new Date 按本地渲染 —— naive 无 offset
+    会被浏览器当本地时区解析,+8 主机显示慢 8h)。"""
+    from ..core.timeutil import iso_utc_z
 
-    return iso_naive_utc(dt)
+    return iso_utc_z(dt)
 
 
 class _EventIngester:

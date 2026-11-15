@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ..core.timeutil import iso_utc_z
 from ..models.project_promotion import ProjectPromotion
 from ..services import notifications as notify_svc
 from ..services.project_promotion import (
@@ -75,10 +76,10 @@ def _promo_out(promo: ProjectPromotion, *, changed: bool | None = None,
         "conflicts": promo.conflicts or [],
         "resolution": promo.resolution,
         "note": promo.note or "",
-        "createdAt": promo.created_at.isoformat() + "Z"
-        if promo.created_at else None,
-        "updatedAt": promo.updated_at.isoformat() + "Z"
-        if promo.updated_at else None,
+        # 时区对齐 2026-11-15 B:isoformat()+"Z" 在 aware 列(PG 读回
+        # +00:00)上产出双后缀,前端 Invalid Date —— 走 iso_utc_z 归一
+        "createdAt": iso_utc_z(promo.created_at),
+        "updatedAt": iso_utc_z(promo.updated_at),
     }
     if changed is not None:
         out["sourceChangedSinceApplication"] = changed
@@ -130,7 +131,7 @@ async def create_promotion(
             applicant_id=user.id, status="approved", conflicts=[],
             resolution={"decisions": [], "immediate": True,
                         "decidedBy": user.id,
-                        "decidedAt": datetime.now(timezone.utc).isoformat()})
+                        "decidedAt": iso_utc_z(datetime.now(timezone.utc))})
         copy = await execute_promotion_copy(db, direct, [], approver=user)
         await db.commit()
         return {"status": "copied", "copy": copy}

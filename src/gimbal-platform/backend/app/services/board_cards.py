@@ -11,7 +11,7 @@ from __future__ import annotations
 from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.timeutil import iso_naive_utc
+from ..core.timeutil import iso_utc_z
 from ..models.board_card import QUADRANTS, BoardCard
 
 
@@ -26,8 +26,8 @@ def card_out(card: BoardCard) -> dict:
         "isRoot": card.is_root, "quadrant": card.quadrant,
         "annotatesNodeId": card.annotates_node_id,
         "authorId": card.author_id,
-        "createdAt": iso_naive_utc(card.created_at),
-        "updatedAt": iso_naive_utc(card.updated_at),
+        "createdAt": iso_utc_z(card.created_at),
+        "updatedAt": iso_utc_z(card.updated_at),
     }
 
 

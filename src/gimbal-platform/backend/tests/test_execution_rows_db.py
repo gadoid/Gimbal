@@ -45,7 +45,8 @@ async def test_rows_envelope_pagination(client):
     # seq 升序
     assert [it["seq"] for it in body["items"]] == [0, 1, 2, 3, 4]
     # 时间戳 naive-UTC 串(与 registry 口径一致)
-    assert body["items"][0]["finishedAt"] == "2026-09-20T12:00:01"
+    # 时区对齐 2026-11-15:行级时间戳 API 口径 = UTC Z 后缀
+    assert body["items"][0]["finishedAt"] == "2026-09-20T12:00:01Z"
 
     r2 = await client.get(f"/api/executions/{eid}/rows", headers=h,
                           params={"page": 2, "page_size": 2})
@@ -96,4 +97,4 @@ async def test_persist_row_terminal_writes_db(client):
     # 读侧回读:naive-UTC ISO 串
     r = await client.get(f"/api/executions/{eid}/rows", headers=h)
     it = r.json()["items"][0]
-    assert it["finishedAt"] == "2026-09-20T12:00:05"
+    assert it["finishedAt"] == "2026-09-20T12:00:05Z"

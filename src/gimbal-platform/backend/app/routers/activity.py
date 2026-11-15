@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..core.timeutil import iso_naive_utc
+from ..core.timeutil import iso_utc_z
 from ..models import ActivityEvent as ActivityEventRow
 from ..models.execution import Execution
 from ..services import adaptation_service
@@ -114,7 +114,7 @@ async def get_activity(
             if at is None:
                 continue
             events.append(ActivityEvent(
-                kind="execution", at=iso_naive_utc(at) or "",
+                kind="execution", at=iso_utc_z(at) or "",
                 executionId=e.id, status=e.status, scenarioId=e.scenario_id,
                 scenarioName=(e.scenario_name or None)))
             taken += 1
@@ -138,7 +138,7 @@ async def get_activity(
         for r in rows:
             d = r.detail or {}
             events.append(ActivityEvent(
-                kind="scenario", at=iso_naive_utc(r.created_at) or "",
+                kind="scenario", at=iso_utc_z(r.created_at) or "",
                 scenarioId=r.resource_id,
                 name=d.get("name") or r.resource_id,
                 action=r.kind, detail=d or None))
@@ -155,7 +155,7 @@ async def get_activity(
         for b in batches[:limit]:
             ops = sum((b.get("opCounts") or {}).values())
             raw_at = b.get("closedAt") or b.get("createdAt")
-            at_str = iso_naive_utc(raw_at) if isinstance(raw_at, _dt) else str(raw_at or "")
+            at_str = iso_utc_z(raw_at) if isinstance(raw_at, _dt) else str(raw_at or "")
             events.append(ActivityEvent(
                 kind="adaptation",
                 at=at_str,
@@ -188,7 +188,7 @@ async def get_activity(
             except (TypeError, ValueError):
                 suite_id = None
             events.append(ActivityEvent(
-                kind="suite", at=iso_naive_utc(r.created_at) or "",
+                kind="suite", at=iso_utc_z(r.created_at) or "",
                 suiteId=suite_id,
                 name=d.get("name") or r.resource_id,
                 action=r.kind, detail=d or None))
@@ -213,7 +213,7 @@ async def get_activity(
             except (TypeError, ValueError):
                 task_id = None
             events.append(ActivityEvent(
-                kind="integration", at=iso_naive_utc(r.created_at) or "",
+                kind="integration", at=iso_utc_z(r.created_at) or "",
                 taskId=task_id,
                 name=d.get("name") or r.resource_id,
                 action=r.kind, detail=d or None))
@@ -235,7 +235,7 @@ async def get_activity(
             d = r.detail or {}
             exec_id = d.get("execution_id")
             events.append(ActivityEvent(
-                kind="inbound", at=iso_naive_utc(r.created_at) or "",
+                kind="inbound", at=iso_utc_z(r.created_at) or "",
                 executionId=int(exec_id) if exec_id is not None else None,
                 scenarioId=d.get("scenario_id"),
                 scenarioName=d.get("scenario_name"),

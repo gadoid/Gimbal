@@ -24,7 +24,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.timeutil import iso_naive_utc
+from ..core.timeutil import iso_utc_z
 from ..models.adaptation_batch import AdaptationBatch
 from ..models.adaptation_op import AdaptationOp
 from ..models.board_card import BoardCard
@@ -153,7 +153,7 @@ async def grid(db: AsyncSession, service: str) -> dict[str, Any]:
                 "alarm": alarm,
             },
             "caseCount": len(covered),
-            "lastRunAt": iso_naive_utc(best[1] if best is not None else None),
+            "lastRunAt": iso_utc_z(best[1] if best is not None else None),
         })
         if not covered:
             stats["noCases"] += 1
@@ -276,7 +276,7 @@ async def board(
                 "meta": {"executionId": ex.id, "status": ex.status,
                          "passed": ex.passed, "failed": ex.failed,
                          "totalRuns": ex.total_runs,
-                         "finishedAt": iso_naive_utc(ex.finished_at or ex.created_at)},
+                         "finishedAt": iso_utc_z(ex.finished_at or ex.created_at)},
             })
             edges.append({"from": f"sc:{sid}", "to": f"ex:{ex.id}", "kind": "ran"})
             # trails(方案 §3.2):未落定批次 → 主体 → 场景 → 最近执行为失败
