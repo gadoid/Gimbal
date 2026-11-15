@@ -18,22 +18,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        // ── Signal 原子层(D-palette 核录,唯一 hex 真源)─────────
+        // ── Signal 原子层(D-palette 核录;双主题改造 2026-11-15:表面类
+        // 值走 RGB 通道变量(--sig-*,白天通道在 dual-theme.css :root,
+        // 夜间覆盖于 html[data-theme=dark]),<alpha-value> 保住 /NN 修饰;
+        // sidebar/dot 恒定暗 chrome,不随主题翻转)─────────
         // 冷灰中性阶
         signal: {
           sidebar: '#0B0E14',
-          ink: '#10151C',
-          canvas: '#F3F5F8',
-          card: '#FFFFFF',
-          line: '#E1E5EB',
+          ink: 'rgb(var(--sig-ink) / <alpha-value>)',
+          canvas: 'rgb(var(--sig-canvas) / <alpha-value>)',
+          card: 'rgb(var(--sig-card) / <alpha-value>)',
+          line: 'rgb(var(--sig-line) / <alpha-value>)',
           // 电光蓝主色
-          DEFAULT: '#2F6FED',
-          soft: '#E7EFFF',
+          DEFAULT: 'rgb(var(--sig-accent) / <alpha-value>)',
+          soft: 'rgb(var(--sig-soft) / <alpha-value>)',
           dot: '#22D3EE',
           // 状态色
-          done: '#15803D',
-          failed: '#DC2626',
-          star: '#EAB308',
+          done: 'rgb(var(--sig-done) / <alpha-value>)',
+          failed: 'rgb(var(--sig-failed) / <alpha-value>)',
+          star: 'rgb(var(--sig-star) / <alpha-value>)',
           // ── 执行设计附录补录(2026-09-20):此前无 token 归属的取值 ──
           // 注:附录 carry/本别名底写 #E7EFFE,与既有 soft #E7EFFF 一位之差
           // — 以既有 token 为准(视觉不可分),不另立第二值。

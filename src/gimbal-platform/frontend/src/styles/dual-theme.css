@@ -22,73 +22,85 @@
   --soft-neutral-bg: #f1f5f9;  /* 中性软底(queued/禁用/表头) */
   --surface-raised: #f8fafc;   /* 近白抬升面 */
   --color-text-strong: #475569;/* 次强调文字(slate-600 档) */
+
+  /* ── Signal 原子层 RGB 通道(tailwind signal 色板消费;<alpha-value>
+     修饰的透明度类依赖此通道形式)── */
+  --sig-ink: 16 21 28;       /* #10151C */
+  --sig-canvas: 243 245 248; /* #F3F5F8 */
+  --sig-card: 255 255 255;   /* #FFFFFF */
+  --sig-line: 225 229 235;   /* #E1E5EB */
+  --sig-accent: 47 111 237;  /* #2F6FED */
+  --sig-soft: 231 239 255;   /* #E7EFFF */
+  --sig-done: 21 128 61;     /* #15803D */
+  --sig-failed: 220 38 38;   /* #DC2626 */
+  --sig-star: 234 179 8;     /* #EAB308 */
 }
 
 /* ════════════════════ 夜间方案 ════════════════════ */
 html[data-theme="dark"] {
   /* theme.css 族(spec-1 语义令牌) */
-  --color-bg-primary: #0f1420;
-  --color-bg-secondary: #171d2b;
-  --color-text-primary: #e6eaf2;
-  --color-text-secondary: #9aa5b8;
-  --color-text-tertiary: #6b7690;
-  --color-text-strong: #8b96ab;
-  --color-border-tertiary: #2a3345;
-  --color-border-secondary: #39445c;
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #121212;
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #9b9b9b;
+  --color-text-tertiary: #6f6f6f;
+  --color-text-strong: #8a8a8a;
+  --color-border-tertiary: #2b2b2b;
+  --color-border-secondary: #3b3b3b;
   --accent: #818cf8;
   --accent-hover: #a5b4fc;
-  --accent-soft: #26304a;
-  --accent-soft-border: #3b4a7a;
+  --accent-soft: #232329;
+  --accent-soft-border: #3a3a4a;
   --red: #f87171;
   --green: #4ade80;
   --amber: #fbbf24;
 
   /* scenario-lib 族(场景库/工作台) */
   --sl-accent: #5b9bff;
-  --sl-accent-soft: #16243f;
+  --sl-accent-soft: #1e1e1e;
   --sl-ok: #4ade80;
-  --sl-ok-soft: #11301f;
+  --sl-ok-soft: #12291a;
   --sl-bad: #f87171;
-  --sl-bad-soft: #3b1717;
+  --sl-bad-soft: #2e1414;
   --sl-warn: #fbbf24;
-  --sl-warn-soft: #3a2a10;
-  --sl-ink: #e6eaf2;
-  --sl-ink-2: #9aa5b8;
-  --sl-ink-3: #6b7690;
-  --sl-line: #2a3345;
-  --sl-divider: #212a3c;
-  --sl-canvas: #0f1420;
+  --sl-warn-soft: #2d2210;
+  --sl-ink: #e8e8e8;
+  --sl-ink-2: #9b9b9b;
+  --sl-ink-3: #6f6f6f;
+  --sl-line: #2b2b2b;
+  --sl-divider: #202020;
+  --sl-canvas: #000000;
   --sl-star: #facc15;
-  --sl-star-off: #4a5468;
-  --sl-th-bg: #1c2436;
-  --sl-th-ink: #a8b6d4;
-  --sl-th-rule: #3a4560;
+  --sl-star-off: #4d4d4d;
+  --sl-th-bg: #1a1a1a;
+  --sl-th-ink: #a8a8a8;
+  --sl-th-rule: #3a3a3a;
 
   /* composer 族(编排页) */
-  --c-surface: #1a2130;
-  --c-border: #2a3345;
-  --c-divider: #212a3c;
-  --c-text: #e6eaf2;
-  --c-text-secondary: #9aa5b8;
-  --c-text-tertiary: #6b7690;
+  --c-surface: #161616;
+  --c-border: #2b2b2b;
+  --c-divider: #202020;
+  --c-text: #e8e8e8;
+  --c-text-secondary: #9b9b9b;
+  --c-text-tertiary: #6f6f6f;
   --c-accent: #818cf8;
-  --c-accent-soft: #26304a;
-  --c-accent-soft-border: #3b4a7a;
-  --c-bg-secondary: #171d2b;
-  --c-field-bg: #121826;
-  --c-field-border: #2a3345;
-  --c-border-strong: #39445c;
+  --c-accent-soft: #232329;
+  --c-accent-soft-border: #3a3a4a;
+  --c-bg-secondary: #121212;
+  --c-field-bg: #0d0d0d;
+  --c-field-border: #2b2b2b;
+  --c-border-strong: #3b3b3b;
 
   /* 白天侧补充令牌的夜面值 */
-  --soft-accent-bg: #16243f;
-  --soft-ok-bg: #11301f;
-  --soft-bad-bg: #3b1717;
-  --soft-warn-bg: #3a2a10;
-  --soft-neutral-bg: #202939;
-  --surface-raised: #202939;
+  --soft-accent-bg: #1e1e1e;
+  --soft-ok-bg: #12291a;
+  --soft-bad-bg: #2e1414;
+  --soft-warn-bg: #2d2210;
+  --soft-neutral-bg: #1c1c1c;
+  --surface-raised: #1f1f1f;
 
   /* avatar 分类色板:色相保持(辨识"哪个账号"),暗面提亮一档 */
-  --avatar-2: #60a5fa;
+  --avatar-2: #4d9aff;
   --avatar-3: #c084fc;
   --avatar-5: #f87171;
   --avatar-6: #22d3ee;
@@ -96,50 +108,61 @@ html[data-theme="dark"] {
   --avatar-8: #f472b6;
   /* --avatar-1/4 引用 --green/--amber,随上覆自动切换 */
 
+  /* ── Signal 原子层 RGB 通道夜面值(中性黑灰;状态色相保留)── */
+  --sig-ink: 232 232 232;
+  --sig-canvas: 18 18 18;
+  --sig-card: 22 22 22;
+  --sig-line: 43 43 43;
+  --sig-accent: 91 155 255;
+  --sig-soft: 30 30 30;
+  --sig-done: 74 222 128;
+  --sig-failed: 248 113 113;
+  --sig-star: 250 204 21;
+
   /* ── shadcn 族(tailwind.css 语义类消费;HSL 三元组,无 hsl() 包装)──
      bg-background/bg-card/bg-accent/border-input 等 tailwind 类的夜面值 */
-  --background: 221 39% 9%;        /* canvas #0f1420 */
-  --foreground: 220 26% 92%;       /* ink #e6eaf2 */
-  --card: 220 27% 14%;             /* surface #1a2130 */
-  --card-foreground: 220 26% 92%;
-  --popover: 220 26% 17%;          /* overlay #202939 */
-  --popover-foreground: 220 26% 92%;
+  --background: 0 0% 0%;        /* canvas #0f1420 */
+  --foreground: 0 0% 91%;       /* ink #e6eaf2 */
+  --card: 0 0% 9%;             /* surface #1a2130 */
+  --card-foreground: 0 0% 91%;
+  --popover: 0 0% 12%;          /* overlay #202939 */
+  --popover-foreground: 0 0% 91%;
   --primary: 217 100% 68%;         /* sl-accent #5b9bff */
   --primary-foreground: 221 39% 9%;
-  --secondary: 219 47% 17%;        /* soft-accent-bg #16243f */
-  --secondary-foreground: 215 100% 80%;
-  --muted: 220 26% 17%;
-  --muted-foreground: 219 16% 66%; /* #9aa5b8 */
-  --accent: 219 47% 17%;
-  --accent-foreground: 215 100% 80%;
+  --secondary: 0 0% 12%;        /* soft-accent-bg #16243f */
+  --secondary-foreground: 217 100% 80%;
+  --muted: 0 0% 11%;
+  --muted-foreground: 0 0% 61%; /* #9aa5b8 */
+  --accent: 0 0% 12%;
+  --accent-foreground: 217 100% 80%;
   --destructive: 0 100% 71%;       /* #f87171 */
-  --destructive-foreground: 221 39% 9%;
-  --border: 219 26% 22%;           /* line #2a3345 */
-  --input: 219 26% 22%;
+  --destructive-foreground: 0 0% 0%;
+  --border: 0 0% 17%;           /* line #2a3345 */
+  --input: 0 0% 17%;
   --ring: 217 100% 68%;
 
-  /* ── Element Plus 桥接:组件库变量映射到本方案 ── */  --el-bg-color: #1a2130;
-  --el-bg-color-overlay: #202939;
-  --el-bg-color-page: #0f1420;
-  --el-text-color-primary: #e6eaf2;
-  --el-text-color-regular: #c3cbdb;
-  --el-text-color-secondary: #9aa5b8;
-  --el-text-color-placeholder: #6b7690;
-  --el-text-color-disabled: #556077;
-  --el-border-color: #39445c;
-  --el-border-color-light: #2f3a52;
-  --el-border-color-lighter: #293349;
-  --el-border-color-extra-light: #222b40;
-  --el-border-color-dark: #46536f;
-  --el-border-color-darker: #526084;
-  --el-fill-color: #1c2436;
-  --el-fill-color-light: #202939;
-  --el-fill-color-lighter: #171d2b;
-  --el-fill-color-extra-light: #141a28;
-  --el-fill-color-blank: #1a2130;
-  --el-fill-color-dark: #232c40;
-  --el-fill-color-darker: #2a3348;
-  --el-mask-color: rgba(6, 10, 18, 70%);
+  /* ── Element Plus 桥接:组件库变量映射到本方案 ── */  --el-bg-color: #161616;
+  --el-bg-color-overlay: #1f1f1f;
+  --el-bg-color-page: #000000;
+  --el-text-color-primary: #e8e8e8;
+  --el-text-color-regular: #c4c4c4;
+  --el-text-color-secondary: #9b9b9b;
+  --el-text-color-placeholder: #6f6f6f;
+  --el-text-color-disabled: #565656;
+  --el-border-color: #3b3b3b;
+  --el-border-color-light: #303030;
+  --el-border-color-lighter: #2a2a2a;
+  --el-border-color-extra-light: #222222;
+  --el-border-color-dark: #454545;
+  --el-border-color-darker: #505050;
+  --el-fill-color: #1c1c1c;
+  --el-fill-color-light: #202020;
+  --el-fill-color-lighter: #141414;
+  --el-fill-color-extra-light: #0f0f0f;
+  --el-fill-color-blank: #161616;
+  --el-fill-color-dark: #242424;
+  --el-fill-color-darker: #2b2b2b;
+  --el-mask-color: rgba(0, 0, 0, 70%);
   --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 36%),
     0 8px 20px rgba(0, 0, 0, 32%);
   --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 40%);
@@ -181,19 +204,19 @@ html[data-theme="dark"] {
   --el-color-error-light-7: #622b2b;
   --el-color-error-light-8: #4f2222;
   --el-color-error-light-9: #3b1717;
-  --el-color-info: #9aa5b8;
-  --el-color-info-dark-2: #b6c0d2;
-  --el-color-info-light-3: #6f7889;
-  --el-color-info-light-5: #5a616e;
-  --el-color-info-light-7: #444954;
-  --el-color-info-light-8: #373c45;
-  --el-color-info-light-9: #2a2e37;
+  --el-color-info: #9b9b9b;
+  --el-color-info-dark-2: #b5b5b5;
+  --el-color-info-light-3: #707070;
+  --el-color-info-light-5: #5a5a5a;
+  --el-color-info-light-7: #444444;
+  --el-color-info-light-8: #373737;
+  --el-color-info-light-9: #2a2a2a;
 }
 
 /* 夜面滚动条:白轨灰条在暗底刺眼,统一暗轨 */
 html[data-theme="dark"] ::-webkit-scrollbar-thumb {
-  background: #39445c;
+  background: #3d3d3d;
 }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
-  background: #4a5878;
+  background: #525252;
 }
