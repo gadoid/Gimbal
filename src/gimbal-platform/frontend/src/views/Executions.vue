@@ -600,8 +600,8 @@ onUnmounted(() => {
   font-size: 12px; border: 1px solid var(--color-border-tertiary);
 }
 .pin-badge.pinned { background: #eff6ff; color: #1d4ed8; }
-.pin-badge.working { background: #fffbeb; color: #b45309; }
-.warn-text { color: #b45309; font-weight: 600; }
+.pin-badge.working { background: #fffbeb; color: var(--sl-warn); }
+.warn-text { color: var(--sl-warn); font-weight: 600; }
 .dim { color: var(--color-text-secondary); }
 .step-to-pill {
   @apply text-micro font-semibold;
@@ -609,8 +609,8 @@ onUnmounted(() => {
   align-items: center;
   margin-left: 8px;
   padding: 1px 8px;
-  color: #475569;
-  background: #f1f5f9;
+  color: var(--color-text-strong);
+  background: var(--soft-neutral-bg);
   border-radius: 4px;
   vertical-align: middle;
 }
@@ -660,14 +660,14 @@ onUnmounted(() => {
 
 .counter {
   padding: 16px;
-  background: #fff;
-  border: 0.5px solid #e2e8f0;
+  background: var(--c-surface);
+  border: 0.5px solid var(--color-border-tertiary);
   border-radius: 8px;
 }
 
 .counter-label {
   @apply text-caption font-normal;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 .counter-value {
@@ -677,11 +677,11 @@ onUnmounted(() => {
 }
 
 .counter.ok .counter-value {
-  color: #15803d;
+  color: var(--sl-ok);
 }
 
 .counter.fail .counter-value {
-  color: #dc2626;
+  color: var(--sl-bad);
 }
 
 .recipe-title {
@@ -697,8 +697,8 @@ onUnmounted(() => {
   padding: 14px 18px;
   margin: 0 0 16px;
   @apply text-label font-normal;
-  background: #fff;
-  border: 0.5px solid #e2e8f0;
+  background: var(--c-surface);
+  border: 0.5px solid var(--color-border-tertiary);
   border-radius: 8px;
 }
 
@@ -729,8 +729,8 @@ onUnmounted(() => {
 .ex-table {
   width: 100%;
   @apply text-label font-normal;
-  background: #fff;
-  border: 0.5px solid #e2e8f0;
+  background: var(--c-surface);
+  border: 0.5px solid var(--color-border-tertiary);
   border-radius: 8px;
   border-collapse: collapse;
 }
@@ -746,7 +746,7 @@ onUnmounted(() => {
   padding: 7px 10px;
   color: var(--color-text-primary);
   text-align: left;
-  border-bottom: 0.5px solid #f1f5f9;
+  border-bottom: 0.5px solid var(--soft-neutral-bg);
 }
 
 .state {

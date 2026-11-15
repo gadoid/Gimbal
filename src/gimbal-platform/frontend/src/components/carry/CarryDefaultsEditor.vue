@@ -254,15 +254,15 @@ onMounted(async () => {
 .editor { display: flex; flex-direction: column; gap: 0.5rem; }
 .bar { display: flex; gap: 0.5rem; align-items: center; }
 .mt-2 { margin-top: 0.5rem; }
-.muted { color: #94a3b8; }
+.muted { color: var(--color-text-tertiary); }
 .empty-hint { font-size: 0.85rem; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tbl th, .tbl td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #eef2f7; }
-.tbl th { color: #64748b; font-weight: 500; }
+.tbl th { color: var(--color-text-secondary); font-weight: 500; }
 .c-center { text-align: center; }
 .row-acts { display: flex; gap: 0.5rem; justify-content: center; }
 .link { border: none; background: none; color: #2563eb; cursor: pointer; font-size: 0.78rem; padding: 0; }
-.link.danger { color: #dc2626; }
+.link.danger { color: var(--sl-bad); }
 .foot { display: flex; justify-content: flex-end; }
 .foot-right { display: flex; gap: 0.5rem; }
 </style>

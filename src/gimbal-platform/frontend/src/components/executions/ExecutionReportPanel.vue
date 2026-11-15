@@ -271,26 +271,26 @@ function hasKeys(v: unknown): boolean {
 .rp-empty {
   @apply text-label font-normal;
   margin: 0; padding: 18px; color: var(--color-text-tertiary);
-  background: #fff; border: 0.5px dashed #e2e8f0; border-radius: 8px;
+  background: var(--c-surface); border: 0.5px dashed var(--color-border-tertiary); border-radius: 8px;
 }
-.rp-error { color: #dc2626; }
+.rp-error { color: var(--sl-bad); }
 .rp-summary {
   display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center;
-  padding: 12px 16px; background: #fff; border: 0.5px solid #e2e8f0; border-radius: 8px;
+  padding: 12px 16px; background: var(--c-surface); border: 0.5px solid var(--color-border-tertiary); border-radius: 8px;
   @apply text-label font-normal;
 }
 .rp-verdict { @apply text-label font-semibold; padding: 2px 10px; border-radius: 4px; }
 .rp-kv { color: var(--color-text-secondary); }
 .rp-kv b { color: var(--color-text-primary); font-weight: 600; }
 .rp-failure {
-  padding: 14px 16px; background: #fff; border: 0.5px solid #fecaca;
-  border-left: 3px solid #dc2626; border-radius: 8px;
+  padding: 14px 16px; background: var(--c-surface); border: 0.5px solid #fecaca;
+  border-left: 3px solid var(--sl-bad); border-radius: 8px;
   display: flex; flex-direction: column; gap: 8px;
 }
 .rp-failure-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
 /* S1 深链入口(自「查看日志」迁入):链接式按钮,推到行尾 */
 .rp-locate {
-  @apply text-label font-normal; color: #2f6fed; background: none;
+  @apply text-label font-normal; color: var(--sl-accent); background: none;
   border: 0; cursor: pointer; padding: 0; margin-left: auto; white-space: nowrap;
 }
 .rp-step-title { color: var(--color-text-primary); font-weight: 600; }
@@ -303,32 +303,32 @@ function hasKeys(v: unknown): boolean {
 }
 .rp-tag { @apply text-micro font-semibold; display: inline-flex; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
 .rp-assert, .rp-steps {
-  width: 100%; border-collapse: collapse; @apply text-label font-normal; background: #fff;
+  width: 100%; border-collapse: collapse; @apply text-label font-normal; background: var(--c-surface);
 }
 .rp-assert th, .rp-steps th {
   text-align: left; padding: 6px 10px; color: var(--color-text-secondary);
-  font-weight: 500; border-bottom: 0.5px solid #e2e8f0;
+  font-weight: 500; border-bottom: 0.5px solid var(--color-border-tertiary);
 }
-.rp-assert td, .rp-steps td { padding: 6px 10px; border-bottom: 0.5px solid #f1f5f9; vertical-align: top; }
-.rp-actual { color: #dc2626; font-weight: 600; }
+.rp-assert td, .rp-steps td { padding: 6px 10px; border-bottom: 0.5px solid var(--soft-neutral-bg); vertical-align: top; }
+.rp-actual { color: var(--sl-bad); font-weight: 600; }
 .rp-evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .rp-ev-col h4 { margin: 0 0 4px; @apply text-label font-semibold; color: var(--color-text-secondary); }
 .rp-ev-col p { margin: 0 0 4px; word-break: break-all; }
 .rp-ev-col pre {
   margin: 0 0 6px; padding: 8px 10px; max-height: 260px; overflow: auto;
-  background: #f8fafc; border: 0.5px solid #e2e8f0; border-radius: 4px;
+  background: var(--surface-raised); border: 0.5px solid var(--color-border-tertiary); border-radius: 4px;
   @apply text-micro font-normal; white-space: pre-wrap; word-break: break-all;
 }
-.rp-group { background: #fff; border: 0.5px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.rp-group { background: var(--c-surface); border: 0.5px solid var(--color-border-tertiary); border-radius: 8px; overflow: hidden; }
 .rp-group-head {
   display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
-  padding: 8px 12px; background: #f8fafc; border-bottom: 0.5px solid #e2e8f0;
+  padding: 8px 12px; background: var(--surface-raised); border-bottom: 0.5px solid var(--color-border-tertiary);
 }
 .rp-group-title { @apply text-label font-semibold; color: var(--color-text-primary); }
 .rp-row-fail td { background: #fffafa; }
 .rp-call-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); }
 .rp-detail td { background: #fcfcfd; }
-.rp-toggle { @apply text-label font-normal; color: #2f6fed; background: none; border: 0; cursor: pointer; padding: 0; }
+.rp-toggle { @apply text-label font-normal; color: var(--sl-accent); background: none; border: 0; cursor: pointer; padding: 0; }
 .rp-extracts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0 0; }
 .rp-extracts dt { color: var(--color-text-secondary); }
 .rp-extracts dd { margin: 0; word-break: break-all; }

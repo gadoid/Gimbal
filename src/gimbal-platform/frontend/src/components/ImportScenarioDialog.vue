@@ -429,7 +429,7 @@ watch(() => props.open, (v) => {
 }
 .imp-x {
   border: none; background: transparent; cursor: pointer;
-  color: #64748b; font-size: 14px;
+  color: var(--color-text-secondary); font-size: 14px;
 }
 .imp-body { padding: 14px 18px; overflow-y: auto; }
 .imp-section { margin-bottom: 14px; }
@@ -439,11 +439,11 @@ watch(() => props.open, (v) => {
 .imp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .imp-chip {
   padding: 1px 8px; border-radius: 999px; font-size: 11.5px;
-  border: 1px solid #e1e5eb; background: #f8fafc; color: #334155;
+  border: 1px solid var(--sl-line); background: var(--surface-raised); color: #334155;
 }
-.imp-chip-miss { border-color: #f59e0b; background: #fffbeb; color: #b45309; }
+.imp-chip-miss { border-color: #f59e0b; background: #fffbeb; color: var(--sl-warn); }
 .imp-warn {
-  margin-top: 6px; font-size: 11.5px; color: #b45309;
+  margin-top: 6px; font-size: 11.5px; color: var(--sl-warn);
   background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 4px 8px;
 }
 .imp-warn-line { font-size: 12px; line-height: 1.5; }
@@ -455,34 +455,34 @@ watch(() => props.open, (v) => {
 .imp-fatal-title { font-weight: 600; color: #b91c1c; font-size: 13px; }
 .imp-fatal-line { font-size: 12px; color: #7f1d1d; margin-top: 4px; word-break: break-all; }
 .imp-check { font-size: 12.5px; color: #334155; display: flex; gap: 6px; align-items: center; }
-.imp-id { font-family: ui-monospace, monospace; background: #f1f5f9; padding: 1px 6px; border-radius: 4px; }
+.imp-id { font-family: ui-monospace, monospace; background: var(--soft-neutral-bg); padding: 1px 6px; border-radius: 4px; }
 .imp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .imp-table th {
-  text-align: left; font-weight: 600; color: #64748b; font-size: 11px;
+  text-align: left; font-weight: 600; color: var(--color-text-secondary); font-size: 11px;
   padding: 4px 8px; border-bottom: 1px solid #eef0f4;
 }
-.imp-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-.imp-create-cfg td { background: #f8fafc; }
+.imp-table td { padding: 6px 8px; border-bottom: 1px solid var(--soft-neutral-bg); vertical-align: top; }
+.imp-create-cfg td { background: var(--surface-raised); }
 .imp-cfg-line { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 4px; font-size: 12px; color: #334155; }
 .imp-inline { display: inline-flex; gap: 4px; align-items: center; margin-right: 10px; font-size: 12px; }
 .imp-input {
-  border: 1px solid #e1e5eb; border-radius: 6px; padding: 2px 8px;
-  font-size: 12px; background: #fff; min-width: 140px;
+  border: 1px solid var(--sl-line); border-radius: 6px; padding: 2px 8px;
+  font-size: 12px; background: var(--c-surface); min-width: 140px;
 }
 .imp-foot {
   display: flex; align-items: center; gap: 8px;
   padding: 12px 18px; border-top: 1px solid #eef0f4;
 }
 .imp-btn {
-  padding: 5px 16px; border-radius: 6px; border: 1px solid #e1e5eb;
-  background: #fff; font-size: 12.5px; cursor: pointer; color: #334155;
+  padding: 5px 16px; border-radius: 6px; border: 1px solid var(--sl-line);
+  background: var(--c-surface); font-size: 12.5px; cursor: pointer; color: #334155;
 }
-.imp-btn-primary { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+.imp-btn-primary { background: var(--sl-accent); border-color: var(--sl-accent); color: #fff; }
 .imp-btn-primary:disabled { opacity: 0.6; cursor: default; }
 .mono { font-family: ui-monospace, monospace; }
 .imp-ok { font-size: 12.5px; color: #166534; margin-bottom: 10px; }
 .imp-link {
   border: none; background: transparent; padding: 0; cursor: pointer;
-  color: #2f6fed; font-size: 12px; text-decoration: underline;
+  color: var(--sl-accent); font-size: 12px; text-decoration: underline;
 }
 </style>

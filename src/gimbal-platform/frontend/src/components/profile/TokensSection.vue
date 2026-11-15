@@ -819,20 +819,20 @@ onMounted(() => void reload())
   height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid var(--color-signal-line, #e1e5eb);
-  background: #fff;
-  color: var(--color-signal-ink, #10151c);
+  border: 1px solid var(--color-signal-line, var(--sl-line));
+  background: var(--c-surface);
+  color: var(--color-signal-ink, var(--sl-ink));
   font-size: 12px;
 }
 .chip-toggle.is-on {
-  border-color: var(--color-signal, #2f6fed);
-  background: #e7efff;
+  border-color: var(--color-signal, var(--sl-accent));
+  background: var(--soft-accent-bg);
   color: #1f55c4;
 }
 .chip-pill {
   padding: 1px 8px;
   border-radius: 999px;
-  background: #e7efff;
+  background: var(--soft-accent-bg);
   color: #1f55c4;
   font-size: 11px;
 }
@@ -843,35 +843,35 @@ onMounted(() => void reload())
   border-radius: 999px;
   white-space: nowrap;
 }
-.st-active { background: #e4f5ea; color: #15803d; }
-.st-expired { background: #fef3c7; color: #b45309; }
+.st-active { background: #e4f5ea; color: var(--sl-ok); }
+.st-expired { background: #fef3c7; color: var(--sl-warn); }
 .st-invalidated { background: #fee2e2; color: #b91c1c; }
 .st-revoked { background: #eef0f3; color: #5b6472; }
 .badge-oos {
   font-size: 11px;
   padding: 1px 8px;
   border-radius: 999px;
-  border: 1px dashed #b45309;
-  color: #b45309;
+  border: 1px dashed var(--sl-warn);
+  color: var(--sl-warn);
   white-space: nowrap;
 }
 .btn-emphasis {
-  background: var(--color-signal, #2f6fed);
+  background: var(--color-signal, var(--sl-accent));
   color: #fff;
-  border-color: var(--color-signal, #2f6fed);
+  border-color: var(--color-signal, var(--sl-accent));
 }
 /* 行操作钮(原型 Tokens:26px / 4px 圆角 / 12px;危险红字描边;
    强调态蓝底白字 —— 续期对到期、重新生成对失效) */
 .row-btn {
   height: 26px; padding: 0 10px; margin-left: 6px;
-  border: 1px solid #e1e5eb; border-radius: 4px;
-  background: #fff; color: #10151c; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--sl-line); border-radius: 4px;
+  background: var(--c-surface); color: var(--sl-ink); font-size: 12px; cursor: pointer;
 }
 .row-btn:first-child { margin-left: 0; }
 .row-btn:hover { background: #f6f8fc; }
 .row-btn:disabled { opacity: .5; cursor: not-allowed; }
-.row-btn-danger { color: #dc2626; }
-.row-btn-primary { border-color: #2f6fed; background: #2f6fed; color: #fff; }
+.row-btn-danger { color: var(--sl-bad); }
+.row-btn-primary { border-color: var(--sl-accent); background: var(--sl-accent); color: #fff; }
 .row-btn-primary:hover { background: #1f55c4; }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

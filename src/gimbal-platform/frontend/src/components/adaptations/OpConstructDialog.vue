@@ -349,7 +349,7 @@ defineExpose({ form, submit })
 .ocd-label { font-size: 12px; font-weight: 500; color: var(--sl-ink-2); text-align: right; }
 .ocd-select {
   height: 32px; padding: 0 8px; font-size: 13px;
-  color: var(--sl-ink); background: #fff;
+  color: var(--sl-ink); background: var(--c-surface);
   border: 1px solid var(--sl-line); border-radius: 6px;
   min-width: 0;
 }

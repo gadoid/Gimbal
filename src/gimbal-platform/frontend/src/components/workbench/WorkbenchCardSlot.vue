@@ -162,20 +162,20 @@ onUnmounted(() => clearTimeout(pulseTimer))
   flex-direction: column;
   gap: 10px;
   padding: 11px 16px 16px;
-  background: #fff;
-  border: 1px solid #e1e5eb;
-  border-top: 3px solid var(--card-accent, #2f6fed);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-top: 3px solid var(--card-accent, var(--sl-accent));
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.accent-blue { --card-accent: #2f6fed; }
-.accent-green { --card-accent: #15803d; }
+.accent-blue { --card-accent: var(--sl-accent); }
+.accent-green { --card-accent: var(--sl-ok); }
 .accent-gold { --card-accent: #eab308; }
 
 .card-slot:hover .slot-frame {
-  border-color: #2f6fed;
-  border-top-color: var(--card-accent, #2f6fed);
+  border-color: var(--sl-accent);
+  border-top-color: var(--card-accent, var(--sl-accent));
   box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
 }
 
@@ -189,8 +189,8 @@ onUnmounted(() => clearTimeout(pulseTimer))
 /* 拖拽反馈:提起 = 轻微旋转 + 抬升;原位 = 虚线空位(§3) */
 .card-slot.sortable-ghost .slot-frame { opacity: 0.4; border-style: dashed; }
 .card-slot.sortable-chosen .slot-frame {
-  border-color: #2f6fed;
-  border-top-color: var(--card-accent, #2f6fed);
+  border-color: var(--sl-accent);
+  border-top-color: var(--card-accent, var(--sl-accent));
   box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
   transform: rotate(1deg);
 }
@@ -211,7 +211,7 @@ onUnmounted(() => clearTimeout(pulseTimer))
   z-index: 2;
 }
 .card-slot:hover .card-handle { opacity: 1; }
-.card-handle:hover { color: #2f6fed; background: #e7efff; }
+.card-handle:hover { color: var(--sl-accent); background: var(--soft-accent-bg); }
 .card-handle:active { cursor: grabbing; }
 /* 未 hover 卡片时隐形把手不接鼠标 — 防误触拖拽 */
 .card-slot:not(:hover) .card-handle { pointer-events: none; }
@@ -233,8 +233,8 @@ onUnmounted(() => clearTimeout(pulseTimer))
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border: 1px solid #e1e5eb;
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
   cursor: pointer;
   padding: 0;
   transition: color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
@@ -243,34 +243,34 @@ onUnmounted(() => clearTimeout(pulseTimer))
 /* ⤢ 尺寸:小方钮,点击循环 紧凑→标准→展开;按压有反馈 */
 .ctl-size {
   width: 22px; height: 22px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   border-radius: 6px;
 }
-.ctl-size:hover { color: #2f6fed; border-color: #2f6fed; transform: scale(1.08); }
+.ctl-size:hover { color: var(--sl-accent); border-color: var(--sl-accent); transform: scale(1.08); }
 .ctl-size:active { transform: scale(0.94); }
 /* ✕ 删除:圆形徽标,半悬浮边框外(可关闭标签页同款) */
 .ctl-remove {
   width: 20px; height: 20px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(16, 21, 28, 0.1);
 }
-.ctl-remove:hover { color: #dc2626; border-color: #f6c6c6; background: #fdf5f5; }
+.ctl-remove:hover { color: var(--sl-bad); border-color: #f6c6c6; background: #fdf5f5; }
 
 /* ── 状态面(loading / error)────────────────────────────── */
 .card-state {
   padding: 22px 16px;
   font-size: 12.5px;
-  color: #64748b;
-  background: #f8fafc;
-  border: 1px dashed #e1e5eb;
+  color: var(--color-text-secondary);
+  background: var(--surface-raised);
+  border: 1px dashed var(--sl-line);
   border-radius: 8px;
   text-align: center;
 }
-.card-state.bad { color: #dc2626; border-color: #f6c6c6; background: #fdf5f5; }
+.card-state.bad { color: var(--sl-bad); border-color: #f6c6c6; background: #fdf5f5; }
 .retry {
   margin-left: 8px; padding: 2px 10px; font-size: 12px;
-  color: #2f6fed; background: none;
-  border: 1px solid #2f6fed; border-radius: 4px; cursor: pointer;
+  color: var(--sl-accent); background: none;
+  border: 1px solid var(--sl-accent); border-radius: 4px; cursor: pointer;
 }
 </style>

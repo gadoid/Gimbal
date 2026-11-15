@@ -197,14 +197,14 @@ const hasUnread = computed(() => unread.value > 0)
   padding: 8px 14px; font-size: 13px; font-weight: 600; color: rgb(100 116 139);
   border-bottom: 2px solid transparent;
 }
-.nt-tab.active { color: var(--accent, #4338ca); border-bottom-color: var(--accent, #4338ca); }
+.nt-tab.active { color: var(--accent, var(--accent)); border-bottom-color: var(--accent, var(--accent)); }
 .nt-dot {
   margin-left: 6px; font-size: 11px; background: #ef4444; color: #fff;
   border-radius: 999px; padding: 1px 7px;
 }
 .nt-action {
   font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .nt-action:hover { background: var(--accent-soft-border); }
@@ -221,7 +221,7 @@ const hasUnread = computed(() => unread.value > 0)
   display: flex; flex-direction: column; gap: 4px;
 }
 .nt-card:hover { border-color: var(--accent-soft-border); background: rgb(59 130 246 / 3%); }
-.nt-card.unread { border-left: 3px solid var(--accent, #4338ca); }
+.nt-card.unread { border-left: 3px solid var(--accent, var(--accent)); }
 .nt-card-head { display: flex; align-items: center; gap: 8px; }
 .nt-type {
   font-size: 11px; flex: none; padding: 2px 8px; border-radius: 999px;

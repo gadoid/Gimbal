@@ -127,17 +127,17 @@ onMounted(() => { void load() })
 .cdp { display: flex; flex-direction: column; gap: 0.5rem; }
 .head { display: flex; align-items: center; gap: 8px; }
 .label { font-size: 0.85rem; font-weight: 600; color: #334155; }
-.count { font-size: 11px; color: #64748b; background: #f1f5f9; border-radius: 4px; padding: 1px 6px; }
+.count { font-size: 11px; color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 4px; padding: 1px 6px; }
 .actions { margin-left: auto; display: flex; gap: 4px; }
-.hint { margin: 0; color: #64748b; font-size: 0.8rem; }
-.warn { margin: 0; color: #b45309; font-size: 0.8rem; background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%); border-radius: 6px; padding: 6px 10px; }
+.hint { margin: 0; color: var(--color-text-secondary); font-size: 0.8rem; }
+.warn { margin: 0; color: var(--sl-warn); font-size: 0.8rem; background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%); border-radius: 6px; padding: 6px 10px; }
 .list { display: flex; flex-direction: column; gap: 0.6rem; }
-.svc { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.svc { border: 1px solid var(--color-border-tertiary); border-radius: 8px; padding: 0.5rem 0.8rem; display: flex; flex-direction: column; gap: 0.35rem; }
 .name { font-size: 0.8rem; font-weight: 600; color: #1e293b; }
-.ok { margin: 0; color: #15803d; font-size: 0.8rem; }
+.ok { margin: 0; color: var(--sl-ok); font-size: 0.8rem; }
 .checks { display: flex; flex-direction: column; gap: 2px; }
 .check { font-size: 0.8rem; color: #334155; display: flex; align-items: center; gap: 6px; }
-.btn { border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.3rem 0.8rem; background: #fff; cursor: pointer; font-size: 0.8rem; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; font-size: 0.8rem; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .mono { font-family: var(--font-mono, monospace); }

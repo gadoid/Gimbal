@@ -527,7 +527,7 @@ onMounted(async () => {
 .mx-table th:nth-child(2),
 .mx-table td.mx-desc-cell {
   position: sticky;
-  background: #fff;
+  background: var(--c-surface);
 }
 .mx-table th:first-child,
 .mx-table td.mx-svc-cell { left: 0; }
@@ -542,13 +542,13 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 .mx-svc-link {
-  color: var(--sl-ink, #10151c);
+  color: var(--sl-ink, var(--sl-ink));
   text-decoration: none;
   margin: 0 2px;
   font-weight: 600;
 }
 .mx-svc-link:hover {
-  color: var(--sl-accent, #2f6fed);
+  color: var(--sl-accent, var(--sl-accent));
   text-decoration: underline;
 }
 .mx-svc-cell .svc-link { margin-left: 8px; }
@@ -565,9 +565,9 @@ onMounted(async () => {
   background: none;
   cursor: pointer;
   font-size: 12px;
-  color: var(--sl-ink, #10151c);
+  color: var(--sl-ink, var(--sl-ink));
 }
-.mx-desc:hover { color: var(--sl-accent, #2f6fed); }
+.mx-desc:hover { color: var(--sl-accent, var(--sl-accent)); }
 .mx-cell { min-width: 170px; }
 .mx-cell.mx-focus, .mx-table th.mx-focus { background: var(--sl-accent-soft, #eef4ff); }
 .mx-url {
@@ -582,9 +582,9 @@ onMounted(async () => {
   background: none;
   cursor: pointer;
   font-size: 12px;
-  color: var(--sl-ink, #10151c);
+  color: var(--sl-ink, var(--sl-ink));
 }
-.mx-url:hover { color: var(--sl-accent, #2f6fed); }
+.mx-url:hover { color: var(--sl-accent, var(--sl-accent)); }
 .mx-kind td {
   background: var(--sl-canvas, #f7f8fa);
   font-size: 12px;

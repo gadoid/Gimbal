@@ -151,14 +151,14 @@ async function confirm(): Promise<void> {
 }
 .sub-dialog {
   width: min(560px, 92vw); max-height: 86vh; overflow: auto;
-  background: #fff; border-radius: 12px; padding: 18px 20px;
+  background: var(--c-surface); border-radius: 12px; padding: 18px 20px;
   display: flex; flex-direction: column; gap: 10px;
   box-shadow: 0 18px 50px rgb(15 23 42 / 25%);
 }
 .sub-dialog h2 { margin: 0; font-size: 16px; }
 .sub-dialog h3 { margin: 4px 0 0; font-size: 13px; color: rgb(51 65 85); }
 .sub-hint { margin: 0; font-size: 12px; color: rgb(71 85 105); line-height: 1.7; }
-.sub-err { margin: 0; font-size: 12.5px; color: #dc2626; }
+.sub-err { margin: 0; font-size: 12.5px; color: var(--sl-bad); }
 .sub-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .sub-table th, .sub-table td {
   text-align: left; padding: 4px 8px; border-bottom: 1px solid rgb(226 232 240);
@@ -181,7 +181,7 @@ async function confirm(): Promise<void> {
 }
 .sub-ghost { background: none; border: 1px solid rgb(203 213 225); color: rgb(71 85 105); }
 .sub-primary {
-  color: #fff; background: #4338ca; border: none;
+  color: #fff; background: var(--accent); border: none;
 }
 .sub-primary:disabled { opacity: .5; cursor: not-allowed; }
 </style>

@@ -169,14 +169,14 @@ async function save() {
   height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid var(--color-signal-line, #e1e5eb);
-  background: #fff;
-  color: var(--color-signal-ink, #10151c);
+  border: 1px solid var(--color-signal-line, var(--sl-line));
+  background: var(--c-surface);
+  color: var(--color-signal-ink, var(--sl-ink));
   font-size: 12px;
 }
 .chip-toggle.is-on {
-  border-color: var(--color-signal, #2f6fed);
-  background: #e7efff;
+  border-color: var(--color-signal, var(--sl-accent));
+  background: var(--soft-accent-bg);
   color: #1f55c4;
 }
 </style>

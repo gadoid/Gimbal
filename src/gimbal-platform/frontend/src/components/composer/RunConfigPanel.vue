@@ -594,7 +594,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .run-section { margin-bottom: 24px; }
 .run-section:last-child { margin-bottom: 0; }
 .run-label {
-  display: block; font-size: 13px; font-weight: 600; color: #10151C;
+  display: block; font-size: 13px; font-weight: 600; color: var(--sl-ink);
   margin-bottom: 12px;
 }
 .run-label .muted { font-weight: 400; color: #8B93A1; }
@@ -609,21 +609,21 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .rd-chip {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 6px 14px;
-  border: 1.5px solid #E1E5EB; border-radius: 999px;
-  background: #fff; font-size: 12px; color: #5B6472;
+  border: 1.5px solid var(--sl-line); border-radius: 999px;
+  background: var(--c-surface); font-size: 12px; color: #5B6472;
   cursor: pointer; transition: all 0.15s;
 }
-.rd-chip:hover { border-color: #2F6FED; color: #10151C; }
+.rd-chip:hover { border-color: var(--sl-accent); color: var(--sl-ink); }
 .rd-chip.active {
-  border-color: #10151C; color: #fff; font-weight: 600;
-  background: #10151C;
+  border-color: var(--sl-ink); color: #fff; font-weight: 600;
+  background: var(--sl-ink);
 }
 .rd-chip-tag {
   font-size: 10px; font-weight: 600; padding: 1px 6px;
-  border-radius: 999px; background: #E7EFFF; color: #2F6FED;
+  border-radius: 999px; background: var(--soft-accent-bg); color: var(--sl-accent);
 }
 .rd-chip.active .rd-chip-tag { background: rgba(255, 255, 255, .16); color: #fff; }
-.rd-chip-warn { font-size: 11px; color: #DC2626; }
+.rd-chip-warn { font-size: 11px; color: var(--sl-bad); }
 .rd-chip.active .rd-chip-warn { color: #FCA5A5; }
 
 /* ── 默认方案态:基线提示 ──────────────────────────────────── */
@@ -633,14 +633,14 @@ const previewEnvNames = computed<Record<number, string>>(() =>
   background: #F6F8FC;
   font-size: 12px; color: #5B6472; line-height: 1.6;
 }
-.rd-link { color: #2F6FED; cursor: pointer; }
+.rd-link { color: var(--sl-accent); cursor: pointer; }
 .rd-link:hover { text-decoration: underline; }
 
 /* ── 绑定行(spec D3;M2a S6 后一行一个别名选择)────────────── */
 .rd-bind-row {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 10px; margin-bottom: 8px;
-  border: 1px solid #E1E5EB; border-radius: 8px;
+  border: 1px solid var(--sl-line); border-radius: 8px;
 }
 .rd-bind-row:last-child { margin-bottom: 0; }
 /* 降级(M2a S6):选中的别名已从注册表删除 — 标红不报废,退回服务键本身 */
@@ -651,8 +651,8 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 }
 .rd-bind-user {
   min-width: 128px; padding: 5px 8px;
-  border: 1px solid #E1E5EB; border-radius: 6px;
-  font-size: 12px; background: #fff;
+  border: 1px solid var(--sl-line); border-radius: 6px;
+  font-size: 12px; background: var(--c-surface);
 }
 .rd-bind-row.is-degraded .rd-bind-user { border-color: #fca5a5; }
 /* 无同基候选 → 静默说明代替下拉(用服务键本身) */
@@ -667,23 +667,23 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 @media (max-width: 720px) { .adv-grid { grid-template-columns: 1fr; } }
 .adv-field {
   padding: 10px 12px;
-  border: 1.5px solid #E1E5EB; border-radius: 10px;
+  border: 1.5px solid var(--sl-line); border-radius: 10px;
 }
 .adv-name {
   display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px;
 }
 .adv-select {
   width: 100%; padding: 6px 8px;
-  border: 1px solid #E1E5EB; border-radius: 6px;
-  font-size: 12px; background: #fff;
+  border: 1px solid var(--sl-line); border-radius: 6px;
+  font-size: 12px; background: var(--c-surface);
 }
 .num-row {
   display: flex; align-items: center; gap: 6px;
 }
 .adv-input {
   width: 100%; padding: 6px 8px;
-  border: 1px solid #E1E5EB; border-radius: 6px;
-  font-size: 12px; background: #fff;
+  border: 1px solid var(--sl-line); border-radius: 6px;
+  font-size: 12px; background: var(--c-surface);
 }
 .num-row .adv-input { width: 72px; }
 .num-sep { font-size: 11px; color: #8B93A1; }
@@ -692,15 +692,15 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .rd-save-row { display: flex; align-items: center; gap: 8px; }
 .rd-scheme-name {
   flex: 1; min-width: 0; max-width: 320px; padding: 6px 8px;
-  border: 1px solid #E1E5EB; border-radius: 6px;
-  font-size: 12px; background: #fff;
+  border: 1px solid var(--sl-line); border-radius: 6px;
+  font-size: 12px; background: var(--c-surface);
 }
 .rd-save-row .ghost-btn { padding: 6px 12px; font-size: 12px; white-space: nowrap; }
 
 /* ── 自建方案只读概要(spec §7 路径①)──────────────────────── */
 .rd-summary {
-  border: 1.5px solid #E1E5EB; border-radius: 10px;
-  padding: 6px 14px; background: #fff;
+  border: 1.5px solid var(--sl-line); border-radius: 10px;
+  padding: 6px 14px; background: var(--c-surface);
 }
 .rd-sum-row {
   display: flex; gap: 12px; align-items: baseline;
@@ -716,7 +716,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .rd-sum-bind {
   display: inline-block; margin: 0 6px 2px 0;
   font-family: var(--font-mono); font-size: 11px;
-  background: #f1f5f9; padding: 1px 6px; border-radius: 4px;
+  background: var(--soft-neutral-bg); padding: 1px 6px; border-radius: 4px;
 }
 /* 降级(概要态,spec §9):绑定 alias 已删 — 底色微红 + 警示(与默认态 .is-degraded 同口径) */
 .rd-sum-bind.is-degraded { background: #fef2f2; color: #b91c1c; }
@@ -744,22 +744,22 @@ const previewEnvNames = computed<Record<number, string>>(() =>
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
   padding: 16px 0 0; margin-top: 8px;
-  border-top: 1px solid #E1E5EB;
+  border-top: 1px solid var(--sl-line);
 }
 .run-summary { display: flex; gap: 6px; flex-wrap: wrap; }
 .summary-chip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 10px; border-radius: 999px;
   font-size: 11px; font-weight: 500;
-  background: #E7EFFF; color: #2F6FED;
+  background: var(--soft-accent-bg); color: var(--sl-accent);
 }
-.summary-chip.total { background: #E4F5EA; color: #15803D; }
+.summary-chip.total { background: #E4F5EA; color: var(--sl-ok); }
 /* 总量超闸(dispatch 409 too_many_runs)→ 红色警示,confirm 亦被拦 */
-.summary-chip.total.over { background: #FEE2E2; color: #DC2626; }
+.summary-chip.total.over { background: #FEE2E2; color: var(--sl-bad); }
 .run-actions { display: flex; gap: 8px; }
 
 .ghost-btn {
-  background: transparent; border: 1px solid #E1E5EB; border-radius: 8px;
+  background: transparent; border: 1px solid var(--sl-line); border-radius: 8px;
   padding: 8px 14px; font-size: 13px; color: #5B6472;
   cursor: pointer; transition: all 0.15s;
 }
@@ -767,7 +767,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 
 .primary-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  background: #2F6FED;
+  background: var(--sl-accent);
   color: #fff; border: none; border-radius: 8px;
   padding: 8px 18px; font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all 0.15s;
@@ -780,6 +780,6 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .small { font-size: 11px; }
-.env-select { border: 1px solid #cbd5e1; border-radius: 6px;
-  padding: 0.3rem 0.5rem; background: #fff; max-width: 16rem; }
+.env-select { border: 1px solid var(--color-border-secondary); border-radius: 6px;
+  padding: 0.3rem 0.5rem; background: var(--c-surface); max-width: 16rem; }
 </style>

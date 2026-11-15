@@ -461,7 +461,7 @@ const lastRunPill = computed<{ text: string; cls: string } | null>(() => {
 <style scoped>
 .idtl { display: flex; flex-direction: column; gap: 16px; max-width: 880px; }
 .idtl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.idtl-link { color: var(--color-signal, #2f6fed); text-decoration: none; }
+.idtl-link { color: var(--color-signal, var(--sl-accent)); text-decoration: none; }
 .idtl-link:hover { text-decoration: underline; }
 
 .idtl-pill {
@@ -470,29 +470,29 @@ const lastRunPill = computed<{ text: string; cls: string } | null>(() => {
 }
 .ip-mode-plat { background: #eef4ff; color: #1f3b73; }
 .ip-mode-pers { background: #f6f8fc; color: #4a5a72; }
-.ip-ok { background: #e4f5ea; color: #15803d; }
-.ip-warn { background: #fef3c7; color: #b45309; }
+.ip-ok { background: #e4f5ea; color: var(--sl-ok); }
+.ip-warn { background: #fef3c7; color: var(--sl-warn); }
 .ip-bad { background: #fee2e2; color: #b91c1c; }
 .ip-mute { background: #eef0f3; color: #5b6472; }
-.ip-run { background: #e7efff; color: #1f55c4; }
+.ip-run { background: var(--soft-accent-bg); color: #1f55c4; }
 
-/* 暂停横幅(原型:red #FEF2F2/#FECACA·#991B1B;amber #FFFBEB/#FDE68A·#92400E;neutral #F6F8FC/#E1E5EB·#10151C) */
+/* 暂停横幅(原型:red #FEF2F2/#FECACA·#991B1B;amber #FFFBEB/#FDE68A·#92400E;neutral #F6F8FC/var(--sl-line)·var(--sl-ink)) */
 .idtl-banner {
   border-radius: 10px; padding: 14px 18px;
   display: flex; flex-direction: column; gap: 10px;
 }
 .tone-red { background: #fef2f2; border: 1px solid #fecaca; }
 .tone-amber { background: #fffbeb; border: 1px solid #fde68a; }
-.tone-neutral { background: #f6f8fc; border: 1px solid #e1e5eb; }
+.tone-neutral { background: #f6f8fc; border: 1px solid var(--sl-line); }
 .idtl-banner-title { font-size: 14px; font-weight: 600; }
 .tt-red { color: #991b1b; }
 .tt-amber { color: #92400e; }
-.tt-neutral { color: #10151c; }
+.tt-neutral { color: var(--sl-ink); }
 
 .idtl-main { display: flex; flex-direction: column; gap: 16px; }
 .idtl-card {
   background: var(--color-signal-card, #fff);
-  border: 1px solid #e1e5eb; border-radius: 10px;
+  border: 1px solid var(--sl-line); border-radius: 10px;
   padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;
 }
 .idtl-dl {
@@ -505,14 +505,14 @@ const lastRunPill = computed<{ text: string; cls: string } | null>(() => {
 /* 按钮(原型 30px/6px;行内 12px) */
 .idtl-btn {
   display: inline-flex; align-items: center; height: 30px; padding: 0 12px;
-  border-radius: 6px; border: 1px solid #e1e5eb; background: #fff;
-  color: #10151c; font-size: 12px; font-weight: 500;
+  border-radius: 6px; border: 1px solid var(--sl-line); background: var(--c-surface);
+  color: var(--sl-ink); font-size: 12px; font-weight: 500;
   cursor: pointer; text-decoration: none; box-sizing: border-box;
 }
 .idtl-btn:hover { background: #f6f8fc; }
-.idtl-btn.primary { border-color: #2f6fed; background: #2f6fed; color: #fff; }
+.idtl-btn.primary { border-color: var(--sl-accent); background: var(--sl-accent); color: #fff; }
 .idtl-btn.primary:hover { background: #1f55c4; }
-.idtl-btn.danger { color: #dc2626; }
+.idtl-btn.danger { color: var(--sl-bad); }
 .idtl-btn.is-disabled, .idtl-btn:disabled {
   color: #8b93a1; opacity: .7; cursor: not-allowed;
 }

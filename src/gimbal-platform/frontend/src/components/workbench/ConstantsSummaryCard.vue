@@ -122,18 +122,18 @@ async function copyEntry(e: ConstantEntry): Promise<void> {
   padding: 5px 10px;
   font-size: 12px;
   color: var(--sl-ink);
-  background: #f8fafc;
+  background: var(--surface-raised);
   border: 1px solid var(--sl-line);
   border-radius: 6px;
   outline: none;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
-.l-search:focus { border-color: var(--sl-accent); background: #fff; }
+.l-search:focus { border-color: var(--sl-accent); background: var(--c-surface); }
 
 /* 键值行:名称 1fr / 类型 chip / 复制 icon */
 .kv-row { grid-template-columns: minmax(0, 1fr) auto auto; font-size: 12.5px; }
 .kg-gen { color: #92400e; background: #fef3c7; }
-.kg-lit { color: #475569; background: var(--sl-divider); }
+.kg-lit { color: var(--color-text-strong); background: var(--sl-divider); }
 
 /* 行内操作独立:icon-only,默认低透明度,行 hover 才增强 —
    不抢 key/value 主内容的视觉权重 */

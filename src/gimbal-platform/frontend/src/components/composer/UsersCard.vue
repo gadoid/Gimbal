@@ -338,12 +338,12 @@ async function submitImport() {
 }
 
 .users-table :deep(.el-table__row:hover > td.el-table__cell) {
-  background: var(--c-accent-soft, #f1f5f9);
+  background: var(--c-accent-soft, var(--soft-neutral-bg));
 }
 
 .alias {
   padding: 2px 6px;
-  color: var(--c-accent, #4338ca);
+  color: var(--c-accent, var(--accent));
   font-family: var(--font-mono, monospace);
   font-weight: 600;
   background: var(--c-accent-soft, #eef2ff);
@@ -353,14 +353,14 @@ async function submitImport() {
 .pw {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: var(--c-text-secondary, #64748b);
+  color: var(--c-text-secondary, var(--color-text-secondary));
 }
 
 .import-hint {
   margin: 0 0 10px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--c-text-secondary, #64748b);
+  color: var(--c-text-secondary, var(--color-text-secondary));
 }
 
 .pool-list {
@@ -377,17 +377,17 @@ async function submitImport() {
   align-items: center;
   padding: 8px 10px;
   cursor: pointer;
-  border: 1px solid var(--c-border, #e2e8f0);
+  border: 1px solid var(--c-border, var(--color-border-tertiary));
   border-radius: 6px;
   transition: all 0.15s;
 }
 
 .pool-item:hover:not(.disabled) {
-  border-color: var(--c-accent, #4338ca);
+  border-color: var(--c-accent, var(--accent));
 }
 
 .pool-item.selected {
-  border-color: var(--c-accent, #4338ca);
+  border-color: var(--c-accent, var(--accent));
   background: var(--c-accent-soft, #eef2ff);
 }
 
@@ -406,7 +406,7 @@ async function submitImport() {
   overflow: hidden;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: var(--c-text-secondary, #64748b);
+  color: var(--c-text-secondary, var(--color-text-secondary));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -424,10 +424,10 @@ async function submitImport() {
   /* 形制走 .slib-table thead th;这里只压密度 */
   padding: 5px 8px;
 }
-.users-table td { padding: 6px 8px; border-bottom: 0.5px solid #f1f5f9; }
+.users-table td { padding: 6px 8px; border-bottom: 0.5px solid var(--soft-neutral-bg); }
 .cell-url { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .uc-ops { display: flex; align-items: center; justify-content: center; gap: 2px; }
 .uc-op { height: 24px; padding: 0 6px; font-size: 11px; }
-.uc-del { color: #dc2626; }
-.req { margin-left: 3px; color: #dc2626; font-weight: 700; }
+.uc-del { color: var(--sl-bad); }
+.req { margin-left: 3px; color: var(--sl-bad); font-weight: 700; }
 </style>

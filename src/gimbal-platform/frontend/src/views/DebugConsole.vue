@@ -195,7 +195,7 @@ onBeforeUnmount(() => {
 .dc-status.active { background: #E6F7EE; color: #0E7A43; }
 .dc-body { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 16px; }
 .dc-right { display: flex; flex-direction: column; gap: 16px; }
-.dc-panel { border: 1px solid #E3E7ED; border-radius: 10px; padding: 14px; background: #fff; }
+.dc-panel { border: 1px solid #E3E7ED; border-radius: 10px; padding: 14px; background: var(--c-surface); }
 .dc-panel h3 { margin: 0 0 10px; font-size: 14px; }
 .dc-event-list, .dc-console-list {
   height: 420px; overflow-y: auto; font-family: ui-monospace, Consolas, monospace;

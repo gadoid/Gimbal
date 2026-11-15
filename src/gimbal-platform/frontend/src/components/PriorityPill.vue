@@ -20,8 +20,8 @@ defineProps<{ priority: number | null | undefined }>()
   border-radius: 10px;
 }
 .p0 { color: #b91c1c; background: #fee2e2; }
-.p1 { color: #b45309; background: #fef3c7; }
-.p2 { color: #475569; background: #f1f5f9; }
-.p3 { color: #94a3b8; background: #f8fafc; }
+.p1 { color: var(--sl-warn); background: #fef3c7; }
+.p2 { color: var(--color-text-strong); background: var(--soft-neutral-bg); }
+.p3 { color: var(--color-text-tertiary); background: var(--surface-raised); }
 
 </style>

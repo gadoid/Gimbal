@@ -95,5 +95,5 @@ onMounted(async () => {
   background: transparent; border: 1px solid rgb(100 116 139 / 40%);
 }
 .nt-dot.on { background: #d97706; border-color: #d97706; }
-.nt-unread { color: #b45309; font-weight: 700; }
+.nt-unread { color: var(--sl-warn); font-weight: 700; }
 </style>

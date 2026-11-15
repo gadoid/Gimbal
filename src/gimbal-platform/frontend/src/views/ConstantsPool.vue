@@ -524,10 +524,10 @@ function copySpec(): void {
 </script>
 
 <style scoped>
-.muted { @apply text-label font-normal; color: var(--c-text-tertiary, #94a3b8); }
+.muted { @apply text-label font-normal; color: var(--c-text-tertiary, var(--color-text-tertiary)); }
 .card {
   background: var(--c-surface, #fff);
-  border: 1px solid var(--c-border, #e1e5eb);
+  border: 1px solid var(--c-border, var(--sl-line));
   border-radius: 10px;
   padding: 14px 16px;
 }
@@ -537,8 +537,8 @@ function copySpec(): void {
   justify-content: space-between;
   margin-bottom: 10px;
 }
-.degraded { @apply text-label font-normal; color: #b45309; }
-.kind-card { border: 1px solid var(--c-border, #e1e5eb); border-radius: 8px; margin-bottom: 8px; }
+.degraded { @apply text-label font-normal; color: var(--sl-warn); }
+.kind-card { border: 1px solid var(--c-border, var(--sl-line)); border-radius: 8px; margin-bottom: 8px; }
 .kind-head {
   @apply text-label font-normal;
   display: flex;
@@ -551,10 +551,10 @@ function copySpec(): void {
   cursor: pointer;
   text-align: left;
 }
-.chevron { display: inline-block; transition: transform 0.15s ease; color: var(--c-text-tertiary, #94a3b8); }
+.chevron { display: inline-block; transition: transform 0.15s ease; color: var(--c-text-tertiary, var(--color-text-tertiary)); }
 .chevron.open { transform: rotate(90deg); }
 .kind-name { font-family: var(--font-mono, monospace); font-weight: 600; }
-.kind-summary { color: #64748b; }
+.kind-summary { color: var(--color-text-secondary); }
 .kind-body { padding: 0 12px 10px; }
 .kind-desc { @apply text-label font-normal; margin: 4px 0 8px; }
 /* 发丝线表格;列头形制统一走 .slib-table thead th,这里只压密度 */
@@ -587,7 +587,7 @@ function copySpec(): void {
 .kind-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .kind-chip {
   @apply text-caption font-normal;
-  border: 1px solid var(--c-border, #e1e5eb);
+  border: 1px solid var(--c-border, var(--sl-line));
   background: #f6f8fa;
   border-radius: 12px;
   padding: 2px 10px;
@@ -596,12 +596,12 @@ function copySpec(): void {
 }
 /* 选中态对齐 Signal accent */
 .kind-chip.active {
-  background: #e7efff;
-  border-color: #2f6fed;
-  color: #2f6fed;
+  background: var(--soft-accent-bg);
+  border-color: var(--sl-accent);
+  color: var(--sl-accent);
 }
 /* 类型分段选择(替代 el-radio-button) */
-.seg { display: inline-flex; border: 1px solid #e1e5eb; border-radius: 8px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 8px; overflow: hidden; }
 .seg-btn {
   @apply text-label font-normal;
   padding: 6px 14px;
@@ -610,7 +610,7 @@ function copySpec(): void {
   cursor: pointer;
   color: #5a6273;
 }
-.seg-btn.active { background: #2f6fed; color: #fff; font-weight: 600; }
+.seg-btn.active { background: var(--sl-accent); color: #fff; font-weight: 600; }
 .seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .param-hint { display: block; margin-top: 2px; }
 .spec-preview { display: flex; align-items: center; gap: 8px; width: 100%; }

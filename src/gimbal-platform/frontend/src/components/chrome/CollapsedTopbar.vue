@@ -32,10 +32,14 @@
     </nav>
 
     <UserBadge />
+    <div class="flex items-center">
+      <ThemeToggle compact />
+    </div>
   </header>
 </template>
 
 <script setup lang="ts">
+import ThemeToggle from '@/components/chrome/ThemeToggle.vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import UserBadge from '@/components/chrome/UserBadge.vue'

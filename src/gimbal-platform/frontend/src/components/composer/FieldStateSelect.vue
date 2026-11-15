@@ -55,20 +55,20 @@ const emit = defineEmits<{
 .fss-sel {
   font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
   padding: 1px 3px; border-radius: 3px; cursor: pointer;
-  border: 1px solid #e2e8f0; background: #f8fafc; color: #475569;
+  border: 1px solid var(--color-border-tertiary); background: var(--surface-raised); color: var(--color-text-strong);
   outline: none;
 }
-.fss-sel:hover { border-color: #94a3b8; }
+.fss-sel:hover { border-color: var(--color-text-tertiary); }
 .fss-sel:focus { border-color: #6366f1; }
 /* 解析态色语:form 中性 / collapse 靛 / carry 青(值表传递) */
-.fss-sel.s-form { background: #f1f5f9; color: #475569; }
+.fss-sel.s-form { background: var(--soft-neutral-bg); color: var(--color-text-strong); }
 .fss-sel.s-collapse { background: #eef2ff; color: #4f46e5; }
 .fss-sel.s-carry { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
 .fss-reset {
   width: 16px; height: 16px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px dashed #cbd5e1; border-radius: 4px;
-  background: transparent; color: #94a3b8;
+  border: 1px dashed var(--color-border-secondary); border-radius: 4px;
+  background: transparent; color: var(--color-text-tertiary);
   font-size: 10px; line-height: 1; cursor: pointer; transition: all 0.15s;
 }
 .fss-reset:hover { border-color: #6ee7b7; color: #0f766e; background: #f0fdfa; }

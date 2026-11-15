@@ -57,7 +57,7 @@ const emit = defineEmits<{ retry: []; close: [] }>()
 }
 .surface-notice-text { flex: 1; }
 .surface-notice-degraded { color: #92400e; background: #fef3c7; border-color: #fcd34d; }
-.surface-notice-changed { color: #3730a3; background: #eef2ff; border-color: #c7d2fe; }
+.surface-notice-changed { color: var(--accent-hover); background: #eef2ff; border-color: #c7d2fe; }
 .surface-notice-retry {
   border: 1px solid currentColor; background: transparent; border-radius: 4px;
   color: inherit; cursor: pointer; font-size: 12px; padding: 2px 10px;

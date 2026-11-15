@@ -106,21 +106,21 @@ onMounted(async () => {
 <style scoped>
 .page { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
 .head { display: flex; align-items: baseline; gap: 1rem; }
-.sub { color: #64748b; font-size: 0.85rem; flex: 1; }
+.sub { color: var(--color-text-secondary); font-size: 0.85rem; flex: 1; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; }
-.card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.85rem 1rem; background: #fff; color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 0.4rem; }
-.card:hover { border-color: #94a3b8; }
+.card { border: 1px solid var(--color-border-tertiary); border-radius: 8px; padding: 0.85rem 1rem; background: var(--c-surface); color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 0.4rem; }
+.card:hover { border-color: var(--color-text-tertiary); }
 .form { max-width: 28rem; }
 .form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
 .row { display: flex; gap: 0.5rem; align-items: center; }
 .row-title { display: flex; align-items: center; gap: 0.5rem; }
 .name { font-weight: 600; }
-.desc { color: #475569; font-size: 0.85rem; margin: 0; min-height: 1.2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meta { color: #94a3b8; font-size: 0.78rem; margin: 0; }
-.badge { font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.desc { color: var(--color-text-strong); font-size: 0.85rem; margin: 0; min-height: 1.2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { color: var(--color-text-tertiary); font-size: 0.78rem; margin: 0; }
+.badge { font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
 .badge.pub { background: rgb(37 99 235 / 8%); color: #2563eb; border-color: rgb(37 99 235 / 30%); }
-.btn { border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.3rem 0.8rem; background: #fff; cursor: pointer; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.err { color: #dc2626; font-size: 0.8rem; }
-.empty { color: #94a3b8; }
+.err { color: var(--sl-bad); font-size: 0.8rem; }
+.empty { color: var(--color-text-tertiary); }
 </style>

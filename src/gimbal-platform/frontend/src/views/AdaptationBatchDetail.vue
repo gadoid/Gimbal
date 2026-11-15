@@ -399,7 +399,7 @@ onMounted(reload)
   border-radius: 10px;
   padding: 10px 14px;
   margin-bottom: 10px;
-  background: #fff;
+  background: var(--c-surface);
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
 .op-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }

@@ -596,7 +596,7 @@ async function save() {
 
 /* ── 条目列表 ── */
 .are-list-card {
-  background: #fff; border: 1px solid var(--color-border-tertiary);
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
   border-radius: 8px; overflow: hidden; margin-bottom: 14px;
 }
 .are-row {
@@ -611,11 +611,11 @@ async function save() {
 .are-row.are-legacy { opacity: .55; }
 .are-name { font-weight: 600; color: var(--color-text-primary); min-width: 96px; }
 .are-anchor {
-  font-family: var(--font-mono); font-size: 11px; color: #4338ca;
+  font-family: var(--font-mono); font-size: 11px; color: var(--accent);
   background: #eef2ff; border-radius: 3px; padding: 1px 6px;
   white-space: nowrap;
 }
-.are-anchor-none { font-family: inherit; color: var(--color-text-secondary); background: #f1f5f9; }
+.are-anchor-none { font-family: inherit; color: var(--color-text-secondary); background: var(--soft-neutral-bg); }
 .are-anchor-jump {
   border: none; background: transparent; color: #7c3aed; cursor: pointer;
   font-size: 12px; padding: 0 2px; margin-left: 2px;
@@ -627,12 +627,12 @@ async function save() {
 }
 .are-count { font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; }
 .are-dead-mark {
-  font-size: 10px; font-weight: 700; color: #b45309;
+  font-size: 10px; font-weight: 700; color: var(--sl-warn);
   background: #fef3c7; border-radius: 3px; padding: 1px 5px;
 }
 .are-legacy-mark {
-  font-size: 10px; font-weight: 700; color: #64748b;
-  background: #f1f5f9; border-radius: 3px; padding: 1px 5px;
+  font-size: 10px; font-weight: 700; color: var(--color-text-secondary);
+  background: var(--soft-neutral-bg); border-radius: 3px; padding: 1px 5px;
 }
 .are-empty { padding: 14px 16px; font-size: 12px; color: var(--color-text-secondary); }
 .are-select-hint { border: 1px dashed var(--color-border-tertiary); border-radius: 8px; }
@@ -646,7 +646,7 @@ async function save() {
 
 /* ── 详情 ── */
 .are-detail {
-  background: #fff; border: 1px solid var(--color-border-tertiary);
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
   border-radius: 8px; padding: 14px 16px;
 }
 .are-detail-head {
@@ -657,7 +657,7 @@ async function save() {
 /* 聚焦态的删除口(全量态不出,删除仍由列表行的 × 承担) */
 .are-del-focus {
   margin-left: auto; padding: 3px 10px; font-size: 12px;
-  color: #dc2626; background: #fff; border: 1px solid #fecaca; border-radius: 4px;
+  color: var(--sl-bad); background: var(--c-surface); border: 1px solid #fecaca; border-radius: 4px;
   cursor: pointer; white-space: nowrap;
 }
 .are-del-focus:hover { background: #fef2f2; border-color: #ef4444; }
@@ -670,7 +670,7 @@ async function save() {
   display: flex; align-items: center; gap: 8px;
   padding: 4px 8px; font-size: 12px; border-radius: 4px;
 }
-.are-kv:hover { background: #f8fafc; }
+.are-kv:hover { background: var(--surface-raised); }
 .are-kv code { font-family: var(--font-mono); color: #334155; }
 .are-kv .are-val { color: #0f172a; }
 .are-sep { color: var(--color-text-secondary); }
@@ -680,7 +680,7 @@ async function save() {
 .are-value-edit { display: flex; align-items: center; gap: 8px; }
 .are-kind-select { width: 90px; }
 .are-val-preview {
-  font-family: var(--font-mono); font-size: 11px; color: #4338ca;
+  font-family: var(--font-mono); font-size: 11px; color: var(--accent);
   background: #eef2ff; border-radius: 3px; padding: 1px 6px;
 }
 /* 送达面注记:引擎把该类值先当上下文引用读 / null 送不到 — 橙底软提示,
@@ -702,7 +702,7 @@ async function save() {
 .are-exp-input { width: 160px; }
 .are-mode-select { width: 110px; }
 .are-add-inject, .are-add-assert {
-  border: 1px dashed #cbd5e1; background: transparent; border-radius: 4px;
+  border: 1px dashed var(--color-border-secondary); background: transparent; border-radius: 4px;
   color: var(--accent); cursor: pointer; font-size: 12px; padding: 5px 10px;
   white-space: nowrap;
 }
@@ -718,6 +718,6 @@ async function save() {
 }
 .are-asserts td { border-bottom: 1px solid var(--color-border-tertiary); }
 .are-mode { font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 5px; }
-.are-mode.m-override { color: #b45309; background: #fef3c7; }
+.are-mode.m-override { color: var(--sl-warn); background: #fef3c7; }
 .are-mode.m-append { color: #065f46; background: #d1fae5; }
 </style>

@@ -353,33 +353,33 @@ onMounted(async () => {
 .soe { display: flex; flex-direction: column; gap: 12px; }
 .soe-item {
   border: 1px solid #fecaca; border-radius: 8px; padding: 10px 12px;
-  background: #fff;
+  background: var(--c-surface);
 }
 .soe-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .soe-ep { font-size: 12px; font-weight: 600; color: #b91c1c; }
-.soe-step { font-size: 11px; color: #94a3b8; }
+.soe-step { font-size: 11px; color: var(--color-text-tertiary); }
 .soe-sel {
-  width: 100%; padding: 6px 8px; border: 1px solid #e1e5eb;
+  width: 100%; padding: 6px 8px; border: 1px solid var(--sl-line);
   border-radius: 4px; font-size: 13px; margin-bottom: 8px;
 }
 .soe-field { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
-.soe-field label { font-size: 11px; color: #64748b; }
+.soe-field label { font-size: 11px; color: var(--color-text-secondary); }
 .soe-input {
-  padding: 6px 8px; border: 1px solid #e1e5eb; border-radius: 4px;
+  padding: 6px 8px; border: 1px solid var(--sl-line); border-radius: 4px;
   font-size: 12px; font-family: ui-monospace, monospace;
 }
 .soe-textarea { resize: vertical; }
-.soe-cross label { color: #b45309; font-weight: 600; }
-.soe-catalog-hint { font-size: 11px; color: #94a3b8; margin: 0; }
+.soe-cross label { color: var(--sl-warn); font-weight: 600; }
+.soe-catalog-hint { font-size: 11px; color: var(--color-text-tertiary); margin: 0; }
 .soe-json-bad { border-color: #ef4444; }
 .soe-json-err { font-size: 11px; color: #ef4444; }
-.soe-note { font-size: 11px; color: #94a3b8; padding: 4px 0; }
+.soe-note { font-size: 11px; color: var(--color-text-tertiary); padding: 4px 0; }
 .soe-skip { font-size: 11px; color: #f59e0b; padding: 4px 0; }
-.soe-substep { border-left: 2px solid #e1e5eb; padding-left: 10px; margin: 8px 0; }
-.soe-sub-head { font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+.soe-substep { border-left: 2px solid var(--sl-line); padding-left: 10px; margin: 8px 0; }
+.soe-sub-head { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; }
 .soe-add {
-  background: none; border: 1px dashed #94a3b8; border-radius: 4px;
-  padding: 4px 12px; font-size: 12px; color: #64748b; cursor: pointer;
+  background: none; border: 1px dashed var(--color-text-tertiary); border-radius: 4px;
+  padding: 4px 12px; font-size: 12px; color: var(--color-text-secondary); cursor: pointer;
 }
-.soe-add:hover { border-color: #2f6fed; color: #2f6fed; }
+.soe-add:hover { border-color: var(--sl-accent); color: var(--sl-accent); }
 </style>

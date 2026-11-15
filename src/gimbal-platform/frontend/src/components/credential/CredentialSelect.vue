@@ -152,15 +152,15 @@ watch(() => props.disabled, (d) => { if (d) close() })
   height: 36px;
   padding: 0 10px;
   font-size: 13px;
-  color: #10151c;
-  background: #fff;
-  border: 1px solid #e1e5eb;
+  color: var(--sl-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
 }
 .cred-trigger:hover:not(:disabled) { border-color: #c4c9d2; }
-.cred-trigger:focus-visible { outline: none; border-color: #2f6fed; }
+.cred-trigger:focus-visible { outline: none; border-color: var(--sl-accent); }
 .cred-trigger:disabled { color: #9ca3af; cursor: not-allowed; background: #f9fafb; }
 
 .cred-value {
@@ -181,7 +181,7 @@ watch(() => props.disabled, (d) => { if (d) close() })
 }
 .cred-out {
   font-size: 11px;
-  color: #b45309;
+  color: var(--sl-warn);
   white-space: nowrap;
 }
 .cred-placeholder { flex: 1; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -205,8 +205,8 @@ watch(() => props.disabled, (d) => { if (d) close() })
   width: 100%;
   min-width: 300px;
   padding: 6px;
-  background: #fff;
-  border: 1px solid #e1e5eb;
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
 }
@@ -216,10 +216,10 @@ watch(() => props.disabled, (d) => { if (d) close() })
   margin-bottom: 6px;
   padding: 5px 10px;
   font-size: 12px;
-  border: 1px solid #e1e5eb;
+  border: 1px solid var(--sl-line);
   border-radius: 6px;
 }
-.cred-filter:focus { outline: none; border-color: #2f6fed; }
+.cred-filter:focus { outline: none; border-color: var(--sl-accent); }
 
 .cred-options { max-height: 220px; overflow-y: auto; }
 
@@ -236,20 +236,20 @@ watch(() => props.disabled, (d) => { if (d) close() })
   text-align: left;
 }
 .cred-option:hover { background: #f5f8ff; }
-.cred-option.selected { background: #e7efff; }
+.cred-option.selected { background: var(--soft-accent-bg); }
 
 .cred-line1 {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.cred-line1 .mono { font-size: 12.5px; font-weight: 600; color: #10151c; }
+.cred-line1 .mono { font-size: 12.5px; font-weight: 600; color: var(--sl-ink); }
 .cred-type {
   padding: 0 6px;
   border-radius: 999px;
   font-size: 10px;
-  background: #e7efff;
-  color: #2f6fed;
+  background: var(--soft-accent-bg);
+  color: var(--sl-accent);
 }
 
 .cred-line2 {

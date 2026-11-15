@@ -9,27 +9,30 @@
  * queued 灰、running 电光蓝、done Signal 绿、failed Signal 红、
  * canceled 冷灰。
  */
+ * 双主题(2026-11-15):颜色走 dual-theme.css 语义令牌 —— 白天值
+ * 与原 hex 逐字一致,夜间由 html[data-theme="dark"] 覆盖。
+ */
 .status-queued {
-  color: #475569;
-  background: #f1f5f9;
+  color: var(--color-text-strong, var(--color-text-strong));
+  background: var(--soft-neutral-bg, var(--soft-neutral-bg));
 }
 
 .status-running {
-  color: #2f6fed;
-  background: #e7efff;
+  color: var(--sl-accent, var(--sl-accent));
+  background: var(--soft-accent-bg, var(--soft-accent-bg));
 }
 
 .status-done {
-  color: #15803d;
-  background: #e8f5ec;
+  color: var(--sl-ok, var(--sl-ok));
+  background: var(--soft-ok-bg, var(--soft-ok-bg));
 }
 
 .status-failed {
-  color: #dc2626;
-  background: #fdecec;
+  color: var(--sl-bad, var(--sl-bad));
+  background: var(--soft-bad-bg, var(--soft-bad-bg));
 }
 
 .status-canceled {
-  color: #64748b;
-  background: #f1f5f9;
+  color: var(--color-text-secondary, var(--color-text-secondary));
+  background: var(--soft-neutral-bg, var(--soft-neutral-bg));
 }

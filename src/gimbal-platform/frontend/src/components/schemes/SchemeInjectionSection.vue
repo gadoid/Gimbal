@@ -101,7 +101,7 @@ function confirmQuick() {
 <style scoped>
 /* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
-  background: #fff; border: 1px solid var(--color-border-tertiary);
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
   border-radius: 8px; padding: 12px 16px;
   display: flex; flex-direction: column; gap: 10px;
 }
@@ -113,7 +113,7 @@ function confirmQuick() {
 }
 .zone-count {
   padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: var(--color-text-secondary); background: #f1f5f9; border-radius: 3px;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 3px;
 }
 .zone-spacer { flex: 1; }
 .zone-ops { display: flex; gap: 4px; }

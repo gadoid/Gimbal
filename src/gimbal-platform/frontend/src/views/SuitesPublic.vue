@@ -219,9 +219,9 @@ onMounted(reload)
   border-right: 1px solid rgb(100 116 139 / 20%);
 }
 .slib-mode:last-child { border-right: none; }
-.slib-mode.on { background: var(--accent-soft); color: #4338ca; font-weight: 600; }
+.slib-mode.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .slib-public-link {
-  font-size: 12.5px; color: #4338ca; text-decoration: none; white-space: nowrap;
+  font-size: 12.5px; color: var(--accent); text-decoration: none; white-space: nowrap;
   padding: 7px 10px; border-radius: 8px; border: 1px solid var(--accent-soft-border);
 }
 .slib-public-link:hover { background: var(--accent-soft); }
@@ -253,7 +253,7 @@ onMounted(reload)
 .ops { display: flex; gap: 8px; align-items: center; }
 .run-btn {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .run-btn:hover { background: var(--accent-soft-border); }
@@ -261,7 +261,7 @@ onMounted(reload)
 .card-empty { padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
 .cta {
   margin-top: 10px; padding: 6px 16px; font-size: 12.5px; cursor: pointer;
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border); border-radius: 8px;
 }
 </style>

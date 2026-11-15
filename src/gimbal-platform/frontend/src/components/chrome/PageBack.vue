@@ -24,7 +24,7 @@ withDefaults(defineProps<{
   text-decoration: none; white-space: nowrap; padding-top: 4px;
   transition: color .15s ease;
 }
-.pgback:hover { color: #4338ca; }
+.pgback:hover { color: var(--accent); }
 .pgback-arrow {
   display: inline-block; transition: transform .15s ease;
 }

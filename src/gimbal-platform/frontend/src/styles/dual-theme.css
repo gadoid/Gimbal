@@ -1,0 +1,199 @@
+/* ──────────────────────────────────────────────────────────────────
+ * dual-theme.css — 日间/夜间双主题(2026-11-15 重做,语义令牌方案)。
+ *
+ * 结构:白天值**不在此定义** —— 三族既有令牌(--color-* / --sl-* /
+ * --c-*)的白天值留在原位(theme.css / scenario-lib.css / composer.css),
+ * 本文件只做两件事:
+ *   1. 补充白天侧缺失的通用软底/抬升面令牌(:root 块);
+ *   2. html[data-theme="dark"] 夜间覆盖块 —— 按同名令牌重定义。
+ * 切换机制:html[data-theme="dark"](useTheme 写 dataset,light 删除);
+ * index.html 内联脚本承担首帧防闪。
+ * 设计基调:夜面不是"反色",是同一套语义的暗面再映射 —— 面板抬一级
+ * (#1a2130),画布沉两级(#0f1420),文字降三档(低饱和蓝白),accent
+ * 提亮一档保对比(4.5:1+),状态软底换深色同色调暗底。
+ * ────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── 白天侧补充(原样值,保证收编 hex 后白天外观零变化)── */
+  --soft-accent-bg: #e7efff;   /* running/信息软底 */
+  --soft-ok-bg: #e8f5ec;       /* 成功软底 */
+  --soft-bad-bg: #fdecec;      /* 失败软底 */
+  --soft-warn-bg: #fef3e2;     /* 警告软底 */
+  --soft-neutral-bg: #f1f5f9;  /* 中性软底(queued/禁用/表头) */
+  --surface-raised: #f8fafc;   /* 近白抬升面 */
+  --color-text-strong: #475569;/* 次强调文字(slate-600 档) */
+}
+
+/* ════════════════════ 夜间方案 ════════════════════ */
+html[data-theme="dark"] {
+  /* theme.css 族(spec-1 语义令牌) */
+  --color-bg-primary: #0f1420;
+  --color-bg-secondary: #171d2b;
+  --color-text-primary: #e6eaf2;
+  --color-text-secondary: #9aa5b8;
+  --color-text-tertiary: #6b7690;
+  --color-text-strong: #8b96ab;
+  --color-border-tertiary: #2a3345;
+  --color-border-secondary: #39445c;
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: #26304a;
+  --accent-soft-border: #3b4a7a;
+  --red: #f87171;
+  --green: #4ade80;
+  --amber: #fbbf24;
+
+  /* scenario-lib 族(场景库/工作台) */
+  --sl-accent: #5b9bff;
+  --sl-accent-soft: #16243f;
+  --sl-ok: #4ade80;
+  --sl-ok-soft: #11301f;
+  --sl-bad: #f87171;
+  --sl-bad-soft: #3b1717;
+  --sl-warn: #fbbf24;
+  --sl-warn-soft: #3a2a10;
+  --sl-ink: #e6eaf2;
+  --sl-ink-2: #9aa5b8;
+  --sl-ink-3: #6b7690;
+  --sl-line: #2a3345;
+  --sl-divider: #212a3c;
+  --sl-canvas: #0f1420;
+  --sl-star: #facc15;
+  --sl-star-off: #4a5468;
+  --sl-th-bg: #1c2436;
+  --sl-th-ink: #a8b6d4;
+  --sl-th-rule: #3a4560;
+
+  /* composer 族(编排页) */
+  --c-surface: #1a2130;
+  --c-border: #2a3345;
+  --c-divider: #212a3c;
+  --c-text: #e6eaf2;
+  --c-text-secondary: #9aa5b8;
+  --c-text-tertiary: #6b7690;
+  --c-accent: #818cf8;
+  --c-accent-soft: #26304a;
+  --c-accent-soft-border: #3b4a7a;
+  --c-bg-secondary: #171d2b;
+  --c-field-bg: #121826;
+  --c-field-border: #2a3345;
+  --c-border-strong: #39445c;
+
+  /* 白天侧补充令牌的夜面值 */
+  --soft-accent-bg: #16243f;
+  --soft-ok-bg: #11301f;
+  --soft-bad-bg: #3b1717;
+  --soft-warn-bg: #3a2a10;
+  --soft-neutral-bg: #202939;
+  --surface-raised: #202939;
+
+  /* avatar 分类色板:色相保持(辨识"哪个账号"),暗面提亮一档 */
+  --avatar-2: #60a5fa;
+  --avatar-3: #c084fc;
+  --avatar-5: #f87171;
+  --avatar-6: #22d3ee;
+  --avatar-7: #a78bfa;
+  --avatar-8: #f472b6;
+  /* --avatar-1/4 引用 --green/--amber,随上覆自动切换 */
+
+  /* ── shadcn 族(tailwind.css 语义类消费;HSL 三元组,无 hsl() 包装)──
+     bg-background/bg-card/bg-accent/border-input 等 tailwind 类的夜面值 */
+  --background: 221 39% 9%;        /* canvas #0f1420 */
+  --foreground: 220 26% 92%;       /* ink #e6eaf2 */
+  --card: 220 27% 14%;             /* surface #1a2130 */
+  --card-foreground: 220 26% 92%;
+  --popover: 220 26% 17%;          /* overlay #202939 */
+  --popover-foreground: 220 26% 92%;
+  --primary: 217 100% 68%;         /* sl-accent #5b9bff */
+  --primary-foreground: 221 39% 9%;
+  --secondary: 219 47% 17%;        /* soft-accent-bg #16243f */
+  --secondary-foreground: 215 100% 80%;
+  --muted: 220 26% 17%;
+  --muted-foreground: 219 16% 66%; /* #9aa5b8 */
+  --accent: 219 47% 17%;
+  --accent-foreground: 215 100% 80%;
+  --destructive: 0 100% 71%;       /* #f87171 */
+  --destructive-foreground: 221 39% 9%;
+  --border: 219 26% 22%;           /* line #2a3345 */
+  --input: 219 26% 22%;
+  --ring: 217 100% 68%;
+
+  /* ── Element Plus 桥接:组件库变量映射到本方案 ── */  --el-bg-color: #1a2130;
+  --el-bg-color-overlay: #202939;
+  --el-bg-color-page: #0f1420;
+  --el-text-color-primary: #e6eaf2;
+  --el-text-color-regular: #c3cbdb;
+  --el-text-color-secondary: #9aa5b8;
+  --el-text-color-placeholder: #6b7690;
+  --el-text-color-disabled: #556077;
+  --el-border-color: #39445c;
+  --el-border-color-light: #2f3a52;
+  --el-border-color-lighter: #293349;
+  --el-border-color-extra-light: #222b40;
+  --el-border-color-dark: #46536f;
+  --el-border-color-darker: #526084;
+  --el-fill-color: #1c2436;
+  --el-fill-color-light: #202939;
+  --el-fill-color-lighter: #171d2b;
+  --el-fill-color-extra-light: #141a28;
+  --el-fill-color-blank: #1a2130;
+  --el-fill-color-dark: #232c40;
+  --el-fill-color-darker: #2a3348;
+  --el-mask-color: rgba(6, 10, 18, 70%);
+  --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 36%),
+    0 8px 20px rgba(0, 0, 0, 32%);
+  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 40%);
+
+  /* 主色:indigo 提亮档 + Element 语义阶梯(dark 模式下 light-N 是
+     深色软底档,dark-2 是 hover 提亮) */
+  --el-color-primary: #818cf8;
+  --el-color-primary-dark-2: #a5b4fc;
+  --el-color-primary-light-3: #6673d8;
+  --el-color-primary-light-5: #515cad;
+  --el-color-primary-light-7: #3d4582;
+  --el-color-primary-light-8: #313663;
+  --el-color-primary-light-9: #26304a;
+  --el-color-success: #4ade80;
+  --el-color-success-dark-2: #86efac;
+  --el-color-success-light-3: #2f9350;
+  --el-color-success-light-5: #246f3f;
+  --el-color-success-light-7: #1a4b2d;
+  --el-color-success-light-8: #153a24;
+  --el-color-success-light-9: #11301f;
+  --el-color-warning: #fbbf24;
+  --el-color-warning-dark-2: #fcd34d;
+  --el-color-warning-light-3: #a8861d;
+  --el-color-warning-light-5: #866a17;
+  --el-color-warning-light-7: #644f11;
+  --el-color-warning-light-8: #4f3e0d;
+  --el-color-warning-light-9: #3a2a10;
+  --el-color-danger: #f87171;
+  --el-color-danger-dark-2: #fca5a5;
+  --el-color-danger-light-3: #a34848;
+  --el-color-danger-light-5: #823939;
+  --el-color-danger-light-7: #622b2b;
+  --el-color-danger-light-8: #4f2222;
+  --el-color-danger-light-9: #3b1717;
+  --el-color-error: #f87171;
+  --el-color-error-dark-2: #fca5a5;
+  --el-color-error-light-3: #a34848;
+  --el-color-error-light-5: #823939;
+  --el-color-error-light-7: #622b2b;
+  --el-color-error-light-8: #4f2222;
+  --el-color-error-light-9: #3b1717;
+  --el-color-info: #9aa5b8;
+  --el-color-info-dark-2: #b6c0d2;
+  --el-color-info-light-3: #6f7889;
+  --el-color-info-light-5: #5a616e;
+  --el-color-info-light-7: #444954;
+  --el-color-info-light-8: #373c45;
+  --el-color-info-light-9: #2a2e37;
+}
+
+/* 夜面滚动条:白轨灰条在暗底刺眼,统一暗轨 */
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #39445c;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #4a5878;
+}

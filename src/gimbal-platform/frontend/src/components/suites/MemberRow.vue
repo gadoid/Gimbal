@@ -83,7 +83,7 @@ function act(cmd: 'settings' | 'main' | 'before' | 'after' | 'remove'): void {
   border-radius: 8px; font-size: 12.5px; background: rgb(100 116 139 / 3%);
   min-width: 0;
 }
-.mrow.hl { border-color: #4338ca; background: var(--accent-soft); }
+.mrow.hl { border-color: var(--accent); background: var(--accent-soft); }
 .mrow-idx { flex: none; color: rgb(100 116 139); font-size: 11.5px; width: 16px; text-align: right; }
 .mrow-source {
   flex: none; font-size: 11px; line-height: 1; padding: 2px 7px;
@@ -107,13 +107,13 @@ function act(cmd: 'settings' | 'main' | 'before' | 'after' | 'remove'): void {
   padding: 2px 6px; border-radius: 6px; background: var(--accent-soft);
 }
 .mrow-multirow {
-  flex: none; font-size: 11px; color: #b45309;
+  flex: none; font-size: 11px; color: var(--sl-warn);
   background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%);
   padding: 2px 7px; border-radius: 999px; cursor: help;
 }
 .mrow-row {
   flex: none; font-size: 11px; font-family: ui-monospace, monospace;
-  color: #15803d; background: rgb(34 197 94 / 10%);
+  color: var(--sl-ok); background: rgb(34 197 94 / 10%);
   border: 1px solid rgb(34 197 94 / 40%); padding: 2px 7px; border-radius: 999px;
 }
 .mrow-ops { flex: none; display: flex; gap: 4px; }
@@ -135,5 +135,5 @@ function act(cmd: 'settings' | 'main' | 'before' | 'after' | 'remove'): void {
   border: none; background: transparent; color: inherit; border-radius: 6px;
 }
 .mrow-menu button:hover { background: var(--accent-soft); }
-.mrow-menu .danger { color: var(--sl-bad, #dc2626); }
+.mrow-menu .danger { color: var(--sl-bad, var(--sl-bad)); }
 </style>

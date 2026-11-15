@@ -43,7 +43,7 @@ defineEmits<{ adapt: [] }>()
 
 <style scoped>
 .vh-card {
-  border: 1px solid #e1e5eb; border-radius: 8px;
+  border: 1px solid var(--sl-line); border-radius: 8px;
   padding: 8px 12px; margin: 4px 0; font-size: 12px;
   display: flex; flex-direction: column; gap: 4px;
 }
@@ -57,7 +57,7 @@ defineEmits<{ adapt: [] }>()
 .vh-text { color: #374151; line-height: 1.4; }
 .vh-btn {
   margin-left: auto; border: none; background: none;
-  color: #2f6fed; font-size: 12px; font-weight: 500;
+  color: var(--sl-accent); font-size: 12px; font-weight: 500;
   cursor: pointer; padding: 2px 6px; white-space: nowrap;
 }
 .vh-btn:hover { text-decoration: underline; }

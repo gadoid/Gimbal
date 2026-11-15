@@ -352,7 +352,7 @@ function num(key: 'parallel' | 'nRuns', ev: Event): void {
 .gpan-gate { display: flex; align-items: center; gap: 6px; }
 .gpan-gate-chip {
   font-size: 12px; padding: 4px 10px; border-radius: 999px;
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .gpan-x {
@@ -364,13 +364,13 @@ function num(key: 'parallel' | 'nRuns', ev: Event): void {
 .gpan-add input { width: 76px; }
 .gpan-add-btn {
   font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .gpan-check {
   display: flex; align-items: flex-start; gap: 8px; font-size: 12px;
-  padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px;
-  background: #f8fafc; flex-direction: column;
+  padding: 8px 10px; border: 1px solid var(--color-border-tertiary); border-radius: 6px;
+  background: var(--surface-raised); flex-direction: column;
 }
 .gpan-check-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .gpan-check .gpan-x { flex: none; }
@@ -400,7 +400,7 @@ function num(key: 'parallel' | 'nRuns', ev: Event): void {
   border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit;
 }
 .gpan-ref.on {
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border-color: var(--accent-soft-border);
 }
 .mono { font-family: ui-monospace, monospace; }

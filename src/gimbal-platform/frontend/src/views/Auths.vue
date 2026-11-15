@@ -951,7 +951,7 @@ onMounted(async () => {
   color: var(--sl-ink-3, #5b6472);
   cursor: pointer;
 }
-.adv-toggle:hover { color: var(--sl-ink, #10151c); }
+.adv-toggle:hover { color: var(--sl-ink, var(--sl-ink)); }
 
 /* ── 槽位卡片看板(借 .svc-tile 语言:白卡 + 状态色 3px 顶边)────── */
 .auth-board {
@@ -961,8 +961,8 @@ onMounted(async () => {
   align-items: start;
 }
 .slot-card {
-  background: #fff;
-  border: 1px solid var(--sl-line, #e1e5eb);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line, var(--sl-line));
   border-top: 3px solid var(--sl-divider, #c3c9d4);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(16, 21, 28, 0.06);
@@ -981,7 +981,7 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
 }
-.sc-slot { font-size: 12.5px; color: var(--sl-ink, #10151c); }
+.sc-slot { font-size: 12.5px; color: var(--sl-ink, var(--sl-ink)); }
 .sc-slot b { font-size: 13px; }
 .sc-n { font-size: 11px; }
 .sc-binds {
@@ -1019,7 +1019,7 @@ onMounted(async () => {
   border: 0;
   background: none;
   font-size: 11.5px;
-  color: var(--sl-accent, #2f6fed);
+  color: var(--sl-accent, var(--sl-accent));
   cursor: pointer;
 }
 .sc-more:hover { text-decoration: underline; }

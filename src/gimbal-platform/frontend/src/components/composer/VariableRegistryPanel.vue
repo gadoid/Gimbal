@@ -159,7 +159,7 @@ const unregisteredRefs = computed(() => {
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
 }
 .vr-badge.extract { background: #d1fae5; color: #065f46; }
-.vr-badge.config { background: #eef2ff; color: #4338ca; }
+.vr-badge.config { background: #eef2ff; color: var(--accent); }
 .vr-producer { font-size: 10px; color: var(--c-text-tertiary); white-space: nowrap; }
 /* 同名多产出黄标(promote 静默覆盖 → 提示后者生效) */
 .vr-dup {

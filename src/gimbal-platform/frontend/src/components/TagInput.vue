@@ -74,14 +74,14 @@ defineExpose({ focus })
   gap: 6px;
   min-height: 32px;
   padding: 4px 8px;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid #d1d5db;
   border-radius: 6px;
   transition: border-color 0.2s;
 }
 .tag-input:focus-within {
-  border-color: #2f6fed;
-  box-shadow: 0 0 0 1px #2f6fed inset;
+  border-color: var(--sl-accent);
+  box-shadow: 0 0 0 1px var(--sl-accent) inset;
 }
 .tag-input__input {
   flex: 1 1 80px;
@@ -94,7 +94,7 @@ defineExpose({ focus })
   color: var(--color-text-primary, #1f2933);
 }
 .tag-input__input::placeholder {
-  color: var(--color-text-tertiary, #94a3b8);
+  color: var(--color-text-tertiary, var(--color-text-tertiary));
 }
 .tag-chip {
   display: inline-flex;
@@ -102,9 +102,9 @@ defineExpose({ focus })
   gap: 3px;
   padding: 1px 8px;
   font-size: 11.5px;
-  color: #475569;
-  background: #f1f5f9;
-  border: 0.5px solid #e1e5eb;
+  color: var(--color-text-strong);
+  background: var(--soft-neutral-bg);
+  border: 0.5px solid var(--sl-line);
   border-radius: 4px;
   line-height: 1.7;
 }
@@ -112,10 +112,10 @@ defineExpose({ focus })
   padding: 0;
   border: none;
   background: none;
-  color: #94a3b8;
+  color: var(--color-text-tertiary);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
 }
-.tag-x:hover { color: #dc2626; }
+.tag-x:hover { color: var(--sl-bad); }
 </style>

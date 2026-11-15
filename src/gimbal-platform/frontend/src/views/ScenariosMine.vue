@@ -769,13 +769,13 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 
 <style scoped>
 .qr-mask { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.qr-card { background: #fff; border-radius: 12px; padding: 1.1rem 1.3rem; width: min(380px, 92vw); display: flex; flex-direction: column; gap: 0.7rem; }
+.qr-card { background: var(--c-surface); border-radius: 12px; padding: 1.1rem 1.3rem; width: min(380px, 92vw); display: flex; flex-direction: column; gap: 0.7rem; }
 .qr-card h3 { margin: 0; font-size: 0.95rem; }
-.qr-sub { margin: 0; color: #64748b; font-size: 0.8rem; }
+.qr-sub { margin: 0; color: var(--color-text-secondary); font-size: 0.8rem; }
 .qr-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #334155; }
-.qr-row select { border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 0.8rem; }
+.qr-row select { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 4px 8px; font-size: 0.8rem; }
 .qr-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.qr-actions button { border-radius: 6px; padding: 4px 12px; font-size: 0.8rem; cursor: pointer; border: 1px solid #cbd5e1; }
+.qr-actions button { border-radius: 6px; padding: 4px 12px; font-size: 0.8rem; cursor: pointer; border: 1px solid var(--color-border-secondary); }
 .qr-actions .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .qr-actions .btn-ghost { background: none; }
 
@@ -790,7 +790,7 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   line-height: 1;
   padding: 3px 8px;
   border-radius: 999px;
-  color: #b45309;
+  color: var(--sl-warn);
   background: rgb(245 158 11 / 12%);
   border: 1px solid rgb(245 158 11 / 45%);
   cursor: help;
@@ -806,14 +806,14 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   padding: 7px 12px;
   border-radius: 8px;
   cursor: pointer;
-  color: #15803d;
+  color: var(--sl-ok);
   background: rgb(34 197 94 / 10%);
   border: 1px solid rgb(34 197 94 / 45%);
   white-space: nowrap;
 }
 .slib-addsuite:disabled {
   cursor: not-allowed;
-  color: var(--c-text-tertiary, #94a3b8);
+  color: var(--c-text-tertiary, var(--color-text-tertiary));
   background: transparent;
   border-color: rgb(100 116 139 / 25%);
 }
@@ -827,7 +827,7 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
   padding: 7px 12px;
   border-radius: 8px;
   cursor: pointer;
-  color: #2f6fed;
+  color: var(--sl-accent);
   background: rgb(47 111 237 / 8%);
   border: 1px solid rgb(47 111 237 / 40%);
   white-space: nowrap;

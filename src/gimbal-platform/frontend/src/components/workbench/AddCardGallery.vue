@@ -77,22 +77,22 @@ const allTypes = computed(() =>
 .gal-item {
   display: flex; align-items: center; gap: 12px;
   padding: 11px 14px;
-  background: #fff; border: 1px solid #e1e5eb; border-radius: 10px;
+  background: var(--c-surface); border: 1px solid var(--sl-line); border-radius: 10px;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
 }
-.gal-item:hover { border-color: #2f6fed; box-shadow: 0 2px 8px rgba(47, 111, 237, 0.1); }
+.gal-item:hover { border-color: var(--sl-accent); box-shadow: 0 2px 8px rgba(47, 111, 237, 0.1); }
 /* 已添加:置灰不可点(类型清单仍可见) */
 .gal-item.added { opacity: 0.55; }
-.gal-item.added:hover { border-color: #e1e5eb; box-shadow: none; }
+.gal-item.added:hover { border-color: var(--sl-line); box-shadow: none; }
 .gal-dot {
   width: 8px; height: 8px; border-radius: 50%; flex: none;
 }
-.dot-blue { background: #2f6fed; }
-.dot-green { background: #15803d; }
+.dot-blue { background: var(--sl-accent); }
+.dot-green { background: var(--sl-ok); }
 .dot-gold { background: #eab308; }
 .gal-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-.gal-title { font-size: 13px; font-weight: 700; color: #10151c; }
+.gal-title { font-size: 13px; font-weight: 700; color: var(--sl-ink); }
 .gal-desc { font-size: 12px; color: #5b6472; line-height: 1.45; }
-.gal-id { font-size: 11px; color: #94a3b8; }
+.gal-id { font-size: 11px; color: var(--color-text-tertiary); }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

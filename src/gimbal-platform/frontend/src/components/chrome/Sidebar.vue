@@ -105,6 +105,7 @@
       :class="collapsed ? 'flex-col px-0' : 'flex-col px-4'"
     >
       <UserBadge :compact="collapsed" layout="footer" />
+      <ThemeToggle :compact="collapsed" />
     </div>
 
   </aside>
@@ -134,6 +135,7 @@ import {
   StackIcon,
   StarIcon,
 } from '@radix-icons/vue'
+import ThemeToggle from '@/components/chrome/ThemeToggle.vue'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSidebarCollapse } from '@/composables/sidebar-collapse'

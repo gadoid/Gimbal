@@ -718,7 +718,7 @@ onMounted(async () => {
 
 /* 钻取入口:整行可点进用户页,用户名再给一道链接暗示 */
 :deep(tr[data-testid^="user-row-"]:hover) td {
-  background: color-mix(in srgb, var(--color-signal, #2f6fed) 4%, transparent);
+  background: color-mix(in srgb, var(--color-signal, var(--sl-accent)) 4%, transparent);
 }
 
 .username.drill:hover {
@@ -763,9 +763,9 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #e1e5eb;
+  border: 1px solid var(--sl-line);
   border-radius: 10px;
   cursor: pointer;
 }
-.disposal-opt.on { border-color: #2f6fed; background: #f5f8ff; }
+.disposal-opt.on { border-color: var(--sl-accent); background: #f5f8ff; }
 </style>

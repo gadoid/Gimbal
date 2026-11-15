@@ -223,7 +223,7 @@ onMounted(async () => {
   font-size: 12px;
   border: 1px solid var(--sl-line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--c-surface);
 }
 .grid-search:focus { outline: none; border-color: var(--sl-accent); }
 .grid-method {
@@ -231,7 +231,7 @@ onMounted(async () => {
   font-size: 12px;
   border: 1px solid var(--sl-line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--c-surface);
 }
 .grid-filter-meta { font-size: 11px; color: var(--sl-ink-3); }
 </style>

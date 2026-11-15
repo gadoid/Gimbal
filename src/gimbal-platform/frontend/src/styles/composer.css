@@ -262,14 +262,14 @@
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--soft-neutral-bg);
+  color: var(--color-text-strong);
 }
-.c-ns-sys.s-fin { background: #eef2ff; color: #4338ca; }
+.c-ns-sys.s-fin { background: #eef2ff; color: var(--accent); }
 .c-ns-sys.s-logi { background: #cffafe; color: #0e7490; }
 .c-ns-sys.s-wms { background: #f3e8ff; color: #6b21a8; }
 .c-ns-sys.s-mall { background: #fce7f3; color: #9d174d; }
-.c-ns-sys.s-common { background: #f1f5f9; color: #475569; }
+.c-ns-sys.s-common { background: var(--soft-neutral-bg); color: var(--color-text-strong); }
 .c-ns-count { font-size: 11px; color: var(--c-text-tertiary); }
 
 /* ── tokens (若 theme.css 已定义则引用, 否则在此落地) ── */

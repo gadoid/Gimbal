@@ -441,15 +441,15 @@ onMounted(() => void load())
   border-right: 1px solid rgb(100 116 139 / 18%); white-space: nowrap;
 }
 .slib-mode:last-child { border-right: none; }
-.slib-mode.on { background: var(--accent-soft); color: #4338ca; font-weight: 600; }
+.slib-mode.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .slib-public-link {
-  font-size: 12.5px; color: #4338ca; text-decoration: none; white-space: nowrap;
+  font-size: 12.5px; color: var(--accent); text-decoration: none; white-space: nowrap;
   padding: 7px 10px; border-radius: 8px; border: 1px solid var(--accent-soft-border);
 }
 .slib-create {
   margin-left: auto; padding: 8px 14px; font-size: 13px; font-weight: 600;
   white-space: nowrap; border-radius: 8px; border: none; cursor: pointer;
-  color: #fff; background: #4338ca;
+  color: #fff; background: var(--accent);
 }
 .slib-create:hover { background: var(--accent-hover); }
 .slib-create:disabled { opacity: .5; cursor: not-allowed; }
@@ -470,7 +470,7 @@ onMounted(() => void load())
 .sl-sid { font-size: 11.5px; color: rgb(100 116 139); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .draft-chip {
   flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
-  color: #b45309; background: rgb(245 158 11 / 10%);
+  color: var(--sl-warn); background: rgb(245 158 11 / 10%);
   border: 1px solid rgb(245 158 11 / 40%);
 }
 /* proj-chip / pub-chip 样式随「全员视角」镜头退役移除(私有桶恒不可达) */
@@ -494,7 +494,7 @@ onMounted(() => void load())
 .ops { display: flex; gap: 8px; align-items: center; }
 .run-btn {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .run-btn:disabled { opacity: .4; cursor: not-allowed; }
@@ -505,10 +505,10 @@ onMounted(() => void load())
 }
 .ref-in-badge {
   font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
-  color: #15803d; background: rgb(34 197 94 / 10%);
+  color: var(--sl-ok); background: rgb(34 197 94 / 10%);
   border: 1px solid rgb(34 197 94 / 40%); font-weight: 400;
 }
-.cta { color: #4338ca; background: none; border: none; cursor: pointer; font-size: 13px; }
+.cta { color: var(--accent); background: none; border: none; cursor: pointer; font-size: 13px; }
 .card-empty { padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
-.sl-menu-item.danger { color: var(--sl-bad, #dc2626); }
+.sl-menu-item.danger { color: var(--sl-bad, var(--sl-bad)); }
 </style>

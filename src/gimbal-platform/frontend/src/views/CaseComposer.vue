@@ -1336,17 +1336,17 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
   padding: 2px 8px; border-radius: 999px;
 }
 /* 过期场景:标题置灰 + 灰 pill(与收藏金 pill 同构、语义相反) */
-.title.expired { color: #94a3b8; }
+.title.expired { color: var(--color-text-tertiary); }
 .expire-pill {
   display: inline-flex; align-items: center; gap: 4px;
-  background: #f1f5f9; border: 1px solid #e2e8f0;
-  color: #64748b; font-size: 11px; font-weight: 600;
+  background: var(--soft-neutral-bg); border: 1px solid var(--color-border-tertiary);
+  color: var(--color-text-secondary); font-size: 11px; font-weight: 600;
   padding: 2px 8px; border-radius: 999px;
 }
 
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 
-.ro-pill { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; background: rgb(100 116 139 / 10%); color: #475569; }
+.ro-pill { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; background: rgb(100 116 139 / 10%); color: var(--color-text-strong); }
 .save-state {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 12px;
@@ -1384,7 +1384,7 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 }
 .primary-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
 .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.primary-btn.outline { background: #fff; color: #4f46e5; border: 1px solid #c7d2fe; box-shadow: none; }
+.primary-btn.outline { background: var(--c-surface); color: #4f46e5; border: 1px solid #c7d2fe; box-shadow: none; }
 .primary-btn.outline:hover { background: #eef2ff; }
 .spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -1400,7 +1400,7 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 
 /* ═══════ Stepper (4 步) ═══════ */
 .stepper-bar {
-  background: #fff;
+  background: var(--c-surface);
   border-bottom: 1px solid #e6e8ec;
   position: sticky; top: 60px; z-index: 40;
 }
@@ -1444,13 +1444,13 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
   width: 32px; height: 32px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 50%;
-  background: #f1f5f9; color: #94a3b8;
+  background: var(--soft-neutral-bg); color: var(--color-text-tertiary);
   font-weight: 700; font-size: 14px;
   transition: all 0.2s;
   flex-shrink: 0;
 }
 .step-label { font-size: 14px; font-weight: 600; color: #1a1d24; }
-.step-hint { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+.step-hint { font-size: 11px; color: var(--color-text-tertiary); margin-top: 1px; }
 .step.active { background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; }
 .step.active .step-dot { background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #fff; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3); }
 .step.active .step-label { color: #4f46e5; }

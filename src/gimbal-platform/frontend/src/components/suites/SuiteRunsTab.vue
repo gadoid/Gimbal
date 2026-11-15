@@ -330,15 +330,15 @@ void refresh()
 }
 .srt-channel.orch { color: #6d28d9; background: rgb(139 92 246 / 10%); }
 .srt-status { font-size: 12px; }
-.srt-status.ok { color: #15803d; }
-.srt-status.bad { color: #dc2626; }
-.srt-status.run { color: #2f6fed; }
+.srt-status.ok { color: var(--sl-ok); }
+.srt-status.bad { color: var(--sl-bad); }
+.srt-status.run { color: var(--sl-accent); }
 .srt-status.muted { color: rgb(100 116 139); }
 .srt-ops { display: flex; gap: 10px; align-items: center; }
-.srt-ops a { color: #4338ca; text-decoration: none; font-size: 12px; }
+.srt-ops a { color: var(--accent); text-decoration: none; font-size: 12px; }
 .srt-rerun {
   font-size: 12px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
-  color: #b45309; background: rgb(245 158 11 / 8%);
+  color: var(--sl-warn); background: rgb(245 158 11 / 8%);
   border: 1px solid rgb(245 158 11 / 40%);
 }
 .srt-rerun:disabled { opacity: .5; cursor: not-allowed; }
@@ -354,9 +354,9 @@ void refresh()
 .srt-gate-chip {
   font-family: ui-monospace, monospace; font-size: 11.5px;
   padding: 2px 8px; border-radius: 6px;
-  background: rgb(34 197 94 / 10%); color: #15803d;
+  background: rgb(34 197 94 / 10%); color: var(--sl-ok);
 }
-.srt-gate-chip.bad { background: rgb(220 38 38 / 10%); color: #dc2626; }
+.srt-gate-chip.bad { background: rgb(220 38 38 / 10%); color: var(--sl-bad); }
 .srt-gates-sum { font-weight: 600; }
 .srt-units-loading { font-size: 12px; color: rgb(100 116 139); padding: 6px 0; }
 .srt-units { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -364,7 +364,7 @@ void refresh()
 .srt-units td { padding: 4px 8px; border-bottom: 1px solid rgb(100 116 139 / 10%); }
 .srt-unit-link {
   font-family: ui-monospace, monospace; font-size: 11.5px; cursor: pointer;
-  border: none; background: none; color: #4338ca; padding: 0;
+  border: none; background: none; color: var(--accent); padding: 0;
 }
 .muted { color: rgb(100 116 139); }
 </style>

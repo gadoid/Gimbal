@@ -397,7 +397,7 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.8;
   color: #1f2937;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid #e5e7eb;
   border-radius: 4px;
   box-sizing: border-box;
@@ -432,7 +432,7 @@ onMounted(async () => {
   padding: 6px 14px;
   font-size: 12px;
   color: #374151;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid #d1d5db;
   border-radius: 3px;
   cursor: pointer;
@@ -459,9 +459,9 @@ onMounted(async () => {
   cursor: pointer;
   border: 1px solid transparent;
 }
-.cov-full { color: #15803d; background: #e8f5ec; border-color: #bbe3c8; }
+.cov-full { color: var(--sl-ok); background: var(--soft-ok-bg); border-color: #bbe3c8; }
 .cov-part { color: #92400e; background: #fef9c3; border-color: #fde68a; }
-.cov-zero { color: #dc2626; background: #fdecec; border-color: #f6c6c6; }
+.cov-zero { color: var(--sl-bad); background: var(--soft-bad-bg); border-color: #f6c6c6; }
 .cov-none { color: #6b7280; background: #f3f4f6; border-color: #e5e7eb; }
 
 /* 数据集计数可点(linklike 同语言) */
@@ -470,7 +470,7 @@ onMounted(async () => {
   font: inherit;
   font-size: 11px;
   font-weight: 600;
-  color: #2f6fed;
+  color: var(--sl-accent);
   background: none;
   border: none;
   cursor: pointer;
@@ -480,7 +480,7 @@ onMounted(async () => {
 .linklike {
   padding: 0;
   font: inherit;
-  color: #4338ca;
+  color: var(--accent);
   background: none;
   border: none;
   cursor: pointer;
@@ -599,7 +599,7 @@ onMounted(async () => {
 .proc-method.patch { background: #8b5cf6; }
 .proc-service {
   font-size: 11px;
-  color: #4338ca;
+  color: var(--accent);
 }
 .proc-path {
   font-size: 11px;
@@ -638,14 +638,14 @@ onMounted(async () => {
   font-size: 11px;
   line-height: 1.6;
   color: #334155;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
+  background: var(--surface-raised);
+  border: 1px solid var(--soft-neutral-bg);
   border-radius: 4px;
   overflow-x: auto;
 }
 .req-detail summary {
   font-size: 11px;
-  color: #4338ca;
+  color: var(--accent);
   cursor: pointer;
   user-select: none;
 }

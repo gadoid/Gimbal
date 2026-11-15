@@ -572,7 +572,7 @@ watch(executionId, (next, prev) => {
 .fold-members { display: flex; flex-direction: column; gap: 2px; }
 .fold-member {
   display: flex; gap: 8px; text-align: left; font-size: 12px;
-  border: none; background: #f8fafc; border-radius: 6px; padding: 4px 8px;
+  border: none; background: var(--surface-raised); border-radius: 6px; padding: 4px 8px;
   cursor: pointer;
 }
 .fold-member:hover { background: #eff6ff; }
@@ -590,7 +590,7 @@ watch(executionId, (next, prev) => {
 .kv-table .v { word-break: break-all; }
 .section-title { font-size: 12px; color: #71717a; margin-bottom: 6px; }
 .payload-pre {
-  font-size: 11px; background: #f8fafc; border: 1px solid #e2e8f0;
+  font-size: 11px; background: var(--surface-raised); border: 1px solid var(--color-border-tertiary);
   border-radius: 6px; padding: 8px; overflow-x: auto; max-height: 50vh;
 }
 .state { padding: 24px; text-align: center; color: #71717a; }

@@ -145,8 +145,8 @@ async function submit(): Promise<void> {
 .ats-item:hover { background: rgb(100 116 139 / 8%); }
 .ats-item.on { border-color: var(--accent-soft-border); background: var(--accent-soft); }
 .ats-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ats-empty { padding: 12px 4px; font-size: 13px; color: var(--c-text-secondary, #64748b); }
-.muted { color: var(--c-text-tertiary, #94a3b8); font-size: 12px; }
+.ats-empty { padding: 12px 4px; font-size: 13px; color: var(--c-text-secondary, var(--color-text-secondary)); }
+.muted { color: var(--c-text-tertiary, var(--color-text-tertiary)); font-size: 12px; }
 .linklike {
   background: none; border: none; padding: 0; cursor: pointer;
   color: var(--c-accent, #2563eb); text-decoration: underline;

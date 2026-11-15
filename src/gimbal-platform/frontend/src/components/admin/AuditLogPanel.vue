@@ -167,53 +167,53 @@ onMounted(() => { void load() })
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 11px;
-  border: 1px solid var(--color-border-tertiary, #e1e5eb);
-  background: #f1f5f9;
+  border: 1px solid var(--color-border-tertiary, var(--sl-line));
+  background: var(--soft-neutral-bg);
 }
 .audit-filter {
   height: 26px;
   max-width: 220px;
   padding: 0 6px;
-  border: 1px solid var(--color-border-tertiary, #e1e5eb);
+  border: 1px solid var(--color-border-tertiary, var(--sl-line));
   border-radius: 6px;
-  background: #fff;
+  background: var(--c-surface);
   font-size: 11.5px;
   color: #5a6273;
   cursor: pointer;
 }
-.audit-filter:hover:not(:disabled) { color: #2f6fed; border-color: #2f6fed; }
+.audit-filter:hover:not(:disabled) { color: var(--sl-accent); border-color: var(--sl-accent); }
 .audit-filter:disabled { color: #c4c9d2; cursor: default; }
 .audit-refresh {
   padding: 2px 10px;
-  border: 1px solid var(--color-border-tertiary, #e1e5eb);
+  border: 1px solid var(--color-border-tertiary, var(--sl-line));
   border-radius: 6px;
-  background: #fff;
+  background: var(--c-surface);
   font-size: 11.5px;
   color: #5a6273;
   cursor: pointer;
 }
-.audit-refresh:hover:not(:disabled) { color: #2f6fed; border-color: #2f6fed; }
+.audit-refresh:hover:not(:disabled) { color: var(--sl-accent); border-color: var(--sl-accent); }
 .audit-refresh:disabled { color: #c4c9d2; cursor: default; }
 .audit-detail-text { font-size: 12px; color: #334155; }
 .audit-raw { margin-top: 4px; }
 .audit-raw summary {
   cursor: pointer;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--color-text-tertiary);
   user-select: none;
 }
-.audit-raw summary:hover { color: #2f6fed; }
+.audit-raw summary:hover { color: var(--sl-accent); }
 .audit-raw pre {
   margin: 4px 0 0;
   padding: 6px 8px;
-  background: #f8fafc;
+  background: var(--surface-raised);
   border-radius: 6px;
   font-family: ui-monospace, monospace;
   font-size: 10.5px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   white-space: pre-wrap;
   word-break: break-all;
 }
-.muted { color: #64748b; }
+.muted { color: var(--color-text-secondary); }
 .mono { font-family: ui-monospace, monospace; font-size: 11.5px; }
 </style>

@@ -328,50 +328,50 @@ function onSlotCandidateChange(ev: Event) {
 <style scoped>
 .dsg { display: flex; flex-direction: column; gap: 8px; }
 .dsg-top, .dsg-foot { display: flex; align-items: center; gap: 8px; }
-.dsg-stats { font-size: 11px; color: var(--color-text-secondary, #64748b); }
+.dsg-stats { font-size: 11px; color: var(--color-text-secondary, var(--color-text-secondary)); }
 .flex-1 { flex: 1; }
 
 .dsg-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   padding: 5px 10px; font-size: 11px; border-radius: 6px;
-  color: var(--color-text-secondary, #475569); background: #f8fafc; border: 1px solid var(--color-border-tertiary, #e2e8f0);
+  color: var(--color-text-secondary, var(--color-text-strong)); background: var(--surface-raised); border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary));
 }
-.dsg-bar.warn { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.dsg-bar.warn { color: var(--sl-warn); background: #fffbeb; border-color: #fde68a; }
 
-.dsg-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--color-border-tertiary, #e2e8f0); border-radius: 8px; }
+.dsg-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); border-radius: 8px; }
 .dsg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
-.dsg-table th, .dsg-table td { border-bottom: 1px solid var(--color-border-tertiary, #e2e8f0); padding: 4px 8px; text-align: left; }
-.dsg-table thead th, .dsg-table thead td { background: #fff; position: sticky; z-index: 2; }
+.dsg-table th, .dsg-table td { border-bottom: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); padding: 4px 8px; text-align: left; }
+.dsg-table thead th, .dsg-table thead td { background: var(--c-surface); position: sticky; z-index: 2; }
 .dsg-desc-row th, .dsg-desc-row td { top: 0; }
 /* 字段行吸在描述行之下(描述行 ~28px) */
 .dsg-table thead tr:nth-child(2) th { top: 28px; }
 .dsg-gutter, .dsg-gutter-2 {
-  position: sticky; left: 0; background: #fff;
-  min-width: 64px; width: 64px; font-weight: 600; color: var(--color-text-secondary, #475569);
+  position: sticky; left: 0; background: var(--c-surface);
+  min-width: 64px; width: 64px; font-weight: 600; color: var(--color-text-secondary, var(--color-text-strong));
 }
 .dsg-desc-row .dsg-gutter { z-index: 4; }
 .dsg-gutter-2 { z-index: 3; }
-.dsg-desc { color: var(--color-text-tertiary, #94a3b8); font-weight: 400; font-size: 10.5px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsg-desc { color: var(--color-text-tertiary, var(--color-text-tertiary)); font-weight: 400; font-size: 10.5px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsg-colhead { white-space: nowrap; }
 .dsg-name { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 600; color: var(--color-text-primary, #0f172a); }
 .dsg-name.slot { color: #1d4ed8; }
-.dsg-ref { margin-left: 4px; padding: 0 4px; font-size: 9px; border-radius: 3px; background: #eef2ff; color: #4338ca; }
+.dsg-ref { margin-left: 4px; padding: 0 4px; font-size: 9px; border-radius: 3px; background: #eef2ff; color: var(--accent); }
 .dsg-kind { margin-left: 4px; padding: 0 4px; font-size: 9px; border-radius: 3px; background: rgb(37 99 235 / 8%); color: #1d4ed8; }
 .dsg-lock { margin-left: 4px; border: 0; background: none; font-size: 10px; color: var(--accent, #4f46e5); cursor: pointer; padding: 0; }
 .dsg-lock:hover { text-decoration: underline; }
 
-.dsg-baseline th, .dsg-baseline td { background: #f8fafc; color: var(--color-text-secondary, #475569); }
+.dsg-baseline th, .dsg-baseline td { background: var(--surface-raised); color: var(--color-text-secondary, var(--color-text-strong)); }
 .dsg-baseline-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
 .dsg-chip { padding: 0 5px; font-size: 9px; border-radius: 3px; background: #fce7f3; color: #be185d; font-weight: 700; }
 
 .dsg-cell { max-width: 220px; }
 .dsg-cell.override-empty { box-shadow: inset 3px 0 0 #ef4444; }
 .dsg-cell.override-empty :deep(input) { color: #b91c1c; }
-select.dsg-slot-add, .dsg-cell select { height: 26px; font-size: 11.5px; border: 1px solid var(--color-border-tertiary, #e2e8f0); border-radius: 6px; background: #fff; color: inherit; }
+select.dsg-slot-add, .dsg-cell select { height: 26px; font-size: 11.5px; border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); border-radius: 6px; background: var(--c-surface); color: inherit; }
 
 .dsg-rowhead { display: flex; align-items: center; gap: 4px; }
-.dsg-del { border: 0; background: none; color: var(--color-text-tertiary, #94a3b8); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
-.dsg-del:hover { color: #dc2626; }
-.dsg-norow { color: var(--color-text-tertiary, #94a3b8); text-align: center; font-size: 11px; padding: 14px 8px !important; }
-.dsg-hint { font-size: 10.5px; color: var(--color-text-tertiary, #94a3b8); }
+.dsg-del { border: 0; background: none; color: var(--color-text-tertiary, var(--color-text-tertiary)); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+.dsg-del:hover { color: var(--sl-bad); }
+.dsg-norow { color: var(--color-text-tertiary, var(--color-text-tertiary)); text-align: center; font-size: 11px; padding: 14px 8px !important; }
+.dsg-hint { font-size: 10.5px; color: var(--color-text-tertiary, var(--color-text-tertiary)); }
 </style>

@@ -249,37 +249,37 @@ onUnmounted(stop)            // 卸载即断流(§8 连接预算)
 </template>
 
 <style scoped>
-.logs-panel { border: 1px solid var(--border, #e2e8f0); border-radius: 8px; overflow: hidden; }
+.logs-panel { border: 1px solid var(--border, var(--color-border-tertiary)); border-radius: 8px; overflow: hidden; }
 .logs-toolbar {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-  border-bottom: 1px solid var(--border, #e2e8f0); background: #f8fafc; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border, var(--color-border-tertiary)); background: var(--surface-raised); flex-wrap: wrap;
 }
 .logs-title { font-size: 13px; font-weight: 600; }
 .logs-select, .logs-input {
-  font-size: 12px; padding: 2px 6px; border: 1px solid #cbd5e1;
-  border-radius: 4px; background: #fff; height: 24px;
+  font-size: 12px; padding: 2px 6px; border: 1px solid var(--color-border-secondary);
+  border-radius: 4px; background: var(--c-surface); height: 24px;
 }
 .logs-input { width: 130px; }
 .logs-state { font-size: 11px; padding: 1px 8px; border-radius: 10px; }
-.st-live { background: #dcfce7; color: #15803d; }
+.st-live { background: #dcfce7; color: var(--sl-ok); }
 .st-connecting { background: #fef9c3; color: #a16207; }
-.st-done { background: #e0e7ff; color: #4338ca; }
+.st-done { background: #e0e7ff; color: var(--accent); }
 .st-failed, .st-idle { background: #fee2e2; color: #b91c1c; }
 .logs-count { font-size: 11px; margin-left: auto; }
 /* 300px → 480px(2026-11-12 +60%):实时日志升默认 tab,加大可视窗口 */
-.logs-scroll { height: 480px; overflow-y: auto; padding: 4px 0; background: #fff; }
+.logs-scroll { height: 480px; overflow-y: auto; padding: 4px 0; background: var(--c-surface); }
 .log-row {
   /* S7:行高恒定(窗口化渲染的前提)—— 改此值须同步 script 里 ROW_H */
   display: flex; gap: 8px; padding: 0 10px; font-size: 12px;
   height: 22px; line-height: 22px; white-space: nowrap; align-items: baseline;
 }
-.log-row:hover { background: #f1f5f9; }
-.log-ts { color: #94a3b8; flex: none; width: 86px; }
+.log-row:hover { background: var(--soft-neutral-bg); }
+.log-ts { color: var(--color-text-tertiary); flex: none; width: 86px; }
 .log-lv { flex: none; width: 64px; font-weight: 600; }
-.lv-warning .log-lv { color: #b45309; }
+.lv-warning .log-lv { color: var(--sl-warn); }
 .lv-error .log-lv, .lv-critical .log-lv { color: #b91c1c; }
-.lv-success .log-lv { color: #15803d; }
-.lv-info .log-lv, .lv-debug .log-lv, .lv-trace .log-lv { color: #475569; }
+.lv-success .log-lv { color: var(--sl-ok); }
+.lv-info .log-lv, .lv-debug .log-lv, .lv-trace .log-lv { color: var(--color-text-strong); }
 .log-cat {
   flex: none; font-size: 11px; background: #eff6ff; color: #1d4ed8;
   padding: 0 6px; border-radius: 4px;

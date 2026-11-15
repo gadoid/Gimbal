@@ -643,11 +643,11 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 .sm-meta { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
 .sm-draft-chip {
   font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
-  color: #b45309; background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%);
+  color: var(--sl-warn); background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%);
 }
 .sm-pub-chip {
   font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
-  color: #15803d; background: rgb(34 197 94 / 10%); border: 1px solid rgb(34 197 94 / 40%);
+  color: var(--sl-ok); background: rgb(34 197 94 / 10%); border: 1px solid rgb(34 197 94 / 40%);
 }
 .sm-head-actions { display: flex; align-items: center; gap: 8px; }
 /* 运行主按钮(原型 20):44px 双行 indigo,副行浅 indigo */
@@ -655,7 +655,7 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
   display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
   gap: 1px; box-sizing: border-box; height: 44px; padding: 0 18px;
   border: none; border-radius: 6px; cursor: pointer; line-height: 1.2;
-  color: #fff; background: #4338ca;
+  color: #fff; background: var(--accent);
 }
 .sm-run:hover:not(:disabled) { background: var(--accent-hover); }
 .sm-run:disabled { opacity: .5; cursor: not-allowed; }
@@ -663,7 +663,7 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 .sm-run-sub { font-size: 11px; color: var(--accent-soft-border); }
 .sm-more {
   width: 36px; height: 36px; border-radius: 6px; cursor: pointer;
-  border: 1px solid var(--color-border-tertiary); background: #fff; color: inherit;
+  border: 1px solid var(--color-border-tertiary); background: var(--c-surface); color: inherit;
   font-size: 15px;
 }
 .sm-banner {
@@ -675,20 +675,20 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
   border: 1px solid rgb(59 130 246 / 35%);
 }
 .sm-banner.warn {
-  color: #b45309; background: rgb(245 158 11 / 8%);
+  color: var(--sl-warn); background: rgb(245 158 11 / 8%);
   border: 1px solid rgb(245 158 11 / 40%);
 }
 .sm-banner.bad {
-  color: #dc2626; background: rgb(220 38 38 / 6%);
+  color: var(--sl-bad); background: rgb(220 38 38 / 6%);
   border: 1px solid rgb(220 38 38 / 35%);
 }
 .sm-banner.draft {
-  color: #475569; background: rgb(100 116 139 / 6%);
+  color: var(--color-text-strong); background: rgb(100 116 139 / 6%);
   border: 1px solid rgb(100 116 139 / 30%);
 }
 .sm-banner-ops button, .sm-banner.draft button {
   font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
-  color: #4338ca; background: var(--accent-soft);
+  color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .sm-tabs { display: flex; flex-direction: column; gap: 12px; }
@@ -703,7 +703,7 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
   font-size: 13px; color: var(--color-text-secondary);
 }
 .sm-tabs :deep([role='tab'][data-state='active']) {
-  border-bottom: 2px solid #4338ca; font-weight: 600;
+  border-bottom: 2px solid var(--accent); font-weight: 600;
   color: var(--color-text-primary); box-shadow: none;
 }
 .sm-pane { display: flex; flex-direction: column; gap: 12px; }
@@ -729,14 +729,14 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 }
 .sm-menu button:hover:not(:disabled) { background: rgb(59 130 246 / 8%); }
 .sm-menu button:disabled { opacity: .45; cursor: not-allowed; }
-.sm-menu .danger { color: var(--sl-bad, #dc2626); }
+.sm-menu .danger { color: var(--sl-bad, var(--sl-bad)); }
 .sm-loading, .sm-empty { padding: 40px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
 .btn-primary {
   padding: 7px 16px; font-size: 13px; font-weight: 600; border: none;
-  border-radius: 8px; cursor: pointer; color: #fff; background: #4338ca;
+  border-radius: 8px; cursor: pointer; color: #fff; background: var(--accent);
 }
 .btn-secondary {
   padding: 7px 14px; font-size: 13px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--accent-soft-border); color: #4338ca; background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border); color: var(--accent); background: var(--accent-soft);
 }
 </style>

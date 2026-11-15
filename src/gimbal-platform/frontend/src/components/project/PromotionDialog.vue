@@ -158,22 +158,22 @@ async function submit(): Promise<void> {
 
 <style scoped>
 .overlay { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.dialog { background: #fff; border-radius: 10px; width: min(640px, 92vw); max-height: 84vh; overflow: auto; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.dialog { background: var(--c-surface); border-radius: 10px; width: min(640px, 92vw); max-height: 84vh; overflow: auto; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
 .d-head { display: flex; align-items: center; justify-content: space-between; }
 .d-head h3 { margin: 0; font-size: 1rem; }
-.x { border: none; background: none; cursor: pointer; font-size: 0.9rem; color: #64748b; }
-.hint { color: #475569; font-size: 0.85rem; margin: 0; }
+.x { border: none; background: none; cursor: pointer; font-size: 0.9rem; color: var(--color-text-secondary); }
+.hint { color: var(--color-text-strong); font-size: 0.85rem; margin: 0; }
 .field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
-.field select { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.field select { padding: 6px 8px; border: 1px solid var(--color-border-secondary); border-radius: 6px; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .tbl th, .tbl td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eef2f7; }
-.ok { color: #15803d; font-size: 0.85rem; }
-.warn { color: #b45309; font-size: 0.85rem; }
+.ok { color: var(--sl-ok); font-size: 0.85rem; }
+.warn { color: var(--sl-warn); font-size: 0.85rem; }
 .warn ul { margin: 0.25rem 0 0 1rem; padding: 0; }
-.err { color: #dc2626; font-size: 0.82rem; }
-.muted { color: #94a3b8; font-size: 0.78rem; margin: 0; }
+.err { color: var(--sl-bad); font-size: 0.82rem; }
+.muted { color: var(--color-text-tertiary); font-size: 0.78rem; margin: 0; }
 .d-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
-.btn { border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.35rem 0.9rem; background: #fff; cursor: pointer; font-size: 0.85rem; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.35rem 0.9rem; background: var(--c-surface); cursor: pointer; font-size: 0.85rem; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 </style>

@@ -91,20 +91,20 @@ import ListPage from '@/layouts/ListPage.vue'
   display: inline-flex; align-items: center;
   padding: 3px 10px; border-radius: 999px;
   font-size: 11px; font-weight: 600;
-  background: #FEF3C7; color: #B45309;
+  background: #FEF3C7; color: var(--sl-warn);
 }
 
 .deferred-notice {
   margin-top: 16px;
   padding: 14px 16px;
-  background: #FFFFFF; border: 1px solid #E1E5EB; border-left: 3px solid #B45309;
+  background: var(--c-surface); border: 1px solid var(--sl-line); border-left: 3px solid var(--sl-warn);
   border-radius: 10px;
 }
-.notice-title { font-size: 13px; font-weight: 700; color: #10151C; }
+.notice-title { font-size: 13px; font-weight: 700; color: var(--sl-ink); }
 .notice-body {
   margin: 8px 0 0; font-size: 12px; color: #5B6472; line-height: 1.8;
 }
-.notice-body strong { color: #B45309; }
+.notice-body strong { color: var(--sl-warn); }
 .notice-body code {
   font-family: var(--font-mono, monospace); font-size: 11px;
   background: #EEF0F3; border-radius: 4px; padding: 0 5px;
@@ -113,10 +113,10 @@ import ListPage from '@/layouts/ListPage.vue'
 .ana-card {
   margin-top: 14px;
   padding: 14px 16px;
-  background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px;
+  background: var(--c-surface); border: 1px solid var(--sl-line); border-radius: 10px;
   display: flex; flex-direction: column; gap: 10px;
 }
-.card-title { font-size: 13px; font-weight: 700; color: #10151C; }
+.card-title { font-size: 13px; font-weight: 700; color: var(--sl-ink); }
 .card-dim { font-size: 11px; font-weight: 400; color: #8B93A1; }
 
 /* 已在别处(通过族) */
@@ -126,24 +126,24 @@ import ListPage from '@/layouts/ListPage.vue'
 }
 .moved-tag {
   flex: none; font-size: 10px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
-  background: #E4F5EA; color: #15803D;
+  background: #E4F5EA; color: var(--sl-ok);
 }
-.moved-body { flex: 1; min-width: 0; font-size: 12px; color: #10151C; line-height: 1.7; }
+.moved-body { flex: 1; min-width: 0; font-size: 12px; color: var(--sl-ink); line-height: 1.7; }
 .moved-dim { color: #5B6472; }
-.moved-link { flex: none; font-size: 12px; color: #2F6FED; white-space: nowrap; }
+.moved-link { flex: none; font-size: 12px; color: var(--sl-accent); white-space: nowrap; }
 .moved-link:hover { text-decoration: underline; }
 
 /* 需落库(待办琥珀族) */
 .wait-row {
   display: flex; align-items: baseline; gap: 10px;
-  padding: 10px 12px; border: 1px dashed #E1E5EB; border-radius: 8px;
+  padding: 10px 12px; border: 1px dashed var(--sl-line); border-radius: 8px;
 }
 .wait-tag {
   flex: none; font-size: 10px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
-  background: #FEF3C7; color: #B45309;
+  background: #FEF3C7; color: var(--sl-warn);
 }
 .wait-body { flex: 1; min-width: 0; }
-.wait-name { font-size: 12.5px; font-weight: 600; color: #10151C; }
+.wait-name { font-size: 12.5px; font-weight: 600; color: var(--sl-ink); }
 .wait-desc { margin: 4px 0 0; font-size: 11.5px; color: #5B6472; line-height: 1.7; }
 
 .mono { font-family: var(--font-mono, monospace); }

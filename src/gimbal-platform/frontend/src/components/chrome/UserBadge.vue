@@ -183,13 +183,13 @@ async function onLogout() {
   padding: 0 6px;
   border-radius: 999px;
   background: #fef3c7;
-  color: #b45309;
+  color: var(--sl-warn);
 }
 .role-chip {
   padding: 0 6px;
   border-radius: 999px;
   font-size: 10px;
   background: rgba(255, 255, 255, 0.12);
-  color: #cbd5e1;
+  color: var(--color-border-secondary);
 }
 </style>

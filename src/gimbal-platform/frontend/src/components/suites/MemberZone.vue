@@ -394,7 +394,7 @@ function onDrop(zone: 'before' | 'after', ev: DragEvent): void {
   border: 1px dashed rgb(100 116 139 / 45%); border-radius: 10px;
   padding: 8px 12px; display: flex; flex-direction: column; gap: 6px;
 }
-.mz-bracket.dragover { border-color: #4338ca; background: var(--accent-soft); }
+.mz-bracket.dragover { border-color: var(--accent); background: var(--accent-soft); }
 .mz-bracket-title { margin: 0; font-size: 12.5px; font-weight: 600; }
 .mz-bracket-hint { margin-left: 8px; font-weight: 400; font-size: 11.5px; color: rgb(100 116 139); }
 .mz-drop { margin: 0; font-size: 12px; color: rgb(100 116 139 / 80%); }
@@ -412,7 +412,7 @@ function onDrop(zone: 'before' | 'after', ev: DragEvent): void {
 .mz-chain-num {
   flex: none; width: 22px; height: 22px; margin-top: 6px;
   display: grid; place-items: center; font-size: 11.5px;
-  border: 1px solid var(--accent-soft-border); border-radius: 999px; color: #4338ca;
+  border: 1px solid var(--accent-soft-border); border-radius: 999px; color: var(--accent);
   position: relative;
 }
 .mz-chain-step:not(:last-child) .mz-chain-num::after {
@@ -444,7 +444,7 @@ function onDrop(zone: 'before' | 'after', ev: DragEvent): void {
 }
 .mz-dag-cells { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .mz-dag-layer:not(:last-child) { padding-bottom: 8px; border-bottom: 1px dashed rgb(100 116 139 / 25%); }
-.mz-cycle { margin: 0; font-size: 12px; color: #b45309; }
+.mz-cycle { margin: 0; font-size: 12px; color: var(--sl-warn); }
 
 .mz-summary {
   margin: 0; font-size: 12px; color: rgb(100 116 139);

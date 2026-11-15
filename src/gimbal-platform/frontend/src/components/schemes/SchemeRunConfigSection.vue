@@ -263,7 +263,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 <style scoped>
 /* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
-  background: #fff; border: 1px solid var(--color-border-tertiary);
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
   border-radius: 8px; padding: 12px 16px;
   display: flex; flex-direction: column; gap: 10px;
 }
@@ -271,7 +271,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .zone-head { display: flex; align-items: center; gap: 10px; }
 /* S7.3 生效预览入口(zone-head 行尾小按钮) */
 .preview-btn {
-  border: 1px solid #cbd5e1; border-radius: 6px; background: #fff;
+  border: 1px solid var(--color-border-secondary); border-radius: 6px; background: var(--c-surface);
   padding: 2px 12px; font-size: 12px; cursor: pointer; color: #334155;
 }
 .preview-btn:hover { border-color: #2563eb; color: #2563eb; }
@@ -289,7 +289,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .bind-row {
   display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 220px);
   gap: 8px; align-items: center; padding: 8px 0;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--soft-neutral-bg);
 }
 .bind-row:last-child { border-bottom: none; }
 .bind-svc { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -310,7 +310,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .bind-alias {
   border: 1px solid var(--color-border-secondary); border-radius: 4px;
   padding: 4px 8px; font-size: 13px; min-width: 0;
-  background: #fff; color: var(--color-text-primary);
+  background: var(--c-surface); color: var(--color-text-primary);
 }
 .bind-alias:focus {
   border-color: var(--accent); outline: none;
@@ -327,7 +327,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .total-chip {
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
   padding: 1px 6px; border-radius: 3px;
-  color: var(--color-text-secondary); background: #f1f5f9;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg);
 }
 .total-chip.total-over { color: #b91c1c; background: #fef2f2; }
 .total-warn { margin: 0; color: #b91c1c; font-size: 12px; }
@@ -340,7 +340,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
   border-radius: 8px; background: #F6F8FC;
 }
 .exec-pointer .hint { margin: 0; }
-.pointer-link { color: #2F6FED; font-size: 12px; text-decoration: none; width: fit-content; }
+.pointer-link { color: var(--sl-accent); font-size: 12px; text-decoration: none; width: fit-content; }
 .pointer-link:hover { text-decoration: underline; }
 .legacy-note { margin: 0; font-size: 11.5px; }
 @media (max-width: 1280px) { .bind-row { grid-template-columns: 1fr; } }

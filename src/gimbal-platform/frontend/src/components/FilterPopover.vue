@@ -229,16 +229,16 @@ function resetFilters() {
   padding: 6px 12px;
   font-size: 12px;
   color: #374151;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid #d1d5db;
   border-radius: 6px;
   cursor: pointer;
 }
 .fp-trigger:hover { color: #111827; border-color: #9ca3af; }
 .fp-trigger.active {
-  color: #2f6fed;
-  border-color: #2f6fed;
-  background: #e7efff;
+  color: var(--sl-accent);
+  border-color: var(--sl-accent);
+  background: var(--soft-accent-bg);
 }
 
 .filter-panel {
@@ -250,11 +250,11 @@ function resetFilters() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--color-border-tertiary, #e1e5eb);
+  border-bottom: 1px solid var(--color-border-tertiary, var(--sl-line));
 }
 
 .filter-panel-title {
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-text-secondary, var(--color-text-secondary));
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
@@ -265,7 +265,7 @@ function resetFilters() {
   padding: 0;
   border: none;
   background: none;
-  color: #2f6fed;
+  color: var(--sl-accent);
   font-size: 12px;
   cursor: pointer;
 }
@@ -282,7 +282,7 @@ function resetFilters() {
 
 .fp-item { display: flex; flex-direction: column; gap: 4px; }
 .fp-label {
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-text-secondary, var(--color-text-secondary));
   font-size: 11px;
   font-weight: 600;
 }
@@ -302,17 +302,17 @@ function resetFilters() {
   padding: 2px 8px;
   font-size: 11.5px;
   color: #374151;
-  border: 1px solid #e1e5eb;
+  border: 1px solid var(--sl-line);
   border-radius: 10px;
   cursor: pointer;
   user-select: none;
 }
 .fp-check:has(input:checked) {
-  color: #2f6fed;
-  border-color: #2f6fed;
-  background: #e7efff;
+  color: var(--sl-accent);
+  border-color: var(--sl-accent);
+  background: var(--soft-accent-bg);
 }
-.fp-check input { accent-color: #2f6fed; margin: 0; }
+.fp-check input { accent-color: var(--sl-accent); margin: 0; }
 
 /* facets 计数徽标:弱化的次级信息(池兜底时不渲染) */
 .fp-count {
@@ -324,7 +324,7 @@ function resetFilters() {
 .fp-check:has(input:checked) .fp-count { color: #6f9bff; }
 
 /* 分段钮(更新时间) */
-.seg { display: inline-flex; border: 1px solid #e1e5eb; border-radius: 6px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 6px; overflow: hidden; }
 .seg-btn {
   padding: 4px 10px;
   font-size: 11.5px;
@@ -333,7 +333,7 @@ function resetFilters() {
   cursor: pointer;
   color: #5a6273;
 }
-.seg-btn.active { background: #2f6fed; color: #fff; font-weight: 600; }
+.seg-btn.active { background: var(--sl-accent); color: #fff; font-weight: 600; }
 
 .filter-badge {
   display: inline-flex;
@@ -345,7 +345,7 @@ function resetFilters() {
   color: white;
   font-size: 10px;
   font-weight: 700;
-  background: #2f6fed;
+  background: var(--sl-accent);
   border-radius: 999px;
 }
 
@@ -355,16 +355,16 @@ function resetFilters() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-top: 1px dashed var(--color-border-tertiary, #e1e5eb);
+  border-top: 1px dashed var(--color-border-tertiary, var(--sl-line));
 }
 
 .filter-foot-meta {
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-text-secondary, var(--color-text-secondary));
   font-size: 11.5px;
 }
 
 .filter-foot-meta strong {
-  color: #2f6fed;
+  color: var(--sl-accent);
   font-weight: 700;
 }
 
@@ -373,7 +373,7 @@ function resetFilters() {
   font-size: 12px;
   font-weight: 600;
   color: #fff;
-  background: #2f6fed;
+  background: var(--sl-accent);
   border: none;
   border-radius: 6px;
   cursor: pointer;

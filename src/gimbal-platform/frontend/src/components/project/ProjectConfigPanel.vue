@@ -392,25 +392,25 @@ onMounted(async () => {
 .panel { display: flex; flex-direction: column; gap: 1.4rem; }
 section { display: flex; flex-direction: column; gap: 0.45rem; }
 h2 { margin: 0; font-size: 0.95rem; color: #1e293b; }
-.hint { margin: 0; color: #64748b; font-size: 0.8rem; }
+.hint { margin: 0; color: var(--color-text-secondary); font-size: 0.8rem; }
 .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 select, .svc-input { padding: 6px 8px; border-radius: 8px; border: 1px solid rgb(100 116 139 / 30%); background: transparent; font-size: 0.85rem; }
 .svc-input { max-width: 260px; }
-.btn { border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.35rem 0.9rem; background: #fff; cursor: pointer; font-size: 0.85rem; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.35rem 0.9rem; background: var(--c-surface); cursor: pointer; font-size: 0.85rem; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.err { color: #dc2626; font-size: 0.8rem; margin: 0; }
-.muted { color: #94a3b8; font-size: 0.78rem; }
+.err { color: var(--sl-bad); font-size: 0.8rem; margin: 0; }
+.muted { color: var(--color-text-tertiary); font-size: 0.78rem; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .tbl th, .tbl td { text-align: left; padding: 0.3rem 0.5rem;
                    border-bottom: 1px solid #eef2f7; }
 .mono { font-family: var(--font-mono, monospace); }
 .ok { color: #16a34a; font-size: 0.8rem; }
-.slot-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.slot-card { border: 1px solid var(--color-border-tertiary); border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .slot-card header { display: flex; align-items: baseline; gap: 0.6rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.chip { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; border: 1px solid #e2e8f0; }
-.chip.ok { background: rgb(34 197 94 / 8%); color: #15803d; border-color: rgb(34 197 94 / 35%); }
-.chip.miss { background: rgb(245 158 11 / 10%); color: #b45309; border-color: rgb(245 158 11 / 40%); }
+.chip { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--color-border-tertiary); }
+.chip.ok { background: rgb(34 197 94 / 8%); color: var(--sl-ok); border-color: rgb(34 197 94 / 35%); }
+.chip.miss { background: rgb(245 158 11 / 10%); color: var(--sl-warn); border-color: rgb(245 158 11 / 40%); }
 .chip.proj { background: rgb(37 99 235 / 8%); color: #1d4ed8; border-color: rgb(37 99 235 / 35%); }
 </style>

@@ -190,12 +190,12 @@ function insertValue(e: ConstantEntry): void {
   flex-shrink: 0;
 }
 .cp-badge.generator { background: #f3e8ff; color: #6b21a8; }
-.cp-badge.literal { background: #f1f5f9; color: #334155; }
+.cp-badge.literal { background: var(--soft-neutral-bg); color: #334155; }
 .cp-key,
 .cp-value {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--c-text-secondary, #64748b);
+  color: var(--c-text-secondary, var(--color-text-secondary));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

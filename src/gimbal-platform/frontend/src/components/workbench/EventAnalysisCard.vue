@@ -64,7 +64,7 @@ onMounted(async () => {
 .chead { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; }
 .chead-icon { display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px; }
-.ci-gold { background: #fef3c7; color: #b45309; }
+.ci-gold { background: #fef3c7; color: var(--sl-warn); }
 .chead-title { font-weight: 600; font-size: 13px; }
 .chead-count { font-size: 12px; color: #71717a; }
 .chead-spacer { flex: 1; }

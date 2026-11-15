@@ -77,6 +77,6 @@ onMounted(async () => {
   padding: 0 6px;
   border-radius: 999px;
   background: #fef3c7;
-  color: #b45309;
+  color: var(--sl-warn);
 }
 </style>

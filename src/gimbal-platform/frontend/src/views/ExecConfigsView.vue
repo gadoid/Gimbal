@@ -655,7 +655,7 @@ onMounted(async () => {
   padding: 0 10px;
   font-size: 13px;
   color: var(--sl-ink);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 6px;
   outline: none;

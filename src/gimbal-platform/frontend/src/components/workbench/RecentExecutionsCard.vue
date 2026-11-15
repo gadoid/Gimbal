@@ -111,7 +111,7 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .ex-counts { color: var(--sl-ink-2); white-space: nowrap; }
-.ex-counts em { font-style: normal; color: #cbd5e1; padding: 0 1px; }
+.ex-counts em { font-style: normal; color: var(--color-border-secondary); padding: 0 1px; }
 </style>
 
 <style src="@/styles/status-colors.css"></style>

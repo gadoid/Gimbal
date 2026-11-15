@@ -31,5 +31,5 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.redirecting { padding: 2rem 1.5rem; color: #94a3b8; }
+.redirecting { padding: 2rem 1.5rem; color: var(--color-text-tertiary); }
 </style>

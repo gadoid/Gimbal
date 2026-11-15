@@ -541,7 +541,7 @@ onMounted(async () => {
 .board-node { border-radius: 10px; font-size: 12px; cursor: grab; }
 .board-node.is-plain {
   padding: 10px;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
 }
@@ -618,7 +618,7 @@ onMounted(async () => {
 .svc-kv-list { margin: 0; }
 .board-card {
   padding: 8px 10px;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 8px;
   font-size: 11.5px;
@@ -633,7 +633,7 @@ onMounted(async () => {
   font: inherit;
   font-size: 11.5px;
   color: var(--sl-ink);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 6px;
   outline: none;
@@ -645,7 +645,7 @@ onMounted(async () => {
   font: inherit;
   font-size: 11.5px;
   color: var(--sl-ink);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 6px;
   outline: none;

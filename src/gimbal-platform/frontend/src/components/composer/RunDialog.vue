@@ -118,7 +118,7 @@ void emit
 
 .run-dialog {
   width: 720px; max-width: 92vw; max-height: 88vh;
-  background: #fff; border-radius: 16px;
+  background: var(--c-surface); border-radius: 16px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
   display: flex; flex-direction: column;
   animation: slideUp 0.25s ease-out;
@@ -132,7 +132,7 @@ void emit
 }
 .run-header h2 { margin: 0 0 4px; font-size: 20px; }
 .run-header .muted { font-size: 13px; color: #5a6273; }
-.run-header .muted code { font-family: var(--font-mono); background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+.run-header .muted code { font-family: var(--font-mono); background: var(--soft-neutral-bg); padding: 1px 4px; border-radius: 3px; }
 
 .icon-btn {
   width: 32px; height: 32px;

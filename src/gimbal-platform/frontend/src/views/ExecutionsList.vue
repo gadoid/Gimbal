@@ -594,7 +594,7 @@ onUnmounted(() => {
 .kpi-band {
   display: flex; flex-wrap: wrap;
   margin-top: 14px;
-  background: #FFFFFF; border: 1px solid #E1E5EB; border-radius: 10px;
+  background: var(--c-surface); border: 1px solid var(--sl-line); border-radius: 10px;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
 .kpi {
@@ -605,17 +605,17 @@ onUnmounted(() => {
 .kpi + .kpi { border-left: 1px solid #EEF0F3; }
 .kpi-num {
   font-family: var(--font-mono, monospace); font-size: 22px; font-weight: 700;
-  color: #10151C; line-height: 1.2;
+  color: var(--sl-ink); line-height: 1.2;
 }
 .kpi-label { font-size: 11px; color: #5B6472; }
 .kpi-sub { font-size: 10.5px; color: #8B93A1; }
-.kpi-warn .kpi-num { color: #DC2626; }
+.kpi-warn .kpi-num { color: var(--sl-bad); }
 /* 通过率微条:绿(done)/底红(failed)两段,量纲 = 运行次数 */
 .kpi-pass-bar {
   margin-top: 4px; height: 5px; border-radius: 999px;
-  background: #DC2626; overflow: hidden;
+  background: var(--sl-bad); overflow: hidden;
 }
-.kpi-pass-bar i { display: block; height: 100%; background: #15803D; }
+.kpi-pass-bar i { display: block; height: 100%; background: var(--sl-ok); }
 .kpi-tip { display: flex; align-items: center; padding: 0 12px; }
 
 /* ── 筛选行 ─────────────────────────────────────────────────────── */
@@ -625,16 +625,16 @@ onUnmounted(() => {
 }
 .filter-search {
   width: 210px; padding: 5px 10px; font-size: 12px;
-  border: 1px solid #E1E5EB; border-radius: 6px; background: #fff;
+  border: 1px solid var(--sl-line); border-radius: 6px; background: var(--c-surface);
 }
-.filter-search:focus { outline: none; border-color: #2F6FED; }
+.filter-search:focus { outline: none; border-color: var(--sl-accent); }
 .filter-select {
   padding: 5px 8px; font-size: 12px;
-  border: 1px solid #E1E5EB; border-radius: 6px; background: #fff;
+  border: 1px solid var(--sl-line); border-radius: 6px; background: var(--c-surface);
 }
 .filter-spacer { flex: 1; }
 .filter-count { font-size: 11.5px; color: #5B6472; }
-.filter-count strong { color: #DC2626; font-weight: 700; }
+.filter-count strong { color: var(--sl-bad); font-weight: 700; }
 .batch-banner {
   display: flex;
   flex-wrap: wrap;
@@ -643,8 +643,8 @@ onUnmounted(() => {
   padding: 10px 14px;
   font-size: 13px;
   color: var(--color-text-secondary);
-  background: #fff;
-  border: 0.5px solid #e2e8f0;
+  background: var(--c-surface);
+  border: 0.5px solid var(--color-border-tertiary);
   border-radius: 8px;
 }
 
@@ -670,7 +670,7 @@ onUnmounted(() => {
   padding: 3px 10px; border-radius: 999px;
   font-size: 11px; font-weight: 600;
   font-family: var(--font-mono, monospace);
-  background: #E7EFFF; color: #2F6FED;
+  background: var(--soft-accent-bg); color: var(--sl-accent);
 }
 .batch-clear {
   border: none; background: transparent; cursor: pointer;
@@ -680,7 +680,7 @@ onUnmounted(() => {
 /* ── 单元格:场景 / 方案 / 开始 ─────────────────────────────────── */
 .scenario-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .scenario-name {
-  font-size: 12.5px; font-weight: 600; color: #10151C;
+  font-size: 12.5px; font-weight: 600; color: var(--sl-ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .scenario-sid {
@@ -701,9 +701,9 @@ onUnmounted(() => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
 }
 .when-cell { display: flex; flex-direction: column; gap: 2px; }
-.when-main { font-size: 11.5px; color: #10151C; }
+.when-main { font-size: 11.5px; color: var(--sl-ink); }
 .when-dur { font-size: 10.5px; color: #8B93A1; }
-.exec-id { font-size: 12px; font-weight: 600; color: #10151C; }
+.exec-id { font-size: 12px; font-weight: 600; color: var(--sl-ink); }
 
 /* ── 信号列(§3.2)──────────────────────────────────────────────── */
 .signals-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
@@ -713,12 +713,12 @@ onUnmounted(() => {
   font-size: 11px; font-weight: 500; white-space: nowrap;
 }
 .sig-batch {
-  background: #E7EFFF; color: #2F6FED;
+  background: var(--soft-accent-bg); color: var(--sl-accent);
   cursor: pointer;
 }
 /* 连续失败 = 待办琥珀(§附录);认证快速失败 = 告警红 */
-.sig-warn { background: #FEF3C7; color: #B45309; }
-.sig-fail { background: #FEE2E2; color: #DC2626; }
+.sig-warn { background: #FEF3C7; color: var(--sl-warn); }
+.sig-fail { background: #FEE2E2; color: var(--sl-bad); }
 
 /* ── 展开行(§3.3 三件套)──────────────────────────────────────── */
 .expand-row { background: #FAFBFC; }
@@ -732,10 +732,10 @@ onUnmounted(() => {
   font-size: 11px; font-weight: 700; letter-spacing: .06em;
   color: #4A5A72;
 }
-.expand-line { font-size: 12px; color: #10151C; line-height: 1.9; }
+.expand-line { font-size: 12px; color: var(--sl-ink); line-height: 1.9; }
 .auth-chip {
   display: inline-block; margin: 0 4px 2px 0; padding: 1px 6px; border-radius: 4px;
-  font-size: 11px; background: #E7EFFF; color: #2F6FED;
+  font-size: 11px; background: var(--soft-accent-bg); color: var(--sl-accent);
 }
 .expand-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .expand-note { margin: 0; font-size: 11px; color: #8B93A1; }
@@ -751,7 +751,7 @@ onUnmounted(() => {
   padding: 0;
   border: none;
   background: none;
-  color: #DC2626;
+  color: var(--sl-bad);
   font: inherit;
   font-weight: 700;
   cursor: pointer;

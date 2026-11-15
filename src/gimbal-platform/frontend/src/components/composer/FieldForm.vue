@@ -1376,7 +1376,7 @@ function formatJson(v: unknown): string {
 .obj-node, .arr-node, .dict-node {
   display: flex; flex-direction: column; gap: 6px;
   border-left: 3px solid #c7d2fe; border-radius: 4px;
-  background: #f8fafc; padding: 8px 10px;
+  background: var(--surface-raised); padding: 8px 10px;
 }
 .node-head {
   display: flex; align-items: center; gap: 6px;
@@ -1386,9 +1386,9 @@ function formatJson(v: unknown): string {
   width: 20px; height: 20px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   border: none; border-radius: 4px; background: transparent;
-  color: #64748b; cursor: pointer; transition: all 0.15s;
+  color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s;
 }
-.obj-toggle:hover { background: #e2e8f0; color: #334155; }
+.obj-toggle:hover { background: var(--color-border-tertiary); color: #334155; }
 .obj-toggle svg { transition: transform 0.15s; }
 .obj-toggle svg.open { transform: rotate(0deg); }
 .obj-toggle svg:not(.open) { transform: rotate(-90deg); }
@@ -1400,16 +1400,16 @@ function formatJson(v: unknown): string {
 }
 .obj-body {
   display: flex; flex-direction: column; gap: 12px;
-  padding: 8px 0 2px 10px; border-left: 1px dashed #cbd5e1; margin-left: 4px;
+  padding: 8px 0 2px 10px; border-left: 1px dashed var(--color-border-secondary); margin-left: 4px;
 }
 /* 数组/字典区块体:与 obj-body 同款缩进导轨(区块级折叠 P2) */
 .arr-body {
   display: flex; flex-direction: column; gap: 10px;
-  padding: 8px 0 2px 10px; border-left: 1px dashed #cbd5e1; margin-left: 4px;
+  padding: 8px 0 2px 10px; border-left: 1px dashed var(--color-border-secondary); margin-left: 4px;
 }
 .arr-count {
   font-family: var(--font-mono); font-size: 10px;
-  color: #94a3b8; background: #f1f5f9; padding: 1px 5px; border-radius: 3px;
+  color: var(--color-text-tertiary); background: var(--soft-neutral-bg); padding: 1px 5px; border-radius: 3px;
 }
 .arr-add {
   flex-shrink: 0; margin-left: auto;
@@ -1429,7 +1429,7 @@ function formatJson(v: unknown): string {
 .arr-del {
   flex-shrink: 0; width: 26px; height: 32px;
   background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
-  color: #94a3b8; cursor: pointer; font-size: 14px; line-height: 1;
+  color: var(--color-text-tertiary); cursor: pointer; font-size: 14px; line-height: 1;
   transition: all 0.15s;
 }
 .arr-del:hover:not(:disabled) {
@@ -1437,16 +1437,16 @@ function formatJson(v: unknown): string {
 }
 .arr-del:disabled { cursor: not-allowed; opacity: 0.5; }
 .arr-empty, .dict-empty {
-  margin: 0; font-size: 11px; color: #94a3b8; font-style: normal;
+  margin: 0; font-size: 11px; color: var(--color-text-tertiary); font-style: normal;
 }
 .kv-row { display: flex; gap: 6px; align-items: flex-start; }
 .kv-key {
   flex-shrink: 0; width: 130px; box-sizing: border-box;
   background: #fafbfc; border: 1.5px dashed #e6e8ec; border-radius: 8px;
   padding: 7px 10px; font-size: 12px;
-  font-family: var(--font-mono); color: #475569;
+  font-family: var(--font-mono); color: var(--color-text-strong);
 }
-.kv-key:focus { outline: none; border-color: #6366f1; background: #fff; }
+.kv-key:focus { outline: none; border-color: #6366f1; background: var(--c-surface); }
 .kv-value { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
 /* 控件 + Ⓥ 按钮同排(text)/叠排(textarea/json)。
@@ -1474,15 +1474,15 @@ function formatJson(v: unknown): string {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   width: 20px; height: 20px;
   border: none; border-radius: 4px; background: transparent;
-  color: #94a3b8; cursor: pointer; font-size: 10px; line-height: 1;
+  color: var(--color-text-tertiary); cursor: pointer; font-size: 10px; line-height: 1;
   display: flex; align-items: center; justify-content: center;
 }
-.cand-btn:hover { background: #e2e8f0; color: #475569; }
+.cand-btn:hover { background: var(--color-border-tertiary); color: var(--color-text-strong); }
 .cand-list {
   position: absolute; top: calc(100% + 2px); left: 0; right: 0;
   z-index: 30;
   max-height: 200px; overflow-y: auto;
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 6px;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
   padding: 3px;
 }
@@ -1491,7 +1491,7 @@ function formatJson(v: unknown): string {
   padding: 5px 8px; border: none; border-radius: 4px;
   background: transparent; cursor: pointer;
 }
-.cand-item:hover { background: #f1f5f9; }
+.cand-item:hover { background: var(--soft-neutral-bg); }
 .cand-item code {
   font-family: var(--font-mono); font-size: 11px; color: #334155;
 }
@@ -1504,14 +1504,14 @@ function formatJson(v: unknown): string {
 .req-mark { color: #ef4444; font-weight: 700; }
 .field-path {
   font-family: var(--font-mono); font-size: 10px;
-  color: #94a3b8; background: #f1f5f9; padding: 1px 4px; border-radius: 3px;
+  color: var(--color-text-tertiary); background: var(--soft-neutral-bg); padding: 1px 4px; border-radius: 3px;
 }
 /* 深层字段 path 角标(D5):path ≠ $.+name 的字段以角标替代灰 chip —
    mono 小字 slate 族(对齐 .fa-note/策略角标惯例) */
 .path-badge {
   font-family: var(--font-mono); font-size: 9.5px;
   padding: 1px 5px; border-radius: 3px;
-  background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+  background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary);
   cursor: default;
   max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -1525,7 +1525,7 @@ function formatJson(v: unknown): string {
 .ui-tag.k-select { background: #f3e8ff; color: #6b21a8; }
 .ui-tag.k-textarea { background: #fce7f3; color: #9d174d; }
 .ui-tag.k-json { background: #1e1e2e; color: #a6e3a1; }
-.ui-tag.k-file, .ui-tag.k-binary { background: #f1f5f9; color: #475569; }
+.ui-tag.k-file, .ui-tag.k-binary { background: var(--soft-neutral-bg); color: var(--color-text-strong); }
 .ui-tag.k-unknown { background: #fee2e2; color: #991b1b; }
 /* assertable ✓ 标(Response 页契约参考线) */
 .assertable-mark {
@@ -1535,7 +1535,7 @@ function formatJson(v: unknown): string {
 .src-tag {
   font-size: 9px; font-weight: 600;
   padding: 1px 6px; border-radius: 3px;
-  background: #f1f5f9; color: #475569;        /* literal 灰 */
+  background: var(--soft-neutral-bg); color: var(--color-text-strong);        /* literal 灰 */
 }
 .src-tag.s-lookup { background: #faf5ff; color: #7c3aed; }   /* static 紫 */
 .src-tag.s-generated { background: #ede9fe; color: #7c3aed; } /* dynamic 紫 */
@@ -1543,7 +1543,7 @@ function formatJson(v: unknown): string {
 .strategy-tag {
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
   padding: 1px 6px; border-radius: 3px; border: none; cursor: pointer;
-  background: #e0e7ff; color: #4338ca;
+  background: #e0e7ff; color: var(--accent);
 }
 .strategy-tag:hover { background: #c7d2fe; color: #3730ea; }
 /* 动态取数源查钮(§7):青绿族 — 与策略角标(靛)区分,指向查询动作 */
@@ -1560,7 +1560,7 @@ function formatJson(v: unknown): string {
   background: #ecfdf5; color: #047857;
 }
 /* 字段行 4 色左边框 */
-.field.sk-independent { border-left: 3px solid #cbd5e1; }    /* literal 灰 */
+.field.sk-independent { border-left: 3px solid var(--color-border-secondary); }    /* literal 灰 */
 .field.sk-lookup { border-left: 3px solid #7c3aed; }            /* static 紫 */
 .field.sk-generated { border-left: 3px solid #f59e0b; }         /* dynamic 橙 (auto-extract 提示色) */
 
@@ -1604,13 +1604,13 @@ function formatJson(v: unknown): string {
   display: inline-flex; align-items: center;
   padding: 1px 8px; border-radius: 999px;
   background: #eef2ff; border: 1.5px dashed #6366f1;
-  font-size: 11px; color: #4338ca;
+  font-size: 11px; color: var(--accent);
   cursor: default; user-select: none; flex-shrink: 0;
 }
 .node-tpl-ctl { display: flex; flex-direction: column; gap: 3px; }
 .node-tpl-hint {
   margin: 0;
-  font-size: 11px; color: #4338ca;
+  font-size: 11px; color: var(--accent);
 }
 .extracted-hint {
   display: flex; align-items: center; gap: 4px;
@@ -1626,7 +1626,7 @@ function formatJson(v: unknown): string {
 .injected-fallback {
   display: flex; align-items: center; gap: 4px;
   margin: 1px 0 0;
-  font-size: 11px; color: #b45309;
+  font-size: 11px; color: var(--sl-warn);
 }
 .injected-fallback code {
   font-family: var(--font-mono); font-size: 10.5px;
@@ -1645,8 +1645,8 @@ function formatJson(v: unknown): string {
   outline: none;
 }
 .ctl:hover { border-color: #c7d2fe; }
-.ctl:focus { background: #fff; border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15); }
-.ctl::placeholder { color: #cbd5e1; }
+.ctl:focus { background: var(--c-surface); border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15); }
+.ctl::placeholder { color: var(--color-border-secondary); }
 
 /* 模板态降级输入(typed 字段值为 ${...}):等宽字体 + 靛蓝底提示语域切换 */
 .ctl.tpl {
@@ -1669,26 +1669,26 @@ function formatJson(v: unknown): string {
 
 .ctl-file {
   display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; background: #fafbfc; border: 1.5px dashed #cbd5e1; border-radius: 8px;
+  padding: 7px 10px; background: #fafbfc; border: 1.5px dashed var(--color-border-secondary); border-radius: 8px;
   color: #5a6273; font-size: 12px;
 }
-.file-tag { font-weight: 700; color: #475569; }
+.file-tag { font-weight: 700; color: var(--color-text-strong); }
 .file-hint { font-size: 11px; }
 
 .field-desc {
   display: flex; align-items: flex-start; gap: 5px;
   margin: 1px 0 0;
-  font-size: 11.5px; color: #64748b; line-height: 1.5;
+  font-size: 11.5px; color: var(--color-text-secondary); line-height: 1.5;
 }
-.field-desc svg { flex-shrink: 0; margin-top: 2px; color: #94a3b8; }
+.field-desc svg { flex-shrink: 0; margin-top: 2px; color: var(--color-text-tertiary); }
 
 /* ── 已折叠字段区(§5.4 折叠区):中性 slate —— 渐进披露而非警示
    (与「其他字段」琥珀警示区分;值仍在 body,仅布局收纳) ── */
 .folded {
   padding: 8px 10px 8px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-left: 3px solid #94a3b8;
+  background: var(--surface-raised);
+  border: 1px solid var(--color-border-tertiary);
+  border-left: 3px solid var(--color-text-tertiary);
   border-radius: 8px;
 }
 .folded-toggle {
@@ -1697,12 +1697,12 @@ function formatJson(v: unknown): string {
   font-size: 12px; text-align: left; cursor: pointer;
 }
 .folded-arrow {
-  display: inline-block; font-size: 10px; color: #64748b;
+  display: inline-block; font-size: 10px; color: var(--color-text-secondary);
   transition: transform 0.15s;
 }
 .folded-arrow.open { transform: rotate(90deg); }
-.folded-title { font-weight: 600; color: #475569; }
-.folded-hint { margin-left: auto; font-size: 11px; color: #94a3b8; }
+.folded-title { font-weight: 600; color: var(--color-text-strong); }
+.folded-hint { margin-left: auto; font-size: 11px; color: var(--color-text-tertiary); }
 .folded-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .folded-row { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
 .folded-label { display: flex; align-items: center; gap: 6px; font-size: 12px; }

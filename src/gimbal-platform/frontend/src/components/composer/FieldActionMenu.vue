@@ -203,10 +203,10 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   width: 20px; height: 20px;
   border: none; border-radius: 4px; background: transparent;
-  color: #94a3b8; cursor: pointer; font-size: 10px; line-height: 1;
+  color: var(--color-text-tertiary); cursor: pointer; font-size: 10px; line-height: 1;
   display: flex; align-items: center; justify-content: center;
 }
-.cand-btn:hover { background: #e2e8f0; color: #475569; }
+.cand-btn:hover { background: var(--color-border-tertiary); color: var(--color-text-strong); }
 /* ☰ 外置侧钮(2026-09-14 改版):此前 absolute 叠在填写框内
    (right:4px,与候选 ▾ 同位)— 改静态 flex 项放置到填写框旁边,
    增大加粗;样式对齐 FieldForm .var-btn 侧钮先例(30px/1.5px 边)。
@@ -216,19 +216,19 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
   position: static; transform: none;
   flex-shrink: 0;
   width: 30px; height: auto; min-height: 26px;
-  border: 1.5px solid #e2e8f0; border-radius: 8px; background: #fafbfc;
+  border: 1.5px solid var(--color-border-tertiary); border-radius: 8px; background: #fafbfc;
   color: #4f46e5; cursor: pointer;
   font-size: 13px; font-weight: 700; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.15s;
 }
-.fa-menu-btn:hover { background: #e0e7ff; border-color: #c7d2fe; color: #3730a3; }
+.fa-menu-btn:hover { background: #e0e7ff; border-color: #c7d2fe; color: var(--accent-hover); }
 
 /* 就地浮层(与 FieldForm cand-list 同模式:绝对定位 + 阴影) */
 .fa-menu {
   position: absolute; top: calc(100% + 2px); right: 0;
   z-index: 40; min-width: 230px;
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 8px;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
   padding: 4px;
   display: flex; flex-direction: column; gap: 1px;
@@ -239,18 +239,18 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
   background: transparent; cursor: pointer; font-size: 12px;
   text-align: left; color: #1a1d24;
 }
-.fa-item:hover { background: #f1f5f9; }
+.fa-item:hover { background: var(--soft-neutral-bg); }
 .fa-item.disabled { opacity: 0.45; cursor: not-allowed; }
 .fa-item.disabled:hover { background: transparent; }
 .fa-label { font-weight: 600; flex: 1; }
 .fa-note {
-  font-family: var(--font-mono); font-size: 9px; color: #94a3b8;
+  font-family: var(--font-mono); font-size: 9px; color: var(--color-text-tertiary);
 }
 .fa-sub-title {
-  margin: 2px 4px 4px; font-size: 11px; color: #64748b;
+  margin: 2px 4px 4px; font-size: 11px; color: var(--color-text-secondary);
   font-family: var(--font-mono);
 }
-.fa-empty { font-size: 12px; color: #94a3b8; padding: 6px 10px; margin: 0; }
+.fa-empty { font-size: 12px; color: var(--color-text-tertiary); padding: 6px 10px; margin: 0; }
 .fa-var-item { display: grid; grid-template-columns: 1.2fr 56px 72px; gap: 6px; }
 .fa-name {
   font-family: var(--font-mono); font-weight: 600; font-size: 12px;
@@ -261,15 +261,15 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
 }
 .fa-badge.extract { background: #d1fae5; color: #065f46; }
-.fa-badge.config { background: #eef2ff; color: #4338ca; }
-.fa-src { font-size: 10px; color: #94a3b8; }
+.fa-badge.config { background: #eef2ff; color: var(--accent); }
+.fa-src { font-size: 10px; color: var(--color-text-tertiary); }
 .fa-ds-hint {
-  margin: 2px 4px; font-size: 10px; color: #b45309;
+  margin: 2px 4px; font-size: 10px; color: var(--sl-warn);
 }
 .fa-back {
   border: none; background: transparent; cursor: pointer;
-  padding: 5px 8px; font-size: 11px; color: #64748b; text-align: left;
-  border-top: 1px dashed #e2e8f0; border-radius: 0 0 6px 6px;
+  padding: 5px 8px; font-size: 11px; color: var(--color-text-secondary); text-align: left;
+  border-top: 1px dashed var(--color-border-tertiary); border-radius: 0 0 6px 6px;
 }
-.fa-back:hover { color: #3730a3; }
+.fa-back:hover { color: var(--accent-hover); }
 </style>

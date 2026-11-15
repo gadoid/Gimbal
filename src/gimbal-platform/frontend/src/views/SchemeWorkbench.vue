@@ -444,11 +444,11 @@ async function onDeleteDataSet(datasetId: string) {
   flex: none; font-size: 11px; font-weight: 600;
   padding: 1px 6px; border-radius: 3px; white-space: nowrap;
 }
-.save-state.is-dirty { color: #b45309; background: #fef3c7; }
-.save-state.is-clean { color: var(--color-text-secondary); background: #f1f5f9; }
+.save-state.is-dirty { color: var(--sl-warn); background: #fef3c7; }
+.save-state.is-clean { color: var(--color-text-secondary); background: var(--soft-neutral-bg); }
 .editor-ops { display: flex; gap: 8px; flex: none; }
 
-.hint { margin: 0; padding: 8px 12px; font-size: 12px; color: var(--color-text-secondary); background: #f8fafc; border-radius: 6px; }
-.wb-empty { background: #fff; border: 1px dashed var(--color-border-tertiary); border-radius: 8px; }
+.hint { margin: 0; padding: 8px 12px; font-size: 12px; color: var(--color-text-secondary); background: var(--surface-raised); border-radius: 6px; }
+.wb-empty { background: var(--c-surface); border: 1px dashed var(--color-border-tertiary); border-radius: 8px; }
 @media (max-width: 1280px) { .wb-body { grid-template-columns: minmax(0, 1fr); } }
 </style>

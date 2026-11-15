@@ -575,7 +575,7 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 .c-kv-lock {
   border: none; background: none; cursor: pointer;
   display: inline-flex; align-items: center; line-height: 1;
-  padding: 2px 4px; color: #64748b; opacity: 0.45;
+  padding: 2px 4px; color: var(--color-text-secondary); opacity: 0.45;
 }
 .c-kv-lock.is-on { opacity: 1; color: var(--accent); }
 .c-kv-lock:hover { opacity: 1; }

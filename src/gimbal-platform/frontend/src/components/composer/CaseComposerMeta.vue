@@ -273,32 +273,32 @@ watch(local, (v) => {
 .opt-sys { font-weight: 500; }
 .switch-label { margin-left: 12px; font-size: 13px; color: var(--c-text-secondary); }
 .mf-item { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
-.mf-label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary, #64748b); }
+.mf-label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary, var(--color-text-secondary)); }
 .meta-select {
   height: 34px; padding: 0 8px; font-size: 13px;
-  color: #10151c; background: #fff;
-  border: 1px solid #e1e5eb; border-radius: 6px;
+  color: var(--sl-ink); background: var(--c-surface);
+  border: 1px solid var(--sl-line); border-radius: 6px;
 }
 .sys-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; }
 .sys-chip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 10px; font-size: 11.5px;
-  color: #374151; border: 1px solid #e1e5eb; border-radius: 10px;
+  color: #374151; border: 1px solid var(--sl-line); border-radius: 10px;
   cursor: pointer; user-select: none;
 }
-.sys-chip.on { color: #2f6fed; border-color: #2f6fed; background: #e7efff; }
-.sys-chip input { accent-color: #2f6fed; margin: 0; }
+.sys-chip.on { color: var(--sl-accent); border-color: var(--sl-accent); background: var(--soft-accent-bg); }
+.sys-chip input { accent-color: var(--sl-accent); margin: 0; }
 .sys-add {
   border: none; outline: none; background: transparent;
-  font-size: 11.5px; color: #2f6fed; width: 130px;
+  font-size: 11.5px; color: var(--sl-accent); width: 130px;
 }
-.sys-add::placeholder { color: #94a3b8; }
+.sys-add::placeholder { color: var(--color-text-tertiary); }
 
 /* RS3 版本声明（meta.plate）*/
 .plate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .plate-sys {
   min-width: 100px; font-size: 11.5px; font-weight: 600;
-  color: var(--c-text-secondary, #64748b); white-space: nowrap;
+  color: var(--c-text-secondary, var(--color-text-secondary)); white-space: nowrap;
 }
 .plate-select { flex: 1; min-width: 0; }
 </style>

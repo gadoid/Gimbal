@@ -136,7 +136,7 @@
   padding: 0 12px 0 32px;
   font-size: 12.5px;
   color: var(--sl-ink);
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") 10px center no-repeat;
+  background: var(--c-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") 10px center no-repeat;
   border: 1px solid var(--sl-line);
   border-radius: 8px;
   outline: none;
@@ -148,7 +148,7 @@
   font-size: 12.5px;
   font-weight: 600;
   color: var(--sl-ink);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 8px;
   cursor: pointer;
@@ -177,7 +177,7 @@
    表含描述行,~78px/行)在页面根上抬 --lib-card-max。分页条随 Pagination
    组件统一落右下角。 */
 .lib-card {
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
@@ -294,7 +294,7 @@
   font-size: 10.5px;
   font-weight: 600;
   color: var(--sl-ink-2);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px dashed var(--sl-line);
   border-radius: 999px;
   cursor: pointer;
@@ -327,7 +327,7 @@
   padding: 0 8px;
   font-size: 11.5px;
   color: var(--sl-ink);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 6px;
   outline: none;
@@ -376,7 +376,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px 10px;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-top: 3px solid var(--sl-line);
   border-radius: 8px;
@@ -445,7 +445,7 @@
 .mini-badge:hover { border-color: var(--sl-accent); color: var(--sl-accent); }
 .mini-badge b { color: var(--sl-ink); font-weight: 700; }
 .mini-badge.editing {
-  background: #fff;
+  background: var(--c-surface);
   border-color: var(--sl-accent);
   cursor: text;
   padding: 0 6px;
@@ -485,7 +485,7 @@
   padding: 10px;
   text-align: center;
   color: var(--sl-accent);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid #bcd0f7;
   border-radius: 8px;
   text-decoration: none;
@@ -502,7 +502,7 @@
   font-size: 14px;
   line-height: 1;
   color: var(--sl-ink-2);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 6px;
   cursor: pointer;
@@ -511,7 +511,7 @@
 .sl-menu {
   min-width: 132px;
   padding: 4px;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 8px;
   box-shadow: 0 6px 16px rgba(16, 21, 28, 0.14);
@@ -550,7 +550,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
@@ -657,7 +657,7 @@
   font-size: 12px;
   font-weight: 700;
   color: var(--sl-ink);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 8px;
   text-decoration: none;
@@ -676,7 +676,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 7px;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
@@ -734,7 +734,7 @@
   text-align: center;
   font-size: 12.5px;
   color: var(--sl-ink-2);
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-radius: 10px;
 }
@@ -747,7 +747,7 @@
 
 /* ── .wcard 摘要卡形制(工作台卡片板;全站唯一实现)──────────────
    原先 5 张卡各自复制一份卡头/结论面/空态,色值已经漂了 —— 同一个
-   ci-blue 底是 #e7efff 还是 #e7effe,两张卡各说一套。形制收在这里,
+   ci-blue 底是 var(--soft-accent-bg) 还是 #e7effe,两张卡各说一套。形制收在这里,
    卡片只留自己的行网格与专属操作(复制钮、卡内搜索那种)。 */
 .wcard { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 

@@ -127,7 +127,7 @@ function confirm() {
   font-size: 11px;
 }
 
-.seg { display: inline-flex; border: 1px solid #e1e5eb; border-radius: 6px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 6px; overflow: hidden; }
 .seg-btn {
   padding: 5px 14px;
   font-size: 12px;
@@ -137,5 +137,5 @@ function confirm() {
   cursor: pointer;
   color: #5a6273;
 }
-.seg-btn.active { background: #2f6fed; color: #fff; font-weight: 600; }
+.seg-btn.active { background: var(--sl-accent); color: #fff; font-weight: 600; }
 </style>

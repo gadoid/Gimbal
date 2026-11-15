@@ -79,7 +79,7 @@ defineEmits<{
 }
 .zone-count {
   padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: var(--color-text-secondary); background: #f1f5f9; border-radius: 3px;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 3px;
 }
 
 /* 列表项:两层信息(名 + 操作 / 概要徽标行),卡片 + hover/选中态
@@ -87,7 +87,7 @@ defineEmits<{
 .scheme-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .scheme-item {
   display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 12px; background: #fff;
+  padding: 10px 12px; background: var(--c-surface);
   border: 1px solid var(--color-border-tertiary); border-radius: 8px; cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
@@ -114,7 +114,7 @@ defineEmits<{
 }
 .more-btn:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* 概要徽标行:平台 tag 体系(10px/600/#f1f5f9 底);系统徽标 = 绿 tag */
+/* 概要徽标行:平台 tag 体系(10px/600/var(--soft-neutral-bg) 底);系统徽标 = 绿 tag */
 .scheme-meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .tag-default {
   font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
@@ -122,7 +122,7 @@ defineEmits<{
 }
 .badge {
   font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
-  color: var(--color-text-secondary); background: #f1f5f9; white-space: nowrap;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg); white-space: nowrap;
 }
 
 /* 空态(三处统一形状:dashed 框 + muted 文案 + 引导按钮) */

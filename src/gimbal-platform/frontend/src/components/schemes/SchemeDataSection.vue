@@ -375,7 +375,7 @@ async function submit() {
 .acct-badge { font-size: 0.7rem; padding: 0 6px; border-radius: 999px; background: rgb(37 99 235 / 8%); color: #1d4ed8; border: 1px solid rgb(37 99 235 / 25%); }
 /* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
-  background: #fff; border: 1px solid var(--color-border-tertiary);
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
   border-radius: 8px; padding: 12px 16px;
   display: flex; flex-direction: column; gap: 10px;
 }
@@ -387,21 +387,21 @@ async function submit() {
 }
 .zone-count {
   padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: var(--color-text-secondary); background: #f1f5f9; border-radius: 3px;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 3px;
 }
 .zone-spacer { flex: 1; }
 
 /* 失效行:amber 软提示条(DataSetEditor dead-keys-bar 同款语言) */
 .dead-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 5px 10px; font-size: 11px; color: #b45309;
+  padding: 5px 10px; font-size: 11px; color: var(--sl-warn);
   background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
 }
 
 /* tile 网格:平台卡片网格形制(CaseDataSetsList .grid auto-fill) */
 .ds-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
 .ds-tile {
-  background: #fff; border: 1px solid var(--color-border-tertiary); border-radius: 8px;
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 8px;
   padding: 10px 12px; transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .ds-tile:hover { border-color: var(--accent); box-shadow: 0 1px 6px rgba(67, 56, 202, 0.12); }
@@ -423,7 +423,7 @@ async function submit() {
 .row-count {
   flex: none; padding: 1px 6px; font-family: var(--font-mono); font-size: 10px;
   font-weight: 600; color: var(--color-text-secondary);
-  background: #f1f5f9; border-radius: 3px; white-space: nowrap;
+  background: var(--soft-neutral-bg); border-radius: 3px; white-space: nowrap;
 }
 
 /* 行级勾选展开态:换行排版 + 虚线分隔(选中 tile 的附属区) */
@@ -436,7 +436,7 @@ async function submit() {
   padding: 2px 8px; border: 1px solid transparent; border-radius: 4px;
   font-size: 12px; color: var(--color-text-secondary);
 }
-.row-pick:hover { border-color: var(--color-border-tertiary); background: #fff; }
+.row-pick:hover { border-color: var(--color-border-tertiary); background: var(--c-surface); }
 .row-pick input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 
 /* tile 操作位:编辑/删除靠右,不触发 label 勾选 */
@@ -456,8 +456,8 @@ async function submit() {
 .create-form { display: flex; flex-direction: column; gap: 6px; }
 .create-label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); margin-top: 4px; }
 .create-hint { margin: 0; font-size: 12px; }
-.create-hint.ok { color: var(--color-success, #15803d); }
-.create-hint.bad { color: var(--color-danger, #dc2626); }
+.create-hint.ok { color: var(--color-success, var(--sl-ok)); }
+.create-hint.bad { color: var(--color-danger, var(--sl-bad)); }
 /* 高级粘贴折叠区:标题行弱化,展开后与网格同一表单节奏 */
 .adv-paste { margin-top: 6px; border: 1px dashed var(--color-border-tertiary); border-radius: 8px; padding: 8px 10px; }
 .adv-paste summary { font-size: 11.5px; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }

@@ -160,7 +160,7 @@ function confirm() {
   text-align: center;
 }
 .var-badge.extract { background: #d1fae5; color: #065f46; }
-.var-badge.config { background: #eef2ff; color: #4338ca; }
+.var-badge.config { background: #eef2ff; color: var(--accent); }
 .var-producer {
   color: var(--c-text-secondary);
   font-size: 11px;

@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gimbal Platform</title>
+    <script>
+      // 首帧防闪:CSS 加载前恢复主题(useTheme 同键 gimbal-theme;
+      // 仅 dark 写 data-theme,light 缺省 —— 与 dual-theme.css 选择器单一覆盖面)
+      try {
+        if (localStorage.getItem('gimbal-theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark'
+        }
+      } catch (e) { /* 隐私模式等:按日间首帧 */ }
+    </script>
   </head>
   <body>
     <div id="app"></div>
