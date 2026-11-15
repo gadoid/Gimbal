@@ -3,7 +3,7 @@
      service 缺省 = 全局默认表。 -->
 <template>
   <Dialog :open="modelValue" @update:open="emit('update:modelValue', $event)">
-    <DialogContent class="max-w-[560px]" @interact-outside="!modelValue || undefined">
+    <DialogContent class="max-w-[35rem]" @interact-outside="!modelValue || undefined">
     <DialogHeader>
       <DialogTitle>{{ mergeSeed ? '合并为 renameField' : '构造 op' }}</DialogTitle>
     </DialogHeader>
@@ -81,7 +81,7 @@
       <!-- STEP_OPS -->
       <template v-else>
         <div class="ocd-row"><span class="ocd-label">步骤(step)</span>
-          <Input v-model="form.step" type="number" min="0" class="h-8 w-[100px]" />
+          <Input v-model="form.step" type="number" min="0" class="h-8 w-[6.25rem]" />
         </div>
         <div class="ocd-row"><span class="ocd-label">字段</span>
           <Input v-model="fieldModel"
@@ -339,19 +339,19 @@ defineExpose({ form, submit })
 </script>
 
 <style scoped>
-.pair { margin-left: 8px; }
+.pair { margin-left: 0.5rem; }
 .map-rows { width: 100%; }
-.map-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.map-row { display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.375rem; }
 .map-row .el-input { flex: 1; }
-.hint { color: var(--sl-ink-3); font-size: 12px; margin: 6px 0 0; }
-.ocd-form { display: flex; flex-direction: column; gap: 10px; }
-.ocd-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; }
-.ocd-label { font-size: 12px; font-weight: 500; color: var(--sl-ink-2); text-align: right; }
+.hint { color: var(--sl-ink-3); font-size: 0.75rem; margin: 0.375rem 0 0; }
+.ocd-form { display: flex; flex-direction: column; gap: 0.625rem; }
+.ocd-row { display: grid; grid-template-columns: 6.875rem 1fr; gap: 0.5rem; align-items: center; }
+.ocd-label { font-size: 0.75rem; font-weight: 500; color: var(--sl-ink-2); text-align: right; }
 .ocd-select {
-  height: 32px; padding: 0 8px; font-size: 13px;
+  height: 2rem; padding: 0 0.5rem; font-size: 0.8125rem;
   color: var(--sl-ink); background: var(--c-surface);
-  border: 1px solid var(--sl-line); border-radius: 6px;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem;
   min-width: 0;
 }
-.pair { margin-left: 6px; }
+.pair { margin-left: 0.375rem; }
 </style>

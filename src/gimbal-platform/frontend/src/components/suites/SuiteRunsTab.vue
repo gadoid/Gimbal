@@ -41,11 +41,11 @@
       <table class="srt-table">
         <thead>
           <tr>
-            <th style="width:110px">时间</th>
-            <th style="width:64px">通道</th>
-            <th style="width:80px">状态</th>
-            <th style="width:90px">通过 / 失败</th>
-            <th style="width:60px">runs</th>
+            <th style="width:6.875rem">时间</th>
+            <th style="width:4rem">通道</th>
+            <th style="width:5rem">状态</th>
+            <th style="width:5.625rem">通过 / 失败</th>
+            <th style="width:3.75rem">runs</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -112,7 +112,7 @@
                 </div>
                 <table v-else class="srt-units">
                   <thead>
-                    <tr><th>单元</th><th style="width:70px">状态</th><th style="width:80px">耗时</th><th>判定门</th></tr>
+                    <tr><th>单元</th><th style="width:4.375rem">状态</th><th style="width:5rem">耗时</th><th>判定门</th></tr>
                   </thead>
                   <tbody>
                     <tr v-for="u in unitsOf(r)" :key="u.unit_id">
@@ -293,77 +293,77 @@ void refresh()
 </script>
 
 <style scoped>
-.srt { display: flex; flex-direction: column; gap: 12px; }
-.srt-empty { padding: 30px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
-.srt-strip-wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.srt-strip-label { margin: 0; font-size: 12px; color: rgb(100 116 139); }
-.srt-strip { display: flex; gap: 4px; }
-.srt-cell { width: 18px; height: 18px; border-radius: 4px; border: 1px solid transparent; }
+.srt { display: flex; flex-direction: column; gap: 0.75rem; }
+.srt-empty { padding: 1.875rem 0; text-align: center; color: rgb(100 116 139); font-size: 0.8125rem; }
+.srt-strip-wrap { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.srt-strip-label { margin: 0; font-size: 0.75rem; color: rgb(100 116 139); }
+.srt-strip { display: flex; gap: 0.25rem; }
+.srt-cell { width: 1.125rem; height: 1.125rem; border-radius: 0.25rem; border: 1px solid transparent; }
 .srt-cell.ok { background: rgb(34 197 94 / 75%); }
 .srt-cell.bad { background: rgb(220 38 38 / 80%); }
 .srt-cell.run { background: rgb(59 130 246 / 80%); }
 .srt-cell.muted { background: rgb(100 116 139 / 35%); }
-.srt-legend { margin: 0 0 0 auto; display: flex; gap: 10px; font-size: 11.5px; color: rgb(100 116 139); }
-.srt-legend span { display: inline-flex; align-items: center; gap: 4px; }
-.srt-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.srt-legend { margin: 0 0 0 auto; display: flex; gap: 0.625rem; font-size: 0.71875rem; color: rgb(100 116 139); }
+.srt-legend span { display: inline-flex; align-items: center; gap: 0.25rem; }
+.srt-legend i { width: 0.625rem; height: 0.625rem; border-radius: 0.1875rem; display: inline-block; }
 .srt-legend i.ok { background: rgb(34 197 94 / 75%); }
 .srt-legend i.bad { background: rgb(220 38 38 / 80%); }
 .srt-legend i.run { background: rgb(59 130 246 / 80%); }
 .srt-legend i.muted { background: rgb(100 116 139 / 35%); }
-.srt-toolbar { display: flex; align-items: center; gap: 12px; }
-.srt-filter { font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.srt-toolbar { display: flex; align-items: center; gap: 0.75rem; }
+.srt-filter { font-size: 0.78125rem; display: inline-flex; align-items: center; gap: 0.375rem; cursor: pointer; }
 .srt-refresh {
-  font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.25rem 0.625rem; border-radius: 0.375rem; cursor: pointer;
   border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
 }
-.srt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.srt-table { width: 100%; border-collapse: collapse; font-size: 0.78125rem; }
 .srt-table th {
-  text-align: left; font-weight: 500; font-size: 11.5px; color: rgb(100 116 139);
-  padding: 6px 10px; border-bottom: 1px solid rgb(100 116 139 / 25%);
+  text-align: left; font-weight: 500; font-size: 0.71875rem; color: rgb(100 116 139);
+  padding: 0.375rem 0.625rem; border-bottom: 1px solid rgb(100 116 139 / 25%);
 }
 .srt-row { cursor: pointer; }
-.srt-row td { padding: 7px 10px; border-bottom: 1px solid rgb(100 116 139 / 12%); }
+.srt-row td { padding: 0.4375rem 0.625rem; border-bottom: 1px solid rgb(100 116 139 / 12%); }
 .srt-row:hover { background: rgb(59 130 246 / 5%); }
 .srt-channel {
-  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.6875rem; padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
   color: rgb(100 116 139); background: rgb(100 116 139 / 10%);
 }
 .srt-channel.orch { color: #6d28d9; background: rgb(139 92 246 / 10%); }
-.srt-status { font-size: 12px; }
+.srt-status { font-size: 0.75rem; }
 .srt-status.ok { color: var(--sl-ok); }
 .srt-status.bad { color: var(--sl-bad); }
 .srt-status.run { color: var(--sl-accent); }
 .srt-status.muted { color: rgb(100 116 139); }
-.srt-ops { display: flex; gap: 10px; align-items: center; }
-.srt-ops a { color: var(--accent); text-decoration: none; font-size: 12px; }
+.srt-ops { display: flex; gap: 0.625rem; align-items: center; }
+.srt-ops a { color: var(--accent); text-decoration: none; font-size: 0.75rem; }
 .srt-rerun {
-  font-size: 12px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.1875rem 0.625rem; border-radius: 0.375rem; cursor: pointer;
   color: var(--sl-warn); background: rgb(245 158 11 / 8%);
   border: 1px solid rgb(245 158 11 / 40%);
 }
 .srt-rerun:disabled { opacity: .5; cursor: not-allowed; }
-.srt-units-row td { background: rgb(100 116 139 / 4%); padding: 8px 10px; }
+.srt-units-row td { background: rgb(100 116 139 / 4%); padding: 0.5rem 0.625rem; }
 .srt-gates {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 6px 10px; margin-bottom: 8px; border-radius: 8px;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.375rem 0.625rem; margin-bottom: 0.5rem; border-radius: 0.5rem;
   border: 1px solid rgb(34 197 94 / 35%); background: rgb(34 197 94 / 6%);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .srt-gates.bad { border-color: rgb(220 38 38 / 35%); background: rgb(220 38 38 / 6%); }
 .srt-gates-label { color: rgb(100 116 139); }
 .srt-gate-chip {
-  font-family: ui-monospace, monospace; font-size: 11.5px;
-  padding: 2px 8px; border-radius: 6px;
+  font-family: ui-monospace, monospace; font-size: 0.71875rem;
+  padding: 0.125rem 0.5rem; border-radius: 0.375rem;
   background: rgb(34 197 94 / 10%); color: var(--sl-ok);
 }
 .srt-gate-chip.bad { background: rgb(220 38 38 / 10%); color: var(--sl-bad); }
 .srt-gates-sum { font-weight: 600; }
-.srt-units-loading { font-size: 12px; color: rgb(100 116 139); padding: 6px 0; }
-.srt-units { width: 100%; border-collapse: collapse; font-size: 12px; }
-.srt-units th { padding: 4px 8px; }
-.srt-units td { padding: 4px 8px; border-bottom: 1px solid rgb(100 116 139 / 10%); }
+.srt-units-loading { font-size: 0.75rem; color: rgb(100 116 139); padding: 0.375rem 0; }
+.srt-units { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+.srt-units th { padding: 0.25rem 0.5rem; }
+.srt-units td { padding: 0.25rem 0.5rem; border-bottom: 1px solid rgb(100 116 139 / 10%); }
 .srt-unit-link {
-  font-family: ui-monospace, monospace; font-size: 11.5px; cursor: pointer;
+  font-family: ui-monospace, monospace; font-size: 0.71875rem; cursor: pointer;
   border: none; background: none; color: var(--accent); padding: 0;
 }
 .muted { color: rgb(100 116 139); }

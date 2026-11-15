@@ -26,13 +26,13 @@
           <div class="time-desc">{{ opt.desc }}</div>
         </button>
       </div>
-      <div v-if="local.timePolicy.kind === 'timeout'" class="c-inline-row" style="margin-top: 8px;">
+      <div v-if="local.timePolicy.kind === 'timeout'" class="c-inline-row" style="margin-top: 0.5rem;">
         <span class="c-inline-label">超时秒数 (seconds)</span>
         <span class="c-inline-ctrl">
           <Input
             :model-value="(local.timePolicy as any).seconds"
             type="number" min="1" max="3600"
-            class="h-8 w-[110px]"
+            class="h-8 w-[6.875rem]"
             @update:model-value="(v) => ((local.timePolicy as any).seconds = Number(v))"
             size="small"
           />
@@ -66,7 +66,7 @@
               <Input
                 :model-value="local.retry.maxAttempts"
                 type="number" min="1" max="10" step="1"
-                class="h-8 w-[110px]"
+                class="h-8 w-[6.875rem]"
                 @update:model-value="(v) => (local.retry!.maxAttempts = Number(v))"
                 size="small"
               />
@@ -78,7 +78,7 @@
               <Input
                 :model-value="local.retry.backoffSeconds"
                 type="number" min="0" max="600" step="1"
-                class="h-8 w-[110px]"
+                class="h-8 w-[6.875rem]"
                 @update:model-value="(v) => (local.retry!.backoffSeconds = Number(v))"
                 size="small"
               />
@@ -522,12 +522,12 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 }
 
 /* time policy */
-.time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
 .time-tile {
   background: var(--c-bg-secondary);
   border: 1px solid var(--c-border);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s;
@@ -537,59 +537,59 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
   border-color: var(--c-accent);
   background: var(--c-accent-soft);
 }
-.time-name { font-weight: 600; font-size: 13px; font-family: var(--font-mono); color: var(--c-accent); }
-.time-desc { font-size: 11px; color: var(--c-text-secondary); margin-top: 4px; line-height: 1.4; }
+.time-name { font-weight: 600; font-size: 0.8125rem; font-family: var(--font-mono); color: var(--c-accent); }
+.time-desc { font-size: 0.6875rem; color: var(--c-text-secondary); margin-top: 0.25rem; line-height: 1.4; }
 
 /* setup / teardown actions — 纵向堆叠: tag 头行 + 双字段栅格 + JSON 通栏,
  * 卡片窄至 320px 也不溢出 (原 5 列 grid 最小轨道 658px 在 2 列布局下必溢出) */
-.action-list { display: flex; flex-direction: column; gap: 8px; }
+.action-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .action-row {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 10px; background: var(--c-bg-secondary); border-radius: 6px;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.625rem; background: var(--c-bg-secondary); border-radius: 0.375rem;
 }
 .action-row-head {
   display: flex; align-items: center; justify-content: space-between;
 }
 .action-row-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(8.75rem, 1fr)); gap: 0.5rem;
 }
 .action-row :deep(.el-input__wrapper) { background: var(--c-surface); }
 .phase-tag {
-  padding: 2px 6px; border-radius: 4px;
-  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  padding: 0.125rem 0.375rem; border-radius: 0.25rem;
+  font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700;
 }
 .phase-tag.setup { background: #d1fae5; color: #065f46; }
 .phase-tag.teardown { background: #fce7f3; color: #9d174d; }
 .action-del {
-  width: 24px; height: 24px; background: transparent; border: none; border-radius: 4px;
-  color: var(--c-text-tertiary); cursor: pointer; font-size: 16px;
+  width: 1.5rem; height: 1.5rem; background: transparent; border: none; border-radius: 0.25rem;
+  color: var(--c-text-tertiary); cursor: pointer; font-size: 1rem;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .action-del:hover { background: #fef2f2; color: #ef4444; }
 
 /* vars / services 行 (c-kv-row 共享栅格) */
-.c-kv-row { margin-bottom: 4px; }
+.c-kv-row { margin-bottom: 0.25rem; }
 .c-kv-row :deep(.el-input__wrapper) { background: var(--c-surface); }
 /* 行级锁钮(var-lock):线性 SVG(闭合 = 锁定,开环 = 未锁);锁定态
    提亮 + accent 色,未锁态低透明度弱化 */
 .c-kv-lock {
   border: none; background: none; cursor: pointer;
   display: inline-flex; align-items: center; line-height: 1;
-  padding: 2px 4px; color: var(--color-text-secondary); opacity: 0.45;
+  padding: 0.125rem 0.25rem; color: var(--color-text-secondary); opacity: 0.45;
 }
 .c-kv-lock.is-on { opacity: 1; color: var(--accent); }
 .c-kv-lock:hover { opacity: 1; }
 /* var-row 在共享 4 列栅格上扩一列锁钮(同 .svc-row 扩列先例):
  * key | = | value | 锁 | × — 不扩列则第 5 子元素折到隐式第二行 */
-.var-row { grid-template-columns: minmax(140px, 220px) 24px minmax(0, 1fr) 24px 28px; }
+.var-row { grid-template-columns: minmax(8.75rem, 13.75rem) 1.5rem minmax(0, 1fr) 1.5rem 1.75rem; }
 @media (max-width: 720px) {
   /* 与共享层同款窄屏降级:key 轨道放宽为 1fr 可收缩;5 子元素仍单行 */
-  .var-row { grid-template-columns: 1fr 24px minmax(0, 1fr) 24px 28px; }
+  .var-row { grid-template-columns: 1fr 1.5rem minmax(0, 1fr) 1.5rem 1.75rem; }
 }
 /* svc-row 在共享 4 列栅格上扩一列归属标签: alias | 归属 | → | url | × */
-.svc-row { grid-template-columns: minmax(140px, 220px) minmax(96px, 150px) 24px minmax(0, 1fr) 28px; }
+.svc-row { grid-template-columns: minmax(8.75rem, 13.75rem) minmax(6rem, 9.375rem) 1.5rem minmax(0, 1fr) 1.75rem; }
 .svc-owner {
-  font-family: var(--font-mono); font-size: 11px; color: var(--c-text-tertiary);
+  font-family: var(--font-mono); font-size: 0.6875rem; color: var(--c-text-tertiary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .svc-row .svc-url :deep(.el-input__wrapper) { font-family: var(--font-mono); }
@@ -597,26 +597,26 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
   /* 与共享层 .c-kv-sep 同款降级:窄屏收起归属列,退回 2 列行为 */
   .svc-row .svc-owner { display: none; }
 }
-.c-ns-grid { display: flex; flex-direction: column; gap: 12px; }
+.c-ns-grid { display: flex; flex-direction: column; gap: 0.75rem; }
 .c-ns-group .c-kv-row:last-child { margin-bottom: 0; }
 
 /* 断言管理入口卡:头行右侧跳转按钮(共享 .c-card-head flex) */
 .are-entry-card .c-card-head .c-add { margin-left: auto; align-self: center; }
 
 /* 断言管理纯展示列表(spec v3 §5) */
-.are-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.are-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.375rem; }
 .are-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 10px; background: var(--c-bg-secondary); border-radius: 6px;
-  font-size: 12px;
+  display: flex; align-items: center; gap: 0.625rem;
+  padding: 0.375rem 0.625rem; background: var(--c-bg-secondary); border-radius: 0.375rem;
+  font-size: 0.75rem;
 }
 .are-row.is-dead { opacity: .55; }
-.are-name { font-weight: 600; min-width: 96px; }
-.are-path { font-family: var(--font-mono); font-size: 11px; color: var(--c-text-secondary); flex: 1; }
-.are-count { color: var(--c-text-tertiary); font-size: 11px; }
+.are-name { font-weight: 600; min-width: 6rem; }
+.are-path { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--c-text-secondary); flex: 1; }
+.are-count { color: var(--c-text-tertiary); font-size: 0.6875rem; }
 .are-run {
   background: transparent; border: none; color: var(--c-accent);
-  font-size: 12px; cursor: pointer; padding: 0;
+  font-size: 0.75rem; cursor: pointer; padding: 0;
 }
 .are-run:hover { text-decoration: underline; }
 </style>

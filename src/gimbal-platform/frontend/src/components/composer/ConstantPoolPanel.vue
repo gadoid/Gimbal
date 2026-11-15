@@ -114,10 +114,10 @@ function insertValue(e: ConstantEntry): void {
 /* 独立白卡外壳(= .c-card 配方,与 ①-③ 页功能块同款),双挂载自带卡片:
    rail(步骤 0-2)与 col-info(步骤 3)均直接持有本组件,不靠父级包 .col */
 .cp-panel {
-  padding: 20px 24px;
+  padding: 1.25rem 1.5rem;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   display: flex;
   flex-direction: column;
 }
@@ -126,12 +126,12 @@ function insertValue(e: ConstantEntry): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--c-divider);
 }
 .cp-title {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--c-text-primary);
 }
@@ -139,20 +139,20 @@ function insertValue(e: ConstantEntry): void {
   font-family: var(--font-mono);
   background: var(--c-bg-secondary);
   border: 1px solid var(--c-border);
-  border-radius: 999px;
-  padding: 0 7px;
-  margin-left: 6px;
-  font-size: 10px;
+  border-radius: 62.4375rem;
+  padding: 0 0.4375rem;
+  margin-left: 0.375rem;
+  font-size: 0.625rem;
   color: var(--c-text-secondary);
 }
-.cp-manage { color: var(--c-text-tertiary); text-decoration: none; font-size: 11px; }
+.cp-manage { color: var(--c-text-tertiary); text-decoration: none; font-size: 0.6875rem; }
 .cp-manage:hover { color: var(--c-accent); }
 /* 虚线空态框(对齐 .c-add 虚线添加惯例) */
 .cp-empty {
   border: 1px dashed var(--c-border-strong);
-  border-radius: 6px;
-  padding: 14px 12px;
-  font-size: 11.5px;
+  border-radius: 0.375rem;
+  padding: 0.875rem 0.75rem;
+  font-size: 0.71875rem;
   color: var(--c-text-tertiary);
   line-height: 1.6;
   text-align: center;
@@ -161,31 +161,31 @@ function insertValue(e: ConstantEntry): void {
 .cp-entry {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
   background: var(--c-bg-secondary);
 }
-.cp-entry + .cp-entry { margin-top: 8px; }
+.cp-entry + .cp-entry { margin-top: 0.5rem; }
 .cp-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 0.375rem;
   min-width: 0;
 }
 .cp-name {
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cp-badge {
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 9px;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.25rem;
+  font-size: 0.5625rem;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -194,22 +194,22 @@ function insertValue(e: ConstantEntry): void {
 .cp-key,
 .cp-value {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   color: var(--c-text-secondary, var(--color-text-secondary));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
 }
-.cp-actions { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.cp-actions { display: inline-flex; gap: 0.1875rem; flex-shrink: 0; }
 /* 无边框幽灵钮: 灰条上悬浮高亮(accent-soft, 对齐 .c-add hover) */
 .cp-btn {
   border: none;
   background: transparent;
   color: var(--c-text-tertiary);
-  border-radius: 4px;
-  font-size: 10px;
-  padding: 1px 6px;
+  border-radius: 0.25rem;
+  font-size: 0.625rem;
+  padding: 0.0625rem 0.375rem;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }

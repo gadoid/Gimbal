@@ -51,22 +51,22 @@ const emit = defineEmits<{ retry: []; close: [] }>()
 <style scoped>
 /* amber(降级) / indigo(换面)两色软提示 —— 只提示,不阻断编辑与保存 */
 .surface-notice {
-  display: flex; align-items: center; gap: 10px;
-  margin: 0 0 12px; padding: 8px 12px; font-size: 12px;
-  border: 1px solid transparent; border-radius: 6px;
+  display: flex; align-items: center; gap: 0.625rem;
+  margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; font-size: 0.75rem;
+  border: 1px solid transparent; border-radius: 0.375rem;
 }
 .surface-notice-text { flex: 1; }
 .surface-notice-degraded { color: #92400e; background: #fef3c7; border-color: #fcd34d; }
 .surface-notice-changed { color: var(--accent-hover); background: #eef2ff; border-color: #c7d2fe; }
 .surface-notice-retry {
-  border: 1px solid currentColor; background: transparent; border-radius: 4px;
-  color: inherit; cursor: pointer; font-size: 12px; padding: 2px 10px;
+  border: 1px solid currentColor; background: transparent; border-radius: 0.25rem;
+  color: inherit; cursor: pointer; font-size: 0.75rem; padding: 0.125rem 0.625rem;
   white-space: nowrap;
 }
 .surface-notice-retry:hover:not(:disabled) { background: rgba(255, 255, 255, .6); }
 .surface-notice-retry:disabled { opacity: .6; cursor: default; }
 .surface-notice-close {
   border: none; background: transparent; color: inherit; cursor: pointer;
-  font-size: 15px; line-height: 1; padding: 0 2px;
+  font-size: 0.9375rem; line-height: 1; padding: 0 0.125rem;
 }
 </style>

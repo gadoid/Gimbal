@@ -65,7 +65,7 @@
         <span class="muted">说明</span>
         <template v-if="descEditing">
           <Input
-            v-model="descDraft" class="max-w-[460px]"
+            v-model="descDraft" class="max-w-[28.75rem]"
             placeholder="该服务的基本信息(做什么 / 负责人 / 注意点)"
             data-testid="svc-desc-input"
           />
@@ -164,16 +164,16 @@
               data-testid="faces-form"
             >
               <span
-                class="mono box-border inline-flex h-9 w-[150px] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-signal-hairline px-2 text-[13px] font-bold text-signal-think"
+                class="mono box-border inline-flex h-9 w-[9.375rem] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-signal-hairline px-2 text-[0.8125rem] font-bold text-signal-think"
                 data-testid="face-prefix"
               >{{ key }}-</span>
               <Input
-                v-model="faceSuffix" class="w-[200px]"
+                v-model="faceSuffix" class="w-[12.5rem]"
                 placeholder="后缀(如 uat)" :disabled="!!faceEditing"
                 data-testid="face-suffix"
               />
               <Input
-                v-model="faceSlot" class="w-[180px]"
+                v-model="faceSlot" class="w-[11.25rem]"
                 placeholder="凭证槽位(可选,如 maker)" data-testid="face-slot"
               />
               <Button data-testid="face-save" :disabled="faceSaveDisabled || faceSaving" @click="saveFace">
@@ -183,7 +183,7 @@
             </div>
 
             <table class="ov-table mt-2" data-testid="faces-table">
-              <thead><tr><th>身份面</th><th>凭证槽位</th><th style="width:132px" class="c-center">操作</th></tr></thead>
+              <thead><tr><th>身份面</th><th>凭证槽位</th><th style="width:8.25rem" class="c-center">操作</th></tr></thead>
               <tbody>
                 <tr v-for="a in faces.items" :key="a.aliasName" :data-testid="`face-row-${a.aliasName}`">
                   <td>
@@ -556,32 +556,32 @@ watch(activeTab, (v) => {
 </script>
 
 <style scoped>
-.ov-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ov-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
 .ov-table th, .ov-table td {
-  text-align: left; padding: 6px 10px;
+  text-align: left; padding: 0.375rem 0.625rem;
   border-bottom: 1px solid var(--sl-divider);
 }
-.ov-table th { color: var(--sl-ink-3); font-weight: 600; width: 120px; }
-.desc-line { margin-top: -6px; }
-.desc-text { font-size: 12px; }
-.faces-q { height: 30px; width: 200px; }
+.ov-table th { color: var(--sl-ink-3); font-weight: 600; width: 7.5rem; }
+.desc-line { margin-top: -0.375rem; }
+.desc-text { font-size: 0.75rem; }
+.faces-q { height: 1.875rem; width: 12.5rem; }
 .faces-pager {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
   justify-content: flex-end;
-  margin-top: 8px;
-  font-size: 11.5px;
+  margin-top: 0.5rem;
+  font-size: 0.71875rem;
 }
 .cred-line {
-  margin: 0 0 6px;
-  font-size: 12px;
+  margin: 0 0 0.375rem;
+  font-size: 0.75rem;
   color: var(--sl-ink);
 }
 
 .cred-note {
   margin: 0;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.7;
   color: var(--sl-ink-3);
 }

@@ -8,11 +8,11 @@ import HubDetailPage from '@/layouts/HubDetailPage.vue'
 describe('HubDetailPage — 容器与分区', () => {
   it('默认 standard 1200;wide prop 1480', () => {
     const a = mount(HubDetailPage, { props: { title: '执行详情' } })
-    expect(a.find('div').classes()).toContain('max-w-[min(1200px,100%)]')
+    expect(a.find('div').classes()).toContain('max-w-[min(75rem,100%)]')
     a.unmount()
 
     const b = mount(HubDetailPage, { props: { title: '批次', width: 'wide' } })
-    expect(b.find('div').classes()).toContain('max-w-[min(1480px,100%)]')
+    expect(b.find('div').classes()).toContain('max-w-[min(92.5rem,100%)]')
     b.unmount()
   })
 

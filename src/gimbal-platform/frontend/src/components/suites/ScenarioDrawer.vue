@@ -80,32 +80,32 @@ onMounted(() => void load())
 
 <style scoped>
 .sdrw {
-  display: flex; flex-direction: column; gap: 8px; min-height: 120px;
-  border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
-  padding: 10px 12px; background: rgb(100 116 139 / 4%);
+  display: flex; flex-direction: column; gap: 0.5rem; min-height: 7.5rem;
+  border: 1px solid rgb(100 116 139 / 22%); border-radius: 0.625rem;
+  padding: 0.625rem 0.75rem; background: rgb(100 116 139 / 4%);
 }
-.sdrw-title { margin: 0; font-size: 12.5px; font-weight: 600; }
+.sdrw-title { margin: 0; font-size: 0.78125rem; font-weight: 600; }
 .sdrw-search {
-  padding: 7px 10px; font-size: 12.5px; border-radius: 8px;
+  padding: 0.4375rem 0.625rem; font-size: 0.78125rem; border-radius: 0.5rem;
   border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
 }
 .sdrw-list {
   margin: 0; padding: 0; list-style: none;
-  display: flex; flex-direction: column; gap: 2px;
-  max-height: 420px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.125rem;
+  max-height: 26.25rem; overflow-y: auto;
 }
 .sdrw-item {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  border-radius: 6px; font-size: 12.5px; cursor: grab;
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem; font-size: 0.78125rem; cursor: grab;
 }
 .sdrw-item:hover { background: rgb(59 130 246 / 8%); }
 .sdrw-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sdrw-in { flex: none; font-size: 11px; color: rgb(100 116 139); }
+.sdrw-in { flex: none; font-size: 0.6875rem; color: rgb(100 116 139); }
 .sdrw-add {
-  flex: none; width: 22px; height: 22px; border-radius: 6px; cursor: pointer;
+  flex: none; width: 1.375rem; height: 1.375rem; border-radius: 0.375rem; cursor: pointer;
   border: 1px solid var(--accent-soft-border); color: var(--accent); background: transparent;
-  font-size: 14px; line-height: 1;
+  font-size: 0.875rem; line-height: 1;
 }
-.sdrw-empty { font-size: 12px; color: rgb(100 116 139); padding: 10px 0; text-align: center; }
-.sdrw-note { margin: 0; font-size: 11px; color: rgb(100 116 139); }
+.sdrw-empty { font-size: 0.75rem; color: rgb(100 116 139); padding: 0.625rem 0; text-align: center; }
+.sdrw-note { margin: 0; font-size: 0.6875rem; color: rgb(100 116 139); }
 </style>

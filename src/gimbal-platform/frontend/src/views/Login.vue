@@ -5,7 +5,7 @@
      (destructive = Signal failed)。 -->
 <template>
   <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-signal-soft to-signal-canvas p-6">
-    <div class="auth-card w-[380px] max-w-full rounded-card border border-signal-line bg-signal-card px-7 pb-6 pt-7 shadow-sig-hover">
+    <div class="auth-card w-[23.75rem] max-w-full rounded-card border border-signal-line bg-signal-card px-7 pb-6 pt-7 shadow-sig-hover">
       <!-- Brand header -->
       <div class="mb-6 flex items-center gap-3">
         <div class="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-signal to-signal-dot" aria-hidden="true"></div>
@@ -16,8 +16,8 @@
       </div>
 
       <!-- Title + subtitle -->
-      <div class="mb-[18px]">
-        <div class="text-[20px] font-semibold text-signal-ink">登录</div>
+      <div class="mb-[1.125rem]">
+        <div class="text-[1.25rem] font-semibold text-signal-ink">登录</div>
         <div class="mt-1 text-caption text-muted-foreground">账号密码登录 · 首次注册的用户自动成为管理员</div>
       </div>
 
@@ -79,12 +79,12 @@
           <span class="select-none text-caption text-muted-foreground/60" title="未开放">忘记密码？</span>
         </div>
 
-        <Button class="h-[38px] w-full tracking-widest" :disabled="loading" type="submit">
+        <Button class="h-[2.375rem] w-full tracking-widest" :disabled="loading" type="submit">
           {{ loading ? '登录中…' : '登 录' }}
         </Button>
       </form>
 
-      <div class="mt-[18px] text-center text-body text-muted-foreground">
+      <div class="mt-[1.125rem] text-center text-body text-muted-foreground">
         还没有账号？
         <router-link to="/register" class="text-signal no-underline hover:underline">立即注册</router-link>
       </div>

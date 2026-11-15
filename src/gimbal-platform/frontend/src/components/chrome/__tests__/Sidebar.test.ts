@@ -216,7 +216,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
 
   it('默认展开:brand 带 platform 文字 + 折叠钮在场', async () => {
     const w = await mountSidebar({ isAdmin: true })
-    expect(w.find('aside').classes()).toContain('w-[200px]')
+    expect(w.find('aside').classes()).toContain('w-[12.5rem]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
     // 17 可点(含置灰可点的数据分析)+ 1 置灰 span(字段来源分析,§4.4;
@@ -230,8 +230,8 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     await w.find('[data-testid="sb-collapse"]').trigger('click')
 
     const aside = w.find('aside')
-    expect(aside.classes()).toContain('w-[56px]')
-    expect(aside.classes()).not.toContain('w-[200px]')
+    expect(aside.classes()).toContain('w-[3.5rem]')
+    expect(aside.classes()).not.toContain('w-[12.5rem]')
     // 折叠后不保留文字:brand 文字与条目文字全消失
     expect(w.text()).not.toContain('platform')
     expect(w.findAll('.nav-text').length).toBe(0)

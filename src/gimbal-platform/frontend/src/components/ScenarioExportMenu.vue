@@ -139,14 +139,14 @@ async function onSchemeExport(s: SchemeV2) {
    .icon-btn 是 scoped 样式够不到这里,按同一组值复刻 —— 改顶栏按钮
    风格时两处要同步。 */
 .se-trigger {
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: 1px solid #e6e8ec;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   color: #5a6273;
   cursor: pointer;
   transition: all 0.15s;

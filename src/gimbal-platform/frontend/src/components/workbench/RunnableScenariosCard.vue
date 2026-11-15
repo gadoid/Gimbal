@@ -92,9 +92,9 @@ const wbT = (suffix: string) => `wb-card-runner-${suffix}`
 /* 形制在基座;这里只给行列宽与"跑不起来"的红警。 */
 .rn-row { grid-template-columns: minmax(0, 1fr) auto auto; }
 .rn-no-scheme {
-  padding: 1px 7px; font-size: 10.5px; font-weight: 600;
+  padding: 0.0625rem 0.4375rem; font-size: 0.65625rem; font-weight: 600;
   color: var(--sl-bad); background: var(--sl-bad-soft);
-  border-radius: 4px; white-space: nowrap;
+  border-radius: 0.25rem; white-space: nowrap;
 }
 .st-warn b { color: var(--sl-warn); }
 </style>

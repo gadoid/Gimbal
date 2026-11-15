@@ -399,56 +399,56 @@ async function onDeleteDataSet(datasetId: string) {
 <style scoped>
 /* 右栏空态 */
 .wb-empty {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 60px 16px; text-align: center;
-  border: 1px dashed var(--color-border-tertiary); border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 0.625rem;
+  padding: 3.75rem 1rem; text-align: center;
+  border: 1px dashed var(--color-border-tertiary); border-radius: 0.5rem;
 }
-.wb-empty p { margin: 0; font-size: 12.5px; color: var(--color-text-tertiary); }
+.wb-empty p { margin: 0; font-size: 0.78125rem; color: var(--color-text-tertiary); }
 
 /* 页面容器:对齐平台视图容器(AssertionRegistryEditor / DataSetEditor 同款) */
 .scheme-workbench {
-  max-width: 1480px; min-height: calc(100vh - 48px);
-  padding: 28px 32px 48px; margin: 0 auto; box-sizing: border-box;
+  max-width: 92.5rem; min-height: calc(100vh - 3rem);
+  padding: 1.75rem 2rem 3rem; margin: 0 auto; box-sizing: border-box;
 }
 .page-header {
-  display: flex; gap: 24px; align-items: center;
-  justify-content: space-between; margin-bottom: 16px;
+  display: flex; gap: 1.5rem; align-items: center;
+  justify-content: space-between; margin-bottom: 1rem;
 }
-.page-header h2 { margin: 0; font-size: 22px; color: var(--color-text-primary); }
-.page-header p { margin: 5px 0 0; font-size: 12px; color: var(--color-text-secondary); }
+.page-header h2 { margin: 0; font-size: 1.375rem; color: var(--color-text-primary); }
+.page-header p { margin: 0.3125rem 0 0; font-size: 0.75rem; color: var(--color-text-secondary); }
 .page-header code.sid {
-  padding: 1px 4px; font-family: var(--font-mono); font-size: 11px;
-  background: var(--accent-soft); border-radius: 3px;
+  padding: 0.0625rem 0.25rem; font-family: var(--font-mono); font-size: 0.6875rem;
+  background: var(--accent-soft); border-radius: 0.1875rem;
 }
-.header-actions { display: flex; gap: 8px; }
+.header-actions { display: flex; gap: 0.5rem; }
 
 .wb-body {
-  display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-  gap: 20px; align-items: start; min-height: 400px;
+  display: grid; grid-template-columns: minmax(17.5rem, 22.5rem) minmax(0, 1fr);
+  gap: 1.25rem; align-items: start; min-height: 25rem;
 }
 /* 编辑区:外框退役 — 各分区自带卡片,直接以统一节奏(16px)排列 */
-.wb-editor { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wb-editor { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 
 /* 编辑头:方案名 + 保存状态 + 操作(底边框分隔,AssertionRegistryEditor 详情头同款) */
 .editor-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding-bottom: 12px; border-bottom: 1px solid var(--color-border-tertiary);
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border-tertiary);
 }
-.editor-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.editor-title { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
 .editor-title h3 {
-  margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text-primary);
+  margin: 0; font-size: 1rem; font-weight: 700; color: var(--color-text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* 保存状态:脏 = 平台 warn tag(amber),净 = muted tag */
 .save-state {
-  flex: none; font-size: 11px; font-weight: 600;
-  padding: 1px 6px; border-radius: 3px; white-space: nowrap;
+  flex: none; font-size: 0.6875rem; font-weight: 600;
+  padding: 0.0625rem 0.375rem; border-radius: 0.1875rem; white-space: nowrap;
 }
 .save-state.is-dirty { color: var(--sl-warn); background: #fef3c7; }
 .save-state.is-clean { color: var(--color-text-secondary); background: var(--soft-neutral-bg); }
-.editor-ops { display: flex; gap: 8px; flex: none; }
+.editor-ops { display: flex; gap: 0.5rem; flex: none; }
 
-.hint { margin: 0; padding: 8px 12px; font-size: 12px; color: var(--color-text-secondary); background: var(--surface-raised); border-radius: 6px; }
-.wb-empty { background: var(--c-surface); border: 1px dashed var(--color-border-tertiary); border-radius: 8px; }
+.hint { margin: 0; padding: 0.5rem 0.75rem; font-size: 0.75rem; color: var(--color-text-secondary); background: var(--surface-raised); border-radius: 0.375rem; }
+.wb-empty { background: var(--c-surface); border: 1px dashed var(--color-border-tertiary); border-radius: 0.5rem; }
 @media (max-width: 1280px) { .wb-body { grid-template-columns: minmax(0, 1fr); } }
 </style>

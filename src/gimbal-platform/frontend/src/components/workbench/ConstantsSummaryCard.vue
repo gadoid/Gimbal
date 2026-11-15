@@ -119,19 +119,19 @@ async function copyEntry(e: ConstantEntry): Promise<void> {
 /* L 档专属:卡内搜索(常量多了翻找是真实需求,§4) */
 .l-search {
   width: 100%;
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.75rem;
   color: var(--sl-ink);
   background: var(--surface-raised);
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   outline: none;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
 .l-search:focus { border-color: var(--sl-accent); background: var(--c-surface); }
 
 /* 键值行:名称 1fr / 类型 chip / 复制 icon */
-.kv-row { grid-template-columns: minmax(0, 1fr) auto auto; font-size: 12.5px; }
+.kv-row { grid-template-columns: minmax(0, 1fr) auto auto; font-size: 0.78125rem; }
 .kg-gen { color: #92400e; background: #fef3c7; }
 .kg-lit { color: var(--color-text-strong); background: var(--sl-divider); }
 
@@ -139,10 +139,10 @@ async function copyEntry(e: ConstantEntry): Promise<void> {
    不抢 key/value 主内容的视觉权重 */
 .kv-copy {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px;
+  width: 1.25rem; height: 1.25rem;
   color: var(--sl-ink-2); opacity: 0.35;
   background: transparent;
-  border: none; border-radius: 5px; cursor: pointer;
+  border: none; border-radius: 0.3125rem; cursor: pointer;
   transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 .kv-row:hover .kv-copy { opacity: 1; }

@@ -48,10 +48,10 @@
         <thead>
           <tr>
             <th>Suite</th>
-            <th style="width:100px">模式</th>
-            <th style="width:70px">成员</th>
-            <th style="width:110px">发布者</th>
-            <th style="width:150px">操作</th>
+            <th style="width:6.25rem">模式</th>
+            <th style="width:4.375rem">成员</th>
+            <th style="width:6.875rem">发布者</th>
+            <th style="width:9.375rem">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -198,49 +198,49 @@ onMounted(reload)
 
 <style scoped>
 /* Suite 表行含描述行(~72px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
-.slib { --lib-card-max: 820px; }
+.slib { --lib-card-max: 51.25rem; }
 /* 与 SuiteLibrary(我的用例集)同一套列表规范:lib-card 容器、
    13px 表格、indigo 主按钮系、card-empty 空态。 */
-.slib { display: flex; flex-direction: column; gap: 14px; }
-.slib-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.slib { display: flex; flex-direction: column; gap: 0.875rem; }
+.slib-toolbar { display: flex; gap: 0.625rem; align-items: center; flex-wrap: wrap; }
 .slib-search {
-  flex: none; width: 300px; padding: 8px 12px; font-size: 13px;
-  border: 1px solid rgb(100 116 139 / 30%); border-radius: 8px;
+  flex: none; width: 18.75rem; padding: 0.5rem 0.75rem; font-size: 0.8125rem;
+  border: 1px solid rgb(100 116 139 / 30%); border-radius: 0.5rem;
   background: transparent; color: inherit;
 }
 .slib-search:focus { outline: none; border-color: var(--accent-soft-border); }
 .slib-modes {
   display: flex; border: 1px solid rgb(100 116 139 / 30%);
-  border-radius: 8px; overflow: hidden;
+  border-radius: 0.5rem; overflow: hidden;
 }
 .slib-mode {
-  padding: 6px 12px; font-size: 12.5px; cursor: pointer;
+  padding: 0.375rem 0.75rem; font-size: 0.78125rem; cursor: pointer;
   border: none; background: transparent; color: inherit;
   border-right: 1px solid rgb(100 116 139 / 20%);
 }
 .slib-mode:last-child { border-right: none; }
 .slib-mode.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .slib-public-link {
-  font-size: 12.5px; color: var(--accent); text-decoration: none; white-space: nowrap;
-  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--accent-soft-border);
+  font-size: 0.78125rem; color: var(--accent); text-decoration: none; white-space: nowrap;
+  padding: 0.4375rem 0.625rem; border-radius: 0.5rem; border: 1px solid var(--accent-soft-border);
 }
 .slib-public-link:hover { background: var(--accent-soft); }
 /* overflow 交给全局 .lib-card(卡内滑轨,分页位置轮);这里只压边框圆角 */
-.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px; }
-.slib-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 0.625rem; }
+.slib-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .slib-table th {
-  text-align: left; font-weight: 500; font-size: 12px; color: rgb(100 116 139);
-  padding: 8px 14px; background: rgb(100 116 139 / 6%);
+  text-align: left; font-weight: 500; font-size: 0.75rem; color: rgb(100 116 139);
+  padding: 0.5rem 0.875rem; background: rgb(100 116 139 / 6%);
 }
 .slib-row { cursor: pointer; }
-.slib-row td { padding: 9px 14px; border-bottom: 1px solid rgb(100 116 139 / 10%); }
+.slib-row td { padding: 0.5625rem 0.875rem; border-bottom: 1px solid rgb(100 116 139 / 10%); }
 .slib-row:hover { background: rgb(59 130 246 / 5%); }
 .slib-row:last-child td { border-bottom: none; }
-.sl-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sl-name { display: flex; align-items: center; gap: 0.375rem; min-width: 0; }
 .sl-name .nm { font-weight: 500; }
-.sl-sid { font-size: 11.5px; color: rgb(100 116 139); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-sid { font-size: 0.71875rem; color: rgb(100 116 139); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mode-chip {
-  font-size: 11.5px; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.71875rem; padding: 0.125rem 0.5625rem; border-radius: 62.4375rem;
   white-space: nowrap;
   color: rgb(100 116 139); background: rgb(100 116 139 / 8%);
   border: 1px solid rgb(100 116 139 / 22%);
@@ -248,20 +248,20 @@ onMounted(reload)
 .mode-chip.chain, .mode-chip.fanout, .mode-chip.compose {
   color: #6d28d9; background: rgb(139 92 246 / 8%); border-color: rgb(139 92 246 / 30%);
 }
-.num { font-size: 12.5px; }
-.muted { color: rgb(100 116 139); font-size: 12px; }
-.ops { display: flex; gap: 8px; align-items: center; }
+.num { font-size: 0.78125rem; }
+.muted { color: rgb(100 116 139); font-size: 0.75rem; }
+.ops { display: flex; gap: 0.5rem; align-items: center; }
 .run-btn {
-  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; cursor: pointer;
   color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .run-btn:hover { background: var(--accent-soft-border); }
-.slib-loading { color: rgb(100 116 139); font-size: 13px; padding: 8px 2px; }
-.card-empty { padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
+.slib-loading { color: rgb(100 116 139); font-size: 0.8125rem; padding: 0.5rem 0.125rem; }
+.card-empty { padding: 2.125rem 0; text-align: center; color: rgb(100 116 139); font-size: 0.8125rem; }
 .cta {
-  margin-top: 10px; padding: 6px 16px; font-size: 12.5px; cursor: pointer;
+  margin-top: 0.625rem; padding: 0.375rem 1rem; font-size: 0.78125rem; cursor: pointer;
   color: var(--accent); background: var(--accent-soft);
-  border: 1px solid var(--accent-soft-border); border-radius: 8px;
+  border: 1px solid var(--accent-soft-border); border-radius: 0.5rem;
 }
 </style>

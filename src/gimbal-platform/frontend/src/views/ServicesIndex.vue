@@ -84,5 +84,5 @@ onMounted(() => { void load() })
 
 <style scoped>
 /* 瓦片里「进入 →」贴着计数右靠:一句话读完这格能干什么 */
-.svc-tile-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.svc-tile-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 </style>

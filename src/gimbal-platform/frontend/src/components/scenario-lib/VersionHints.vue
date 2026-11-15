@@ -43,12 +43,12 @@ defineEmits<{ adapt: [] }>()
 
 <style scoped>
 .vh-card {
-  border: 1px solid var(--sl-line); border-radius: 8px;
-  padding: 8px 12px; margin: 4px 0; font-size: 12px;
-  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--sl-line); border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem; margin: 0.25rem 0; font-size: 0.75rem;
+  display: flex; flex-direction: column; gap: 0.25rem;
 }
 .vh-row {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 0.375rem;
 }
 .vh-icon { flex-shrink: 0; }
 .vh-info .vh-icon { color: #3b82f6; }
@@ -57,8 +57,8 @@ defineEmits<{ adapt: [] }>()
 .vh-text { color: #374151; line-height: 1.4; }
 .vh-btn {
   margin-left: auto; border: none; background: none;
-  color: var(--sl-accent); font-size: 12px; font-weight: 500;
-  cursor: pointer; padding: 2px 6px; white-space: nowrap;
+  color: var(--sl-accent); font-size: 0.75rem; font-weight: 500;
+  cursor: pointer; padding: 0.125rem 0.375rem; white-space: nowrap;
 }
 .vh-btn:hover { text-decoration: underline; }
 </style>

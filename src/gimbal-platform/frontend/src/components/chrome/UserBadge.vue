@@ -52,10 +52,10 @@
       </span>
     </button>
     <div class="flex w-full items-center justify-between gap-2">
-      <!-- 同 compact:面板弹到侧栏右侧内容区,不挤进 200px 导航轨 -->
+      <!-- 同 compact:面板弹到侧栏右侧内容区,不挤进 12.5rem 导航轨 -->
       <NotificationBell anchor-rail />
       <button
-        class="logout-btn flex h-[26px] cursor-pointer items-center gap-1 rounded-chip border border-white/20 bg-transparent px-2 text-caption text-slate-300 transition-colors hover:border-signal-failed hover:text-white"
+        class="logout-btn flex h-[1.625rem] cursor-pointer items-center gap-1 rounded-chip border border-white/20 bg-transparent px-2 text-caption text-slate-300 transition-colors hover:border-signal-failed hover:text-white"
         title="登出"
         data-testid="user-badge-logout"
         aria-label="登出"
@@ -173,23 +173,23 @@ async function onLogout() {
 
 <style scoped>
 .token-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 62.4375rem;
   background: #f59e0b;
 }
 .pending-chip {
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
-  padding: 0 6px;
-  border-radius: 999px;
+  padding: 0 0.375rem;
+  border-radius: 62.4375rem;
   background: #fef3c7;
   color: var(--sl-warn);
 }
 .role-chip {
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 10px;
+  padding: 0 0.375rem;
+  border-radius: 62.4375rem;
+  font-size: 0.625rem;
   background: rgba(255, 255, 255, 0.12);
   /* 恒亮色:role-chip 常驻深色 chrome(不随主题令牌翻转)——
      此前引用 --color-border-secondary,夜间翻深灰在深底隐形 */

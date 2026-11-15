@@ -19,14 +19,14 @@ withDefaults(defineProps<{
 
 <style scoped>
 .pgback {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12.5px; color: var(--color-text-secondary);
-  text-decoration: none; white-space: nowrap; padding-top: 4px;
+  display: inline-flex; align-items: center; gap: 0.3125rem;
+  font-size: 0.78125rem; color: var(--color-text-secondary);
+  text-decoration: none; white-space: nowrap; padding-top: 0.25rem;
   transition: color .15s ease;
 }
 .pgback:hover { color: var(--accent); }
 .pgback-arrow {
   display: inline-block; transition: transform .15s ease;
 }
-.pgback:hover .pgback-arrow { transform: translateX(-2px); }
+.pgback:hover .pgback-arrow { transform: translateX(-0.125rem); }
 </style>

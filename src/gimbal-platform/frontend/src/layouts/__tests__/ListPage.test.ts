@@ -1,22 +1,22 @@
 /**
  * ListPage 壳 — 容器双档 + slot 条件渲染(样式归一第一批)。
- * 默认档必须与旧 max-w-[1200px] 等价(Auths/UsersAdmin 零变化)。
+ * 默认档必须与旧 max-w-[75rem] 等价(Auths/UsersAdmin 零变化)。
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ListPage from '@/layouts/ListPage.vue'
 
 describe('ListPage — 容器双档', () => {
-  it('默认 standard:1200 档 min() 钳制(等价旧 max-w-[1200px])', () => {
+  it('默认 standard:1200 档 min() 钳制(等价旧 max-w-[75rem])', () => {
     const w = mount(ListPage, { props: { title: '列表' } })
-    expect(w.find('div').classes()).toContain('max-w-[min(1200px,100%)]')
+    expect(w.find('div').classes()).toContain('max-w-[min(75rem,100%)]')
     expect(w.find('h1').text()).toBe('列表')
     w.unmount()
   })
 
   it('wide prop:1480 档(宽表格页)', () => {
     const w = mount(ListPage, { props: { title: '场景库', width: 'wide' } })
-    expect(w.find('div').classes()).toContain('max-w-[min(1480px,100%)]')
+    expect(w.find('div').classes()).toContain('max-w-[min(92.5rem,100%)]')
     w.unmount()
   })
 })

@@ -109,7 +109,7 @@ void emit
 .run-overlay {
   position: fixed; inset: 0;
   background: rgba(15, 18, 25, 0.5);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(0.5rem);
   display: flex; align-items: center; justify-content: center;
   z-index: 100;
   animation: fadeIn 0.2s;
@@ -117,30 +117,30 @@ void emit
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .run-dialog {
-  width: 720px; max-width: 92vw; max-height: 88vh;
-  background: var(--c-surface); border-radius: 16px;
+  width: 45rem; max-width: 92vw; max-height: 88vh;
+  background: var(--c-surface); border-radius: 1rem;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
   display: flex; flex-direction: column;
   animation: slideUp 0.25s ease-out;
 }
-@keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 .run-header {
   display: flex; align-items: flex-start; justify-content: space-between;
-  padding: 24px 28px 20px;
+  padding: 1.5rem 1.75rem 1.25rem;
   border-bottom: 1px solid #e6e8ec;
 }
-.run-header h2 { margin: 0 0 4px; font-size: 20px; }
-.run-header .muted { font-size: 13px; color: #5a6273; }
-.run-header .muted code { font-family: var(--font-mono); background: var(--soft-neutral-bg); padding: 1px 4px; border-radius: 3px; }
+.run-header h2 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+.run-header .muted { font-size: 0.8125rem; color: #5a6273; }
+.run-header .muted code { font-family: var(--font-mono); background: var(--soft-neutral-bg); padding: 0.0625rem 0.25rem; border-radius: 0.1875rem; }
 
 .icon-btn {
-  width: 32px; height: 32px;
+  width: 2rem; height: 2rem;
   display: flex; align-items: center; justify-content: center;
-  background: transparent; border: none; border-radius: 6px;
+  background: transparent; border: none; border-radius: 0.375rem;
   color: #5a6273; cursor: pointer; transition: all 0.15s;
 }
 .icon-btn:hover { background: #f5f6fa; color: #1a1d24; }
 
-.run-body { padding: 20px 28px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.run-body { padding: 1.25rem 1.75rem; flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 </style>

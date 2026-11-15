@@ -629,46 +629,46 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
 <style scoped>
 /* 容器与列表/工作台页同款节奏(.slib 规范:1480 居中 + 56/32/48) */
 .sm {
-  box-sizing: border-box; max-width: 1480px; min-width: 0;
-  margin: 0 auto; padding: 56px 32px 48px;
-  display: flex; flex-direction: column; gap: 14px; position: relative;
+  box-sizing: border-box; max-width: 92.5rem; min-width: 0;
+  margin: 0 auto; padding: 3.5rem 2rem 3rem;
+  display: flex; flex-direction: column; gap: 0.875rem; position: relative;
 }
-.sm-head { display: flex; align-items: flex-start; gap: 14px; }
+.sm-head { display: flex; align-items: flex-start; gap: 0.875rem; }
 .sm-head-main { flex: 1; min-width: 0; }
-.sm-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sm-title-row { display: flex; align-items: baseline; gap: 0.625rem; flex-wrap: wrap; }
 .sm-title {
-  margin: 0; font-size: 22px; font-weight: 600; line-height: 1.25;
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0; font-size: 1.375rem; font-weight: 600; line-height: 1.25;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
 }
-.sm-meta { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
+.sm-meta { margin: 0; font-size: 0.75rem; color: var(--color-text-secondary); }
 .sm-draft-chip {
-  font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 500; padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
   color: var(--sl-warn); background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%);
 }
 .sm-pub-chip {
-  font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 500; padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
   color: var(--sl-ok); background: rgb(34 197 94 / 10%); border: 1px solid rgb(34 197 94 / 40%);
 }
-.sm-head-actions { display: flex; align-items: center; gap: 8px; }
+.sm-head-actions { display: flex; align-items: center; gap: 0.5rem; }
 /* 运行主按钮(原型 20):44px 双行 indigo,副行浅 indigo */
 .sm-run {
   display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-  gap: 1px; box-sizing: border-box; height: 44px; padding: 0 18px;
-  border: none; border-radius: 6px; cursor: pointer; line-height: 1.2;
+  gap: 0.0625rem; box-sizing: border-box; height: 2.75rem; padding: 0 1.125rem;
+  border: none; border-radius: 0.375rem; cursor: pointer; line-height: 1.2;
   color: #fff; background: var(--accent);
 }
 .sm-run:hover:not(:disabled) { background: var(--accent-hover); }
 .sm-run:disabled { opacity: .5; cursor: not-allowed; }
-.sm-run-main { font-size: 13px; font-weight: 600; }
-.sm-run-sub { font-size: 11px; color: var(--accent-soft-border); }
+.sm-run-main { font-size: 0.8125rem; font-weight: 600; }
+.sm-run-sub { font-size: 0.6875rem; color: var(--accent-soft-border); }
 .sm-more {
-  width: 36px; height: 36px; border-radius: 6px; cursor: pointer;
+  width: 2.25rem; height: 2.25rem; border-radius: 0.375rem; cursor: pointer;
   border: 1px solid var(--color-border-tertiary); background: var(--c-surface); color: inherit;
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 .sm-banner {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 8px 14px; border-radius: 8px; font-size: 12.5px;
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  padding: 0.5rem 0.875rem; border-radius: 0.5rem; font-size: 0.78125rem;
 }
 .sm-banner.info {
   color: #1d4ed8; background: rgb(59 130 246 / 8%);
@@ -687,56 +687,56 @@ onBeforeUnmount(() => { if (saveTimer !== null) window.clearTimeout(saveTimer) }
   border: 1px solid rgb(100 116 139 / 30%);
 }
 .sm-banner-ops button, .sm-banner.draft button {
-  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; cursor: pointer;
   color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
-.sm-tabs { display: flex; flex-direction: column; gap: 12px; }
+.sm-tabs { display: flex; flex-direction: column; gap: 0.75rem; }
 /* 页签 = 原型 20 下划线式(灰底胶囊是组件默认样式,按 role 覆写) */
 .sm-tabs :deep([role='tablist']) {
-  display: flex; gap: 20px; border-bottom: 1px solid var(--color-border-tertiary);
+  display: flex; gap: 1.25rem; border-bottom: 1px solid var(--color-border-tertiary);
   background: transparent; border-radius: 0; padding: 0;
 }
 .sm-tabs :deep([role='tab']) {
-  padding: 8px 2px; margin-bottom: -1px; border-radius: 0;
+  padding: 0.5rem 0.125rem; margin-bottom: -0.0625rem; border-radius: 0;
   background: transparent; box-shadow: none;
-  font-size: 13px; color: var(--color-text-secondary);
+  font-size: 0.8125rem; color: var(--color-text-secondary);
 }
 .sm-tabs :deep([role='tab'][data-state='active']) {
   border-bottom: 2px solid var(--accent); font-weight: 600;
   color: var(--color-text-primary); box-shadow: none;
 }
-.sm-pane { display: flex; flex-direction: column; gap: 12px; }
+.sm-pane { display: flex; flex-direction: column; gap: 0.75rem; }
 .sm-cols {
-  display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px;
-  gap: 12px; align-items: start;
+  display: grid; grid-template-columns: 13.75rem minmax(0, 1fr) 18.75rem;
+  gap: 0.75rem; align-items: start;
 }
 @media (max-width: 1100px) {
-  .sm-cols { grid-template-columns: 200px minmax(0, 1fr); }
+  .sm-cols { grid-template-columns: 12.5rem minmax(0, 1fr); }
   .sm-cols > :nth-child(3) { grid-column: 1 / -1; }
 }
 .sm-menu-mask { position: fixed; inset: 0; z-index: 30; }
 .sm-menu {
-  position: absolute; right: 32px; top: 132px; z-index: 31;
-  display: flex; flex-direction: column; min-width: 170px;
-  border: 1px solid rgb(100 116 139 / 30%); border-radius: 10px;
+  position: absolute; right: 2rem; top: 8.25rem; z-index: 31;
+  display: flex; flex-direction: column; min-width: 10.625rem;
+  border: 1px solid rgb(100 116 139 / 30%); border-radius: 0.625rem;
   background: var(--c-bg, #fff); box-shadow: 0 8px 24px rgb(15 23 42 / 14%);
-  padding: 4px;
+  padding: 0.25rem;
 }
 .sm-menu button {
-  text-align: left; padding: 8px 12px; font-size: 13px; cursor: pointer;
-  border: none; background: transparent; color: inherit; border-radius: 6px;
+  text-align: left; padding: 0.5rem 0.75rem; font-size: 0.8125rem; cursor: pointer;
+  border: none; background: transparent; color: inherit; border-radius: 0.375rem;
 }
 .sm-menu button:hover:not(:disabled) { background: rgb(59 130 246 / 8%); }
 .sm-menu button:disabled { opacity: .45; cursor: not-allowed; }
 .sm-menu .danger { color: var(--sl-bad, var(--sl-bad)); }
-.sm-loading, .sm-empty { padding: 40px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
+.sm-loading, .sm-empty { padding: 2.5rem 0; text-align: center; color: rgb(100 116 139); font-size: 0.8125rem; }
 .btn-primary {
-  padding: 7px 16px; font-size: 13px; font-weight: 600; border: none;
-  border-radius: 8px; cursor: pointer; color: #fff; background: var(--accent);
+  padding: 0.4375rem 1rem; font-size: 0.8125rem; font-weight: 600; border: none;
+  border-radius: 0.5rem; cursor: pointer; color: #fff; background: var(--accent);
 }
 .btn-secondary {
-  padding: 7px 14px; font-size: 13px; border-radius: 8px; cursor: pointer;
+  padding: 0.4375rem 0.875rem; font-size: 0.8125rem; border-radius: 0.5rem; cursor: pointer;
   border: 1px solid var(--accent-soft-border); color: var(--accent); background: var(--accent-soft);
 }
 </style>

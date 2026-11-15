@@ -20,13 +20,13 @@ withDefaults(
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  padding: 2px 8px;
+  padding: 0.125rem 0.5rem;
   overflow: hidden;
   color: #5b21b6;
   white-space: nowrap;
   text-overflow: ellipsis;
   background: #ede9fe;
-  border-radius: 12px;
+  border-radius: 0.75rem;
 }
 
 .tag-pill.accent {

@@ -6,7 +6,7 @@
      hash 区分高亮(此前通知链到无锚点的账号页,点了停在账号卡顶部、
      高亮的也是「账号」)。 -->
 <template>
-  <nav class="flex w-[168px] flex-none flex-col gap-0.5" aria-label="个人设置分区">
+  <nav class="flex w-[10.5rem] flex-none flex-col gap-0.5" aria-label="个人设置分区">
     <RouterLink
       v-for="item in items" :key="item.to" :to="item.to"
       class="flex items-center justify-between rounded-md px-3 py-2 text-body no-underline"
@@ -72,10 +72,10 @@ onMounted(async () => {
 
 <style scoped>
 .pending-badge {
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
-  padding: 0 6px;
-  border-radius: 999px;
+  padding: 0 0.375rem;
+  border-radius: 62.4375rem;
   background: #fef3c7;
   color: var(--sl-warn);
 }

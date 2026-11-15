@@ -112,67 +112,67 @@ const unregisteredRefs = computed(() => {
 /* 独立白卡外壳(= .c-card 配方,与 ①-③ 页功能块及 ConstantPoolPanel 同款):
    从「step 信息」块拆出后作为 col-stack 中的独立卡常驻 */
 .vr-panel {
-  padding: 20px 24px;
+  padding: 1.25rem 1.5rem;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   display: flex; flex-direction: column;
 }
 /* 分隔线卡头(= .c-card-head 节奏,镜像 cp-head) */
 .vr-head {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 16px; padding-bottom: 12px;
+  margin-bottom: 1rem; padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--c-divider);
 }
 .vr-title {
-  font-size: 14px; font-weight: 600; color: var(--c-text-primary);
+  font-size: 0.875rem; font-weight: 600; color: var(--c-text-primary);
 }
 .vr-count {
   font-family: var(--font-mono);
   background: var(--c-bg-secondary); border: 1px solid var(--c-border);
-  border-radius: 999px; padding: 0 7px; font-size: 10px;
+  border-radius: 62.4375rem; padding: 0 0.4375rem; font-size: 0.625rem;
   color: var(--c-text-secondary);
 }
 /* 虚线空态框(对齐 .c-add 虚线添加惯例) */
 .vr-empty {
   border: 1px dashed var(--c-border-strong);
-  border-radius: 6px; padding: 14px 12px;
-  font-size: 11.5px; color: var(--c-text-tertiary);
+  border-radius: 0.375rem; padding: 0.875rem 0.75rem;
+  font-size: 0.71875rem; color: var(--c-text-tertiary);
   line-height: 1.6; text-align: center;
 }
 
 /* 灰底行(编辑器嵌套内容惯例: 白卡上灰条) */
 .vr-row {
-  display: grid; grid-template-columns: 1fr 56px auto; gap: 6px;
+  display: grid; grid-template-columns: 1fr 3.5rem auto; gap: 0.375rem;
   align-items: center;
-  padding: 4px 8px; border-radius: 6px;
-  font-size: 11.5px;
+  padding: 0.25rem 0.5rem; border-radius: 0.375rem;
+  font-size: 0.71875rem;
   background: var(--c-bg-secondary);
 }
-.vr-row + .vr-row { margin-top: 8px; }
+.vr-row + .vr-row { margin-top: 0.5rem; }
 .vr-name {
   font-family: var(--font-mono); font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .vr-badge {
-  padding: 1px 5px; border-radius: 4px; text-align: center;
-  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  padding: 0.0625rem 0.3125rem; border-radius: 0.25rem; text-align: center;
+  font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700;
 }
 .vr-badge.extract { background: #d1fae5; color: #065f46; }
 .vr-badge.config { background: #eef2ff; color: var(--accent); }
-.vr-producer { font-size: 10px; color: var(--c-text-tertiary); white-space: nowrap; }
+.vr-producer { font-size: 0.625rem; color: var(--c-text-tertiary); white-space: nowrap; }
 /* 同名多产出黄标(promote 静默覆盖 → 提示后者生效) */
 .vr-dup {
-  margin-left: 3px; padding: 0 4px; border-radius: 3px;
-  background: #fef3c7; color: #92400e; font-size: 9px; font-weight: 600;
+  margin-left: 0.1875rem; padding: 0 0.25rem; border-radius: 0.1875rem;
+  background: #fef3c7; color: #92400e; font-size: 0.5625rem; font-weight: 600;
 }
 
 /* 未注册引用琥珀提示条(白卡上软底) */
 .vr-unregistered {
-  margin: 12px 0 0;
-  background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 10px; font-family: var(--font-mono);
+  margin: 0.75rem 0 0;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.625rem; font-family: var(--font-mono);
   color: #92400e; line-height: 1.6;
 }
 </style>

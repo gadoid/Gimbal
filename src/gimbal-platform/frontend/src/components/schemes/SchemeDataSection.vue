@@ -311,7 +311,7 @@ async function submit() {
 
     <!-- 内联维护:网格为主(变量即列),高级粘贴折叠兜底 -->
     <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
-      <DialogContent class="max-w-[960px]">
+      <DialogContent class="max-w-[60rem]">
         <DialogHeader>
           <DialogTitle>{{ mode === 'create' ? '新建数据集' : '编辑数据集' }}</DialogTitle>
         </DialogHeader>
@@ -372,37 +372,37 @@ async function submit() {
 </template>
 
 <style scoped>
-.acct-badge { font-size: 0.7rem; padding: 0 6px; border-radius: 999px; background: rgb(37 99 235 / 8%); color: #1d4ed8; border: 1px solid rgb(37 99 235 / 25%); }
+.acct-badge { font-size: 0.7rem; padding: 0 0.375rem; border-radius: 62.4375rem; background: rgb(37 99 235 / 8%); color: #1d4ed8; border: 1px solid rgb(37 99 235 / 25%); }
 /* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
   background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
-  border-radius: 8px; padding: 12px 16px;
-  display: flex; flex-direction: column; gap: 10px;
+  border-radius: 0.5rem; padding: 0.75rem 1rem;
+  display: flex; flex-direction: column; gap: 0.625rem;
 }
 /* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 计数徽标 + 弹性空位 */
-.zone-head { display: flex; align-items: center; gap: 10px; }
+.zone-head { display: flex; align-items: center; gap: 0.625rem; }
 .zone-name {
-  font-size: 14px; font-weight: 700; color: var(--color-text-primary);
-  padding-left: 10px; border-left: 3px solid var(--accent);
+  font-size: 0.875rem; font-weight: 700; color: var(--color-text-primary);
+  padding-left: 0.625rem; border-left: 3px solid var(--accent);
 }
 .zone-count {
-  padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 3px;
+  padding: 0.0625rem 0.375rem; font-size: 0.6875rem; font-weight: 600;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 0.1875rem;
 }
 .zone-spacer { flex: 1; }
 
 /* 失效行:amber 软提示条(DataSetEditor dead-keys-bar 同款语言) */
 .dead-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 5px 10px; font-size: 11px; color: var(--sl-warn);
-  background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.3125rem 0.625rem; font-size: 0.6875rem; color: var(--sl-warn);
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 0.375rem;
 }
 
 /* tile 网格:平台卡片网格形制(CaseDataSetsList .grid auto-fill) */
-.ds-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.ds-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(14.375rem, 1fr)); gap: 0.625rem; }
 .ds-tile {
-  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 8px;
-  padding: 10px 12px; transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem; transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .ds-tile:hover { border-color: var(--accent); box-shadow: 0 1px 6px rgba(67, 56, 202, 0.12); }
 /* 选中态:浅 accent 底 + 左侧竖条(与左栏选中项同一语言) */
@@ -411,57 +411,57 @@ async function submit() {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 .ds-tile label {
-  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 0.5rem; cursor: pointer;
 }
 .ds-tile input[type="checkbox"] { accent-color: var(--accent); flex: none; }
 .ds-name {
-  flex: 1; min-width: 0; font-size: 13px; font-weight: 600;
+  flex: 1; min-width: 0; font-size: 0.8125rem; font-weight: 600;
   color: var(--color-text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* 行数徽标:CaseDataSetsList .row-count 同款 chip */
 .row-count {
-  flex: none; padding: 1px 6px; font-family: var(--font-mono); font-size: 10px;
+  flex: none; padding: 0.0625rem 0.375rem; font-family: var(--font-mono); font-size: 0.625rem;
   font-weight: 600; color: var(--color-text-secondary);
-  background: var(--soft-neutral-bg); border-radius: 3px; white-space: nowrap;
+  background: var(--soft-neutral-bg); border-radius: 0.1875rem; white-space: nowrap;
 }
 
 /* 行级勾选展开态:换行排版 + 虚线分隔(选中 tile 的附属区) */
 .row-picks {
-  display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 8px; padding-top: 8px;
+  display: flex; flex-wrap: wrap; gap: 0.25rem 0.375rem; margin-top: 0.5rem; padding-top: 0.5rem;
   border-top: 1px dashed var(--color-border-tertiary);
 }
 .row-pick {
-  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
-  padding: 2px 8px; border: 1px solid transparent; border-radius: 4px;
-  font-size: 12px; color: var(--color-text-secondary);
+  display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;
+  padding: 0.125rem 0.5rem; border: 1px solid transparent; border-radius: 0.25rem;
+  font-size: 0.75rem; color: var(--color-text-secondary);
 }
 .row-pick:hover { border-color: var(--color-border-tertiary); background: var(--c-surface); }
 .row-pick input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 
 /* tile 操作位:编辑/删除靠右,不触发 label 勾选 */
-.ds-tile-foot { margin-top: 6px; display: flex; justify-content: flex-end; gap: 2px; }
-.ds-act { height: 22px; padding: 0 6px; font-size: 11px; }
+.ds-tile-foot { margin-top: 0.375rem; display: flex; justify-content: flex-end; gap: 0.125rem; }
+.ds-act { height: 1.375rem; padding: 0 0.375rem; font-size: 0.6875rem; }
 
 /* 空态(三处统一形状:dashed 框 + muted 文案 + 引导按钮) */
 .empty-state {
   grid-column: 1 / -1;
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 18px 16px; text-align: center;
-  border: 1px dashed var(--color-border-tertiary); border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 0.625rem;
+  padding: 1.125rem 1rem; text-align: center;
+  border: 1px dashed var(--color-border-tertiary); border-radius: 0.5rem;
 }
-.empty-state p { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
+.empty-state p { margin: 0; font-size: 0.75rem; color: var(--color-text-tertiary); }
 
 /* 内联维护表单 */
-.create-form { display: flex; flex-direction: column; gap: 6px; }
-.create-label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); margin-top: 4px; }
-.create-hint { margin: 0; font-size: 12px; }
+.create-form { display: flex; flex-direction: column; gap: 0.375rem; }
+.create-label { font-size: 0.75rem; font-weight: 600; color: var(--color-text-secondary); margin-top: 0.25rem; }
+.create-hint { margin: 0; font-size: 0.75rem; }
 .create-hint.ok { color: var(--color-success, var(--sl-ok)); }
 .create-hint.bad { color: var(--color-danger, var(--sl-bad)); }
 /* 高级粘贴折叠区:标题行弱化,展开后与网格同一表单节奏 */
-.adv-paste { margin-top: 6px; border: 1px dashed var(--color-border-tertiary); border-radius: 8px; padding: 8px 10px; }
-.adv-paste summary { font-size: 11.5px; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }
-.adv-paste[open] summary { margin-bottom: 8px; }
-.adv-paste .create-hint { margin-top: 6px; }
-.adv-paste button { margin-top: 8px; }
+.adv-paste { margin-top: 0.375rem; border: 1px dashed var(--color-border-tertiary); border-radius: 0.5rem; padding: 0.5rem 0.625rem; }
+.adv-paste summary { font-size: 0.71875rem; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }
+.adv-paste[open] summary { margin-bottom: 0.5rem; }
+.adv-paste .create-hint { margin-top: 0.375rem; }
+.adv-paste button { margin-top: 0.5rem; }
 </style>

@@ -14,7 +14,7 @@
           / {{ user?.username ?? '…' }}
         </span>
         <div class="flex flex-wrap items-center gap-2.5">
-          <h1 class="m-0 text-[22px] leading-[30px] font-semibold" data-testid="udt-title">
+          <h1 class="m-0 text-[1.375rem] leading-[1.875rem] font-semibold" data-testid="udt-title">
             {{ user ? (user.display_name || user.username) : '…' }}
           </h1>
           <span v-if="user" class="udt-pill">{{ roleText }}</span>
@@ -111,28 +111,28 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.udt { display: flex; flex-direction: column; gap: 16px; max-width: 980px; }
+.udt { display: flex; flex-direction: column; gap: 1rem; max-width: 61.25rem; }
 .udt-head {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap;
+  gap: 1rem; flex-wrap: wrap;
 }
 .udt-link { color: var(--color-signal, var(--sl-accent)); text-decoration: none; }
 .udt-link:hover { text-decoration: underline; }
 .udt-pill {
-  font-size: 11px; font-weight: 600; padding: 2px 8px;
-  border-radius: 999px; white-space: nowrap;
+  font-size: 0.6875rem; font-weight: 600; padding: 0.125rem 0.5rem;
+  border-radius: 62.4375rem; white-space: nowrap;
   background: var(--color-signal-soft, var(--soft-accent-bg));
   color: var(--color-signal, #1f55c4);
 }
 .udt-pill.is-on { background: #e4f5ea; color: var(--sl-ok); }
 .udt-pill.is-off { background: #eef0f3; color: #5b6472; }
-.udt-kv { width: 100%; border-collapse: collapse; font-size: 13px; }
+.udt-kv { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .udt-kv th {
-  width: 96px; text-align: left; font-weight: 500;
+  width: 6rem; text-align: left; font-weight: 500;
   color: color-mix(in srgb, var(--color-signal-ink, var(--sl-ink)) 60%, transparent);
-  padding: 8px 12px; vertical-align: top;
+  padding: 0.5rem 0.75rem; vertical-align: top;
 }
-.udt-kv td { padding: 8px 12px; }
+.udt-kv td { padding: 0.5rem 0.75rem; }
 .udt-kv tr + tr th, .udt-kv tr + tr td { border-top: 1px solid var(--color-signal-line, var(--sl-line)); }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

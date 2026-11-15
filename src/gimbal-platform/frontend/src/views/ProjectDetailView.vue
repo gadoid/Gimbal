@@ -51,7 +51,7 @@
                   @click="newScenarioInProject">在本项目新建场景</button>
         </div>
         <table class="tbl" v-if="scenarios.length">
-          <thead><tr><th>场景名</th><th style="width:100px">系统</th><th style="width:100px">模块</th><th style="width:110px">作者</th><th style="width:100px">最后编辑</th></tr></thead>
+          <thead><tr><th>场景名</th><th style="width:6.25rem">系统</th><th style="width:6.25rem">模块</th><th style="width:6.875rem">作者</th><th style="width:6.25rem">最后编辑</th></tr></thead>
           <tbody>
             <tr v-for="r in scenarios" :key="r.meta.scenarioId" class="row-link"
                 :data-testid="`prj-scen-${r.meta.scenarioId}`"
@@ -88,7 +88,7 @@
                   @click="newSuiteInProject">在本项目新建用例集</button>
         </div>
         <table class="tbl" v-if="suites.length">
-          <thead><tr><th>名称</th><th style="width:80px">模式</th><th style="width:90px">成员数</th><th style="width:110px">最后编辑</th></tr></thead>
+          <thead><tr><th>名称</th><th style="width:5rem">模式</th><th style="width:5.625rem">成员数</th><th style="width:6.875rem">最后编辑</th></tr></thead>
           <tbody>
             <tr v-for="s in suites" :key="s.suiteId" class="row-link"
                 :data-testid="`prj-suite-${s.suiteId}`" @click="openSuite(s)">
@@ -107,7 +107,7 @@
 
       <template v-else-if="tab === 'tasks'">
         <table class="tbl" v-if="tasks.length">
-          <thead><tr><th>名称</th><th style="width:130px">调度</th><th style="width:110px">引用</th><th style="width:90px">状态</th></tr></thead>
+          <thead><tr><th>名称</th><th style="width:8.125rem">调度</th><th style="width:6.875rem">引用</th><th style="width:5.625rem">状态</th></tr></thead>
           <tbody>
             <tr v-for="t in tasks" :key="t.id" class="row-link"
                 :data-testid="`prj-task-${t.id}`" @click="$router.push(`/integrations/${t.id}`)">
@@ -333,10 +333,10 @@ onMounted(loadDetail)
 .tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--color-border-tertiary); }
 .tab { border: none; background: none; padding: 0.45rem 0.9rem; cursor: pointer; font-size: 0.88rem; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }
 .tab.on { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
-.cnt { margin-left: 4px; font-size: 0.72rem; color: var(--color-text-tertiary); }
+.cnt { margin-left: 0.25rem; font-size: 0.72rem; color: var(--color-text-tertiary); }
 .toolbar { display: flex; gap: 0.5rem; align-items: center; }
-.search { padding: 6px 10px; font-size: 12.5px; border-radius: 8px; border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit; max-width: 280px; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 8px; overflow: hidden; }
+.search { padding: 0.375rem 0.625rem; font-size: 0.78125rem; border-radius: 0.5rem; border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit; max-width: 17.5rem; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; overflow: hidden; }
 .tbl th, .tbl td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #eef2f7; }
 .tbl th { background: var(--surface-raised); color: var(--color-text-secondary); font-weight: 500; }
 .row-link { cursor: pointer; }
@@ -344,10 +344,10 @@ onMounted(loadDetail)
 .sl-name { font-weight: 500; }
 .sl-sid { color: var(--color-text-tertiary); font-size: 0.72rem; }
 .muted { color: var(--color-text-tertiary); }
-.badge { font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
+.badge { font-size: 0.7rem; padding: 0.0625rem 0.5rem; border-radius: 62.4375rem; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
 .badge.pub { background: rgb(37 99 235 / 8%); color: #2563eb; border-color: rgb(37 99 235 / 30%); }
-.badge.draft { margin-left: 6px; }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
+.badge.draft { margin-left: 0.375rem; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn.sm { padding: 0.15rem 0.5rem; font-size: 0.78rem; }
 .pager { display: flex; align-items: center; gap: 0.6rem; }

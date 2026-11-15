@@ -184,8 +184,8 @@ const layoutDirty = computed(() => {
    窄屏(<1180)折成单列,右栏落到主区之后。 */
 .wb-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 288px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 18rem;
+  gap: 1rem;
   align-items: start;
 }
 /* 主区是卡片网格的容器查询源:轨数看主区实际宽度,不看视口 ——
@@ -195,10 +195,10 @@ const layoutDirty = computed(() => {
 
 .wb-rail {
   position: sticky;
-  top: 56px;
+  top: 3.5rem;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0.875rem;
 }
 @media (max-width: 1180px) {
   .wb-shell { grid-template-columns: minmax(0, 1fr); }

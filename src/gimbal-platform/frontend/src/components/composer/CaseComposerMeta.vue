@@ -257,11 +257,11 @@ watch(local, (v) => {
 
 <style scoped>
 /* 大部分样式来自 composer.css 共享层 (.c-page/.c-card/.c-form/.c-grid-*) */
-.system-chips { display: inline-flex; gap: 4px; }
+.system-chips { display: inline-flex; gap: 0.25rem; }
 .system-chip {
   display: inline-block;
-  padding: 2px 8px; border-radius: 4px;
-  font-size: 11px; font-weight: 600;
+  padding: 0.125rem 0.5rem; border-radius: 0.25rem;
+  font-size: 0.6875rem; font-weight: 600;
 }
 .system-chip.s-fin { background: #dbeafe; color: #1e40af; }
 .system-chip.s-logi { background: #d1fae5; color: #065f46; }
@@ -269,35 +269,35 @@ watch(local, (v) => {
 .system-chip.s-mall { background: #fce7f3; color: #9d174d; }
 .system-chip.s-common { background: #f3e8ff; color: #6b21a8; }
 
-.hint { display: block; font-size: 11px; color: var(--c-text-tertiary); margin-top: 4px; }
+.hint { display: block; font-size: 0.6875rem; color: var(--c-text-tertiary); margin-top: 0.25rem; }
 .opt-sys { font-weight: 500; }
-.switch-label { margin-left: 12px; font-size: 13px; color: var(--c-text-secondary); }
-.mf-item { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
-.mf-label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary, var(--color-text-secondary)); }
+.switch-label { margin-left: 0.75rem; font-size: 0.8125rem; color: var(--c-text-secondary); }
+.mf-item { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }
+.mf-label { font-size: 0.6875rem; font-weight: 600; color: var(--color-text-secondary, var(--color-text-secondary)); }
 .meta-select {
-  height: 34px; padding: 0 8px; font-size: 13px;
+  height: 2.125rem; padding: 0 0.5rem; font-size: 0.8125rem;
   color: var(--sl-ink); background: var(--c-surface);
-  border: 1px solid var(--sl-line); border-radius: 6px;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem;
 }
-.sys-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.sys-chips { display: flex; flex-wrap: wrap; gap: 0.25rem 0.375rem; }
 .sys-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 10px; font-size: 11.5px;
-  color: #374151; border: 1px solid var(--sl-line); border-radius: 10px;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.125rem 0.625rem; font-size: 0.71875rem;
+  color: #374151; border: 1px solid var(--sl-line); border-radius: 0.625rem;
   cursor: pointer; user-select: none;
 }
 .sys-chip.on { color: var(--sl-accent); border-color: var(--sl-accent); background: var(--soft-accent-bg); }
 .sys-chip input { accent-color: var(--sl-accent); margin: 0; }
 .sys-add {
   border: none; outline: none; background: transparent;
-  font-size: 11.5px; color: var(--sl-accent); width: 130px;
+  font-size: 0.71875rem; color: var(--sl-accent); width: 8.125rem;
 }
 .sys-add::placeholder { color: var(--color-text-tertiary); }
 
 /* RS3 版本声明（meta.plate）*/
-.plate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.plate-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.375rem; }
 .plate-sys {
-  min-width: 100px; font-size: 11.5px; font-weight: 600;
+  min-width: 6.25rem; font-size: 0.71875rem; font-weight: 600;
   color: var(--c-text-secondary, var(--color-text-secondary)); white-space: nowrap;
 }
 .plate-select { flex: 1; min-width: 0; }

@@ -82,23 +82,23 @@
               <span class="mono svc-key">{{ row.alias }}</span>
               <span
                 v-if="row.isDefault" class="svc-chip"
-                style="font-size:11px" :data-testid="`default-chip-${row.id}`"
+                style="font-size:0.6875rem" :data-testid="`default-chip-${row.id}`"
                 title="名字解析与环境未命中时的取用行">默认</span>
               <span
                 v-if="testMemory[row.id]" class="svc-flag"
                 :class="testMemory[row.id].ok ? 'green' : 'red'"
-                style="font-size:11px" :data-testid="`test-mem-${row.id}`"
+                style="font-size:0.6875rem" :data-testid="`test-mem-${row.id}`"
                 :title="`上次测试:${testMemory[row.id].ok ? '成功' : '失败'} · ${shortDateTime(new Date(testMemory[row.id].at))}(本机记录)`"
               >{{ testMemory[row.id].ok ? '✓ 测通' : '✗ 测败' }} {{ shortDateTime(new Date(testMemory[row.id].at)) }}</span>
               <span class="flex-1" />
               <span class="svc-flag" :class="ttClass[row.token_type] ?? 'ink'">{{ row.token_type }}</span>
-              <span class="muted" style="font-size:11px">{{ formatExpires(row.expires_in) }}</span>
+              <span class="muted" style="font-size:0.6875rem">{{ formatExpires(row.expires_in) }}</span>
             </div>
             <div class="bind-line sub">
               <span class="mono muted">{{ row.url }}</span>
               <span
                 v-if="row.system || row.envId" class="muted"
-                style="font-size:11px" :data-testid="`binding-ctx-${row.id}`"
+                style="font-size:0.6875rem" :data-testid="`binding-ctx-${row.id}`"
               >{{ row.system || '未归类' }}<template v-if="row.envId"> · 环境#{{ row.envId }}</template></span>
             </div>
             <div class="bind-line acts">
@@ -116,7 +116,7 @@
                   title="别名绑定与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
                 >未被引用 · 可安全删除</span>
                 <span class="flex-1" />
-                <span class="mono muted" style="font-size:11px">{{ row.username }}</span>
+                <span class="mono muted" style="font-size:0.6875rem">{{ row.username }}</span>
               </div>
               <div class="row-acts">
                 <!-- 高频操作升为一键:测试连通不进菜单(结果回写行内状态) -->
@@ -164,7 +164,7 @@
 
     <!-- ── 创建 / 编辑(定稿表单范式)──────────────────────────── -->
     <Dialog :open="createOpen" @update:open="createOpen = $event">
-      <DialogContent class="max-w-[520px]">
+      <DialogContent class="max-w-[32.5rem]">
         <DialogHeader>
           <DialogTitle>{{ editingId ? '编辑认证' : '+ 新增认证' }}</DialogTitle>
         </DialogHeader>
@@ -302,7 +302,7 @@
                 <FormItem>
                   <FormLabel>expires_in（秒）</FormLabel>
                   <FormControl>
-                    <Input v-bind="componentField" type="number" :min="0" :max="86400" class="w-[140px]" data-testid="f-expires" />
+                    <Input v-bind="componentField" type="number" :min="0" :max="86400" class="w-[8.75rem]" data-testid="f-expires" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -320,7 +320,7 @@
 
     <!-- ── 测试结果弹框(状态主视觉式)─────────────────────────── -->
     <Dialog :open="testOpen" @update:open="testOpen = $event">
-      <DialogContent class="max-w-[460px]">
+      <DialogContent class="max-w-[28.75rem]">
         <DialogHeader>
           <DialogTitle>认证测试</DialogTitle>
         </DialogHeader>
@@ -357,7 +357,7 @@
 
     <!-- ── 删除确认(输入 alias 硬确认)────────────────────────── -->
     <Dialog :open="deleteOpen" @update:open="deleteOpen = $event">
-      <DialogContent class="max-w-[420px]">
+      <DialogContent class="max-w-[26.25rem]">
         <DialogHeader>
           <DialogTitle>删除认证</DialogTitle>
         </DialogHeader>
@@ -383,7 +383,7 @@
     <Sheet :open="refsOpen" @update:open="refsOpen = $event">
       <SheetContent
         side="right"
-        class="flex w-[460px] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[460px]"
+        class="flex w-[28.75rem] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[28.75rem]"
         data-testid="refs-sheet"
       >
         <SheetHeader class="border-b border-signal-line px-4 py-3">
@@ -947,7 +947,7 @@ onMounted(async () => {
   padding: 0;
   border: 0;
   background: none;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   color: var(--sl-ink-3, #5b6472);
   cursor: pointer;
 }
@@ -956,20 +956,20 @@ onMounted(async () => {
 /* ── 槽位卡片看板(借 .svc-tile 语言:白卡 + 状态色 3px 顶边)────── */
 .auth-board {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(21.25rem, 1fr));
   align-items: start;
 }
 .slot-card {
   background: var(--c-surface);
   border: 1px solid var(--sl-line, var(--sl-line));
   border-top: 3px solid var(--sl-divider, #c3c9d4);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   box-shadow: 0 1px 3px rgba(16, 21, 28, 0.06);
-  padding: 10px 13px;
+  padding: 0.625rem 0.8125rem;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
   min-width: 0;
 }
 .slot-card.tone-ok { border-top-color: var(--sl-ok, #22a55e); }
@@ -979,35 +979,35 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 0.375rem;
 }
-.sc-slot { font-size: 12.5px; color: var(--sl-ink, var(--sl-ink)); }
-.sc-slot b { font-size: 13px; }
-.sc-n { font-size: 11px; }
+.sc-slot { font-size: 0.78125rem; color: var(--sl-ink, var(--sl-ink)); }
+.sc-slot b { font-size: 0.8125rem; }
+.sc-n { font-size: 0.6875rem; }
 .sc-binds {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0.375rem;
 }
 .sc-bind {
   border: 1px solid var(--sl-divider, #e8ebf0);
-  border-radius: 8px;
-  padding: 7px 9px;
+  border-radius: 0.5rem;
+  padding: 0.4375rem 0.5625rem;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.25rem;
   background: var(--sl-canvas, #fbfcfe);
 }
 .bind-line {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 0.375rem;
   min-width: 0;
 }
 .bind-line.sub { justify-content: space-between; }
 .bind-line.sub .mono {
-  font-size: 11px;
+  font-size: 0.6875rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1015,10 +1015,10 @@ onMounted(async () => {
 .bind-line.acts { justify-content: space-between; }
 .sc-more {
   align-self: flex-start;
-  padding: 2px 0;
+  padding: 0.125rem 0;
   border: 0;
   background: none;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   color: var(--sl-accent, var(--sl-accent));
   cursor: pointer;
 }
@@ -1026,25 +1026,25 @@ onMounted(async () => {
 
 /* ── 反查侧板 ─────────────────────────────────────────────── */
 .drawer-warn {
-  margin-top: 14px;
-  padding: 8px 10px;
-  font-size: 11.5px;
+  margin-top: 0.875rem;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.71875rem;
   line-height: 1.6;
   color: var(--sl-bad);
   background: var(--sl-bad-soft);
   border: 1px solid var(--sv-bad-line);
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
 
 .ref-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 0;
+  gap: 0.5rem;
+  padding: 0.1875rem 0;
   flex-wrap: wrap;
 }
 
-.ref-dim { font-size: 11px; color: var(--sl-ink-3); }
+.ref-dim { font-size: 0.6875rem; color: var(--sl-ink-3); }
 
 .link { color: var(--sl-accent); }
 .link:hover { text-decoration: underline; }
@@ -1057,9 +1057,9 @@ onMounted(async () => {
 .test-hero { text-align: center; }
 
 .test-sub {
-  margin-bottom: 18px;
+  margin-bottom: 1.125rem;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--sl-ink-2);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1067,19 +1067,19 @@ onMounted(async () => {
 
 .test-state {
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
   align-items: center;
   justify-content: center;
-  margin: 6px 0 14px;
+  margin: 0.375rem 0 0.875rem;
 }
 
 .test-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  font-size: 20px;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   border-radius: 50%;
 }
@@ -1093,25 +1093,25 @@ onMounted(async () => {
 .success .test-icon { color: var(--sl-ok); background: var(--sl-ok-soft); }
 .fail .test-icon { color: var(--sl-bad); background: var(--sl-bad-soft); }
 
-.test-word { font-size: 16px; font-weight: 600; }
+.test-word { font-size: 1rem; font-weight: 600; }
 .testing .test-word { color: var(--sl-ink-2); }
 .success .test-word { color: var(--sl-ok); }
 .fail .test-word { color: var(--sl-bad); }
 
 .test-code {
-  padding: 2px 8px;
-  font-size: 11px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
   color: var(--sl-ink-2);
   background: var(--sl-canvas);
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 
 .detail {
   display: block;
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
   color: var(--sl-ink);
   background: var(--sl-canvas);
-  border-radius: 4px;
+  border-radius: 0.25rem;
   word-break: break-all;
 }
 
@@ -1120,7 +1120,7 @@ onMounted(async () => {
   border: none;
   color: var(--sl-ink-2);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 @keyframes test-spin { to { transform: rotate(360deg); } }

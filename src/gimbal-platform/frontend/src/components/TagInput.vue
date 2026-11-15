@@ -71,12 +71,12 @@ defineExpose({ focus })
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 4px 8px;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
   background: var(--c-surface);
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   transition: border-color 0.2s;
 }
 .tag-input:focus-within {
@@ -84,13 +84,13 @@ defineExpose({ focus })
   box-shadow: 0 0 0 1px var(--sl-accent) inset;
 }
 .tag-input__input {
-  flex: 1 1 80px;
-  min-width: 80px;
+  flex: 1 1 5rem;
+  min-width: 5rem;
   border: none;
   outline: none;
   background: transparent;
-  font-size: 13px;
-  padding: 2px 4px;
+  font-size: 0.8125rem;
+  padding: 0.125rem 0.25rem;
   color: var(--color-text-primary, #1f2933);
 }
 .tag-input__input::placeholder {
@@ -99,13 +99,13 @@ defineExpose({ focus })
 .tag-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 8px;
-  font-size: 11.5px;
+  gap: 0.1875rem;
+  padding: 0.0625rem 0.5rem;
+  font-size: 0.71875rem;
   color: var(--color-text-strong);
   background: var(--soft-neutral-bg);
   border: 0.5px solid var(--sl-line);
-  border-radius: 4px;
+  border-radius: 0.25rem;
   line-height: 1.7;
 }
 .tag-x {
@@ -113,7 +113,7 @@ defineExpose({ focus })
   border: none;
   background: none;
   color: var(--color-text-tertiary);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1;
   cursor: pointer;
 }

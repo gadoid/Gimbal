@@ -590,14 +590,14 @@ onUnmounted(() => {
 
 <style scoped>
 .detail-tabs {
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
 }
 
 /* W21 版本信息(原修订台账/系统版本信息) */
-.ledger-table { margin-bottom: 8px; }
+.ledger-table { margin-bottom: 0.5rem; }
 .pin-badge {
-  display: inline-block; padding: 1px 8px; border-radius: 4px;
-  font-size: 12px; border: 1px solid var(--color-border-tertiary);
+  display: inline-block; padding: 0.0625rem 0.5rem; border-radius: 0.25rem;
+  font-size: 0.75rem; border: 1px solid var(--color-border-tertiary);
 }
 .pin-badge.pinned { background: #eff6ff; color: #1d4ed8; }
 .pin-badge.working { background: #fffbeb; color: var(--sl-warn); }
@@ -607,11 +607,11 @@ onUnmounted(() => {
   @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
-  margin-left: 8px;
-  padding: 1px 8px;
+  margin-left: 0.5rem;
+  padding: 0.0625rem 0.5rem;
   color: var(--color-text-strong);
   background: var(--soft-neutral-bg);
-  border-radius: 4px;
+  border-radius: 0.25rem;
   vertical-align: middle;
 }
 
@@ -624,30 +624,30 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 0.5rem;
 }
 /* TooltipTrigger 的 span 包装器与状态徽标都以行内盒居中参与 */
 .exec-actions > span {
   display: inline-flex;
   align-items: center;
 }
-/* PageBack 全局形态带 padding-top:4px(为非居中容器兜底);
+/* PageBack 全局形态带 padding-top:0.25rem(为非居中容器兜底);
    本行 items-center 已居中,补丁在这里造成下坠 —— 就地归零。
    右距 10px:返回链接是导航,与「状态+动作」组拉开一档(实测
    12px 时整行读成连串,2026-11-12 浏览器实测定值) */
 .exec-actions :deep(.pgback) {
   padding-top: 0;
-  margin-right: 10px;
+  margin-right: 0.625rem;
 }
 
 .status-tag {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  margin-left: 8px;
+  height: 1.5rem;
+  padding: 0 0.625rem;
+  margin-left: 0.5rem;
   @apply text-caption font-semibold;
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 
 /* 状态配色统一在 @/styles/status-colors.css（见文件末尾引入） */
@@ -655,14 +655,14 @@ onUnmounted(() => {
 .counters {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .counter {
-  padding: 16px;
+  padding: 1rem;
   background: var(--c-surface);
   border: 0.5px solid var(--color-border-tertiary);
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
 
 .counter-label {
@@ -672,7 +672,7 @@ onUnmounted(() => {
 
 .counter-value {
   @apply text-display-lg;
-  margin-top: 6px;
+  margin-top: 0.375rem;
   color: var(--color-text-primary);
 }
 
@@ -686,20 +686,20 @@ onUnmounted(() => {
 
 .recipe-title {
   @apply text-heading;
-  margin: 0 0 12px;
+  margin: 0 0 0.75rem;
   color: var(--color-text-primary);
 }
 
 .recipe {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 6px 24px;
-  padding: 14px 18px;
-  margin: 0 0 16px;
+  gap: 0.375rem 1.5rem;
+  padding: 0.875rem 1.125rem;
+  margin: 0 0 1rem;
   @apply text-label font-normal;
   background: var(--c-surface);
   border: 0.5px solid var(--color-border-tertiary);
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
 
 .recipe dt {
@@ -722,7 +722,7 @@ onUnmounted(() => {
 /* ── 行级明细已退役;ex-table 仅版本信息表在用 ────────────── */
 .rows-hint {
   @apply text-label font-normal;
-  margin: 0 0 16px;
+  margin: 0 0 1rem;
   color: var(--color-text-tertiary);
 }
 
@@ -731,48 +731,48 @@ onUnmounted(() => {
   @apply text-label font-normal;
   background: var(--c-surface);
   border: 0.5px solid var(--color-border-tertiary);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   border-collapse: collapse;
 }
 
 .ex-table th {
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
   /* th 浏览器默认居中,与左对齐的行内容错位 —— 表头随行左对齐
      (标题「系统」压住「fin/jira」列首,2026-11-12) */
   text-align: left;
 }
 
 .ex-table td {
-  padding: 7px 10px;
+  padding: 0.4375rem 0.625rem;
   color: var(--color-text-primary);
   text-align: left;
   border-bottom: 0.5px solid var(--soft-neutral-bg);
 }
 
 .state {
-  max-width: 720px;
-  padding: 80px 20px;
+  max-width: 45rem;
+  padding: 5rem 1.25rem;
   margin: 0 auto;
 }
 
 .error-state {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 1rem;
   align-items: flex-start;
 }
 
 .error-actions {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .poll-warn {
-  margin-bottom: 12px;
+  margin-bottom: 0.75rem;
 }
 
 .sys-alert {
-  margin-bottom: 12px;
+  margin-bottom: 0.75rem;
 }
 </style>
 

@@ -325,78 +325,78 @@ function num(key: 'parallel' | 'nRuns', ev: Event): void {
 </script>
 
 <style scoped>
-.gpan { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.gpan { display: flex; flex-direction: column; gap: 0.625rem; min-width: 0; }
 .gpan-group {
-  border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
-  padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid rgb(100 116 139 / 22%); border-radius: 0.625rem;
+  padding: 0.625rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;
 }
 .gpan-group.off { opacity: .75; }
-.gpan-title { margin: 0; font-size: 12.5px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
-.gpan-count { font-size: 11px; color: rgb(100 116 139); font-weight: 400; }
+.gpan-title { margin: 0; font-size: 0.78125rem; font-weight: 600; display: flex; gap: 0.5rem; align-items: center; }
+.gpan-count { font-size: 0.6875rem; color: rgb(100 116 139); font-weight: 400; }
 .gpan-off-tag {
-  font-size: 11px; font-weight: 400; color: rgb(100 116 139);
-  border: 1px solid rgb(100 116 139 / 30%); border-radius: 999px; padding: 1px 8px;
+  font-size: 0.6875rem; font-weight: 400; color: rgb(100 116 139);
+  border: 1px solid rgb(100 116 139 / 30%); border-radius: 62.4375rem; padding: 0.0625rem 0.5rem;
 }
-.gpan-off-note { margin: 0; font-size: 11.5px; color: rgb(100 116 139); }
-.gpan-row { display: flex; gap: 12px; }
-.gpan-field { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.gpan-off-note { margin: 0; font-size: 0.71875rem; color: rgb(100 116 139); }
+.gpan-row { display: flex; gap: 0.75rem; }
+.gpan-field { display: flex; align-items: center; gap: 0.375rem; font-size: 0.78125rem; }
 .gpan-field > span { color: rgb(100 116 139); }
 .gpan input, .gpan select {
-  width: 64px; padding: 4px 8px; font-size: 12px; border-radius: 6px;
+  width: 4rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 0.375rem;
   border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit;
 }
 .gpan select { width: auto; }
 .gpan input:disabled, .gpan select:disabled { opacity: .5; }
-.gpan-note { margin: 0; font-size: 11.5px; color: rgb(100 116 139); }
-.gpan-empty { font-size: 12px; color: rgb(100 116 139); }
-.gpan-gate { display: flex; align-items: center; gap: 6px; }
+.gpan-note { margin: 0; font-size: 0.71875rem; color: rgb(100 116 139); }
+.gpan-empty { font-size: 0.75rem; color: rgb(100 116 139); }
+.gpan-gate { display: flex; align-items: center; gap: 0.375rem; }
 .gpan-gate-chip {
-  font-size: 12px; padding: 4px 10px; border-radius: 999px;
+  font-size: 0.75rem; padding: 0.25rem 0.625rem; border-radius: 62.4375rem;
   color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .gpan-x {
-  width: 20px; height: 20px; border-radius: 6px; cursor: pointer;
+  width: 1.25rem; height: 1.25rem; border-radius: 0.375rem; cursor: pointer;
   border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
-  font-size: 12px; line-height: 1; padding: 0;
+  font-size: 0.75rem; line-height: 1; padding: 0;
 }
-.gpan-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.gpan-add input { width: 76px; }
+.gpan-add { display: flex; gap: 0.375rem; align-items: center; flex-wrap: wrap; }
+.gpan-add input { width: 4.75rem; }
 .gpan-add-btn {
-  font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.3125rem 0.625rem; border-radius: 0.375rem; cursor: pointer;
   color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .gpan-check {
-  display: flex; align-items: flex-start; gap: 8px; font-size: 12px;
-  padding: 8px 10px; border: 1px solid var(--color-border-tertiary); border-radius: 6px;
+  display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.75rem;
+  padding: 0.5rem 0.625rem; border: 1px solid var(--color-border-tertiary); border-radius: 0.375rem;
   background: var(--surface-raised); flex-direction: column;
 }
-.gpan-check-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.gpan-check-body { display: flex; flex-direction: column; gap: 0.1875rem; flex: 1; min-width: 0; }
 .gpan-check .gpan-x { flex: none; }
-.gpan-check-on { font-size: 11px; color: rgb(100 116 139); }
+.gpan-check-on { font-size: 0.6875rem; color: rgb(100 116 139); }
 .gpan-check-assert {
-  font-size: 11.5px; color: #334155; overflow: hidden;
+  font-size: 0.71875rem; color: #334155; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
-.gpan-title-sub { font-size: 11px; color: rgb(100 116 139); font-weight: 400; }
+.gpan-title-sub { font-size: 0.6875rem; color: rgb(100 116 139); font-weight: 400; }
 
 .gpan-cform {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 10px; border: 1px dashed rgb(100 116 139 / 35%);
-  border-radius: 8px;
+  display: flex; flex-direction: column; gap: 0.375rem;
+  padding: 0.625rem; border: 1px dashed rgb(100 116 139 / 35%);
+  border-radius: 0.5rem;
 }
-.gpan-form-cap { margin: 2px 0 0; font-size: 11px; color: rgb(100 116 139); font-weight: 600; }
-.gpan-form-hint { margin: 0; font-size: 10.5px; color: rgb(100 116 139); }
-.gpan-form-row { display: flex; gap: 6px; }
+.gpan-form-cap { margin: 0.125rem 0 0; font-size: 0.6875rem; color: rgb(100 116 139); font-weight: 600; }
+.gpan-form-hint { margin: 0; font-size: 0.65625rem; color: rgb(100 116 139); }
+.gpan-form-row { display: flex; gap: 0.375rem; }
 .gpan-form-row select { flex: none; }
 .gpan-form-row input { flex: 1; min-width: 0; }
 .gpan-w { width: 100%; box-sizing: border-box; }
 .gpan .gpan-cform input { width: 100%; }
-.gpan-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+.gpan-refs { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .gpan-ref {
-  font-family: ui-monospace, monospace; font-size: 11px; padding: 2px 8px;
-  border-radius: 999px; cursor: pointer;
+  font-family: ui-monospace, monospace; font-size: 0.6875rem; padding: 0.125rem 0.5rem;
+  border-radius: 62.4375rem; cursor: pointer;
   border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit;
 }
 .gpan-ref.on {

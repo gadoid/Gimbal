@@ -17,7 +17,7 @@
         <span v-if="activeCount > 0" class="filter-badge">{{ activeCount }}</span>
       </button>
     </PopoverTrigger>
-    <PopoverContent align="end" class="w-[min(380px,calc(100vw-2rem))] p-0">
+    <PopoverContent align="end" class="w-[min(23.75rem,calc(100vw-2rem))] p-0">
       <div class="filter-panel">
         <header class="filter-panel-head">
           <span class="filter-panel-title">筛选条件</span>
@@ -225,13 +225,13 @@ function resetFilters() {
 .fp-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  font-size: 12px;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
   color: #374151;
   background: var(--c-surface);
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   cursor: pointer;
 }
 .fp-trigger:hover { color: #111827; border-color: #9ca3af; }
@@ -242,22 +242,22 @@ function resetFilters() {
 }
 
 .filter-panel {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .filter-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px 8px;
+  padding: 0.625rem 0.75rem 0.5rem;
   border-bottom: 1px solid var(--color-border-tertiary, var(--sl-line));
 }
 
 .filter-panel-title {
   color: var(--color-text-secondary, var(--color-text-secondary));
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.03125rem;
   text-transform: uppercase;
 }
 
@@ -266,7 +266,7 @@ function resetFilters() {
   border: none;
   background: none;
   color: var(--sl-accent);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 .fp-link:disabled { color: #c4c9d2; cursor: not-allowed; }
@@ -274,16 +274,16 @@ function resetFilters() {
 .filter-panel-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px 4px;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem 0.25rem;
   max-height: 50vh;
   overflow-y: auto;
 }
 
-.fp-item { display: flex; flex-direction: column; gap: 4px; }
+.fp-item { display: flex; flex-direction: column; gap: 0.25rem; }
 .fp-label {
   color: var(--color-text-secondary, var(--color-text-secondary));
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 
@@ -291,19 +291,19 @@ function resetFilters() {
 .fp-checks {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
-  max-height: 96px;
+  gap: 0.25rem 0.375rem;
+  max-height: 6rem;
   overflow-y: auto;
 }
 .fp-check {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  font-size: 11.5px;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.71875rem;
   color: #374151;
   border: 1px solid var(--sl-line);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   cursor: pointer;
   user-select: none;
 }
@@ -316,18 +316,18 @@ function resetFilters() {
 
 /* facets 计数徽标:弱化的次级信息(池兜底时不渲染) */
 .fp-count {
-  margin-left: 2px;
+  margin-left: 0.125rem;
   color: #9ca3af;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-variant-numeric: tabular-nums;
 }
 .fp-check:has(input:checked) .fp-count { color: #6f9bff; }
 
 /* 分段钮(更新时间) */
-.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 6px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 0.375rem; overflow: hidden; }
 .seg-btn {
-  padding: 4px 10px;
-  font-size: 11.5px;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.71875rem;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -339,28 +339,28 @@ function resetFilters() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.3125rem;
   color: white;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   background: var(--sl-accent);
-  border-radius: 999px;
+  border-radius: 62.4375rem;
 }
 
 .filter-panel-foot {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 0.625rem 0.75rem;
   border-top: 1px dashed var(--color-border-tertiary, var(--sl-line));
 }
 
 .filter-foot-meta {
   color: var(--color-text-secondary, var(--color-text-secondary));
-  font-size: 11.5px;
+  font-size: 0.71875rem;
 }
 
 .filter-foot-meta strong {
@@ -369,13 +369,13 @@ function resetFilters() {
 }
 
 .fp-apply {
-  padding: 5px 14px;
-  font-size: 12px;
+  padding: 0.3125rem 0.875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: #fff;
   background: var(--sl-accent);
   border: none;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   cursor: pointer;
 }
 .fp-apply:hover { background: #265fd4; }

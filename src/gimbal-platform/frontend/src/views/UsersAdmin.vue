@@ -15,11 +15,11 @@
       </Button>
       <Input
         v-model="searchQuery"
-        class="w-[240px] max-w-full"
+        class="w-[15rem] max-w-full"
         placeholder="搜索用户名 / 昵称"
         data-testid="user-search"
       />
-      <Select v-model="roleFilter" class="w-[130px]">
+      <Select v-model="roleFilter" class="w-[8.125rem]">
         <SelectTrigger data-testid="role-filter"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">全部角色</SelectItem>
@@ -37,10 +37,10 @@
           <TableRow>
             <TableHead>用户名</TableHead>
             <TableHead>昵称</TableHead>
-            <TableHead class="w-[90px]">角色</TableHead>
-            <TableHead class="w-[90px]">状态</TableHead>
-            <TableHead class="w-[110px]">创建时间</TableHead>
-            <TableHead class="w-[90px] text-center">操作</TableHead>
+            <TableHead class="w-[5.625rem]">角色</TableHead>
+            <TableHead class="w-[5.625rem]">状态</TableHead>
+            <TableHead class="w-[6.875rem]">创建时间</TableHead>
+            <TableHead class="w-[5.625rem] text-center">操作</TableHead>
           </TableRow>
         </TableHeader>
       <TableBody>
@@ -143,7 +143,7 @@
 
     <!-- ── 创建用户:定稿表单范式(useForm + zod)───────────────── -->
     <Dialog :open="createOpen" @update:open="createOpen = $event">
-      <DialogContent class="max-w-[480px]">
+      <DialogContent class="max-w-[30rem]">
         <DialogHeader>
           <DialogTitle>+ 创建用户</DialogTitle>
         </DialogHeader>
@@ -212,7 +212,7 @@
 
     <!-- ── 编辑昵称(单字段,无需校验真源,直受控)────────────────── -->
     <Dialog :open="announceOpen" @update:open="announceOpen = $event">
-      <DialogContent class="w-[420px]">
+      <DialogContent class="w-[26.25rem]">
         <DialogHeader>
           <DialogTitle>发布公告</DialogTitle>
           <DialogDescription>
@@ -243,7 +243,7 @@
     </Dialog>
 
     <Dialog :open="editOpen" @update:open="editOpen = $event">
-      <DialogContent class="max-w-[420px]">
+      <DialogContent class="max-w-[26.25rem]">
         <DialogHeader>
           <DialogTitle>编辑用户</DialogTitle>
         </DialogHeader>
@@ -268,13 +268,13 @@
 
     <!-- ── 重置密码结果(仅显示一次)────────────────────────────── -->
     <Dialog :open="resetOpen" @update:open="resetOpen = $event">
-      <DialogContent class="max-w-[420px]">
+      <DialogContent class="max-w-[26.25rem]">
         <DialogHeader>
           <DialogTitle>重置密码</DialogTitle>
         </DialogHeader>
         <div v-if="resetResult" class="flex flex-col items-center gap-2 text-center">
           <p class="m-0 text-body">新密码已生成（仅显示一次）：</p>
-          <code class="rounded-field bg-signal-failed/10 px-4 py-2.5 font-mono text-[16px] font-bold text-signal-failed" data-testid="reset-pw">
+          <code class="rounded-field bg-signal-failed/10 px-4 py-2.5 font-mono text-[1rem] font-bold text-signal-failed" data-testid="reset-pw">
             {{ resetResult.new_password }}
           </code>
           <Button variant="outline" size="sm" @click="copyResetPw">复制</Button>
@@ -291,7 +291,7 @@
 
     <!-- ── 删除 + 资源处置三选一(P2-2,权限方案 §4.3)───────────── -->
     <Dialog :open="deleteOpen" @update:open="deleteOpen = $event">
-      <DialogContent class="max-w-[560px]">
+      <DialogContent class="max-w-[35rem]">
         <DialogHeader>
           <DialogTitle>删除用户并处置资源</DialogTitle>
         </DialogHeader>
@@ -709,7 +709,7 @@ onMounted(async () => {
 
 <style scoped>
 .avatar {
-  @apply mr-1.5 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-bold text-white;
+  @apply mr-1.5 inline-flex h-[1.125rem] w-[1.125rem] items-center justify-center rounded-full text-[0.625rem] font-bold text-white;
 }
 
 .username {
@@ -730,11 +730,11 @@ onMounted(async () => {
 }
 
 .you-mark {
-  @apply ml-1 rounded-chip bg-signal-soft px-[5px] text-[9.5px] font-bold text-signal;
+  @apply ml-1 rounded-chip bg-signal-soft px-[0.3125rem] text-[0.59375rem] font-bold text-signal;
 }
 
 .chip {
-  @apply inline-flex items-center rounded-chip px-2 py-0.5 text-[10.5px] font-semibold;
+  @apply inline-flex items-center rounded-chip px-2 py-0.5 text-[0.65625rem] font-semibold;
 }
 
 /* 自现行浅绿底;停用行淡红底 + 用户名/昵称划线 */
@@ -761,10 +761,10 @@ onMounted(async () => {
 /* 处置三选一选项卡(审计 chip 样式随面板迁 AuditLogPanel) */
 .disposal-opt {
   display: flex;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--sl-line);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   cursor: pointer;
 }
 .disposal-opt.on { border-color: var(--sl-accent); background: #f5f8ff; }

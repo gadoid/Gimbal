@@ -51,10 +51,10 @@
         <thead>
           <tr>
             <th>Suite</th>
-            <th style="width:100px">模式</th>
-            <th style="width:70px">成员</th>
-            <th style="width:170px">最近运行</th>
-            <th style="width:170px">操作</th>
+            <th style="width:6.25rem">模式</th>
+            <th style="width:4.375rem">成员</th>
+            <th style="width:10.625rem">最近运行</th>
+            <th style="width:10.625rem">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -423,59 +423,59 @@ onMounted(() => void load())
 
 <style scoped>
 /* Suite 表行含描述行(~72px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
-.slib { --lib-card-max: 820px; }
-.slib { display: flex; flex-direction: column; gap: 14px; }
-.slib-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.slib { --lib-card-max: 51.25rem; }
+.slib { display: flex; flex-direction: column; gap: 0.875rem; }
+.slib-toolbar { display: flex; gap: 0.625rem; align-items: center; flex-wrap: wrap; }
 .slib-search {
-  flex: none; width: 300px; padding: 8px 12px; font-size: 13px;
-  border: 1px solid rgb(100 116 139 / 30%); border-radius: 8px;
+  flex: none; width: 18.75rem; padding: 0.5rem 0.75rem; font-size: 0.8125rem;
+  border: 1px solid rgb(100 116 139 / 30%); border-radius: 0.5rem;
   background: transparent; color: inherit;
 }
 .slib-modes {
   display: inline-flex; border: 1px solid rgb(100 116 139 / 25%);
-  border-radius: 8px; overflow: hidden;
+  border-radius: 0.5rem; overflow: hidden;
 }
 .slib-mode {
-  padding: 6px 12px; font-size: 12.5px; cursor: pointer;
+  padding: 0.375rem 0.75rem; font-size: 0.78125rem; cursor: pointer;
   border: none; background: transparent; color: inherit;
   border-right: 1px solid rgb(100 116 139 / 18%); white-space: nowrap;
 }
 .slib-mode:last-child { border-right: none; }
 .slib-mode.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .slib-public-link {
-  font-size: 12.5px; color: var(--accent); text-decoration: none; white-space: nowrap;
-  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--accent-soft-border);
+  font-size: 0.78125rem; color: var(--accent); text-decoration: none; white-space: nowrap;
+  padding: 0.4375rem 0.625rem; border-radius: 0.5rem; border: 1px solid var(--accent-soft-border);
 }
 .slib-create {
-  margin-left: auto; padding: 8px 14px; font-size: 13px; font-weight: 600;
-  white-space: nowrap; border-radius: 8px; border: none; cursor: pointer;
+  margin-left: auto; padding: 0.5rem 0.875rem; font-size: 0.8125rem; font-weight: 600;
+  white-space: nowrap; border-radius: 0.5rem; border: none; cursor: pointer;
   color: #fff; background: var(--accent);
 }
 .slib-create:hover { background: var(--accent-hover); }
 .slib-create:disabled { opacity: .5; cursor: not-allowed; }
 /* overflow 交给全局 .lib-card(卡内滑轨,分页位置轮);这里只压边框圆角 */
-.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px; }
-.slib-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lib-card { border: 1px solid rgb(100 116 139 / 22%); border-radius: 0.625rem; }
+.slib-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .slib-table th {
-  text-align: left; font-weight: 500; font-size: 12px; color: rgb(100 116 139);
-  padding: 8px 14px; background: rgb(100 116 139 / 6%);
+  text-align: left; font-weight: 500; font-size: 0.75rem; color: rgb(100 116 139);
+  padding: 0.5rem 0.875rem; background: rgb(100 116 139 / 6%);
   border-bottom: 1px solid rgb(100 116 139 / 15%);
 }
 .slib-row { cursor: pointer; }
-.slib-row td { padding: 9px 14px; border-bottom: 1px solid rgb(100 116 139 / 10%); }
+.slib-row td { padding: 0.5625rem 0.875rem; border-bottom: 1px solid rgb(100 116 139 / 10%); }
 .slib-row:hover { background: rgb(59 130 246 / 5%); }
 .slib-row:last-child td { border-bottom: none; }
-.sl-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sl-name { display: flex; align-items: center; gap: 0.375rem; min-width: 0; }
 .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sl-sid { font-size: 11.5px; color: rgb(100 116 139); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-sid { font-size: 0.71875rem; color: rgb(100 116 139); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .draft-chip {
-  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  flex: none; font-size: 0.6875rem; padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
   color: var(--sl-warn); background: rgb(245 158 11 / 10%);
   border: 1px solid rgb(245 158 11 / 40%);
 }
 /* proj-chip / pub-chip 样式随「全员视角」镜头退役移除(私有桶恒不可达) */
 .mode-chip {
-  font-size: 11.5px; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.71875rem; padding: 0.125rem 0.5625rem; border-radius: 62.4375rem;
   white-space: nowrap;
   color: rgb(100 116 139); background: rgb(100 116 139 / 8%);
   border: 1px solid rgb(100 116 139 / 22%);
@@ -483,32 +483,32 @@ onMounted(() => void load())
 .mode-chip.chain, .mode-chip.fanout, .mode-chip.compose {
   color: #6d28d9; background: rgb(139 92 246 / 8%); border-color: rgb(139 92 246 / 30%);
 }
-.num { font-size: 12.5px; }
-.muted { color: rgb(100 116 139); font-size: 12px; }
-.last-run { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: rgb(100 116 139); }
-.dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.num { font-size: 0.78125rem; }
+.muted { color: rgb(100 116 139); font-size: 0.75rem; }
+.last-run { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; color: rgb(100 116 139); }
+.dot { width: 0.5625rem; height: 0.5625rem; border-radius: 0.1875rem; display: inline-block; }
 .dot.ok { background: rgb(34 197 94 / 75%); }
 .dot.bad { background: rgb(220 38 38 / 80%); }
 .dot.run { background: rgb(59 130 246 / 80%); }
 .dot.muted { background: rgb(100 116 139 / 35%); }
-.ops { display: flex; gap: 8px; align-items: center; }
+.ops { display: flex; gap: 0.5rem; align-items: center; }
 .run-btn {
-  font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; cursor: pointer;
   color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
 .run-btn:disabled { opacity: .4; cursor: not-allowed; }
 .more-btn {
-  width: 26px; height: 24px; border-radius: 6px; cursor: pointer;
+  width: 1.625rem; height: 1.5rem; border-radius: 0.375rem; cursor: pointer;
   border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
-  font-size: 12px; padding: 0;
+  font-size: 0.75rem; padding: 0;
 }
 .ref-in-badge {
-  font-size: 11px; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+  font-size: 0.6875rem; padding: 0.125rem 0.5rem; border-radius: 62.4375rem; margin-left: 0.375rem;
   color: var(--sl-ok); background: rgb(34 197 94 / 10%);
   border: 1px solid rgb(34 197 94 / 40%); font-weight: 400;
 }
-.cta { color: var(--accent); background: none; border: none; cursor: pointer; font-size: 13px; }
-.card-empty { padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
+.cta { color: var(--accent); background: none; border: none; cursor: pointer; font-size: 0.8125rem; }
+.card-empty { padding: 2.125rem 0; text-align: center; color: rgb(100 116 139); font-size: 0.8125rem; }
 .sl-menu-item.danger { color: var(--sl-bad, var(--sl-bad)); }
 </style>

@@ -211,12 +211,12 @@ const previewEnvNames = computed<Record<number, string>>(() =>
       </div>
       <div class="param-row">
         <label>每行重复(nRuns)</label>
-        <Input v-model="nRunsModel" type="number" min="1" max="1000" class="h-8 w-[110px]"
+        <Input v-model="nRunsModel" type="number" min="1" max="1000" class="h-8 w-[6.875rem]"
           size="small" data-testid="param-nruns" />
       </div>
       <div class="param-row">
         <label>并发度(parallel)</label>
-        <Input v-model="parallelModel" type="number" min="1" max="64" class="h-8 w-[110px]"
+        <Input v-model="parallelModel" type="number" min="1" max="64" class="h-8 w-[6.875rem]"
           size="small" data-testid="param-parallel" />
       </div>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
@@ -264,52 +264,52 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 /* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
   background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
-  border-radius: 8px; padding: 12px 16px;
-  display: flex; flex-direction: column; gap: 10px;
+  border-radius: 0.5rem; padding: 0.75rem 1rem;
+  display: flex; flex-direction: column; gap: 0.625rem;
 }
 /* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 弹性空位 + note */
-.zone-head { display: flex; align-items: center; gap: 10px; }
+.zone-head { display: flex; align-items: center; gap: 0.625rem; }
 /* S7.3 生效预览入口(zone-head 行尾小按钮) */
 .preview-btn {
-  border: 1px solid var(--color-border-secondary); border-radius: 6px; background: var(--c-surface);
-  padding: 2px 12px; font-size: 12px; cursor: pointer; color: #334155;
+  border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; background: var(--c-surface);
+  padding: 0.125rem 0.75rem; font-size: 0.75rem; cursor: pointer; color: #334155;
 }
 .preview-btn:hover { border-color: #2563eb; color: #2563eb; }
 .zone-name {
-  font-size: 14px; font-weight: 700; color: var(--color-text-primary);
-  padding-left: 10px; border-left: 3px solid var(--accent);
+  font-size: 0.875rem; font-weight: 700; color: var(--color-text-primary);
+  padding-left: 0.625rem; border-left: 3px solid var(--accent);
 }
 .zone-spacer { flex: 1; }
-.zone-hint { font-size: 11px; color: var(--color-text-secondary); }
-.run-config { display: flex; flex-direction: column; gap: 16px; }
+.zone-hint { font-size: 0.6875rem; color: var(--color-text-secondary); }
+.run-config { display: flex; flex-direction: column; gap: 1rem; }
 
 /* ① 绑定行:列表行语言(分隔线 + 行距,atbl td 同款);
    M2a S6 后两列(服务 + 别名选择),URL 列已退役 */
 .bind-list { display: flex; flex-direction: column; }
 .bind-row {
-  display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 220px);
-  gap: 8px; align-items: center; padding: 8px 0;
+  display: grid; grid-template-columns: minmax(7.5rem, 1fr) minmax(10rem, 13.75rem);
+  gap: 0.5rem; align-items: center; padding: 0.5rem 0;
   border-bottom: 1px solid var(--soft-neutral-bg);
 }
 .bind-row:last-child { border-bottom: none; }
-.bind-svc { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bind-svc { min-width: 0; display: flex; flex-direction: column; gap: 0.0625rem; }
 .svc-name {
-  font-weight: 600; font-size: 13px; color: var(--color-text-primary);
+  font-weight: 600; font-size: 0.8125rem; color: var(--color-text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .svc-declared {
-  font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary);
+  font-family: var(--font-mono); font-size: 0.6875rem; color: var(--color-text-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.svc-degraded { font-size: 11px; color: #b91c1c; }
+.svc-degraded { font-size: 0.6875rem; color: #b91c1c; }
 /* 无同基候选 → 静默说明代替下拉(用服务键本身) */
-.svc-noalias { font-size: 11px; color: var(--color-text-secondary); }
+.svc-noalias { font-size: 0.6875rem; color: var(--color-text-secondary); }
 /* 降级行(spec §9,M2a S6):别名已删 — 底色微红 + 警示文案(与 RunConfigPanel .is-degraded 同口径) */
 .bind-row.is-degraded { background: #fef2f2; }
 .bind-row.is-degraded .bind-alias { border-color: #fca5a5; }
 .bind-alias {
-  border: 1px solid var(--color-border-secondary); border-radius: 4px;
-  padding: 4px 8px; font-size: 13px; min-width: 0;
+  border: 1px solid var(--color-border-secondary); border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem; font-size: 0.8125rem; min-width: 0;
   background: var(--c-surface); color: var(--color-text-primary);
 }
 .bind-alias:focus {
@@ -318,30 +318,30 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 }
 
 /* ② 参数行:行距节奏(8px 行高步进) */
-.param-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.param-row { display: flex; align-items: center; gap: 0.625rem; padding: 0.1875rem 0; }
 /* stepTo 下拉:选项文案较长,给足最小宽防抖动 */
-.stepto-select { min-width: 200px; }
-.param-row label { width: 150px; flex: none; font-size: 13px; color: var(--color-text-primary); }
-.param-hint { font-size: 11px; color: var(--color-text-secondary); }
+.stepto-select { min-width: 12.5rem; }
+.param-row label { width: 9.375rem; flex: none; font-size: 0.8125rem; color: var(--color-text-primary); }
+.param-hint { font-size: 0.6875rem; color: var(--color-text-secondary); }
 /* 总量预览 chip:平台摘要 chip 形制(row-count/zone-count 同族,mono 数字) */
 .total-chip {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-  padding: 1px 6px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 600;
+  padding: 0.0625rem 0.375rem; border-radius: 0.1875rem;
   color: var(--color-text-secondary); background: var(--soft-neutral-bg);
 }
 .total-chip.total-over { color: #b91c1c; background: #fef2f2; }
-.total-warn { margin: 0; color: #b91c1c; font-size: 12px; }
+.total-warn { margin: 0; color: #b91c1c; font-size: 0.75rem; }
 
 .hint { color: var(--color-text-secondary); }
 /* 分层⑤:改指执行配置的指引卡(空方案)与存量提示 */
 .exec-pointer {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 12px; border: 1px dashed var(--color-border-tertiary);
-  border-radius: 8px; background: #F6F8FC;
+  display: flex; flex-direction: column; gap: 0.375rem;
+  padding: 0.625rem 0.75rem; border: 1px dashed var(--color-border-tertiary);
+  border-radius: 0.5rem; background: #F6F8FC;
 }
 .exec-pointer .hint { margin: 0; }
-.pointer-link { color: var(--sl-accent); font-size: 12px; text-decoration: none; width: fit-content; }
+.pointer-link { color: var(--sl-accent); font-size: 0.75rem; text-decoration: none; width: fit-content; }
 .pointer-link:hover { text-decoration: underline; }
-.legacy-note { margin: 0; font-size: 11.5px; }
+.legacy-note { margin: 0; font-size: 0.71875rem; }
 @media (max-width: 1280px) { .bind-row { grid-template-columns: 1fr; } }
 </style>

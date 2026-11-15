@@ -27,7 +27,7 @@
           <TooltipTrigger as-child>
             <Button variant="outline" :disabled="!rows.length" data-testid="import-csv" @click="pickCsv">导入 CSV</Button>
           </TooltipTrigger>
-          <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
+          <TooltipContent class="max-w-[min(20rem,calc(100vw-2rem))]">
             CSV 三列:path,value,is_null —— 表头按名定位(列序任意);is_null=1 为显式 null,两列都留空 = 该行不导入;面外字段会被跳过
           </TooltipContent>
         </Tooltip>
@@ -35,7 +35,7 @@
           <TooltipTrigger as-child>
             <Button variant="outline" :disabled="!rows.length" data-testid="dl-template" @click="downloadTemplate">下载模板</Button>
           </TooltipTrigger>
-          <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
+          <TooltipContent class="max-w-[min(20rem,calc(100vw-2rem))]">
             按当前字段面生成模板(预填全部 path 与已绑定值);不改直接导回 = 绑定态不变
           </TooltipContent>
         </Tooltip>
@@ -43,7 +43,7 @@
           <TooltipTrigger as-child>
             <Button variant="outline" :disabled="!hasBoundRows" data-testid="export-csv" @click="downloadBoundCsv">导出 CSV</Button>
           </TooltipTrigger>
-          <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
+          <TooltipContent class="max-w-[min(20rem,calc(100vw-2rem))]">
             导出本键的已绑定行(未绑定的面字段不进文件);导出→不改→导回 = 绑定态不变
           </TooltipContent>
         </Tooltip>
@@ -387,13 +387,13 @@ onMounted(async () => {
 /* 字段路径 = 这张表的主键:等宽、加粗、可折行 */
 .path {
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--sl-ink);
   word-break: break-all;
 }
 
-.footer-stats { font-size: 11px; color: var(--sl-ink-3); }
+.footer-stats { font-size: 0.6875rem; color: var(--sl-ink-3); }
 
 /* 「来源」四档 = 三层查找链的读法:本键蓝 → 服务级紫 → 默认值灰 → 无行虚线。
    无行(不注入)是语义终点,所以它必须占一个可见的位置,而不是留白。 */
@@ -411,16 +411,16 @@ onMounted(async () => {
 <style scoped>
 .svc-endpoints {
   display: flex;
-  gap: 4px;
+  gap: 0.25rem;
   flex-wrap: wrap;
-  margin-top: 2px;
+  margin-top: 0.125rem;
 }
 .svc-ep-chip {
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.4;
-  padding: 0 6px;
+  padding: 0 0.375rem;
   border: 1px solid var(--border, #ddd);
-  border-radius: 999px;
+  border-radius: 62.4375rem;
   white-space: nowrap;
 }
 </style>

@@ -35,12 +35,12 @@
           </div>
 
           <div v-if="unsatisfied.length" class="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3.5">
-            <span class="text-[12px] font-semibold text-red-800">
+            <span class="text-[0.75rem] font-semibold text-red-800">
               收紧后，{{ unsatisfied.length }} 个已注册任务将不满足范围，会在下次运行前暂停
             </span>
             <div
               v-for="t in unsatisfied" :key="t.id"
-              class="flex items-center gap-2.5 rounded-md border border-signal-line bg-white px-2.5 py-2 text-[12px]"
+              class="flex items-center gap-2.5 rounded-md border border-signal-line bg-white px-2.5 py-2 text-[0.75rem]"
             >
               <span class="flex-1">{{ t.name }}</span>
               <span class="text-signal-ink/60">
@@ -166,13 +166,13 @@ async function save() {
 
 <style scoped>
 .chip-toggle {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
+  height: 1.625rem;
+  padding: 0 0.625rem;
+  border-radius: 62.4375rem;
   border: 1px solid var(--color-signal-line, var(--sl-line));
   background: var(--c-surface);
   color: var(--color-signal-ink, var(--sl-ink));
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .chip-toggle.is-on {
   border-color: var(--color-signal, var(--sl-accent));

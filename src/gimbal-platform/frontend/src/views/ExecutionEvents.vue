@@ -157,7 +157,7 @@
 
     <!-- 行详情/折叠组成员(右侧 Sheet:展开外移,列表行高恒定) -->
     <Sheet :open="rowOpen" @update:open="rowOpen = $event">
-      <SheetContent side="right" class="w-[440px] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[440px]">
+      <SheetContent side="right" class="w-[27.5rem] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[27.5rem]">
         <SheetHeader class="border-b border-signal-line px-4 py-3">
           <SheetTitle v-if="detailFold" class="text-left mono text-sm">
             折叠组 · ×{{ detailFold.count }} 行
@@ -516,63 +516,63 @@ watch(executionId, (next, prev) => {
 </script>
 
 <style scoped>
-.view-tabs { display: inline-flex; gap: 2px; margin-bottom: 10px; border: 1px solid var(--border, #d4d4d8); border-radius: 8px; padding: 2px; }
+.view-tabs { display: inline-flex; gap: 0.125rem; margin-bottom: 0.625rem; border: 1px solid var(--border, #d4d4d8); border-radius: 0.5rem; padding: 0.125rem; }
 .view-tab {
-  border: none; background: transparent; padding: 4px 14px; font-size: 13px;
-  border-radius: 6px; cursor: pointer; color: var(--muted-fg, #5B6472);
+  border: none; background: transparent; padding: 0.25rem 0.875rem; font-size: 0.8125rem;
+  border-radius: 0.375rem; cursor: pointer; color: var(--muted-fg, #5B6472);
 }
 .view-tab.active { background: #eff6ff; color: #1d4ed8; font-weight: 600; }
-.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+.filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; align-items: center; }
 .f-select, .f-input {
-  border: 1px solid var(--border, #d4d4d8); border-radius: 6px;
-  padding: 4px 8px; font-size: 13px; background: var(--card, #fff);
+  border: 1px solid var(--border, #d4d4d8); border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem; font-size: 0.8125rem; background: var(--card, #fff);
 }
-.f-input { width: 110px; }
-.f-input.grow { flex: 1; min-width: 180px; }
-.counts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.f-input { width: 6.875rem; }
+.f-input.grow { flex: 1; min-width: 11.25rem; }
+.counts { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.75rem; }
 .count-chip {
-  font-size: 12px; padding: 2px 10px; border-radius: 999px;
+  font-size: 0.75rem; padding: 0.125rem 0.625rem; border-radius: 62.4375rem;
   border: 1px solid var(--border, #d4d4d8); cursor: pointer;
 }
 .count-chip.active { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
-.count-empty { font-size: 12px; color: #71717a; }
+.count-empty { font-size: 0.75rem; color: #71717a; }
 .around-banner {
-  font-size: 12px; background: #fef9c3; color: #a16207;
-  border: 1px solid #fde68a; border-radius: 6px; padding: 6px 12px; margin-bottom: 10px;
+  font-size: 0.75rem; background: #fef9c3; color: #a16207;
+  border: 1px solid #fde68a; border-radius: 0.375rem; padding: 0.375rem 0.75rem; margin-bottom: 0.625rem;
 }
-.ev-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ev-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .ev-table th {
-  text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border, #e4e4e7);
+  text-align: left; padding: 0.375rem 0.5rem; border-bottom: 1px solid var(--border, #e4e4e7);
   color: #71717a; font-weight: 500; white-space: nowrap;
 }
-.ev-table td { padding: 5px 8px; border-bottom: 1px solid var(--f0, #f4f4f5); vertical-align: top; }
+.ev-table td { padding: 0.3125rem 0.5rem; border-bottom: 1px solid var(--f0, #f4f4f5); vertical-align: top; }
 .mono { font-family: ui-monospace, monospace; }
 .ts { white-space: nowrap; }
-.kind-badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.kind-badge { font-size: 0.6875rem; padding: 0.0625rem 0.375rem; border-radius: 0.25rem; }
 .kind-badge.event { background: #eff6ff; color: #1d4ed8; }
 .kind-badge.log { background: #fefce8; color: #a16207; }
 .lv.warn { color: #b91c1c; font-weight: 600; }
-.et { margin-right: 6px; color: #71717a; }
+.et { margin-right: 0.375rem; color: #71717a; }
 .msg {
   /* S7 行高恒定:单行省略,全文走右抽屉 */
-  max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 26.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .row-log { background: #fffbeb; }
 .row-fold { background: #fefce8; }
 .fold-badge {
-  font-size: 11px; background: #fde68a; color: #92400e;
-  padding: 0 6px; border-radius: 4px; margin-right: 6px;
+  font-size: 0.6875rem; background: #fde68a; color: #92400e;
+  padding: 0 0.375rem; border-radius: 0.25rem; margin-right: 0.375rem;
 }
-.fold-note { font-size: 11px; margin-left: 8px; }
+.fold-note { font-size: 0.6875rem; margin-left: 0.5rem; }
 .dim { color: #71717a; }
 .fold-toggle {
-  display: inline-flex; align-items: center; gap: 4px; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8125rem;
   white-space: nowrap; cursor: pointer; color: var(--muted-fg, #5B6472);
 }
-.fold-members { display: flex; flex-direction: column; gap: 2px; }
+.fold-members { display: flex; flex-direction: column; gap: 0.125rem; }
 .fold-member {
-  display: flex; gap: 8px; text-align: left; font-size: 12px;
-  border: none; background: var(--surface-raised); border-radius: 6px; padding: 4px 8px;
+  display: flex; gap: 0.5rem; text-align: left; font-size: 0.75rem;
+  border: none; background: var(--surface-raised); border-radius: 0.375rem; padding: 0.25rem 0.5rem;
   cursor: pointer;
 }
 .fold-member:hover { background: #eff6ff; }
@@ -582,17 +582,17 @@ watch(executionId, (next, prev) => {
 .row-anchor { outline: 2px solid #f59e0b; outline-offset: -2px; }
 .row-click { cursor: pointer; }
 .row-click:hover { outline: 1px solid #93c5fd; outline-offset: -1px; }
-.load-more { display: flex; justify-content: center; padding: 12px 0; }
-.load-more.dim, .dim { font-size: 12px; color: #71717a; }
-.kv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.kv-table td { padding: 3px 6px; border-bottom: 1px solid #f4f4f5; vertical-align: top; }
-.kv-table .k { color: #71717a; width: 84px; white-space: nowrap; }
+.load-more { display: flex; justify-content: center; padding: 0.75rem 0; }
+.load-more.dim, .dim { font-size: 0.75rem; color: #71717a; }
+.kv-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+.kv-table td { padding: 0.1875rem 0.375rem; border-bottom: 1px solid #f4f4f5; vertical-align: top; }
+.kv-table .k { color: #71717a; width: 5.25rem; white-space: nowrap; }
 .kv-table .v { word-break: break-all; }
-.section-title { font-size: 12px; color: #71717a; margin-bottom: 6px; }
+.section-title { font-size: 0.75rem; color: #71717a; margin-bottom: 0.375rem; }
 .payload-pre {
-  font-size: 11px; background: var(--surface-raised); border: 1px solid var(--color-border-tertiary);
-  border-radius: 6px; padding: 8px; overflow-x: auto; max-height: 50vh;
+  font-size: 0.6875rem; background: var(--surface-raised); border: 1px solid var(--color-border-tertiary);
+  border-radius: 0.375rem; padding: 0.5rem; overflow-x: auto; max-height: 50vh;
 }
-.state { padding: 24px; text-align: center; color: #71717a; }
+.state { padding: 1.5rem; text-align: center; color: #71717a; }
 .state.error { color: #b91c1c; }
 </style>

@@ -30,7 +30,7 @@
     <!-- M:明细 + 快速记录 -->
     <template v-else-if="size === 'M'">
       <Input
-        v-model="draft" placeholder="记一笔，回车保存" class="h-[30px] border-dashed"
+        v-model="draft" placeholder="记一笔，回车保存" class="h-[1.875rem] border-dashed"
         data-testid="notes-input" @keydown.enter.prevent="add"
       />
       <label
@@ -54,7 +54,7 @@
         <div class="flex overflow-hidden rounded-md border border-signal-line" role="group" aria-label="筛选">
           <button
             v-for="f in NOTE_FILTERS" :key="f" type="button"
-            class="h-[26px] border-0 px-2.5 text-caption"
+            class="h-[1.625rem] border-0 px-2.5 text-caption"
             :class="filter === f ? 'bg-[#E7EFFF] text-[#1F55C4]' : 'bg-signal-card text-signal-ink'"
             :style="f !== 'all' ? 'border-left: 1px solid var(--color-signal-line)' : ''"
             @click="filter = f"
@@ -62,7 +62,7 @@
         </div>
       </div>
       <Input
-        v-model="draft" placeholder="记一笔，回车保存" class="h-[30px] border-dashed"
+        v-model="draft" placeholder="记一笔，回车保存" class="h-[1.875rem] border-dashed"
         data-testid="notes-input" @keydown.enter.prevent="add"
       />
       <div
@@ -77,7 +77,7 @@
         <span class="flex-1 break-all" :class="n.done ? 'line-through' : ''">{{ n.text }}</span>
         <span class="whitespace-nowrap text-signal-ink/60">{{ relTime(n.createdAt) }}</span>
         <button
-          type="button" class="h-[22px] w-[22px] border-0 bg-transparent p-0 text-signal-ink/60 hover:text-signal-failed"
+          type="button" class="h-[1.375rem] w-[1.375rem] border-0 bg-transparent p-0 text-signal-ink/60 hover:text-signal-failed"
           aria-label="删除" @click="remove(n)"
         >
           <Cross2Icon class="h-3.5 w-3.5" />
@@ -86,7 +86,7 @@
       <div class="flex justify-end">
         <button
           v-if="doneItems.length" type="button"
-          class="h-[26px] rounded border border-signal-line bg-signal-card px-2.5 text-caption"
+          class="h-[1.625rem] rounded border border-signal-line bg-signal-card px-2.5 text-caption"
           @click="clearDone"
         >清空已完成（{{ doneItems.length }}）</button>
       </div>

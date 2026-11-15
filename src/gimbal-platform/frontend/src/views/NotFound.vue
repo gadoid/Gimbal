@@ -6,7 +6,7 @@
   <ListPage title="页面不存在" icon="globe">
     <div class="flex flex-col items-center gap-4 py-16 text-center">
       <p class="m-0 text-body text-signal-ink/70">
-        地址 <code class="rounded bg-signal-card px-1.5 py-0.5 font-mono text-[12px]">{{ path }}</code>
+        地址 <code class="rounded bg-signal-card px-1.5 py-0.5 font-mono text-[0.75rem]">{{ path }}</code>
         没有对应的页面 — 可能是失效的链接,或路径输入有误。
       </p>
       <RouterLink

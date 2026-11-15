@@ -206,8 +206,8 @@ const summary = computed<string>(() => {
   background: #fafbfc;
   border: 1.5px solid #e6e8ec;
   border-left-width: 3px;
-  border-radius: 8px;
-  margin-bottom: 6px;
+  border-radius: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 /* phase 4 色左边框: before_request 橙 / after_request 绿 / verifying 紫 */
 .strategy-form.ph-before_request { border-left-color: #f59e0b; }
@@ -215,8 +215,8 @@ const summary = computed<string>(() => {
 .strategy-form.ph-verifying      { border-left-color: #7c3aed; }
 
 .sf-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4375rem 0.625rem;
   cursor: pointer;
   user-select: none;
   min-width: 0; /* 摘要 ellipsis 生效的前提 */
@@ -225,8 +225,8 @@ const summary = computed<string>(() => {
 
 .sf-badge {
   flex-shrink: 0;
-  font-size: 11px; font-weight: 700;
-  padding: 2px 8px; border-radius: 4px;
+  font-size: 0.6875rem; font-weight: 700;
+  padding: 0.125rem 0.5rem; border-radius: 0.25rem;
 }
 .sf-badge.ph-before_request { background: #fef3c7; color: #92400e; }
 .sf-badge.ph-after_request  { background: #d1fae5; color: #065f46; }
@@ -234,32 +234,32 @@ const summary = computed<string>(() => {
 
 .sf-kind {
   flex-shrink: 0;
-  font-family: var(--font-mono); font-size: 10px;
+  font-family: var(--font-mono); font-size: 0.625rem;
   color: var(--color-text-tertiary); background: var(--soft-neutral-bg);
-  padding: 1px 5px; border-radius: 3px;
+  padding: 0.0625rem 0.3125rem; border-radius: 0.1875rem;
 }
 
 /* 卡头 order 角标:显式设置的执行顺序,折叠态也可见 */
 .sf-order {
   flex-shrink: 0;
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  font-family: var(--font-mono); font-size: 0.625rem; font-weight: 700;
   color: #4f46e5; background: #eef2ff;
-  padding: 1px 5px; border-radius: 3px;
+  padding: 0.0625rem 0.3125rem; border-radius: 0.1875rem;
 }
 
 /* 单行摘要: 吸收剩余宽度, 溢出 ellipsis */
 .sf-summary {
   flex: 1; min-width: 0;
-  font-family: var(--font-mono); font-size: 11px;
+  font-family: var(--font-mono); font-size: 0.6875rem;
   color: var(--color-text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 .sf-toggle {
   flex-shrink: 0;
-  width: 20px; height: 20px;
+  width: 1.25rem; height: 1.25rem;
   display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: 4px;
+  border: none; border-radius: 0.25rem;
   background: transparent; color: var(--color-text-tertiary);
   cursor: pointer; padding: 0;
 }
@@ -269,16 +269,16 @@ const summary = computed<string>(() => {
 
 .sf-del {
   flex-shrink: 0;
-  width: 20px; height: 20px;
-  border: none; border-radius: 4px;
+  width: 1.25rem; height: 1.25rem;
+  border: none; border-radius: 0.25rem;
   background: transparent; color: var(--color-text-tertiary);
-  font-size: 14px; line-height: 1; cursor: pointer;
+  font-size: 0.875rem; line-height: 1; cursor: pointer;
 }
 .sf-del:hover { background: #fee2e2; color: var(--sl-bad); }
 
 /* 展开的字段区: 内衬底色与头行分隔 */
 .sf-body {
-  padding: 8px 10px 10px;
+  padding: 0.5rem 0.625rem 0.625rem;
   border-top: 1px dashed #e6e8ec;
 }
 
@@ -288,39 +288,39 @@ const summary = computed<string>(() => {
 
 /* onFailure 入口(#2):字段区底部一行,label + select 紧凑排 */
 .sf-onfail {
-  display: flex; align-items: center; gap: 10px;
-  margin-top: 10px; padding-top: 8px;
+  display: flex; align-items: center; gap: 0.625rem;
+  margin-top: 0.625rem; padding-top: 0.5rem;
   border-top: 1px dashed #e6e8ec;
 }
 
 /* order 入口:同 onFailure 行形态,number 输入窄列 */
 .sf-order-row {
-  display: flex; align-items: center; gap: 10px;
-  margin-top: 10px; padding-top: 8px;
+  display: flex; align-items: center; gap: 0.625rem;
+  margin-top: 0.625rem; padding-top: 0.5rem;
   border-top: 1px dashed #e6e8ec;
 }
 .sf-order-label {
-  display: flex; flex-direction: column; gap: 1px;
-  font-size: 11px; font-weight: 600; color: var(--color-text-strong);
+  display: flex; flex-direction: column; gap: 0.0625rem;
+  font-size: 0.6875rem; font-weight: 600; color: var(--color-text-strong);
   flex-shrink: 0;
 }
 .sf-order-input {
-  width: 110px; flex-shrink: 0; box-sizing: border-box;
-  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
-  padding: 6px 10px; font-size: 12px; color: #1a1d24;
+  width: 6.875rem; flex-shrink: 0; box-sizing: border-box;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 0.5rem;
+  padding: 0.375rem 0.625rem; font-size: 0.75rem; color: #1a1d24;
   outline: none;
 }
 .sf-order-input:focus { border-color: #4f46e5; background: var(--c-surface); }
 .sf-onfail-label {
-  display: flex; flex-direction: column; gap: 1px;
-  font-size: 11px; font-weight: 600; color: var(--color-text-strong);
+  display: flex; flex-direction: column; gap: 0.0625rem;
+  font-size: 0.6875rem; font-weight: 600; color: var(--color-text-strong);
   flex-shrink: 0;
 }
-.sf-onfail-hint { font-size: 10px; font-weight: 400; color: var(--color-text-tertiary); }
+.sf-onfail-hint { font-size: 0.625rem; font-weight: 400; color: var(--color-text-tertiary); }
 .sf-onfail-select {
   flex: 1; box-sizing: border-box;
-  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
-  padding: 6px 10px; font-size: 12px; color: #1a1d24;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 0.5rem;
+  padding: 0.375rem 0.625rem; font-size: 0.75rem; color: #1a1d24;
   outline: none;
 }
 .sf-onfail-select:focus { border-color: #4f46e5; background: var(--c-surface); }

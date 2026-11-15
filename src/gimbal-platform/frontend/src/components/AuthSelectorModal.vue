@@ -5,7 +5,7 @@
      自动预填绑定凭证(从服务注册的身份面绑定带出);手工改选仍是逃生舱。 -->
 <template>
   <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
-    <DialogContent class="max-w-[520px]">
+    <DialogContent class="max-w-[32.5rem]">
       <DialogHeader>
         <DialogTitle>ⓘ 选择认证（${auth.&lt;alias&gt;.&lt;field&gt;} 模板）</DialogTitle>
       </DialogHeader>
@@ -109,28 +109,28 @@ function confirm() {
 <style scoped>
 .preview {
   display: inline-block;
-  padding: 4px 8px;
+  padding: 0.25rem 0.5rem;
   color: var(--accent);
   background: var(--accent-soft);
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 
 .origin-note {
-  margin: 2px 0 0;
+  margin: 0.125rem 0 0;
   color: var(--color-text-secondary, #6b7280);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .preview-hint {
-  margin: 6px 0 0;
+  margin: 0.375rem 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
-.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 6px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 0.375rem; overflow: hidden; }
 .seg-btn {
-  padding: 5px 14px;
-  font-size: 12px;
+  padding: 0.3125rem 0.875rem;
+  font-size: 0.75rem;
   font-family: var(--font-mono, monospace);
   background: transparent;
   border: none;

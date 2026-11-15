@@ -14,7 +14,7 @@
           / {{ task?.name }}
         </span>
         <div class="flex flex-wrap items-center gap-2.5">
-          <h1 class="m-0 text-[22px] leading-[30px] font-semibold">{{ task?.name }}</h1>
+          <h1 class="m-0 text-[1.375rem] leading-[1.875rem] font-semibold">{{ task?.name }}</h1>
           <span class="idtl-pill ip-mode-pers">个人模式
           </span>
           <span v-if="statePill" class="idtl-pill" :class="statePill.cls">{{ statePill.text }}</span>
@@ -44,13 +44,13 @@
     <section v-if="banner" class="idtl-banner" :class="`tone-${banner.tone}`">
       <div class="flex flex-col gap-1">
         <span class="idtl-banner-title" :class="`tt-${banner.tone}`">{{ banner.title }}</span>
-        <span class="text-[12px] text-[#4A5A72]">{{ banner.desc }}</span>
+        <span class="text-[0.75rem] text-[#4A5A72]">{{ banner.desc }}</span>
       </div>
       <!-- resource_not_allowed:缺项两类清单(令牌详情预检) -->
       <div v-if="banner.missing?.length" class="flex flex-col gap-1.5">
         <div
           v-for="m in banner.missing" :key="`${m.kind}:${m.name}`"
-          class="flex items-center gap-2.5 rounded-md border border-[#FECACA] bg-white px-2.5 py-1.5 text-[12px]"
+          class="flex items-center gap-2.5 rounded-md border border-[#FECACA] bg-white px-2.5 py-1.5 text-[0.75rem]"
         >
           <span class="mono font-semibold">{{ m.name }}</span>
           <span class="idtl-pill" :class="m.deleted ? 'ip-warn' : 'ip-bad'">
@@ -77,7 +77,7 @@
     <div class="idtl-main">
       <!-- 身份与令牌 -->
       <section class="idtl-card">
-        <h2 class="m-0 text-[14px] leading-5 font-semibold">身份与令牌</h2>
+        <h2 class="m-0 text-[0.875rem] leading-5 font-semibold">身份与令牌</h2>
         <dl class="idtl-dl">
           <dt>执行身份</dt>
           <dd>{{ identityText }}</dd>
@@ -86,7 +86,7 @@
             <dd class="flex flex-wrap items-center gap-2">
               <span class="mono">{{ tokenText }}</span>
               <span v-if="tokenStatus" class="idtl-pill" :class="tokenStatus.cls">{{ tokenStatus.text }}</span>
-              <RouterLink class="idtl-link text-[12px]" :to="tokenManageTo">查看令牌</RouterLink>
+              <RouterLink class="idtl-link text-[0.75rem]" :to="tokenManageTo">查看令牌</RouterLink>
             </dd>
             <dt>回调</dt>
             <dd class="mono">{{ tokenDetail?.callbackUrl || '未设置（令牌可轮询使用）' }}</dd>
@@ -106,7 +106,7 @@
           v-if="task?.tokenId && task?.canManage"
           class="mt-2.5 flex items-center gap-2.5 border-t border-[#EEF0F3] pt-2.5"
         >
-          <span class="flex-1 text-[12px] text-signal-ink/60">令牌退役或吊销后，可以把任务转为由你的账号管理</span>
+          <span class="flex-1 text-[0.75rem] text-signal-ink/60">令牌退役或吊销后，可以把任务转为由你的账号管理</span>
           <button type="button" class="idtl-btn" @click="unbindOpen = true">解绑令牌（转为我管理）</button>
         </div>
       </section>
@@ -115,7 +115,7 @@
            定时运行不落执行记录,平台任务按场景查永远为空 —— 短期投影
            实例自身;真正的任务运行历史需后端新增记录(单独评估)。 -->
       <section class="idtl-card">
-        <h2 class="m-0 text-[14px] leading-5 font-semibold">最近运行</h2>
+        <h2 class="m-0 text-[0.875rem] leading-5 font-semibold">最近运行</h2>
         <dl class="idtl-dl">
           <dt>上次运行</dt>
           <dd>{{ task?.instance?.lastRunAt ? fmtTime(task.instance.lastRunAt) : '还未运行过' }}</dd>
@@ -459,14 +459,14 @@ const lastRunPill = computed<{ text: string; cls: string } | null>(() => {
 </script>
 
 <style scoped>
-.idtl { display: flex; flex-direction: column; gap: 16px; max-width: 880px; }
-.idtl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.idtl { display: flex; flex-direction: column; gap: 1rem; max-width: 55rem; }
+.idtl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .idtl-link { color: var(--color-signal, var(--sl-accent)); text-decoration: none; }
 .idtl-link:hover { text-decoration: underline; }
 
 .idtl-pill {
-  font-size: 11px; font-weight: 600; padding: 2px 8px;
-  border-radius: 9999px; white-space: nowrap;
+  font-size: 0.6875rem; font-weight: 600; padding: 0.125rem 0.5rem;
+  border-radius: 624.9375rem; white-space: nowrap;
 }
 .ip-mode-plat { background: #eef4ff; color: #1f3b73; }
 .ip-mode-pers { background: #f6f8fc; color: #4a5a72; }
@@ -478,35 +478,35 @@ const lastRunPill = computed<{ text: string; cls: string } | null>(() => {
 
 /* 暂停横幅(原型:red #FEF2F2/#FECACA·#991B1B;amber #FFFBEB/#FDE68A·#92400E;neutral #F6F8FC/var(--sl-line)·var(--sl-ink)) */
 .idtl-banner {
-  border-radius: 10px; padding: 14px 18px;
-  display: flex; flex-direction: column; gap: 10px;
+  border-radius: 0.625rem; padding: 0.875rem 1.125rem;
+  display: flex; flex-direction: column; gap: 0.625rem;
 }
 .tone-red { background: #fef2f2; border: 1px solid #fecaca; }
 .tone-amber { background: #fffbeb; border: 1px solid #fde68a; }
 .tone-neutral { background: #f6f8fc; border: 1px solid var(--sl-line); }
-.idtl-banner-title { font-size: 14px; font-weight: 600; }
+.idtl-banner-title { font-size: 0.875rem; font-weight: 600; }
 .tt-red { color: #991b1b; }
 .tt-amber { color: #92400e; }
 .tt-neutral { color: var(--sl-ink); }
 
-.idtl-main { display: flex; flex-direction: column; gap: 16px; }
+.idtl-main { display: flex; flex-direction: column; gap: 1rem; }
 .idtl-card {
   background: var(--color-signal-card, #fff);
-  border: 1px solid var(--sl-line); border-radius: 10px;
-  padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;
+  border: 1px solid var(--sl-line); border-radius: 0.625rem;
+  padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;
 }
 .idtl-dl {
-  margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr);
-  gap: 10px 12px; font-size: 12px;
+  margin: 0; display: grid; grid-template-columns: 6rem minmax(0, 1fr);
+  gap: 0.625rem 0.75rem; font-size: 0.75rem;
 }
 .idtl-dl dt { color: #5b6472; }
 .idtl-dl dd { margin: 0; }
 
 /* 按钮(原型 30px/6px;行内 12px) */
 .idtl-btn {
-  display: inline-flex; align-items: center; height: 30px; padding: 0 12px;
-  border-radius: 6px; border: 1px solid var(--sl-line); background: var(--c-surface);
-  color: var(--sl-ink); font-size: 12px; font-weight: 500;
+  display: inline-flex; align-items: center; height: 1.875rem; padding: 0 0.75rem;
+  border-radius: 0.375rem; border: 1px solid var(--sl-line); background: var(--c-surface);
+  color: var(--sl-ink); font-size: 0.75rem; font-weight: 500;
   cursor: pointer; text-decoration: none; box-sizing: border-box;
 }
 .idtl-btn:hover { background: #f6f8fc; }

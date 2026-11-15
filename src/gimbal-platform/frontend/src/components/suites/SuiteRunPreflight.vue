@@ -136,41 +136,41 @@ watch(() => props.open, (v) => { if (v) void check() })
 </script>
 
 <style scoped>
-.pf-dialog { display: flex; flex-direction: column; gap: 12px; max-width: 540px; }
-.pf-loading { padding: 18px 0; text-align: center; color: rgb(100 116 139); font-size: 13px; }
-.pf-cred { display: flex; align-items: center; gap: 8px; margin: 0; }
-.pf-cred select { border: 1px solid var(--border, var(--color-border-secondary)); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
-.pf-cred-label { font-size: 12px; color: var(--color-text-strong); }
-.pf-summary { margin: 0; font-size: 13px; }
+.pf-dialog { display: flex; flex-direction: column; gap: 0.75rem; max-width: 33.75rem; }
+.pf-loading { padding: 1.125rem 0; text-align: center; color: rgb(100 116 139); font-size: 0.8125rem; }
+.pf-cred { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+.pf-cred select { border: 1px solid var(--border, var(--color-border-secondary)); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+.pf-cred-label { font-size: 0.75rem; color: var(--color-text-strong); }
+.pf-summary { margin: 0; font-size: 0.8125rem; }
 .pf-degraded {
-  margin: 0; font-size: 12px; color: var(--sl-warn);
-  padding: 6px 10px; border-radius: 8px;
+  margin: 0; font-size: 0.75rem; color: var(--sl-warn);
+  padding: 0.375rem 0.625rem; border-radius: 0.5rem;
   background: rgb(245 158 11 / 8%); border: 1px solid rgb(245 158 11 / 35%);
 }
 .pf-list {
   margin: 0; padding: 0; list-style: none;
-  display: flex; flex-direction: column; gap: 6px;
-  max-height: 320px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.375rem;
+  max-height: 20rem; overflow-y: auto;
 }
 .pf-item {
-  display: flex; align-items: center; gap: 8px; font-size: 12.5px;
-  padding: 6px 10px; border-radius: 8px;
+  display: flex; align-items: center; gap: 0.5rem; font-size: 0.78125rem;
+  padding: 0.375rem 0.625rem; border-radius: 0.5rem;
   border: 1px solid rgb(100 116 139 / 18%); background: rgb(100 116 139 / 4%);
 }
 .pf-item.ok { border-color: rgb(34 197 94 / 35%); background: rgb(34 197 94 / 6%); }
 .pf-item.warn { border-color: rgb(245 158 11 / 40%); background: rgb(245 158 11 / 7%); }
 .pf-item.error { border-color: rgb(220 38 38 / 35%); background: rgb(220 38 38 / 6%); }
-.pf-ico { flex: none; width: 16px; text-align: center; font-weight: 700; }
+.pf-ico { flex: none; width: 1rem; text-align: center; font-weight: 700; }
 .pf-item.ok .pf-ico { color: var(--sl-ok); }
 .pf-item.warn .pf-ico { color: var(--sl-warn); }
 .pf-item.error .pf-ico { color: var(--sl-bad); }
 .pf-msg { flex: 1; min-width: 0; }
 .pf-go {
-  flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+  flex: none; font-size: 0.71875rem; padding: 0.1875rem 0.5625rem; border-radius: 0.375rem; cursor: pointer;
   color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
 }
 .btn-ghost, .btn-primary {
-  padding: 7px 16px; font-size: 13px; border-radius: 8px; cursor: pointer;
+  padding: 0.4375rem 1rem; font-size: 0.8125rem; border-radius: 0.5rem; cursor: pointer;
 }
 .btn-ghost { border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit; }
 .btn-primary { font-weight: 600; border: none; color: #fff; background: var(--accent); }

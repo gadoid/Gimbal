@@ -48,7 +48,7 @@
           <section v-if="Object.keys(cfg.services).length">
             <h4>服务地址</h4>
             <table class="tbl" data-testid="preview-services">
-              <thead><tr><th>服务</th><th>地址</th><th style="width:130px">来源</th></tr></thead>
+              <thead><tr><th>服务</th><th>地址</th><th style="width:8.125rem">来源</th></tr></thead>
               <tbody>
                 <tr v-for="(svc, key) in cfg.services" :key="key">
                   <td>{{ key }}<span v-if="svc.alias" class="muted"> · {{ svc.alias }}</span></td>
@@ -63,7 +63,7 @@
           <section v-if="Object.keys(cfg.auths).length">
             <h4>槽位绑定</h4>
             <table class="tbl" data-testid="preview-auths">
-              <thead><tr><th>槽位</th><th style="width:80px">绑定 #</th><th>系统</th><th style="width:90px">环境</th><th style="width:70px">默认</th><th style="width:80px">来源</th><th style="width:110px">取用</th></tr></thead>
+              <thead><tr><th>槽位</th><th style="width:5rem">绑定 #</th><th>系统</th><th style="width:5.625rem">环境</th><th style="width:4.375rem">默认</th><th style="width:5rem">来源</th><th style="width:6.875rem">取用</th></tr></thead>
               <tbody>
                 <tr v-for="(a, slot) in cfg.auths" :key="slot">
                   <td>{{ slot }}</td>
@@ -87,7 +87,7 @@
           <section v-if="carryRows.length">
             <h4>carry 注入值</h4>
             <table class="tbl" data-testid="preview-carry">
-              <thead><tr><th>服务</th><th>字段路径</th><th>值</th><th style="width:120px">来源</th></tr></thead>
+              <thead><tr><th>服务</th><th>字段路径</th><th>值</th><th style="width:7.5rem">来源</th></tr></thead>
               <tbody>
                 <tr v-for="r in carryRows" :key="`${r.service}.${r.path}`">
                   <td>{{ r.service }}</td>
@@ -102,7 +102,7 @@
           <section v-if="Object.keys(cfg.carryDefaults).length">
             <h4>carry 默认值(未命中服务/别名键的兜底)</h4>
             <table class="tbl" data-testid="preview-carry-defaults">
-              <thead><tr><th>字段路径</th><th>值</th><th style="width:120px">来源</th></tr></thead>
+              <thead><tr><th>字段路径</th><th>值</th><th style="width:7.5rem">来源</th></tr></thead>
               <tbody>
                 <tr v-for="(d, path) in cfg.carryDefaults" :key="path">
                   <td class="mono">{{ path }}</td>
@@ -238,15 +238,15 @@ watch(() => props.scenarioId, (sid) => {
 
 <style scoped>
 .overlay { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.dialog { background: var(--color-bg, #fff); border-radius: 10px; width: min(560px, calc(100vw - 2rem)); max-height: min(80vh, 720px); display: flex; flex-direction: column; box-shadow: 0 20px 50px rgb(15 23 42 / 25%); }
-.dialog.wide { width: min(720px, calc(100vw - 2rem)); }
+.dialog { background: var(--color-bg, #fff); border-radius: 0.625rem; width: min(35rem, calc(100vw - 2rem)); max-height: min(80vh, 45rem); display: flex; flex-direction: column; box-shadow: 0 20px 50px rgb(15 23 42 / 25%); }
+.dialog.wide { width: min(45rem, calc(100vw - 2rem)); }
 .d-head { display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.1rem; border-bottom: 1px solid var(--color-border-tertiary); }
 .d-head h3 { margin: 0; font-size: 1rem; }
 .x { border: none; background: none; cursor: pointer; color: var(--color-text-secondary); font-size: 1rem; }
 .body { padding: 0.9rem 1.1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.9rem; }
 .d-foot { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.7rem 1.1rem; border-top: 1px solid var(--color-border-tertiary); }
 .field label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--color-text-strong); }
-select { padding: 6px 8px; border-radius: 8px; border: 1px solid rgb(100 116 139 / 30%); background: transparent; }
+select { padding: 0.375rem 0.5rem; border-radius: 0.5rem; border: 1px solid rgb(100 116 139 / 30%); background: transparent; }
 .ctx { font-size: 0.85rem; }
 section h4 { margin: 0 0 0.4rem; font-size: 0.85rem; color: #334155; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
@@ -254,10 +254,10 @@ section h4 { margin: 0 0 0.4rem; font-size: 0.85rem; color: #334155; }
 .tbl th { color: var(--color-text-secondary); font-weight: 500; }
 .mono { font-family: ui-monospace, monospace; font-size: 0.78rem; }
 .muted { color: var(--color-text-tertiary); font-size: 0.82rem; }
-.src { display: inline-block; margin-left: 6px; font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
-.warn { background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%); color: #92400e; border-radius: 8px; padding: 0.5rem 0.7rem; font-size: 0.82rem; margin: 0; }
+.src { display: inline-block; margin-left: 0.375rem; font-size: 0.7rem; padding: 0.0625rem 0.5rem; border-radius: 62.4375rem; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
+.warn { background: rgb(245 158 11 / 10%); border: 1px solid rgb(245 158 11 / 40%); color: #92400e; border-radius: 0.5rem; padding: 0.5rem 0.7rem; font-size: 0.82rem; margin: 0; }
 .err { color: var(--sl-bad); font-size: 0.82rem; }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.35rem 0.9rem; background: var(--c-surface); cursor: pointer; font-size: 0.85rem; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.35rem 0.9rem; background: var(--c-surface); cursor: pointer; font-size: 0.85rem; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>

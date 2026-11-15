@@ -14,10 +14,10 @@ defineProps<{ priority: number | null | undefined }>()
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 31px;
-  padding: 2px 6px;
+  min-width: 1.9375rem;
+  padding: 0.125rem 0.375rem;
   font-family: var(--font-mono, monospace);
-  border-radius: 10px;
+  border-radius: 0.625rem;
 }
 .p0 { color: #b91c1c; background: #fee2e2; }
 .p1 { color: var(--sl-warn); background: #fef3c7; }

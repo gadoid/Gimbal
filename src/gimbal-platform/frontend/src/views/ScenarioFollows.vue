@@ -283,6 +283,6 @@ async function unfollow(s: ScenarioListItem) {
 </script>
 
 <style scoped>
-.sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.sys-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .fav-list { display: flex; flex-direction: column; }
 </style>

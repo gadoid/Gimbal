@@ -190,20 +190,20 @@ const hasUnread = computed(() => unread.value > 0)
 <style scoped>
 /* 容器/页头/主色全部走全站规范:根节点挂全局 .slib(1480 三壳标准),
    主按钮 indigo --accent 系,卡片 lib-card 同款边框与圆角。 */
-.nt-body { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-.nt-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgb(100 116 139 / 15%); }
+.nt-body { display: flex; flex-direction: column; gap: 0.875rem; margin-top: 0.875rem; }
+.nt-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid rgb(100 116 139 / 15%); }
 .nt-tab {
   border: none; background: none; cursor: pointer;
-  padding: 8px 14px; font-size: 13px; font-weight: 600; color: rgb(100 116 139);
+  padding: 0.5rem 0.875rem; font-size: 0.8125rem; font-weight: 600; color: rgb(100 116 139);
   border-bottom: 2px solid transparent;
 }
 .nt-tab.active { color: var(--accent, var(--accent)); border-bottom-color: var(--accent, var(--accent)); }
 .nt-dot {
-  margin-left: 6px; font-size: 11px; background: #ef4444; color: #fff;
-  border-radius: 999px; padding: 1px 7px;
+  margin-left: 0.375rem; font-size: 0.6875rem; background: #ef4444; color: #fff;
+  border-radius: 62.4375rem; padding: 0.0625rem 0.4375rem;
 }
 .nt-action {
-  font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.3125rem 0.75rem; border-radius: 0.375rem; cursor: pointer;
   color: var(--accent); background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
 }
@@ -214,27 +214,27 @@ const hasUnread = computed(() => unread.value > 0)
 }
 .nt-action.ghost:hover { background: rgb(0 0 0 / 4%); }
 .nt-action:disabled { opacity: .5; cursor: not-allowed; }
-.nt-list { display: flex; flex-direction: column; gap: 8px; }
+.nt-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .nt-card {
-  text-align: left; border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
-  background: transparent; padding: 10px 14px; cursor: pointer;
-  display: flex; flex-direction: column; gap: 4px;
+  text-align: left; border: 1px solid rgb(100 116 139 / 22%); border-radius: 0.625rem;
+  background: transparent; padding: 0.625rem 0.875rem; cursor: pointer;
+  display: flex; flex-direction: column; gap: 0.25rem;
 }
 .nt-card:hover { border-color: var(--accent-soft-border); background: rgb(59 130 246 / 3%); }
 .nt-card.unread { border-left: 3px solid var(--accent, var(--accent)); }
-.nt-card-head { display: flex; align-items: center; gap: 8px; }
+.nt-card-head { display: flex; align-items: center; gap: 0.5rem; }
 .nt-type {
-  font-size: 11px; flex: none; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.6875rem; flex: none; padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
   background: rgb(100 116 139 / 8%); color: rgb(100 116 139);
   border: 1px solid rgb(100 116 139 / 22%);
 }
-.nt-title { font-weight: 500; font-size: 13px; }
-.nt-unread-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex: none; }
-.nt-body { font-size: 12px; color: rgb(100 116 139); margin: 0; }
-.nt-time { font-size: 11px; color: rgb(100 116 139 / 70%); }
+.nt-title { font-weight: 500; font-size: 0.8125rem; }
+.nt-unread-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #ef4444; flex: none; }
+.nt-body { font-size: 0.75rem; color: rgb(100 116 139); margin: 0; }
+.nt-time { font-size: 0.6875rem; color: rgb(100 116 139 / 70%); }
 .nt-empty {
-  padding: 34px 0; text-align: center; color: rgb(100 116 139); font-size: 13px;
+  padding: 2.125rem 0; text-align: center; color: rgb(100 116 139); font-size: 0.8125rem;
 }
-.nt-pager { display: flex; justify-content: flex-end; margin-top: 4px; }
-.nt-note { font-size: 12px; color: rgb(100 116 139); margin-top: 8px; }
+.nt-pager { display: flex; justify-content: flex-end; margin-top: 0.25rem; }
+.nt-note { font-size: 0.75rem; color: rgb(100 116 139); margin-top: 0.5rem; }
 </style>

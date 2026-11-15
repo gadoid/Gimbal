@@ -124,20 +124,20 @@ async function confirm(): Promise<void> {
 </script>
 
 <style scoped>
-.share-dialog { min-width: 420px; }
-.section-label { font-size: 12px; color: rgb(100 116 139); margin: 4px 0; }
+.share-dialog { min-width: 26.25rem; }
+.section-label { font-size: 0.75rem; color: rgb(100 116 139); margin: 0.25rem 0; }
 .share-list {
-  max-height: 220px; overflow-y: auto; display: flex;
-  flex-direction: column; gap: 4px; margin: 8px 0;
+  max-height: 13.75rem; overflow-y: auto; display: flex;
+  flex-direction: column; gap: 0.25rem; margin: 0.5rem 0;
 }
 .share-item {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  border-radius: 6px; cursor: pointer; border: 1px solid transparent;
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem; cursor: pointer; border: 1px solid transparent;
 }
 .share-item:hover { background: rgb(0 0 0 / 4%); }
 .share-item.picked { border-color: hsl(var(--primary)); background: hsl(var(--accent)); }
-.share-item .who { display: flex; gap: 8px; align-items: baseline; flex: 1; }
-.share-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.share-item .who { display: flex; gap: 0.5rem; align-items: baseline; flex: 1; }
+.share-foot { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
 .muted { color: rgb(100 116 139); }
-.small { font-size: 12px; }
+.small { font-size: 0.75rem; }
 </style>

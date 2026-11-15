@@ -179,12 +179,12 @@ onMounted(async () => {
 
 .id-hero {
   @apply flex items-start justify-between gap-3 border-b border-signal-line bg-signal-soft;
-  padding: 16px;
+  padding: 1rem;
 }
 .id-text { @apply flex flex-col gap-0.5 min-w-0; }
 .id-name {
   @apply m-0 text-display font-bold text-signal-ink;
-  font-size: 18px; line-height: 24px; letter-spacing: -0.4px;
+  font-size: 1.125rem; line-height: 1.5rem; letter-spacing: -0.025rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .id-welcome { @apply m-0 text-body text-signal-ink/70; }
@@ -192,49 +192,49 @@ onMounted(async () => {
 .id-user { @apply text-caption text-signal-ink/45; }
 .id-role {
   @apply text-micro font-bold text-signal-ink/70 bg-signal-canvas;
-  padding: 1px 8px; border-radius: 999px;
+  padding: 0.0625rem 0.5rem; border-radius: 62.4375rem;
 }
 .id-role.admin { @apply text-signal bg-signal-card; }
 
 .avatar {
   @apply inline-flex items-center justify-center flex-none text-white;
-  width: 56px; height: 56px; font-size: 22px; font-weight: 700; border-radius: 50%;
+  width: 3.5rem; height: 3.5rem; font-size: 1.375rem; font-weight: 700; border-radius: 50%;
   box-shadow: 0 0 0 4px white, 0 4px 14px rgba(16, 21, 28, 0.16);
 }
 
 /* 常驻统计:≤ 2 项单列两块;3 项三列;4 项两列网格(原型口径)。
    间距微调(2026-11-05):tile 内 label/value 留 3px、块间 10px ——
    原 1px/8px 在 288px 预览宽下数字贴标签,读起来挤。 */
-.id-stats { @apply flex gap-2.5 m-0; padding: 14px 16px 12px; }
+.id-stats { @apply flex gap-2.5 m-0; padding: 0.875rem 1rem 0.75rem; }
 .id-stats.grid2 { @apply grid grid-cols-2; flex: none; }
 .id-stat {
-  @apply flex flex-col gap-[3px] flex-1 bg-signal-canvas/60 border border-signal-line rounded-empty;
-  padding: 10px 12px;
+  @apply flex flex-col gap-[0.1875rem] flex-1 bg-signal-canvas/60 border border-signal-line rounded-empty;
+  padding: 0.625rem 0.75rem;
 }
 .id-stat .label { @apply text-micro text-signal-ink/45; }
-.id-stat .value { @apply m-0 text-signal-ink; font-size: 19px; font-weight: 700; line-height: 26px; }
+.id-stat .value { @apply m-0 text-signal-ink; font-size: 1.1875rem; font-weight: 700; line-height: 1.625rem; }
 .id-stat .value.danger { @apply text-signal-failed; }
 
 /* 告警条:error 红 / warn 琥珀;action 右对齐 */
-.id-alerts { @apply flex flex-col gap-2; padding: 0 16px 12px; }
+.id-alerts { @apply flex flex-col gap-2; padding: 0 1rem 0.75rem; }
 .id-alert {
   @apply flex items-center gap-2 rounded-empty text-caption no-underline;
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
 }
 .id-alert.error { background: #fee2e2; color: #991b1b; }
 .id-alert.warn { background: #fef3c7; color: #92400e; }
 .id-alert .action { @apply font-semibold whitespace-nowrap; }
-.more { @apply text-[11px] text-signal-ink/60 no-underline self-end; }
+.more { @apply text-[0.6875rem] text-signal-ink/60 no-underline self-end; }
 
-.id-shortcuts { @apply flex flex-wrap gap-2.5; padding: 0 16px 14px; }
+.id-shortcuts { @apply flex flex-wrap gap-2.5; padding: 0 1rem 0.875rem; }
 .pill {
   @apply inline-flex items-center border border-signal-line rounded-full text-caption text-signal-ink no-underline;
-  height: 26px; padding: 0 12px;
+  height: 1.625rem; padding: 0 0.75rem;
 }
 
 .id-footer {
   @apply flex justify-between border-t border-signal-line;
-  padding: 9px 16px;
+  padding: 0.5625rem 1rem;
 }
 .link { @apply text-caption text-signal no-underline; }
 .mono { font-family: var(--font-mono, monospace); }

@@ -15,7 +15,7 @@
     </PopoverAnchor>
     <PopoverTrigger as-child>
       <button
-        class="relative h-[26px] cursor-pointer rounded-chip border border-white/20 bg-transparent px-2 text-slate-300 transition-colors hover:border-signal hover:text-white"
+        class="relative h-[1.625rem] cursor-pointer rounded-chip border border-white/20 bg-transparent px-2 text-slate-300 transition-colors hover:border-signal hover:text-white"
         data-testid="notification-bell"
         aria-label="通知"
         @click="onOpen"
@@ -23,7 +23,7 @@
         <BellIcon class="size-3.5" />
         <span
           v-if="count > 0"
-          class="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-semibold text-white"
+          class="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[0.5625rem] font-semibold text-white"
           data-testid="notification-badge"
         >{{ count > 99 ? '99+' : count }}</span>
       </button>
@@ -56,7 +56,7 @@
             <span class="truncate text-body font-medium">{{ n.title }}</span>
           </div>
           <div class="mt-0.5 line-clamp-2 text-caption text-slate-500">{{ n.body }}</div>
-          <div class="mt-0.5 text-[10px] text-slate-400">{{ relTime(n.createdAt) }}</div>
+          <div class="mt-0.5 text-[0.625rem] text-slate-400">{{ relTime(n.createdAt) }}</div>
         </button>
       </div>
 
@@ -178,8 +178,8 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 8px;
-  height: 44px;
+  bottom: 0.5rem;
+  height: 2.75rem;
   pointer-events: none;
 }
 </style>

@@ -200,25 +200,25 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
 <style scoped>
 /* ☰ 触发按钮基础态(与 FieldForm 候选 ▾ 同源的旧内联样式,保留兜底) */
 .cand-btn {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: 20px; height: 20px;
-  border: none; border-radius: 4px; background: transparent;
-  color: var(--color-text-tertiary); cursor: pointer; font-size: 10px; line-height: 1;
+  position: absolute; right: 0.25rem; top: 50%; transform: translateY(-50%);
+  width: 1.25rem; height: 1.25rem;
+  border: none; border-radius: 0.25rem; background: transparent;
+  color: var(--color-text-tertiary); cursor: pointer; font-size: 0.625rem; line-height: 1;
   display: flex; align-items: center; justify-content: center;
 }
 .cand-btn:hover { background: var(--color-border-tertiary); color: var(--color-text-strong); }
 /* ☰ 外置侧钮(2026-09-14 改版):此前 absolute 叠在填写框内
-   (right:4px,与候选 ▾ 同位)— 改静态 flex 项放置到填写框旁边,
+   (right:0.25rem,与候选 ▾ 同位)— 改静态 flex 项放置到填写框旁边,
    增大加粗;样式对齐 FieldForm .var-btn 侧钮先例(30px/1.5px 边)。
    行排分支随输入框拉伸高度(align-items:stretch);col 分支
    (textarea/json)落框下方右缘;容器头 .node-fa 内容自适应。 */
 .fa-menu-btn {
   position: static; transform: none;
   flex-shrink: 0;
-  width: 30px; height: auto; min-height: 26px;
-  border: 1.5px solid var(--color-border-tertiary); border-radius: 8px; background: #fafbfc;
+  width: 1.875rem; height: auto; min-height: 1.625rem;
+  border: 1.5px solid var(--color-border-tertiary); border-radius: 0.5rem; background: #fafbfc;
   color: #4f46e5; cursor: pointer;
-  font-size: 13px; font-weight: 700; line-height: 1;
+  font-size: 0.8125rem; font-weight: 700; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.15s;
 }
@@ -226,17 +226,17 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
 
 /* 就地浮层(与 FieldForm cand-list 同模式:绝对定位 + 阴影) */
 .fa-menu {
-  position: absolute; top: calc(100% + 2px); right: 0;
-  z-index: 40; min-width: 230px;
-  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 8px;
+  position: absolute; top: calc(100% + 0.125rem); right: 0;
+  z-index: 40; min-width: 14.375rem;
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
-  padding: 4px;
-  display: flex; flex-direction: column; gap: 1px;
+  padding: 0.25rem;
+  display: flex; flex-direction: column; gap: 0.0625rem;
 }
 .fa-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; border: none; border-radius: 6px;
-  background: transparent; cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.375rem 0.625rem; border: none; border-radius: 0.375rem;
+  background: transparent; cursor: pointer; font-size: 0.75rem;
   text-align: left; color: #1a1d24;
 }
 .fa-item:hover { background: var(--soft-neutral-bg); }
@@ -244,32 +244,32 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
 .fa-item.disabled:hover { background: transparent; }
 .fa-label { font-weight: 600; flex: 1; }
 .fa-note {
-  font-family: var(--font-mono); font-size: 9px; color: var(--color-text-tertiary);
+  font-family: var(--font-mono); font-size: 0.5625rem; color: var(--color-text-tertiary);
 }
 .fa-sub-title {
-  margin: 2px 4px 4px; font-size: 11px; color: var(--color-text-secondary);
+  margin: 0.125rem 0.25rem 0.25rem; font-size: 0.6875rem; color: var(--color-text-secondary);
   font-family: var(--font-mono);
 }
-.fa-empty { font-size: 12px; color: var(--color-text-tertiary); padding: 6px 10px; margin: 0; }
-.fa-var-item { display: grid; grid-template-columns: 1.2fr 56px 72px; gap: 6px; }
+.fa-empty { font-size: 0.75rem; color: var(--color-text-tertiary); padding: 0.375rem 0.625rem; margin: 0; }
+.fa-var-item { display: grid; grid-template-columns: 1.2fr 3.5rem 4.5rem; gap: 0.375rem; }
 .fa-name {
-  font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+  font-family: var(--font-mono); font-weight: 600; font-size: 0.75rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .fa-badge {
-  padding: 1px 5px; border-radius: 4px; text-align: center;
-  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  padding: 0.0625rem 0.3125rem; border-radius: 0.25rem; text-align: center;
+  font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700;
 }
 .fa-badge.extract { background: #d1fae5; color: #065f46; }
 .fa-badge.config { background: #eef2ff; color: var(--accent); }
-.fa-src { font-size: 10px; color: var(--color-text-tertiary); }
+.fa-src { font-size: 0.625rem; color: var(--color-text-tertiary); }
 .fa-ds-hint {
-  margin: 2px 4px; font-size: 10px; color: var(--sl-warn);
+  margin: 0.125rem 0.25rem; font-size: 0.625rem; color: var(--sl-warn);
 }
 .fa-back {
   border: none; background: transparent; cursor: pointer;
-  padding: 5px 8px; font-size: 11px; color: var(--color-text-secondary); text-align: left;
-  border-top: 1px dashed var(--color-border-tertiary); border-radius: 0 0 6px 6px;
+  padding: 0.3125rem 0.5rem; font-size: 0.6875rem; color: var(--color-text-secondary); text-align: left;
+  border-top: 1px dashed var(--color-border-tertiary); border-radius: 0 0 0.375rem 0.375rem;
 }
 .fa-back:hover { color: var(--accent-hover); }
 </style>

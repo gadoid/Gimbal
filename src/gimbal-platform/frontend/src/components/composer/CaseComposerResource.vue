@@ -328,45 +328,45 @@ watch(local, () => {
 <style scoped>
 /* 大部分样式来自 composer.css 共享层 */
 
-.resource-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.resource-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(17.5rem, 1fr)); gap: 0.75rem; }
 .resource-card {
-  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px;
-  padding: 16px; cursor: pointer; transition: all 0.15s;
-  display: grid; grid-template-columns: 32px 1fr auto; gap: 12px;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 0.625rem;
+  padding: 1rem; cursor: pointer; transition: all 0.15s;
+  display: grid; grid-template-columns: 2rem 1fr auto; gap: 0.75rem;
   align-items: center;
 }
 .resource-card:hover { border-color: var(--c-accent-soft-border); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); }
 .resource-card .kind-icon { color: var(--c-text-secondary); }
 .resource-card.active { border-color: var(--c-accent); background: var(--c-accent-soft); }
-.kind-name { font-size: 14px; font-weight: 600; }
-.kind-desc { font-size: 12px; color: var(--c-text-tertiary); margin-top: 2px; line-height: 1.4; }
-.kind-cta { font-size: 12px; color: var(--c-accent); font-weight: 600; white-space: nowrap; }
+.kind-name { font-size: 0.875rem; font-weight: 600; }
+.kind-desc { font-size: 0.75rem; color: var(--c-text-tertiary); margin-top: 0.125rem; line-height: 1.4; }
+.kind-cta { font-size: 0.75rem; color: var(--c-accent); font-weight: 600; white-space: nowrap; }
 
 .resource-row {
-  padding: 14px; border: 1px solid var(--c-border); border-radius: 8px;
-  background: var(--c-bg-secondary); margin-bottom: 10px;
-  display: flex; flex-direction: column; gap: 10px;
+  padding: 0.875rem; border: 1px solid var(--c-border); border-radius: 0.5rem;
+  background: var(--c-bg-secondary); margin-bottom: 0.625rem;
+  display: flex; flex-direction: column; gap: 0.625rem;
 }
 .resource-row:last-child { margin-bottom: 0; }
-.row-header { display: flex; align-items: center; gap: 8px; }
+.row-header { display: flex; align-items: center; gap: 0.5rem; }
 .row-name { flex: 1; }
 .row-name { background: var(--c-surface); }
-.kind-tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.kind-tag { padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; }
 .t-mock { background: #fef3c7; color: #92400e; }
 .t-file { background: #dbeafe; color: #1e40af; }
 .row-del {
-  width: 28px; height: 28px; background: transparent; border: none;
-  border-radius: 4px; color: var(--c-text-tertiary); font-size: 18px; cursor: pointer;
+  width: 1.75rem; height: 1.75rem; background: transparent; border: none;
+  border-radius: 0.25rem; color: var(--c-text-tertiary); font-size: 1.125rem; cursor: pointer;
 }
 .row-del:hover { background: #fef2f2; color: #ef4444; }
 
-.row-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 12px; }
-.row-field { display: flex; flex-direction: column; gap: 4px; }
-.row-field label { font-size: 11px; color: var(--c-text-secondary); font-weight: 500; }
-.row-field .hint { font-size: 10px; color: var(--c-text-tertiary); margin-top: 2px; }
+.row-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.625rem 0.75rem; }
+.row-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.row-field label { font-size: 0.6875rem; color: var(--c-text-secondary); font-weight: 500; }
+.row-field .hint { font-size: 0.625rem; color: var(--c-text-tertiary); margin-top: 0.125rem; }
 
 
 .port-mapping { grid-column: 1 / -1; }
-.port-row { margin-bottom: 4px; }
-.port-add { width: auto; align-self: flex-start; margin-top: 6px; }
+.port-row { margin-bottom: 0.25rem; }
+.port-add { width: auto; align-self: flex-start; margin-top: 0.375rem; }
 </style>

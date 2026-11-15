@@ -147,15 +147,15 @@ watch(() => props.disabled, (d) => { if (d) close() })
 .cred-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   width: 100%;
-  height: 36px;
-  padding: 0 10px;
-  font-size: 13px;
+  height: 2.25rem;
+  padding: 0 0.625rem;
+  font-size: 0.8125rem;
   color: var(--sl-ink);
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   cursor: pointer;
   text-align: left;
 }
@@ -166,71 +166,71 @@ watch(() => props.disabled, (d) => { if (d) close() })
 .cred-value {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 0.375rem;
   flex: 1;
   min-width: 0;
   overflow: hidden;
 }
-.cred-value .mono { font-size: 12.5px; font-weight: 600; }
+.cred-value .mono { font-size: 0.78125rem; font-weight: 600; }
 .cred-inline-sub {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: #8b93a1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cred-out {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--sl-warn);
   white-space: nowrap;
 }
 .cred-placeholder { flex: 1; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cred-clear {
   flex: none;
-  padding: 2px 3px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 0.125rem 0.1875rem;
+  border-radius: 0.25rem;
+  font-size: 0.6875rem;
   line-height: 1;
   color: #9ca3af;
   cursor: pointer;
 }
 .cred-clear:hover { color: #4b5563; background: #f3f4f6; }
-.cred-caret { flex: none; margin-left: auto; color: #9ca3af; font-size: 10px; }
+.cred-caret { flex: none; margin-left: auto; color: #9ca3af; font-size: 0.625rem; }
 
 .cred-panel {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 0.25rem);
   left: 0;
   z-index: 60;
   width: 100%;
-  min-width: 300px;
-  padding: 6px;
+  min-width: 18.75rem;
+  padding: 0.375rem;
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
 }
 
 .cred-filter {
   width: 100%;
-  margin-bottom: 6px;
-  padding: 5px 10px;
-  font-size: 12px;
+  margin-bottom: 0.375rem;
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.75rem;
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .cred-filter:focus { outline: none; border-color: var(--sl-accent); }
 
-.cred-options { max-height: 220px; overflow-y: auto; }
+.cred-options { max-height: 13.75rem; overflow-y: auto; }
 
 .cred-option {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
   width: 100%;
-  padding: 6px 8px;
+  padding: 0.375rem 0.5rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -241,19 +241,19 @@ watch(() => props.disabled, (d) => { if (d) close() })
 .cred-line1 {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
 }
-.cred-line1 .mono { font-size: 12.5px; font-weight: 600; color: var(--sl-ink); }
+.cred-line1 .mono { font-size: 0.78125rem; font-weight: 600; color: var(--sl-ink); }
 .cred-type {
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 10px;
+  padding: 0 0.375rem;
+  border-radius: 62.4375rem;
+  font-size: 0.625rem;
   background: var(--soft-accent-bg);
   color: var(--sl-accent);
 }
 
 .cred-line2 {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: #8b93a1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -262,8 +262,8 @@ watch(() => props.disabled, (d) => { if (d) close() })
 
 .cred-empty {
   margin: 0;
-  padding: 10px 0;
-  font-size: 12px;
+  padding: 0.625rem 0;
+  font-size: 0.75rem;
   color: #9ca3af;
   text-align: center;
 }

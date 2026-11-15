@@ -59,30 +59,30 @@ const meta = computed(() => modeMeta(props.mode))
 
 <style scoped>
 .mbar {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  padding: 10px 14px; border: 1px solid rgb(100 116 139 / 22%);
-  border-radius: 10px; background: rgb(100 116 139 / 4%);
+  display: flex; align-items: center; gap: 0.875rem; flex-wrap: wrap;
+  padding: 0.625rem 0.875rem; border: 1px solid rgb(100 116 139 / 22%);
+  border-radius: 0.625rem; background: rgb(100 116 139 / 4%);
 }
-.mbar-tag { font-size: 12px; color: rgb(100 116 139); }
+.mbar-tag { font-size: 0.75rem; color: rgb(100 116 139); }
 .mbar-seg {
-  display: inline-flex; gap: 6px; flex-wrap: wrap;
+  display: inline-flex; gap: 0.375rem; flex-wrap: wrap;
 }
 .mbar-opt {
-  padding: 5px 12px; font-size: 12.5px; cursor: pointer;
+  padding: 0.3125rem 0.75rem; font-size: 0.78125rem; cursor: pointer;
   border: 1px solid var(--color-border-tertiary); background: var(--c-surface); color: inherit;
-  border-radius: 8px; white-space: nowrap;
+  border-radius: 0.5rem; white-space: nowrap;
 }
 .mbar-opt.on {
   border: 1.5px solid var(--accent); background: var(--accent-soft);
   color: var(--accent); font-weight: 600;
 }
 .mbar-opt:disabled { cursor: not-allowed; opacity: .55; }
-.mbar-desc { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 2px; }
-.mbar-explain { margin: 0; font-size: 12.5px; }
-.mbar-hint { margin: 0; font-size: 11.5px; color: rgb(100 116 139); }
-.mbar-right { display: flex; gap: 8px; }
+.mbar-desc { flex: 1; min-width: 16.25rem; display: flex; flex-direction: column; gap: 0.125rem; }
+.mbar-explain { margin: 0; font-size: 0.78125rem; }
+.mbar-hint { margin: 0; font-size: 0.71875rem; color: rgb(100 116 139); }
+.mbar-right { display: flex; gap: 0.5rem; }
 .mbar-ghost {
-  font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 0.75rem; padding: 0.3125rem 0.625rem; border-radius: 0.375rem; cursor: pointer;
   color: rgb(100 116 139); background: transparent;
   border: 1px solid rgb(100 116 139 / 30%); white-space: nowrap;
 }

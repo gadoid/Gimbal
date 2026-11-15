@@ -228,9 +228,9 @@ onMounted(async () => {
 <style scoped>
 .chip {
   display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+  padding: 0.125rem 0.5rem;
+  border-radius: 62.4375rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   white-space: nowrap;
 }

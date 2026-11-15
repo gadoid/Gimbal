@@ -5,7 +5,7 @@
 <template>
   <section class="slib">
     <header class="flex flex-col gap-0.5">
-      <h1 class="m-0 text-[22px] leading-[30px] font-semibold">个人设置</h1>
+      <h1 class="m-0 text-[1.375rem] leading-[1.875rem] font-semibold">个人设置</h1>
       <span class="text-caption text-signal-ink/60">
         {{ auth.currentUser?.username }} · {{ roleLabel }}
       </span>
@@ -13,7 +13,7 @@
 
     <div class="flex flex-wrap items-start gap-6">
       <ProfileSideNav class="sticky top-4" />
-      <div class="flex min-w-0 max-w-[880px] flex-1 flex-col gap-4">
+      <div class="flex min-w-0 max-w-[55rem] flex-1 flex-col gap-4">
         <RouterView />
       </div>
     </div>

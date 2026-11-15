@@ -213,25 +213,25 @@ onMounted(async () => {
 .grid-filter-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  margin-bottom: 16px;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
 }
 .grid-search {
-  width: 220px;
-  padding: 5px 10px;
-  font-size: 12px;
+  width: 13.75rem;
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.75rem;
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--c-surface);
 }
 .grid-search:focus { outline: none; border-color: var(--sl-accent); }
 .grid-method {
-  padding: 5px 8px;
-  font-size: 12px;
+  padding: 0.3125rem 0.5rem;
+  font-size: 0.75rem;
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--c-surface);
 }
-.grid-filter-meta { font-size: 11px; color: var(--sl-ink-3); }
+.grid-filter-meta { font-size: 0.6875rem; color: var(--sl-ink-3); }
 </style>

@@ -102,35 +102,35 @@ function confirmQuick() {
 /* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
   background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
-  border-radius: 8px; padding: 12px 16px;
-  display: flex; flex-direction: column; gap: 10px;
+  border-radius: 0.5rem; padding: 0.75rem 1rem;
+  display: flex; flex-direction: column; gap: 0.625rem;
 }
 /* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 计数徽标 + 弹性空位 */
-.zone-head { display: flex; align-items: center; gap: 10px; }
+.zone-head { display: flex; align-items: center; gap: 0.625rem; }
 .zone-name {
-  font-size: 14px; font-weight: 700; color: var(--color-text-primary);
-  padding-left: 10px; border-left: 3px solid var(--accent);
+  font-size: 0.875rem; font-weight: 700; color: var(--color-text-primary);
+  padding-left: 0.625rem; border-left: 3px solid var(--accent);
 }
 .zone-count {
-  padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 3px;
+  padding: 0.0625rem 0.375rem; font-size: 0.6875rem; font-weight: 600;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 0.1875rem;
 }
 .zone-spacer { flex: 1; }
-.zone-ops { display: flex; gap: 4px; }
+.zone-ops { display: flex; gap: 0.25rem; }
 
 /* 快建行:dashed 软面板(基准 .add-card / dead-keys-bar 的浅底虚线语言) */
 .quick-row {
-  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  border: 1px dashed var(--accent-soft-border); border-radius: 6px; background: #fafbff;
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 0.75rem;
+  border: 1px dashed var(--accent-soft-border); border-radius: 0.375rem; background: #fafbff;
 }
-.quick-row .qa-step { width: 110px; flex: none; }
+.quick-row .qa-step { width: 6.875rem; flex: none; }
 .quick-row .qa-path { flex: 1; }
 
 /* 条目行:行距 + hover(平台行交互语言 #f8faff,AssertionRegistryEditor .are-row 同款) */
-.inj-list { display: flex; flex-direction: column; gap: 2px; }
+.inj-list { display: flex; flex-direction: column; gap: 0.125rem; }
 .inj-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4375rem 0.625rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.8125rem;
   transition: background 0.15s ease;
 }
 .inj-item:hover { background: #f8faff; }
@@ -144,9 +144,9 @@ function confirmQuick() {
 
 /* 空态(三处统一形状:dashed 框 + muted 文案 + 引导按钮) */
 .empty-state {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 18px 16px; text-align: center;
-  border: 1px dashed var(--color-border-tertiary); border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 0.625rem;
+  padding: 1.125rem 1rem; text-align: center;
+  border: 1px dashed var(--color-border-tertiary); border-radius: 0.5rem;
 }
-.empty-state p { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
+.empty-state p { margin: 0; font-size: 0.75rem; color: var(--color-text-tertiary); }
 </style>

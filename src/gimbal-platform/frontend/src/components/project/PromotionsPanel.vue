@@ -7,10 +7,10 @@
     <table v-else-if="items.length" class="tbl">
       <thead>
         <tr>
-          <th style="width:70px">类型</th>
+          <th style="width:4.375rem">类型</th>
           <th>来源</th>
-          <th style="width:80px" class="c-center">冲突</th>
-          <th style="width:90px">状态</th>
+          <th style="width:5rem" class="c-center">冲突</th>
+          <th style="width:5.625rem">状态</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -55,7 +55,7 @@
           批准将以<b>当前原件内容</b>复制进项目;「采纳原件值」会把该路径写入项目层 carry。
         </p>
         <table class="tbl">
-          <thead><tr><th>服务</th><th>路径</th><th>原件值</th><th>项目层</th><th style="width:150px">裁决</th></tr></thead>
+          <thead><tr><th>服务</th><th>路径</th><th>原件值</th><th>项目层</th><th style="width:9.375rem">裁决</th></tr></thead>
           <tbody>
             <tr v-for="c in approving.conflicts" :key="`${c.service}.${c.path}`">
               <td>{{ c.service }}</td>
@@ -203,26 +203,26 @@ onMounted(load)
 
 <style scoped>
 .panel { display: flex; flex-direction: column; gap: 0.5rem; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 8px; overflow: hidden; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; overflow: hidden; }
 .tbl th, .tbl td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #eef2f7; }
 .tbl th { background: var(--surface-raised); color: var(--color-text-secondary); font-weight: 500; }
 .c-center { text-align: center !important; }
 .src { font-weight: 500; }
 .changed { color: var(--sl-warn); font-size: 0.74rem; }
 .muted { color: var(--color-text-tertiary); font-size: 0.8rem; }
-.badge { font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; background: var(--soft-neutral-bg); color: var(--color-text-strong); }
+.badge { font-size: 0.72rem; padding: 0.125rem 0.5rem; border-radius: 62.4375rem; background: var(--soft-neutral-bg); color: var(--color-text-strong); }
 .badge.pending { background: rgb(245 158 11 / 12%); color: var(--sl-warn); }
 .badge.approved { background: rgb(34 197 94 / 12%); color: var(--sl-ok); }
 .badge.rejected { background: rgb(239 68 68 / 10%); color: var(--sl-bad); }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn.danger { color: var(--sl-bad); border-color: #fca5a5; }
 .btn.sm { padding: 0.15rem 0.5rem; font-size: 0.78rem; }
 .btn:disabled { opacity: 0.5; }
 .overlay { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.dialog { background: var(--c-surface); border-radius: 10px; width: min(680px, 92vw); max-height: 84vh; overflow: auto; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.dialog { background: var(--c-surface); border-radius: 0.625rem; width: min(42.5rem, 92vw); max-height: 84vh; overflow: auto; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
 .dialog h3 { margin: 0; font-size: 1rem; }
 .field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
-.field textarea { padding: 6px 8px; border: 1px solid var(--color-border-secondary); border-radius: 6px; }
+.field textarea { padding: 0.375rem 0.5rem; border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; }
 .foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
 </style>

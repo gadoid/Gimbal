@@ -71,24 +71,24 @@ defineEmits<{
 
 <style scoped>
 /* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 计数徽标 */
-.scheme-list { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.zone-head { display: flex; align-items: center; gap: 10px; }
+.scheme-list { display: flex; flex-direction: column; gap: 0.625rem; min-height: 0; }
+.zone-head { display: flex; align-items: center; gap: 0.625rem; }
 .zone-name {
-  font-size: 14px; font-weight: 700; color: var(--color-text-primary);
-  padding-left: 10px; border-left: 3px solid var(--accent);
+  font-size: 0.875rem; font-weight: 700; color: var(--color-text-primary);
+  padding-left: 0.625rem; border-left: 3px solid var(--accent);
 }
 .zone-count {
-  padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 3px;
+  padding: 0.0625rem 0.375rem; font-size: 0.6875rem; font-weight: 600;
+  color: var(--color-text-secondary); background: var(--soft-neutral-bg); border-radius: 0.1875rem;
 }
 
 /* 列表项:两层信息(名 + 操作 / 概要徽标行),卡片 + hover/选中态
    (平台行交互语言:hover 描边微光,选中 = 浅底 + 左侧 accent 竖条) */
-.scheme-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.scheme-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .scheme-item {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 12px; background: var(--c-surface);
-  border: 1px solid var(--color-border-tertiary); border-radius: 8px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 0.375rem;
+  padding: 0.625rem 0.75rem; background: var(--c-surface);
+  border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .scheme-item:hover {
@@ -99,39 +99,39 @@ defineEmits<{
   border-color: var(--accent-soft-border); background: #f0f5ff;
   box-shadow: inset 2px 0 0 var(--accent);
 }
-.scheme-main { display: flex; align-items: center; gap: 6px; }
+.scheme-main { display: flex; align-items: center; gap: 0.375rem; }
 .scheme-name {
-  flex: 1; min-width: 0; font-weight: 600; font-size: 13px;
+  flex: 1; min-width: 0; font-weight: 600; font-size: 0.8125rem;
   color: var(--color-text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .scheme-ops { flex: none; display: inline-flex; }
 /* 「⋯」触达区:24px 方形热区,hover 反白(AssertionRegistryEditor .are-del 同款) */
 .more-btn {
-  width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
-  border: none; background: transparent; border-radius: 4px; cursor: pointer;
-  color: var(--color-text-secondary); font-size: 14px; line-height: 1;
+  width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; border-radius: 0.25rem; cursor: pointer;
+  color: var(--color-text-secondary); font-size: 0.875rem; line-height: 1;
 }
 .more-btn:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* 概要徽标行:平台 tag 体系(10px/600/var(--soft-neutral-bg) 底);系统徽标 = 绿 tag */
-.scheme-meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.scheme-meta { display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
 .tag-default {
-  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
+  font-size: 0.625rem; font-weight: 600; padding: 0.0625rem 0.375rem; border-radius: 0.1875rem;
   color: #065f46; background: #d1fae5; white-space: nowrap;
 }
 .badge {
-  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
+  font-size: 0.625rem; font-weight: 600; padding: 0.0625rem 0.375rem; border-radius: 0.1875rem;
   color: var(--color-text-secondary); background: var(--soft-neutral-bg); white-space: nowrap;
 }
 
 /* 空态(三处统一形状:dashed 框 + muted 文案 + 引导按钮) */
 .empty-state {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 18px 16px; text-align: center;
-  border: 1px dashed var(--color-border-tertiary); border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 0.625rem;
+  padding: 1.125rem 1rem; text-align: center;
+  border: 1px dashed var(--color-border-tertiary); border-radius: 0.5rem;
 }
-.empty-state p { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
+.empty-state p { margin: 0; font-size: 0.75rem; color: var(--color-text-tertiary); }
 
-.list-footer { display: flex; padding-top: 2px; }
+.list-footer { display: flex; padding-top: 0.125rem; }
 </style>

@@ -47,7 +47,7 @@
 
     <!-- ── 手动新增 / 编辑(字段与凭证管理一致;差异:password 明文)── -->
 <Dialog :open="formOpen" @update:open="formOpen = $event">
-      <DialogContent class="max-w-[520px]">
+      <DialogContent class="max-w-[32.5rem]">
         <DialogHeader>
           <DialogTitle>{{ editingAlias ? '编辑用户' : '+ 添加用户' }}</DialogTitle>
         </DialogHeader>
@@ -111,7 +111,7 @@
             <FormItem>
               <FormLabel>expires_in（秒）</FormLabel>
               <FormControl>
-                <Input v-bind="componentField" type="number" :min="0" :max="86400" class="w-[140px]" />
+                <Input v-bind="componentField" type="number" :min="0" :max="86400" class="w-[8.75rem]" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -126,7 +126,7 @@
 
     <!-- ── 凭证池导入(快照拷贝:导入的是当前值副本,池后续修改不影响)── -->
 <Dialog :open="importOpen" @update:open="importOpen = $event">
-      <DialogContent class="max-w-[640px]">
+      <DialogContent class="max-w-[40rem]">
         <DialogHeader><DialogTitle>从凭证池导入</DialogTitle></DialogHeader>
         <p class="import-hint">
           选择要快照到本场景的凭证 — 导入后与凭证池解耦;凭证池更新不会同步,如需刷新请删除该行后重新导入。
@@ -333,8 +333,8 @@ async function submitImport() {
 <style scoped>
 .users-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
 }
 
 .users-table :deep(.el-table__row:hover > td.el-table__cell) {
@@ -342,23 +342,23 @@ async function submitImport() {
 }
 
 .alias {
-  padding: 2px 6px;
+  padding: 0.125rem 0.375rem;
   color: var(--c-accent, var(--accent));
   font-family: var(--font-mono, monospace);
   font-weight: 600;
   background: var(--c-accent-soft, #eef2ff);
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 
 .pw {
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--c-text-secondary, var(--color-text-secondary));
 }
 
 .import-hint {
-  margin: 0 0 10px;
-  font-size: 12px;
+  margin: 0 0 0.625rem;
+  font-size: 0.75rem;
   line-height: 1.6;
   color: var(--c-text-secondary, var(--color-text-secondary));
 }
@@ -366,19 +366,19 @@ async function submitImport() {
 .pool-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 320px;
+  gap: 0.375rem;
+  max-height: 20rem;
   overflow-y: auto;
 }
 
 .pool-item {
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
   align-items: center;
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
   cursor: pointer;
   border: 1px solid var(--c-border, var(--color-border-tertiary));
-  border-radius: 6px;
+  border-radius: 0.375rem;
   transition: all 0.15s;
 }
 
@@ -397,15 +397,15 @@ async function submitImport() {
 }
 
 .pool-user {
-  min-width: 90px;
-  font-size: 12px;
+  min-width: 5.625rem;
+  font-size: 0.75rem;
 }
 
 .pool-url {
   flex: 1;
   overflow: hidden;
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--c-text-secondary, var(--color-text-secondary));
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -413,21 +413,21 @@ async function submitImport() {
 
 .taken {
   flex-shrink: 0;
-  padding: 1px 8px;
-  font-size: 10.5px;
+  padding: 0.0625rem 0.5rem;
+  font-size: 0.65625rem;
   color: #854d0e;
   background: #fef9c3;
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
-.users-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.users-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
 .users-table th {
   /* 形制走 .slib-table thead th;这里只压密度 */
-  padding: 5px 8px;
+  padding: 0.3125rem 0.5rem;
 }
-.users-table td { padding: 6px 8px; border-bottom: 0.5px solid var(--soft-neutral-bg); }
-.cell-url { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.uc-ops { display: flex; align-items: center; justify-content: center; gap: 2px; }
-.uc-op { height: 24px; padding: 0 6px; font-size: 11px; }
+.users-table td { padding: 0.375rem 0.5rem; border-bottom: 0.5px solid var(--soft-neutral-bg); }
+.cell-url { max-width: 11.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uc-ops { display: flex; align-items: center; justify-content: center; gap: 0.125rem; }
+.uc-op { height: 1.5rem; padding: 0 0.375rem; font-size: 0.6875rem; }
 .uc-del { color: var(--sl-bad); }
-.req { margin-left: 3px; color: var(--sl-bad); font-weight: 700; }
+.req { margin-left: 0.1875rem; color: var(--sl-bad); font-weight: 700; }
 </style>

@@ -150,34 +150,34 @@ async function confirm(): Promise<void> {
   background: rgb(15 23 42 / 45%);
 }
 .sub-dialog {
-  width: min(560px, 92vw); max-height: 86vh; overflow: auto;
-  background: var(--c-surface); border-radius: 12px; padding: 18px 20px;
-  display: flex; flex-direction: column; gap: 10px;
+  width: min(35rem, 92vw); max-height: 86vh; overflow: auto;
+  background: var(--c-surface); border-radius: 0.75rem; padding: 1.125rem 1.25rem;
+  display: flex; flex-direction: column; gap: 0.625rem;
   box-shadow: 0 18px 50px rgb(15 23 42 / 25%);
 }
-.sub-dialog h2 { margin: 0; font-size: 16px; }
-.sub-dialog h3 { margin: 4px 0 0; font-size: 13px; color: rgb(51 65 85); }
-.sub-hint { margin: 0; font-size: 12px; color: rgb(71 85 105); line-height: 1.7; }
-.sub-err { margin: 0; font-size: 12.5px; color: var(--sl-bad); }
-.sub-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sub-dialog h2 { margin: 0; font-size: 1rem; }
+.sub-dialog h3 { margin: 0.25rem 0 0; font-size: 0.8125rem; color: rgb(51 65 85); }
+.sub-hint { margin: 0; font-size: 0.75rem; color: rgb(71 85 105); line-height: 1.7; }
+.sub-err { margin: 0; font-size: 0.78125rem; color: var(--sl-bad); }
+.sub-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
 .sub-table th, .sub-table td {
-  text-align: left; padding: 4px 8px; border-bottom: 1px solid rgb(226 232 240);
+  text-align: left; padding: 0.25rem 0.5rem; border-bottom: 1px solid rgb(226 232 240);
 }
-.sub-path { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-path { max-width: 12.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub-rw {
-  font-size: 10.5px; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.65625rem; padding: 0.0625rem 0.4375rem; border-radius: 62.4375rem;
   border: 1px solid; white-space: nowrap;
 }
 .sub-rw.rw { color: #b91c1c; background: rgb(239 68 68 / 10%); border-color: rgb(239 68 68 / 35%); font-weight: 600; }
 .sub-rw.ro { color: rgb(71 85 105); background: rgb(100 116 139 / 8%); border-color: rgb(100 116 139 / 30%); }
-.sub-src { margin: 10px 0 0; }
+.sub-src { margin: 0.625rem 0 0; }
 .sub-src select {
-  margin-left: 6px; padding: 4px 8px; border-radius: 8px;
-  border: 1px solid rgb(100 116 139 / 30%); font-size: 12px;
+  margin-left: 0.375rem; padding: 0.25rem 0.5rem; border-radius: 0.5rem;
+  border: 1px solid rgb(100 116 139 / 30%); font-size: 0.75rem;
 }
-.sub-acts { display: flex; justify-content: flex-end; gap: 8px; }
+.sub-acts { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .sub-ghost, .sub-primary {
-  font-size: 13px; padding: 6px 16px; border-radius: 8px; cursor: pointer;
+  font-size: 0.8125rem; padding: 0.375rem 1rem; border-radius: 0.5rem; cursor: pointer;
 }
 .sub-ghost { background: none; border: 1px solid rgb(203 213 225); color: rgb(71 85 105); }
 .sub-primary {

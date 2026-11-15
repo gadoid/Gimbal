@@ -53,14 +53,14 @@
         <thead>
           <tr>
             <th>场景名</th>
-            <th style="width:120px">系统</th>
-            <th style="width:90px">模块</th>
-            <th style="width:70px" class="c-center">优先级</th>
-            <th style="width:110px">作者</th>
-            <th style="width:70px" class="c-center" title="后端暂无复制次数字段 — 有数据前如实留空,不做估算">被复制</th>
-            <th style="width:100px">最后编辑</th>
+            <th style="width:7.5rem">系统</th>
+            <th style="width:5.625rem">模块</th>
+            <th style="width:4.375rem" class="c-center">优先级</th>
+            <th style="width:6.875rem">作者</th>
+            <th style="width:4.375rem" class="c-center" title="后端暂无复制次数字段 — 有数据前如实留空,不做估算">被复制</th>
+            <th style="width:6.25rem">最后编辑</th>
             <th>Tags</th>
-            <th style="width:56px" class="c-center">操作</th>
+            <th style="width:3.5rem" class="c-center">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -268,21 +268,21 @@ async function toggleStar(row: ScenarioListItem) {
 
 <style scoped>
 /* 场景表行含描述行(~78px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
-.slib { --lib-card-max: 850px; }
-.sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.slib { --lib-card-max: 53.125rem; }
+.sys-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .author { color: #5b6472; }
 .row-expired td { opacity: 0.55; }
 
 /* D-3:公共 Suite 分区 + 场景行的所属 Suite chip */
 .suite-chip {
-  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  flex: none; font-size: 0.6875rem; padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
   color: #6d28d9; background: rgb(139 92 246 / 8%);
   border: 1px solid rgb(139 92 246 / 35%); text-decoration: none;
 }
 .suite-chip:hover { background: rgb(139 92 246 / 15%); }
 .pub-suite-filter {
-  padding: 7px 10px; font-size: 12.5px; border-radius: 8px;
+  padding: 0.4375rem 0.625rem; font-size: 0.78125rem; border-radius: 0.5rem;
   border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit;
-  max-width: 240px;
+  max-width: 15rem;
 }
 </style>

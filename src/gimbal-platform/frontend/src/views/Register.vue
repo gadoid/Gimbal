@@ -5,7 +5,7 @@
      values。 -->
 <template>
   <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-signal-soft to-signal-canvas p-6">
-    <div class="auth-card w-[420px] max-w-full rounded-card border border-signal-line bg-signal-card px-7 pb-6 pt-7 shadow-sig-hover">
+    <div class="auth-card w-[26.25rem] max-w-full rounded-card border border-signal-line bg-signal-card px-7 pb-6 pt-7 shadow-sig-hover">
       <div class="mb-6 flex items-center gap-3">
         <div class="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-signal to-signal-dot" aria-hidden="true"></div>
         <div class="flex flex-col">
@@ -14,8 +14,8 @@
         </div>
       </div>
 
-      <div class="mb-[18px]">
-        <div class="text-[20px] font-semibold text-signal-ink">创建账号</div>
+      <div class="mb-[1.125rem]">
+        <div class="text-[1.25rem] font-semibold text-signal-ink">创建账号</div>
         <div class="mt-1 text-caption text-signal">首位注册的用户将自动成为管理员，后续注册为普通成员</div>
       </div>
 
@@ -80,7 +80,7 @@
               <div class="flex flex-1 gap-1">
                 <span v-for="i in 4" :key="i" class="h-1 flex-1 rounded-sm transition-colors" :class="barClass(i)"></span>
               </div>
-              <span class="min-w-[50px] text-right text-caption font-semibold tracking-wider" :class="strengthLabelClass">
+              <span class="min-w-[3.125rem] text-right text-caption font-semibold tracking-wider" :class="strengthLabelClass">
                 {{ strengthLabel }}
               </span>
             </div>
@@ -136,12 +136,12 @@
           </FormItem>
         </FormField>
 
-        <Button class="h-[38px] w-full tracking-widest" :disabled="loading || !canSubmit" type="submit">
+        <Button class="h-[2.375rem] w-full tracking-widest" :disabled="loading || !canSubmit" type="submit">
           {{ loading ? '创建中…' : '创建账号' }}
         </Button>
       </form>
 
-      <div class="mt-[18px] text-center text-body text-muted-foreground">
+      <div class="mt-[1.125rem] text-center text-body text-muted-foreground">
         已有账号？
         <router-link to="/login" class="text-signal no-underline hover:underline">直接登录</router-link>
       </div>

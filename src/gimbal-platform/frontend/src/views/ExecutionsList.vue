@@ -96,7 +96,7 @@
 
     <div v-if="store.loading && store.list.length === 0" class="loading-state mt-3.5">加载中…</div>
     <div v-else-if="filtered.length > 0" class="lib-card mt-3.5">
-      <Table class="exec-table min-w-[1180px] table-fixed">
+      <Table class="exec-table min-w-[73.75rem] table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead class="w-[7%]">#</TableHead>
@@ -593,59 +593,59 @@ onUnmounted(() => {
 /* ── KPI 带(§3.5 原型:一张白卡,指标间细竖线)─────────────────── */
 .kpi-band {
   display: flex; flex-wrap: wrap;
-  margin-top: 14px;
-  background: var(--c-surface); border: 1px solid var(--sl-line); border-radius: 10px;
+  margin-top: 0.875rem;
+  background: var(--c-surface); border: 1px solid var(--sl-line); border-radius: 0.625rem;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
 .kpi {
-  flex: 1 1 0; min-width: 148px;
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 14px 18px 12px;
+  flex: 1 1 0; min-width: 9.25rem;
+  display: flex; flex-direction: column; gap: 0.1875rem;
+  padding: 0.875rem 1.125rem 0.75rem;
 }
 .kpi + .kpi { border-left: 1px solid #EEF0F3; }
 .kpi-num {
-  font-family: var(--font-mono, monospace); font-size: 22px; font-weight: 700;
+  font-family: var(--font-mono, monospace); font-size: 1.375rem; font-weight: 700;
   color: var(--sl-ink); line-height: 1.2;
 }
-.kpi-label { font-size: 11px; color: #5B6472; }
-.kpi-sub { font-size: 10.5px; color: #8B93A1; }
+.kpi-label { font-size: 0.6875rem; color: #5B6472; }
+.kpi-sub { font-size: 0.65625rem; color: #8B93A1; }
 .kpi-warn .kpi-num { color: var(--sl-bad); }
 /* 通过率微条:绿(done)/底红(failed)两段,量纲 = 运行次数 */
 .kpi-pass-bar {
-  margin-top: 4px; height: 5px; border-radius: 999px;
+  margin-top: 0.25rem; height: 0.3125rem; border-radius: 62.4375rem;
   background: var(--sl-bad); overflow: hidden;
 }
 .kpi-pass-bar i { display: block; height: 100%; background: var(--sl-ok); }
-.kpi-tip { display: flex; align-items: center; padding: 0 12px; }
+.kpi-tip { display: flex; align-items: center; padding: 0 0.75rem; }
 
 /* ── 筛选行 ─────────────────────────────────────────────────────── */
 .filter-row {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin-top: 12px;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  margin-top: 0.75rem;
 }
 .filter-search {
-  width: 210px; padding: 5px 10px; font-size: 12px;
-  border: 1px solid var(--sl-line); border-radius: 6px; background: var(--c-surface);
+  width: 13.125rem; padding: 0.3125rem 0.625rem; font-size: 0.75rem;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem; background: var(--c-surface);
 }
 .filter-search:focus { outline: none; border-color: var(--sl-accent); }
 .filter-select {
-  padding: 5px 8px; font-size: 12px;
-  border: 1px solid var(--sl-line); border-radius: 6px; background: var(--c-surface);
+  padding: 0.3125rem 0.5rem; font-size: 0.75rem;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem; background: var(--c-surface);
 }
 .filter-spacer { flex: 1; }
-.filter-count { font-size: 11.5px; color: #5B6472; }
+.filter-count { font-size: 0.71875rem; color: #5B6472; }
 .filter-count strong { color: var(--sl-bad); font-weight: 700; }
 .batch-banner {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
+  gap: 0.375rem 0.875rem;
   align-items: center;
-  padding: 10px 14px;
-  font-size: 13px;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-text-secondary);
   background: var(--c-surface);
   border: 0.5px solid var(--color-border-tertiary);
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
 
 .batch-banner-title {
@@ -654,10 +654,10 @@ onUnmounted(() => {
 }
 
 .batch-count {
-  padding: 1px 8px;
-  font-size: 12px;
+  padding: 0.0625rem 0.5rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 
 .batch-span {
@@ -666,51 +666,51 @@ onUnmounted(() => {
 }
 
 .batch-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 10px; border-radius: 999px;
-  font-size: 11px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.1875rem 0.625rem; border-radius: 62.4375rem;
+  font-size: 0.6875rem; font-weight: 600;
   font-family: var(--font-mono, monospace);
   background: var(--soft-accent-bg); color: var(--sl-accent);
 }
 .batch-clear {
   border: none; background: transparent; cursor: pointer;
-  color: inherit; font-size: 12px; line-height: 1; padding: 0 2px;
+  color: inherit; font-size: 0.75rem; line-height: 1; padding: 0 0.125rem;
 }
 
 /* ── 单元格:场景 / 方案 / 开始 ─────────────────────────────────── */
-.scenario-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.scenario-cell { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
 .scenario-name {
-  font-size: 12.5px; font-weight: 600; color: var(--sl-ink);
+  font-size: 0.78125rem; font-weight: 600; color: var(--sl-ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .scenario-sid {
-  font-size: 10.5px; color: #8B93A1;
+  font-size: 0.65625rem; color: #8B93A1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Suite 运行标记 + 链接(重构:suite_graph 执行显示 Suite 名) */
 .suite-tag {
-  font-size: 10.5px; font-weight: 600; padding: 1px 7px; margin-right: 6px;
-  border-radius: 999px; color: #6d28d9;
+  font-size: 0.65625rem; font-weight: 600; padding: 0.0625rem 0.4375rem; margin-right: 0.375rem;
+  border-radius: 62.4375rem; color: #6d28d9;
   background: rgb(139 92 246 / 10%); border: 1px solid rgb(139 92 246 / 40%);
-  vertical-align: 1px;
+  vertical-align: 0.0625rem;
 }
 .suite-link { color: #2563eb; text-decoration: none; }
 .suite-link:hover { text-decoration: underline; }
 .scheme-cell {
-  font-size: 12px; color: #5B6472;
+  font-size: 0.75rem; color: #5B6472;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
 }
-.when-cell { display: flex; flex-direction: column; gap: 2px; }
-.when-main { font-size: 11.5px; color: var(--sl-ink); }
-.when-dur { font-size: 10.5px; color: #8B93A1; }
-.exec-id { font-size: 12px; font-weight: 600; color: var(--sl-ink); }
+.when-cell { display: flex; flex-direction: column; gap: 0.125rem; }
+.when-main { font-size: 0.71875rem; color: var(--sl-ink); }
+.when-dur { font-size: 0.65625rem; color: #8B93A1; }
+.exec-id { font-size: 0.75rem; font-weight: 600; color: var(--sl-ink); }
 
 /* ── 信号列(§3.2)──────────────────────────────────────────────── */
-.signals-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.signals-cell { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
 .sig {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 2px 8px; border-radius: 4px;
-  font-size: 11px; font-weight: 500; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 0.1875rem;
+  padding: 0.125rem 0.5rem; border-radius: 0.25rem;
+  font-size: 0.6875rem; font-weight: 500; white-space: nowrap;
 }
 .sig-batch {
   background: var(--soft-accent-bg); color: var(--sl-accent);
@@ -724,26 +724,26 @@ onUnmounted(() => {
 .expand-row { background: #FAFBFC; }
 .expand-row:hover { background: #FAFBFC !important; }
 .expand-grid {
-  display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); gap: 20px;
-  padding: 6px 4px;
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(16.25rem, 2fr); gap: 1.25rem;
+  padding: 0.375rem 0.25rem;
 }
-.expand-block { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.expand-block { min-width: 0; display: flex; flex-direction: column; gap: 0.375rem; }
 .expand-label {
-  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: .06em;
   color: #4A5A72;
 }
-.expand-line { font-size: 12px; color: var(--sl-ink); line-height: 1.9; }
+.expand-line { font-size: 0.75rem; color: var(--sl-ink); line-height: 1.9; }
 .auth-chip {
-  display: inline-block; margin: 0 4px 2px 0; padding: 1px 6px; border-radius: 4px;
-  font-size: 11px; background: var(--soft-accent-bg); color: var(--sl-accent);
+  display: inline-block; margin: 0 0.25rem 0.125rem 0; padding: 0.0625rem 0.375rem; border-radius: 0.25rem;
+  font-size: 0.6875rem; background: var(--soft-accent-bg); color: var(--sl-accent);
 }
-.expand-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.expand-note { margin: 0; font-size: 11px; color: #8B93A1; }
+.expand-actions { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.expand-note { margin: 0; font-size: 0.6875rem; color: #8B93A1; }
 
 .status-tag {
   display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
 }
 
 /* 失败数字:红 + 可点(原型修订 v2.2) */
@@ -756,13 +756,13 @@ onUnmounted(() => {
   font-weight: 700;
   cursor: pointer;
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 0.125rem;
 }
 
 .mono { font-family: var(--font-mono, monospace); }
 .dim { color: #8B93A1; }
 
-.exec-pager { display: flex; justify-content: flex-end; margin-top: 10px; }
+.exec-pager { display: flex; justify-content: flex-end; margin-top: 0.625rem; }
 </style>
 
 <style src="@/styles/status-colors.css"></style>

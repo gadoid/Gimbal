@@ -4,7 +4,7 @@
      添加」。添加后不关面板,可连续添加,手动关闭。 -->
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)">
-    <DialogContent class="max-w-[480px]">
+    <DialogContent class="max-w-[30rem]">
       <DialogHeader>
         <DialogTitle>添加卡片</DialogTitle>
         <DialogDescription>选择要放到工作台的摘要卡;已添加的置灰,移除后可再加回。</DialogDescription>
@@ -73,11 +73,11 @@ const allTypes = computed(() =>
 </script>
 
 <style scoped>
-.gal-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.gal-list { display: flex; flex-direction: column; gap: 0.375rem; max-height: 50vh; overflow-y: auto; }
 .gal-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 14px;
-  background: var(--c-surface); border: 1px solid var(--sl-line); border-radius: 10px;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6875rem 0.875rem;
+  background: var(--c-surface); border: 1px solid var(--sl-line); border-radius: 0.625rem;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
 }
 .gal-item:hover { border-color: var(--sl-accent); box-shadow: 0 2px 8px rgba(47, 111, 237, 0.1); }
@@ -85,14 +85,14 @@ const allTypes = computed(() =>
 .gal-item.added { opacity: 0.55; }
 .gal-item.added:hover { border-color: var(--sl-line); box-shadow: none; }
 .gal-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none;
 }
 .dot-blue { background: var(--sl-accent); }
 .dot-green { background: var(--sl-ok); }
 .dot-gold { background: #eab308; }
-.gal-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-.gal-title { font-size: 13px; font-weight: 700; color: var(--sl-ink); }
-.gal-desc { font-size: 12px; color: #5b6472; line-height: 1.45; }
-.gal-id { font-size: 11px; color: var(--color-text-tertiary); }
+.gal-info { display: flex; flex-direction: column; gap: 0.1875rem; min-width: 0; flex: 1; }
+.gal-title { font-size: 0.8125rem; font-weight: 700; color: var(--sl-ink); }
+.gal-desc { font-size: 0.75rem; color: #5b6472; line-height: 1.45; }
+.gal-id { font-size: 0.6875rem; color: var(--color-text-tertiary); }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

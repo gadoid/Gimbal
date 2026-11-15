@@ -135,18 +135,18 @@ async function submit(): Promise<void> {
 </script>
 
 <style scoped>
-.ats-dialog { min-width: 380px; }
-.ats-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow: auto; }
+.ats-dialog { min-width: 23.75rem; }
+.ats-list { display: flex; flex-direction: column; gap: 0.25rem; max-height: 20rem; overflow: auto; }
 .ats-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 0.625rem;
+  padding: 0.5rem 0.625rem; border-radius: 0.5rem; cursor: pointer;
   border: 1px solid transparent;
 }
 .ats-item:hover { background: rgb(100 116 139 / 8%); }
 .ats-item.on { border-color: var(--accent-soft-border); background: var(--accent-soft); }
 .ats-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ats-empty { padding: 12px 4px; font-size: 13px; color: var(--c-text-secondary, var(--color-text-secondary)); }
-.muted { color: var(--c-text-tertiary, var(--color-text-tertiary)); font-size: 12px; }
+.ats-empty { padding: 0.75rem 0.25rem; font-size: 0.8125rem; color: var(--c-text-secondary, var(--color-text-secondary)); }
+.muted { color: var(--c-text-tertiary, var(--color-text-tertiary)); font-size: 0.75rem; }
 .linklike {
   background: none; border: none; padding: 0; cursor: pointer;
   color: var(--c-accent, #2563eb); text-decoration: underline;

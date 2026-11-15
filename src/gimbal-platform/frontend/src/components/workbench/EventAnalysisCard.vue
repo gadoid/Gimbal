@@ -43,30 +43,30 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.ea-card { display: flex; flex-direction: column; gap: 6px; }
-.ea-empty { color: #71717a; font-size: 13px; padding: 8px 0; }
+.ea-card { display: flex; flex-direction: column; gap: 0.375rem; }
+.ea-empty { color: #71717a; font-size: 0.8125rem; padding: 0.5rem 0; }
 .ea-row {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 13px; text-decoration: none; color: inherit;
-  padding: 4px 6px; border-radius: 6px;
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.8125rem; text-decoration: none; color: inherit;
+  padding: 0.25rem 0.375rem; border-radius: 0.375rem;
 }
 .ea-row:hover { background: #f4f4f5; }
-.st { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #f4f4f5; }
+.st { font-size: 0.6875rem; padding: 0.0625rem 0.375rem; border-radius: 0.25rem; background: #f4f4f5; }
 .st.done { background: #dcfce7; color: #166534; }
 .st.running { background: #dbeafe; color: #1e40af; }
 .st.failed { background: #fee2e2; color: #991b1b; }
 .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meta { color: #71717a; font-size: 12px; }
+.meta { color: #71717a; font-size: 0.75rem; }
 .mono { font-family: ui-monospace, monospace; }
 </style>
 
 <style scoped>
-.chead { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; }
+.chead { display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 0.75rem 0.5rem; }
 .chead-icon { display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 6px; }
+  width: 1.625rem; height: 1.625rem; border-radius: 0.375rem; }
 .ci-gold { background: #fef3c7; color: var(--sl-warn); }
-.chead-title { font-weight: 600; font-size: 13px; }
-.chead-count { font-size: 12px; color: #71717a; }
+.chead-title { font-weight: 600; font-size: 0.8125rem; }
+.chead-count { font-size: 0.75rem; color: #71717a; }
 .chead-spacer { flex: 1; }
-.manage-link { font-size: 12px; color: #2563eb; text-decoration: none; }
+.manage-link { font-size: 0.75rem; color: #2563eb; text-decoration: none; }
 </style>

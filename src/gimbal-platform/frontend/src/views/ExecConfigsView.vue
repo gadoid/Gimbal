@@ -137,7 +137,7 @@
                   @click="copyArmed = true">复制为新配置</Button>
         </template>
         <template v-else>
-          <Input v-model="copyName" class="w-[180px]" placeholder="新配置名"
+          <Input v-model="copyName" class="w-[11.25rem]" placeholder="新配置名"
                  data-testid="ec-copy-name" />
           <Button size="sm" data-testid="ec-copy-ok" @click="doCopy">复制</Button>
           <Button variant="outline" size="sm" @click="copyArmed = false">取消</Button>
@@ -181,7 +181,7 @@
           <template v-else>
             <p class="hub-note">「{{ envName(selected.environmentId) }}」下各系统地址:</p>
             <table class="slib-table" data-testid="ec-hub-deps">
-              <thead><tr><th>系统</th><th>地址</th><th style="width:70px">就绪</th></tr></thead>
+              <thead><tr><th>系统</th><th>地址</th><th style="width:4.375rem">就绪</th></tr></thead>
               <tbody>
                 <tr v-for="s in selected.systems" :key="`dep-${s.service}`"
                     :data-testid="`ec-dep-${s.service}`">
@@ -209,7 +209,7 @@
           <table v-else class="slib-table" data-testid="ec-hub-bindings">
             <thead>
               <tr><th>身份面</th><th>配置槽位</th><th>声明槽位</th>
-                  <th style="width:90px">个人池</th><th style="width:210px">操作</th></tr>
+                  <th style="width:5.625rem">个人池</th><th style="width:13.125rem">操作</th></tr>
             </thead>
             <tbody>
               <template v-for="s in selected.systems">
@@ -258,7 +258,7 @@
           </p>
           <table v-else class="slib-table" data-testid="ec-hub-svcs">
             <thead>
-              <tr><th>系统</th><th>说明</th><th style="width:110px" class="c-center">身份面</th></tr>
+              <tr><th>系统</th><th>说明</th><th style="width:6.875rem" class="c-center">身份面</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in selected.systems" :key="`svc-${s.service}`"
@@ -640,24 +640,24 @@ onMounted(async () => {
 <style scoped>
 .form-grid {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 8px 10px;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 0.5rem 0.625rem;
   align-items: center;
-  max-width: 720px;
-  margin-bottom: 12px;
+  max-width: 45rem;
+  margin-bottom: 0.75rem;
 }
-.form-grid .lb { font-size: 11.5px; color: var(--sl-ink-3); }
+.form-grid .lb { font-size: 0.71875rem; color: var(--sl-ink-3); }
 /* 原生 select 保持表单语义(测试/键盘),外观与 shadcn Input 同档 */
 .native-select {
-  height: 36px;
+  height: 2.25rem;
   width: 100%;
-  max-width: 320px;
-  padding: 0 10px;
-  font-size: 13px;
+  max-width: 20rem;
+  padding: 0 0.625rem;
+  font-size: 0.8125rem;
   color: var(--sl-ink);
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   outline: none;
 }
 .native-select:focus { border-color: var(--sl-accent); }
@@ -665,42 +665,42 @@ onMounted(async () => {
 .sys {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
   background: var(--sl-canvas);
   border: 1px solid var(--sl-line);
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
-.sys + .sys { margin-top: 10px; }
+.sys + .sys { margin-top: 0.625rem; }
 .sys-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 6px;
+  gap: 0.5rem;
+  padding-bottom: 0.375rem;
   border-bottom: 1px solid var(--sl-divider);
 }
-.sys-title { font-size: 11.5px; font-weight: 700; color: var(--sl-ink-2); }
+.sys-title { font-size: 0.71875rem; font-weight: 700; color: var(--sl-ink-2); }
 
 .line-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 820px;
+  gap: 0.5rem;
+  max-width: 51.25rem;
 }
-.line-row .lb { flex: none; min-width: 36px; font-size: 11.5px; color: var(--sl-ink-3); }
+.line-row .lb { flex: none; min-width: 2.25rem; font-size: 0.71875rem; color: var(--sl-ink-3); }
 
 .hub { display: flex; flex-direction: column; }
 .hub-note {
-  margin: 0 0 8px;
-  font-size: 11.5px;
+  margin: 0 0 0.5rem;
+  font-size: 0.71875rem;
   color: var(--sl-ink-3);
 }
-.carry-sys + .carry-sys { margin-top: 10px; }
+.carry-sys + .carry-sys { margin-top: 0.625rem; }
 .carry-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 6px;
-  font-size: 12px;
+  gap: 0.5rem;
+  margin: 0 0 0.375rem;
+  font-size: 0.75rem;
 }
 </style>

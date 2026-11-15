@@ -195,23 +195,23 @@ const filtered = computed(() => {
   padding-top: 10vh;
 }
 .vsp-dialog {
-  width: 560px;
-  max-width: calc(100vw - 32px);
+  width: 35rem;
+  max-width: calc(100vw - 2rem);
   background: var(--c-bg-primary, #fff);
   border: 1px solid var(--c-border);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
 }
 .vsp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--c-border);
 }
 .vsp-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 .vsp-close {
@@ -219,22 +219,22 @@ const filtered = computed(() => {
   background: none;
   cursor: pointer;
   color: var(--c-text-secondary);
-  font-size: 13px;
-  padding: 4px;
+  font-size: 0.8125rem;
+  padding: 0.25rem;
 }
 .vsp-close:hover { color: var(--c-text-primary); }
-.vsp-body { padding: 12px 16px; }
+.vsp-body { padding: 0.75rem 1rem; }
 .vsp-toolbar {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 .vs-filter {
   flex: 1;
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.75rem;
   border: 1px solid var(--c-border);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--c-bg-secondary);
   color: var(--c-text-primary);
 }
@@ -243,10 +243,10 @@ const filtered = computed(() => {
   border-color: #4f46e5;
 }
 .vs-refresh {
-  padding: 5px 12px;
-  font-size: 12px;
+  padding: 0.3125rem 0.75rem;
+  font-size: 0.75rem;
   border: 1px solid var(--c-border);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--c-bg-secondary);
   color: var(--c-text-primary);
   cursor: pointer;
@@ -255,21 +255,21 @@ const filtered = computed(() => {
 .vs-refresh:hover:not(:disabled) { border-color: #4f46e5; }
 .vs-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 /* §13.5 参数段:参数行 + 确认钮(靛蓝主行动色,与工具栏次级行动区分) */
-.vsp-params { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-.vsp-params-hint { margin: 0; font-size: 11px; color: var(--c-text-secondary); }
-.vsp-param-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; align-items: center; }
-.vsp-param-row code { font-size: 11px; color: var(--c-text-secondary); }
+.vsp-params { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.5rem; }
+.vsp-params-hint { margin: 0; font-size: 0.6875rem; color: var(--c-text-secondary); }
+.vsp-param-row { display: grid; grid-template-columns: 8.125rem 1fr; gap: 0.5rem; align-items: center; }
+.vsp-param-row code { font-size: 0.6875rem; color: var(--c-text-secondary); }
 .vsp-param-query {
-  align-self: flex-end; padding: 5px 14px; font-size: 12px;
-  border: 1px solid #4f46e5; border-radius: 6px; background: #4f46e5;
+  align-self: flex-end; padding: 0.3125rem 0.875rem; font-size: 0.75rem;
+  border: 1px solid #4f46e5; border-radius: 0.375rem; background: #4f46e5;
   color: #fff; cursor: pointer;
 }
 .vsp-param-query:disabled { opacity: 0.5; cursor: not-allowed; }
 .vsp-banner {
-  margin: 0 0 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 11px;
+  margin: 0 0 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem;
   line-height: 1.6;
 }
 .vsp-truncated {
@@ -283,56 +283,56 @@ const filtered = computed(() => {
   color: #991b1b;
 }
 .vsp-error {
-  padding: 4px 0;
+  padding: 0.25rem 0;
 }
 .vsp-error-msg {
-  margin: 0 0 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  margin: 0 0 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.375rem;
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #991b1b;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.6;
 }
 .vsp-auth-link {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: #4f46e5;
 }
 .vsp-table {
   width: 100%;
-  max-height: 320px;
+  max-height: 20rem;
   display: block;
   overflow-y: auto;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .vsp-table th {
   /* 形制走 .slib-table thead th;表体可滚,所以列头要粘住 */
   position: sticky;
   top: 0;
-  padding: 6px 10px;
+  padding: 0.375rem 0.625rem;
   font-family: var(--font-mono);
 }
 .vsp-table td {
-  padding: 6px 10px;
+  padding: 0.375rem 0.625rem;
   border-bottom: 1px solid var(--c-border);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 240px;
+  max-width: 15rem;
 }
 .vsp-row { cursor: pointer; }
 .vsp-row:hover td { background: #eef2ff; }
 .vsp-empty {
-  padding: 20px 0;
+  padding: 1.25rem 0;
   text-align: center;
   color: var(--c-text-tertiary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .vsp-meta {
-  margin: 8px 0 0;
-  font-size: 11px;
+  margin: 0.5rem 0 0;
+  font-size: 0.6875rem;
   color: var(--c-text-tertiary);
 }
 </style>

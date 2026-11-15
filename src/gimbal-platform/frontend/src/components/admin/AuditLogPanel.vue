@@ -57,10 +57,10 @@
     <Table v-if="rows.length">
       <TableHeader>
         <TableRow>
-          <TableHead class="w-[160px]">时间</TableHead>
-          <TableHead class="w-[140px]">操作者</TableHead>
-          <TableHead class="w-[130px]">动作</TableHead>
-          <TableHead class="w-[200px]">对象</TableHead>
+          <TableHead class="w-[10rem]">时间</TableHead>
+          <TableHead class="w-[8.75rem]">操作者</TableHead>
+          <TableHead class="w-[8.125rem]">动作</TableHead>
+          <TableHead class="w-[12.5rem]">对象</TableHead>
           <TableHead>详情</TableHead>
         </TableRow>
       </TableHeader>
@@ -164,56 +164,56 @@ onMounted(() => { void load() })
 
 <style scoped>
 .audit-chip {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 62.4375rem;
+  font-size: 0.6875rem;
   border: 1px solid var(--color-border-tertiary, var(--sl-line));
   background: var(--soft-neutral-bg);
 }
 .audit-filter {
-  height: 26px;
-  max-width: 220px;
-  padding: 0 6px;
+  height: 1.625rem;
+  max-width: 13.75rem;
+  padding: 0 0.375rem;
   border: 1px solid var(--color-border-tertiary, var(--sl-line));
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--c-surface);
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   color: #5a6273;
   cursor: pointer;
 }
 .audit-filter:hover:not(:disabled) { color: var(--sl-accent); border-color: var(--sl-accent); }
 .audit-filter:disabled { color: #c4c9d2; cursor: default; }
 .audit-refresh {
-  padding: 2px 10px;
+  padding: 0.125rem 0.625rem;
   border: 1px solid var(--color-border-tertiary, var(--sl-line));
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--c-surface);
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   color: #5a6273;
   cursor: pointer;
 }
 .audit-refresh:hover:not(:disabled) { color: var(--sl-accent); border-color: var(--sl-accent); }
 .audit-refresh:disabled { color: #c4c9d2; cursor: default; }
-.audit-detail-text { font-size: 12px; color: #334155; }
-.audit-raw { margin-top: 4px; }
+.audit-detail-text { font-size: 0.75rem; color: #334155; }
+.audit-raw { margin-top: 0.25rem; }
 .audit-raw summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--color-text-tertiary);
   user-select: none;
 }
 .audit-raw summary:hover { color: var(--sl-accent); }
 .audit-raw pre {
-  margin: 4px 0 0;
-  padding: 6px 8px;
+  margin: 0.25rem 0 0;
+  padding: 0.375rem 0.5rem;
   background: var(--surface-raised);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   font-family: ui-monospace, monospace;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   color: var(--color-text-secondary);
   white-space: pre-wrap;
   word-break: break-all;
 }
 .muted { color: var(--color-text-secondary); }
-.mono { font-family: ui-monospace, monospace; font-size: 11.5px; }
+.mono { font-family: ui-monospace, monospace; font-size: 0.71875rem; }
 </style>

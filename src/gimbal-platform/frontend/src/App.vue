@@ -29,7 +29,7 @@
     <!-- 内容区让位宽度跟侧边栏折叠态走(200px ↔ 56px 图标轨道) -->
     <main
       class="min-h-screen min-w-0 transition-[margin] duration-200"
-      :class="sidebarCollapsed ? 'ml-[56px]' : 'ml-[200px]'"
+      :class="sidebarCollapsed ? 'ml-[3.5rem]' : 'ml-[12.5rem]'"
     >
       <RouterView v-slot="{ Component }">
         <Transition name="page-fade" mode="out-in">

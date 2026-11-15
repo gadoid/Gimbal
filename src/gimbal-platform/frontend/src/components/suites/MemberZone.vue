@@ -389,65 +389,65 @@ function onDrop(zone: 'before' | 'after', ev: DragEvent): void {
 </script>
 
 <style scoped>
-.mzone { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mzone { display: flex; flex-direction: column; gap: 0.625rem; min-width: 0; }
 .mz-bracket {
-  border: 1px dashed rgb(100 116 139 / 45%); border-radius: 10px;
-  padding: 8px 12px; display: flex; flex-direction: column; gap: 6px;
+  border: 1px dashed rgb(100 116 139 / 45%); border-radius: 0.625rem;
+  padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.375rem;
 }
 .mz-bracket.dragover { border-color: var(--accent); background: var(--accent-soft); }
-.mz-bracket-title { margin: 0; font-size: 12.5px; font-weight: 600; }
-.mz-bracket-hint { margin-left: 8px; font-weight: 400; font-size: 11.5px; color: rgb(100 116 139); }
-.mz-drop { margin: 0; font-size: 12px; color: rgb(100 116 139 / 80%); }
+.mz-bracket-title { margin: 0; font-size: 0.78125rem; font-weight: 600; }
+.mz-bracket-hint { margin-left: 0.5rem; font-weight: 400; font-size: 0.71875rem; color: rgb(100 116 139); }
+.mz-drop { margin: 0; font-size: 0.75rem; color: rgb(100 116 139 / 80%); }
 .mz-main {
-  border: 1px solid rgb(100 116 139 / 22%); border-radius: 10px;
-  padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid rgb(100 116 139 / 22%); border-radius: 0.625rem;
+  padding: 0.625rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;
 }
-.mz-main-title { margin: 0; font-size: 12.5px; font-weight: 600; }
-.mz-empty { font-size: 12.5px; color: rgb(100 116 139); padding: 16px 0; text-align: center; }
-.mz-rows { display: flex; flex-direction: column; gap: 4px; }
+.mz-main-title { margin: 0; font-size: 0.78125rem; font-weight: 600; }
+.mz-empty { font-size: 0.78125rem; color: rgb(100 116 139); padding: 1rem 0; text-align: center; }
+.mz-rows { display: flex; flex-direction: column; gap: 0.25rem; }
 .mz-row { display: flex; flex-direction: column; }
 
 .mz-chain { display: flex; flex-direction: column; gap: 0; }
-.mz-chain-step { display: flex; gap: 10px; }
+.mz-chain-step { display: flex; gap: 0.625rem; }
 .mz-chain-num {
-  flex: none; width: 22px; height: 22px; margin-top: 6px;
-  display: grid; place-items: center; font-size: 11.5px;
-  border: 1px solid var(--accent-soft-border); border-radius: 999px; color: var(--accent);
+  flex: none; width: 1.375rem; height: 1.375rem; margin-top: 0.375rem;
+  display: grid; place-items: center; font-size: 0.71875rem;
+  border: 1px solid var(--accent-soft-border); border-radius: 62.4375rem; color: var(--accent);
   position: relative;
 }
 .mz-chain-step:not(:last-child) .mz-chain-num::after {
-  content: ''; position: absolute; top: 22px; left: 50%;
-  width: 1px; height: 14px; background: var(--accent-soft-border);
+  content: ''; position: absolute; top: 1.375rem; left: 50%;
+  width: 0.0625rem; height: 0.875rem; background: var(--accent-soft-border);
 }
-.mz-chain-step { margin-bottom: 10px; }
+.mz-chain-step { margin-bottom: 0.625rem; }
 .mz-stepto {
-  display: flex; align-items: center; gap: 10px; margin: 4px 0 0 32px;
-  font-size: 12.5px;
+  display: flex; align-items: center; gap: 0.625rem; margin: 0.25rem 0 0 2rem;
+  font-size: 0.78125rem;
 }
 .mz-stepto select {
-  padding: 4px 8px; font-size: 12.5px; border-radius: 6px;
+  padding: 0.25rem 0.5rem; font-size: 0.78125rem; border-radius: 0.375rem;
   border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit;
 }
-.mz-stepto-note { font-size: 11px; color: rgb(100 116 139); }
+.mz-stepto-note { font-size: 0.6875rem; color: rgb(100 116 139); }
 
 .mz-fanout-note {
-  margin: 2px 0 6px 32px; font-size: 11.5px; color: rgb(100 116 139);
+  margin: 0.125rem 0 0.375rem 2rem; font-size: 0.71875rem; color: rgb(100 116 139);
 }
-.mz-fanout-variants { display: flex; flex-direction: column; gap: 4px; margin-left: 32px;
-  border-left: 1px solid rgb(59 130 246 / 40%); padding-left: 10px; }
+.mz-fanout-variants { display: flex; flex-direction: column; gap: 0.25rem; margin-left: 2rem;
+  border-left: 1px solid rgb(59 130 246 / 40%); padding-left: 0.625rem; }
 
-.mz-dag { display: flex; flex-direction: column; gap: 8px; }
-.mz-dag-layer { display: flex; gap: 10px; align-items: flex-start; }
+.mz-dag { display: flex; flex-direction: column; gap: 0.5rem; }
+.mz-dag-layer { display: flex; gap: 0.625rem; align-items: flex-start; }
 .mz-dag-tag {
-  flex: none; width: 24px; margin-top: 8px; font-size: 11px;
+  flex: none; width: 1.5rem; margin-top: 0.5rem; font-size: 0.6875rem;
   color: rgb(100 116 139); font-family: ui-monospace, monospace;
 }
-.mz-dag-cells { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
-.mz-dag-layer:not(:last-child) { padding-bottom: 8px; border-bottom: 1px dashed rgb(100 116 139 / 25%); }
-.mz-cycle { margin: 0; font-size: 12px; color: var(--sl-warn); }
+.mz-dag-cells { display: flex; flex-wrap: wrap; gap: 0.375rem; flex: 1; min-width: 0; }
+.mz-dag-layer:not(:last-child) { padding-bottom: 0.5rem; border-bottom: 1px dashed rgb(100 116 139 / 25%); }
+.mz-cycle { margin: 0; font-size: 0.75rem; color: var(--sl-warn); }
 
 .mz-summary {
-  margin: 0; font-size: 12px; color: rgb(100 116 139);
-  padding: 4px 2px 0; border-top: 1px solid rgb(100 116 139 / 15%);
+  margin: 0; font-size: 0.75rem; color: rgb(100 116 139);
+  padding: 0.25rem 0.125rem 0; border-top: 1px solid rgb(100 116 139 / 15%);
 }
 </style>

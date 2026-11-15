@@ -107,8 +107,8 @@ onMounted(async () => {
 .page { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
 .head { display: flex; align-items: baseline; gap: 1rem; }
 .sub { color: var(--color-text-secondary); font-size: 0.85rem; flex: 1; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; }
-.card { border: 1px solid var(--color-border-tertiary); border-radius: 8px; padding: 0.85rem 1rem; background: var(--c-surface); color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 0.4rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.25rem, 1fr)); gap: 0.75rem; }
+.card { border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; padding: 0.85rem 1rem; background: var(--c-surface); color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 0.4rem; }
 .card:hover { border-color: var(--color-text-tertiary); }
 .form { max-width: 28rem; }
 .form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
@@ -117,9 +117,9 @@ onMounted(async () => {
 .name { font-weight: 600; }
 .desc { color: var(--color-text-strong); font-size: 0.85rem; margin: 0; min-height: 1.2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meta { color: var(--color-text-tertiary); font-size: 0.78rem; margin: 0; }
-.badge { font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
+.badge { font-size: 0.7rem; padding: 0.0625rem 0.5rem; border-radius: 62.4375rem; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
 .badge.pub { background: rgb(37 99 235 / 8%); color: #2563eb; border-color: rgb(37 99 235 / 30%); }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .err { color: var(--sl-bad); font-size: 0.8rem; }
 .empty { color: var(--color-text-tertiary); }

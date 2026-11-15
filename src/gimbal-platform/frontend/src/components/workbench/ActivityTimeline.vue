@@ -205,16 +205,16 @@ onBeforeUnmount(() => { resize?.disconnect() })
 }
 .chead {
   @apply flex items-center gap-2 border-b border-signal-line bg-signal-done/5;
-  padding: 12px 16px;
+  padding: 0.75rem 1rem;
 }
 .chead-icon {
   @apply inline-flex items-center justify-center flex-none text-signal-done bg-signal-done/10;
-  width: 26px; height: 26px; border-radius: 8px;
+  width: 1.625rem; height: 1.625rem; border-radius: 0.5rem;
 }
-.chead-title { @apply text-heading text-signal-ink; letter-spacing: -0.2px; }
+.chead-title { @apply text-heading text-signal-ink; letter-spacing: -0.0125rem; }
 .chead-count {
   @apply text-micro font-bold text-signal-done bg-signal-done/10;
-  padding: 1px 8px; border-radius: 999px;
+  padding: 0.0625rem 0.5rem; border-radius: 62.4375rem;
 }
 
 /* 卡头筛流的一组圆点:20px 靶心里嵌 11px 色点,点色即事件色(跟着「配色」走)。
@@ -225,7 +225,7 @@ onBeforeUnmount(() => { resize?.disconnect() })
 }
 .flt::before {
   @apply absolute left-1/2 top-1/2 rounded-full;
-  content: ''; width: 11px; height: 11px; background: var(--flt);
+  content: ''; width: 0.6875rem; height: 0.6875rem; background: var(--flt);
   transform: translate(-50%, -50%);
   transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
 }
@@ -235,7 +235,7 @@ onBeforeUnmount(() => { resize?.disconnect() })
 .flt:disabled { @apply cursor-not-allowed; }
 .flt:disabled::before { opacity: 0.2; }
 .flt:focus-visible { @apply outline-signal; outline: 2px solid; outline-offset: 1px; }
-.tl-main { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 16px; }
+.tl-main { display: flex; flex-direction: column; gap: 0.625rem; padding: 0.75rem 1rem 1rem; }
 
 /* 唯一会滚的一段 —— 身份卡与图例都留在滚动区外。
    滚轨做"轻":8px 车道里只画中间 2px 圆胶囊,轨道透明、滑块不贴卡片右边,
@@ -244,20 +244,20 @@ onBeforeUnmount(() => { resize?.disconnect() })
    内容时出现,装得下就一条边都不画。 */
 .tl-scroll {
   position: relative;
-  max-height: min(46vh, 420px);
+  max-height: min(46vh, 26.25rem);
   overflow-y: auto;
   overscroll-behavior: contain;      /* 滚到底不把整页一起带走 */
-  padding: 0 8px;
+  padding: 0 0.5rem;
   scrollbar-gutter: stable;
 }
 /* Chromium/Safari:自定义通道会连带去掉系统滚动条的两端箭头 */
-.tl-scroll::-webkit-scrollbar { width: 8px; }
+.tl-scroll::-webkit-scrollbar { width: 0.5rem; }
 .tl-scroll::-webkit-scrollbar-track { background: transparent; }
 .tl-scroll::-webkit-scrollbar-thumb {
   @apply bg-signal-ink/15;
   border: 3px solid transparent;
   background-clip: content-box;      /* 透明描边把 8px 车道挤成 2px 滑块 */
-  border-radius: 999px;
+  border-radius: 62.4375rem;
 }
 .tl-scroll:hover::-webkit-scrollbar-thumb { @apply bg-signal-ink/30; }
 /* Firefox 只认标准属性;注意 scrollbar-width/color 一旦设了,Chromium
@@ -270,11 +270,11 @@ onBeforeUnmount(() => { resize?.disconnect() })
 .tl-scroll::before,
 .tl-scroll::after {
   @apply pointer-events-none z-20 opacity-0;
-  content: ''; position: sticky; height: 24px; margin-inline: -8px;
+  content: ''; position: sticky; height: 1.5rem; margin-inline: -0.5rem;
   transition: opacity 0.15s ease;
 }
-.tl-scroll::before { top: 0; margin-bottom: -24px; background: linear-gradient(to bottom, white, transparent); }
-.tl-scroll::after { bottom: 0; margin-top: -24px; background: linear-gradient(to top, white, transparent); }
+.tl-scroll::before { top: 0; margin-bottom: -1.5rem; background: linear-gradient(to bottom, white, transparent); }
+.tl-scroll::after { bottom: 0; margin-top: -1.5rem; background: linear-gradient(to top, white, transparent); }
 .tl-scroll.fade-head::before,
 .tl-scroll.fade-foot::after { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
@@ -284,37 +284,37 @@ onBeforeUnmount(() => { resize?.disconnect() })
 .tl-days { margin: 0; padding: 0; list-style: none; }
 .tl-day {
   @apply flex items-center gap-2 text-label text-signal-ink/45;
-  padding: 10px 0 4px; font-weight: 700;
+  padding: 0.625rem 0 0.25rem; font-weight: 700;
 }
-.tl-day::after { @apply bg-signal-line/70; content: ''; flex: 1; height: 1px; }
-.tl-day:first-child { padding-top: 2px; }
+.tl-day::after { @apply bg-signal-line/70; content: ''; flex: 1; height: 0.0625rem; }
+.tl-day:first-child { padding-top: 0.125rem; }
 
-.tl-item { position: relative; display: flex; gap: 10px; }
+.tl-item { position: relative; display: flex; gap: 0.625rem; }
 /* 竖向连线:点与点之间自己接,末行截到点为止 */
 .tl-item::before {
   @apply bg-signal-line/70;
-  content: ''; position: absolute; left: 4.5px; top: 16px; bottom: 2px;
-  width: 1px;
+  content: ''; position: absolute; left: 0.28125rem; top: 1rem; bottom: 0.125rem;
+  width: 0.0625rem;
 }
 .tl-item:last-child::before { display: none; }
 .tl-dot {
   @apply relative z-10 flex-none bg-signal-line;
-  width: 10px; height: 10px; margin-top: 12px; border-radius: 50%;
+  width: 0.625rem; height: 0.625rem; margin-top: 0.75rem; border-radius: 50%;
   box-shadow: 0 0 0 3px white;
 }
 
 .tl-body {
   @apply flex flex-col gap-0.5 flex-1 min-w-0 rounded-field no-underline;
   /* 左右各 -8px 抵掉滚动区内衬:hover 底色正好铺满到卡片的 16px 内缩线 */
-  padding: 7px 8px; margin: 2px -8px;
-  border-radius: 9px;
+  padding: 0.4375rem 0.5rem; margin: 0.125rem -0.5rem;
+  border-radius: 0.5625rem;
   transition: background 0.12s ease;
 }
 .tl-body:hover { @apply bg-signal-soft/70; }
 .tl-line { @apply flex items-baseline gap-2; }
 .tl-title {
   @apply flex-1 min-w-0 text-body font-semibold text-signal-ink;
-  letter-spacing: -0.1px;
+  letter-spacing: -0.00625rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tl-body:hover .tl-title { @apply text-signal; }
@@ -322,12 +322,12 @@ onBeforeUnmount(() => { resize?.disconnect() })
 .tl-inline { @apply text-caption font-normal text-signal-ink/45; }
 .tl-time { @apply text-caption text-signal-ink/45 flex-none; }
 .tl-sub { @apply flex items-center gap-1.5 text-caption text-signal-ink/45; }
-.tl-kind { @apply text-micro font-bold; padding: 0 5px; border-radius: 4px; }
+.tl-kind { @apply text-micro font-bold; padding: 0 0.3125rem; border-radius: 0.25rem; }
 
 .tl-more {
   @apply block self-center text-label font-semibold text-signal bg-signal-card border border-signal-line;
   margin: 0 auto;
-  padding: 5px 14px; border-radius: 999px;
+  padding: 0.3125rem 0.875rem; border-radius: 62.4375rem;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
@@ -338,17 +338,17 @@ onBeforeUnmount(() => { resize?.disconnect() })
 /* 图例 */
 .tl-legend {
   @apply flex items-center justify-between gap-2 border-t border-signal-line;
-  padding-top: 12px;   /* 间距由 .tl-main 的 gap 给,这里只留分隔线下的呼吸 */
+  padding-top: 0.75rem;   /* 间距由 .tl-main 的 gap 给,这里只留分隔线下的呼吸 */
 }
 /* 2026-10-21:五类事件后横向排不下 —— 改竖排:圆点在上、类型名在下,
    每类一列、列间自然铺开(justify-between),类型再增多也仍是这一行。 */
 .lg-items { @apply flex items-start justify-between flex-1; }
-.lg-item { @apply flex flex-col items-center gap-[3px] text-label text-signal-ink/70; font-weight: 500; transition: opacity 0.12s ease; }
+.lg-item { @apply flex flex-col items-center gap-[0.1875rem] text-label text-signal-ink/70; font-weight: 500; transition: opacity 0.12s ease; }
 .lg-item.dim { @apply opacity-40; }
-.lg-item i { @apply w-[9px] h-[9px] rounded-full; box-shadow: 0 0 0 2px white, 0 0 0 3px rgba(16, 21, 28, 0.08); }
+.lg-item i { @apply w-[0.5625rem] h-[0.5625rem] rounded-full; box-shadow: 0 0 0 2px white, 0 0 0 3px rgba(16, 21, 28, 0.08); }
 .lg-edit {
   @apply flex-none text-label font-semibold text-signal bg-signal-card border border-signal-line cursor-pointer;
-  padding: 3px 11px; border-radius: 999px;
+  padding: 0.1875rem 0.6875rem; border-radius: 62.4375rem;
 }
 .lg-edit:hover { @apply bg-signal-soft/70 border-signal; }
 .lg-edit:focus-visible { @apply outline-signal; outline: 2px solid; outline-offset: 1px; }
@@ -356,14 +356,14 @@ onBeforeUnmount(() => { resize?.disconnect() })
 /* 配色面板 */
 .tl-config {
   @apply flex flex-col gap-2.5 bg-signal-canvas/70 rounded-empty;
-  padding: 12px;
+  padding: 0.75rem;
 }
 .cfg-hint { @apply m-0 text-caption text-signal-ink/45; }
 .cfg-row { @apply flex items-center gap-2.5; }
 .cfg-label { @apply w-7 flex-none text-label font-semibold text-signal-ink; }
-.cfg-swatches { @apply flex gap-[5px]; }
+.cfg-swatches { @apply flex gap-[0.3125rem]; }
 .cfg-sw {
-  @apply w-[17px] h-[17px] flex-none p-0 rounded-full border border-signal-line cursor-pointer;
+  @apply w-[1.0625rem] h-[1.0625rem] flex-none p-0 rounded-full border border-signal-line cursor-pointer;
   border: 1px solid rgba(255, 255, 255, 0.9);
 }
 .cfg-sw:hover { transform: scale(1.12); }
@@ -371,14 +371,14 @@ onBeforeUnmount(() => { resize?.disconnect() })
 .cfg-sw:focus-visible { @apply outline-signal; outline: 2px solid; outline-offset: 2px; }
 .cfg-reset {
   @apply self-start text-caption text-signal-ink/60 bg-transparent border-0 cursor-pointer underline;
-  padding: 2px 0;
+  padding: 0.125rem 0;
 }
 .cfg-reset:hover { @apply text-signal; }
 
 .tl-state { @apply flex flex-col gap-2 py-1; }
 .tl-state p { @apply m-0 text-body text-muted-foreground; }
 .tl-skel {
-  @apply h-[30px] rounded-field;
+  @apply h-[1.875rem] rounded-field;
   background: linear-gradient(90deg, rgba(16, 21, 28, 0.04) 0%, rgba(16, 21, 28, 0.08) 50%, rgba(16, 21, 28, 0.04) 100%);
   background-size: 200% 100%;
   animation: tl-shimmer 1.2s ease-in-out infinite;

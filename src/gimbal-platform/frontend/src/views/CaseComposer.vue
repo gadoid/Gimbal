@@ -1296,66 +1296,66 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 /* ═══════ Top action bar ═══════ */
 .topbar {
   background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(1.25rem);
   border-bottom: 1px solid #e6e8ec;
   position: sticky;
   top: 0;
   z-index: 50;
 }
 .topbar-inner {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px clamp(16px, 3vw, 48px);
-  max-width: min(100%, 1800px);
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.625rem clamp(1rem, 3vw, 3rem);
+  max-width: min(100%, 112.5rem);
   margin: 0 auto;
 }
 .back-btn {
-  width: 36px; height: 36px;
+  width: 2.25rem; height: 2.25rem;
   display: flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid #e6e8ec; border-radius: 8px;
+  background: transparent; border: 1px solid #e6e8ec; border-radius: 0.5rem;
   color: #5a6273; cursor: pointer; transition: all 0.15s;
 }
 .back-btn:hover { background: #f5f6fa; color: #1a1d24; }
 
 .title-block { flex: 1; min-width: 0; }
 .crumb {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: #5a6273;
-  margin-bottom: 2px;
+  display: flex; align-items: center; gap: 0.375rem;
+  font-size: 0.75rem; color: #5a6273;
+  margin-bottom: 0.125rem;
 }
 .crumb span { cursor: pointer; transition: color 0.15s; }
 .crumb span:hover { color: #4f46e5; }
 .scenario-id { color: #1a1d24; font-weight: 600; }
 .title {
-  margin: 0; font-size: 18px; font-weight: 700; color: #1a1d24;
-  display: flex; align-items: center; gap: 8px;
+  margin: 0; font-size: 1.125rem; font-weight: 700; color: #1a1d24;
+  display: flex; align-items: center; gap: 0.5rem;
 }
 .star-pill {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 0.25rem;
   background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: #fff; font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: 999px;
+  color: #fff; font-size: 0.6875rem; font-weight: 600;
+  padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
 }
 /* 过期场景:标题置灰 + 灰 pill(与收藏金 pill 同构、语义相反) */
 .title.expired { color: var(--color-text-tertiary); }
 .expire-pill {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 0.25rem;
   background: var(--soft-neutral-bg); border: 1px solid var(--color-border-tertiary);
-  color: var(--color-text-secondary); font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: 999px;
+  color: var(--color-text-secondary); font-size: 0.6875rem; font-weight: 600;
+  padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
 }
 
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.topbar-actions { display: flex; align-items: center; gap: 0.5rem; }
 
-.ro-pill { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; background: rgb(100 116 139 / 10%); color: var(--color-text-strong); }
+.ro-pill { font-size: 0.75rem; padding: 0.125rem 0.625rem; border-radius: 62.4375rem; background: rgb(100 116 139 / 10%); color: var(--color-text-strong); }
 .save-state {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 12px;
-  background: #f5f6fa; border-radius: 999px;
-  font-size: 12px; color: #5a6273;
-  margin-right: 8px;
+  display: flex; align-items: center; gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: #f5f6fa; border-radius: 62.4375rem;
+  font-size: 0.75rem; color: #5a6273;
+  margin-right: 0.5rem;
 }
 .save-state .dot {
-  width: 8px; height: 8px; border-radius: 50%;
+  width: 0.5rem; height: 0.5rem; border-radius: 50%;
   background: #10b981; transition: all 0.2s;
 }
 .save-state.saving .dot { background: #f59e0b; animation: pulse 1s infinite; }
@@ -1363,26 +1363,26 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .icon-btn {
-  width: 36px; height: 36px;
+  width: 2.25rem; height: 2.25rem;
   display: flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid #e6e8ec; border-radius: 8px;
+  background: transparent; border: 1px solid #e6e8ec; border-radius: 0.5rem;
   color: #5a6273; cursor: pointer; transition: all 0.15s;
 }
 .icon-btn:hover { background: #f5f6fa; color: #1a1d24; }
 .icon-btn.active { color: #f59e0b; border-color: #fbbf24; background: #fffbeb; }
 .icon-btn.danger:hover { color: #ef4444; border-color: #fecaca; background: #fef2f2; }
 
-.divider { width: 1px; height: 24px; background: #e6e8ec; margin: 0 4px; }
+.divider { width: 0.0625rem; height: 1.5rem; background: #e6e8ec; margin: 0 0.25rem; }
 
 .primary-btn {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 0.375rem;
   background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-  color: #fff; border: none; border-radius: 8px;
-  padding: 8px 16px; font-size: 13px; font-weight: 600;
+  color: #fff; border: none; border-radius: 0.5rem;
+  padding: 0.5rem 1rem; font-size: 0.8125rem; font-weight: 600;
   cursor: pointer; transition: all 0.15s;
   box-shadow: 0 1px 2px rgba(79, 70, 229, 0.2);
 }
-.primary-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
+.primary-btn:hover { transform: translateY(-0.0625rem); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
 .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .primary-btn.outline { background: var(--c-surface); color: #4f46e5; border: 1px solid #c7d2fe; box-shadow: none; }
 .primary-btn.outline:hover { background: #eef2ff; }
@@ -1390,9 +1390,9 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .ghost-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: transparent; border: 1px solid #e6e8ec; border-radius: 8px;
-  padding: 8px 14px; font-size: 13px; color: #5a6273;
+  display: inline-flex; align-items: center; gap: 0.375rem;
+  background: transparent; border: 1px solid #e6e8ec; border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem; font-size: 0.8125rem; color: #5a6273;
   cursor: pointer; transition: all 0.15s;
 }
 .ghost-btn:hover { background: #f5f6fa; color: #1a1d24; }
@@ -1402,15 +1402,15 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 .stepper-bar {
   background: var(--c-surface);
   border-bottom: 1px solid #e6e8ec;
-  position: sticky; top: 60px; z-index: 40;
+  position: sticky; top: 3.75rem; z-index: 40;
 }
 .stepper-inner {
-  --pad: clamp(16px, 3vw, 48px);
-  --dot-offset: 32px; /* step padding-left (16) + dot 半径 (16) */
+  --pad: clamp(1rem, 3vw, 3rem);
+  --dot-offset: 2rem; /* step padding-left (16) + dot 半径 (16) */
   position: relative;
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
-  padding: 16px var(--pad);
-  max-width: min(100%, 1800px); margin: 0 auto;
+  padding: 1rem var(--pad);
+  max-width: min(100%, 112.5rem); margin: 0 auto;
 }
 /* 贯穿整行的连续横线 — 用 --progress CSS 变量驱动已完成 vs 未完成的渐变 */
 .stepper-inner::before {
@@ -1419,7 +1419,7 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
   left: calc(var(--pad) + var(--dot-offset));
   right: calc(var(--pad) + var(--dot-offset));
   top: 50%;
-  height: 2px;
+  height: 0.125rem;
   transform: translateY(-50%);
   background: linear-gradient(
     to right,
@@ -1433,25 +1433,25 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 }
 .step {
   position: relative;
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 1rem;
   cursor: pointer;
   transition: all 0.15s;
   z-index: 1;
 }
 .step:hover { background: #f5f6fa; }
 .step-dot {
-  width: 32px; height: 32px;
+  width: 2rem; height: 2rem;
   display: flex; align-items: center; justify-content: center;
   border-radius: 50%;
   background: var(--soft-neutral-bg); color: var(--color-text-tertiary);
-  font-weight: 700; font-size: 14px;
+  font-weight: 700; font-size: 0.875rem;
   transition: all 0.2s;
   flex-shrink: 0;
 }
-.step-label { font-size: 14px; font-weight: 600; color: #1a1d24; }
-.step-hint { font-size: 11px; color: var(--color-text-tertiary); margin-top: 1px; }
-.step.active { background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; }
+.step-label { font-size: 0.875rem; font-weight: 600; color: #1a1d24; }
+.step-hint { font-size: 0.6875rem; color: var(--color-text-tertiary); margin-top: 0.0625rem; }
+.step.active { background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 0.75rem; }
 .step.active .step-dot { background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #fff; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3); }
 .step.active .step-label { color: #4f46e5; }
 .step.done .step-dot { background: #10b981; color: #fff; }
@@ -1460,8 +1460,8 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 /* ═══════ Body ═══════ */
 .body {
   flex: 1;
-  padding: 28px clamp(16px, 3vw, 48px) 120px;
-  max-width: min(100%, 1800px);
+  padding: 1.75rem clamp(1rem, 3vw, 3rem) 7.5rem;
+  max-width: min(100%, 112.5rem);
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -1470,18 +1470,18 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 /* ═══════ Footer nav-bar ═══════ */
 .footer {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(1.25rem);
   border-top: 1px solid #e6e8ec;
   position: sticky; bottom: 0; z-index: 30;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
 }
 .footer-inner {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px clamp(16px, 3vw, 48px);
-  max-width: min(100%, 1800px); margin: 0 auto;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem clamp(1rem, 3vw, 3rem);
+  max-width: min(100%, 112.5rem); margin: 0 auto;
 }
 .footer-center {
-  flex: 1; display: flex; gap: 8px; justify-content: center;
+  flex: 1; display: flex; gap: 0.5rem; justify-content: center;
 }
 
 /* ── 步骤编辑回顶按钮:玻璃质感,hover 渐变上浮;锚定 step 信息卡左缘 ──
@@ -1492,14 +1492,14 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
    el-backtop 把 right 写进 inline style,须 !important 压制。 */
 .backtop-btn {
   position: fixed;
-  bottom: 76px;
+  bottom: 4.75rem;
   z-index: 100;
-  right: calc(50% - min(50vw, 900px) + clamp(16px, 3vw, 48px) + 252px) !important;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  right: calc(50% - min(50vw, 56.25rem) + clamp(1rem, 3vw, 3rem) + 15.75rem) !important;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
   background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: saturate(180%) blur(12px);
+  backdrop-filter: saturate(180%) blur(0.75rem);
   border: 1px solid #e6e8ec;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   color: #4f46e5;
@@ -1514,25 +1514,25 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
   color: #fff;
   border-color: transparent;
   box-shadow: 0 6px 20px rgba(79, 70, 229, 0.35);
-  transform: translateY(-2px);
+  transform: translateY(-0.125rem);
 }
 @media (max-width: 1280px) {
-  .backtop-btn { right: 28px !important; }
+  .backtop-btn { right: 1.75rem !important; }
 }
 
 /* ═══════ Slide transition ═══════ */
 .slide-enter-active, .slide-leave-active {
   transition: all 0.25s ease-out;
 }
-.slide-enter-from { opacity: 0; transform: translateY(8px); }
-.slide-leave-to { opacity: 0; transform: translateY(-8px); }
+.slide-enter-from { opacity: 0; transform: translateY(0.5rem); }
+.slide-leave-to { opacity: 0; transform: translateY(-0.5rem); }
 
 /* System-mismatch warning */
 .system-warn {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 0.5rem;
   background: #fef3c7; border: 1px solid #fbbf24; border-left: 4px solid #f59e0b;
-  color: #92400e; padding: 10px 16px; margin: 8px 24px;
-  border-radius: 8px; font-size: 13px;
+  color: #92400e; padding: 0.625rem 1rem; margin: 0.5rem 1.5rem;
+  border-radius: 0.5rem; font-size: 0.8125rem;
 }
 .system-warn svg { color: #f59e0b; flex-shrink: 0; }
 .system-warn strong { color: #92400e; }
@@ -1540,8 +1540,8 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 /* D-1(§7.11):被引用 / 公共场景常驻横幅(与 system-warn 同款形态) */
 .live-edit-banner {
   background: #fef3c7; border: 1px solid #fbbf24; border-left: 4px solid #f59e0b;
-  color: #92400e; padding: 8px 16px; margin: 8px 24px;
-  border-radius: 8px; font-size: 12.5px;
+  color: #92400e; padding: 0.5rem 1rem; margin: 0.5rem 1.5rem;
+  border-radius: 0.5rem; font-size: 0.78125rem;
 }
 
 /* ── 常量池 rail(步骤 0-2 右栏,body-split 布局;步骤 3 挂 Canvas col-info)── */
@@ -1549,24 +1549,24 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
 .body-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 1rem;
   height: 100%;
   min-height: 0;
 }
 .body-split.with-rail {
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 18.75rem);
   /* 整体限宽 1280(c-page 上限)+16(间隔)+300(rail 上限)并居中:
      主单元恰为 1280 → c-page 撑满,rail 以精确 16px 贴主卡;
      否则 c-page 在更宽单元里居中,卡与 rail 之间夹 ~54px 死白 */
-  max-width: 1596px;
+  max-width: 99.75rem;
   margin: 0 auto;
 }
 .body-main { min-width: 0; min-height: 0; }
 .pool-rail {
   position: sticky;
-  top: 8px;
+  top: 0.5rem;
   align-self: start;
-  max-height: calc(100vh - 16px);
+  max-height: calc(100vh - 1rem);
   overflow: auto;
 }
 @media (max-width: 1280px) {

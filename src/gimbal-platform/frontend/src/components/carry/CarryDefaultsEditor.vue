@@ -12,7 +12,7 @@
             <TooltipTrigger as-child>
               <Button variant="outline" size="sm" :data-testid="`${tid}-import-csv`" @click="pickCsv">导入 CSV</Button>
             </TooltipTrigger>
-            <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
+            <TooltipContent class="max-w-[min(20rem,calc(100vw-2rem))]">
               CSV 三列:path,value,is_null —— 表头按名定位(列序任意);已有 path 更新、新 path 追加,两列都留空 = 该行不导入;导入后仍须手动保存
             </TooltipContent>
           </Tooltip>
@@ -20,7 +20,7 @@
             <TooltipTrigger as-child>
               <Button variant="outline" size="sm" :data-testid="`${tid}-dl-template`" @click="downloadTemplate">下载模板</Button>
             </TooltipTrigger>
-            <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
+            <TooltipContent class="max-w-[min(20rem,calc(100vw-2rem))]">
               表头 + 一行示例(path 已填、值列留空 → 原样导回也是无操作)
             </TooltipContent>
           </Tooltip>
@@ -28,7 +28,7 @@
             <TooltipTrigger as-child>
               <Button variant="outline" size="sm" :disabled="!hasRows" :data-testid="`${tid}-export-csv`" @click="downloadCsv">导出 CSV</Button>
             </TooltipTrigger>
-            <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
+            <TooltipContent class="max-w-[min(20rem,calc(100vw-2rem))]">
               导出当前全部默认行;导出→不改→导回 = 默认态不变
             </TooltipContent>
           </Tooltip>

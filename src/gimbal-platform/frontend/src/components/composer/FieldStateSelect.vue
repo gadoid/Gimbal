@@ -51,10 +51,10 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-.fss { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.fss { display: inline-flex; align-items: center; gap: 0.1875rem; flex-shrink: 0; }
 .fss-sel {
-  font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
-  padding: 1px 3px; border-radius: 3px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 0.59375rem; font-weight: 700;
+  padding: 0.0625rem 0.1875rem; border-radius: 0.1875rem; cursor: pointer;
   border: 1px solid var(--color-border-tertiary); background: var(--surface-raised); color: var(--color-text-strong);
   outline: none;
 }
@@ -65,11 +65,11 @@ const emit = defineEmits<{
 .fss-sel.s-collapse { background: #eef2ff; color: #4f46e5; }
 .fss-sel.s-carry { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
 .fss-reset {
-  width: 16px; height: 16px; padding: 0;
+  width: 1rem; height: 1rem; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px dashed var(--color-border-secondary); border-radius: 4px;
+  border: 1px dashed var(--color-border-secondary); border-radius: 0.25rem;
   background: transparent; color: var(--color-text-tertiary);
-  font-size: 10px; line-height: 1; cursor: pointer; transition: all 0.15s;
+  font-size: 0.625rem; line-height: 1; cursor: pointer; transition: all 0.15s;
 }
 .fss-reset:hover { border-color: #6ee7b7; color: #0f766e; background: #f0fdfa; }
 </style>

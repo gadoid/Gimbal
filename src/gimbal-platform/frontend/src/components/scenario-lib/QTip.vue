@@ -15,7 +15,7 @@
       </button>
     </PopoverTrigger>
     <PopoverContent side="bottom" align="start" :side-offset="4"
-      class="w-fit max-w-[420px] whitespace-pre-line p-3 text-[12px] leading-5">
+      class="w-fit max-w-[26.25rem] whitespace-pre-line p-3 text-[0.75rem] leading-5">
       {{ text }}
     </PopoverContent>
   </Popover>

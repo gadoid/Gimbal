@@ -5,9 +5,9 @@
      fetchMe 清掉强制位 → 回 redirect 目标。 -->
 <template>
   <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-signal-soft to-signal-canvas p-6">
-    <div class="auth-card w-[400px] max-w-full rounded-card border border-signal-line bg-signal-card px-7 pb-6 pt-7 shadow-sig-hover">
+    <div class="auth-card w-[25rem] max-w-full rounded-card border border-signal-line bg-signal-card px-7 pb-6 pt-7 shadow-sig-hover">
       <div class="mb-5">
-        <div class="text-[20px] font-semibold text-signal-ink">修改密码</div>
+        <div class="text-[1.25rem] font-semibold text-signal-ink">修改密码</div>
         <div class="mt-1 text-caption text-muted-foreground">
           密码已被管理员重置,请先设置新密码后再使用其他功能
         </div>

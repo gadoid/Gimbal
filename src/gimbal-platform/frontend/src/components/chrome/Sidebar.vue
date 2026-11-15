@@ -12,7 +12,7 @@
 <template>
   <aside
     class="sidebar fixed inset-y-0 left-0 z-[1000] flex flex-col bg-signal-sidebar text-slate-300 transition-[width] duration-200"
-    :class="collapsed ? 'w-[56px]' : 'w-[200px]'"
+    :class="collapsed ? 'w-[3.5rem]' : 'w-[12.5rem]'"
   >
     <!-- brand 行:展开 = 状态点 + platform + 折叠钮;折叠 = 状态点 + 折叠钮纵排。
          brand 可点 → 回工作台(/home);折叠态状态点承接同一入口。 -->
@@ -76,7 +76,7 @@
         <span
           v-if="entry.firstOfGroup && entry.group"
           class="group-label block select-none pb-1 pt-4 text-caption text-slate-500"
-          :class="collapsed ? 'px-0 text-center text-[9px] leading-tight' : 'px-2'"
+          :class="collapsed ? 'px-0 text-center text-[0.5625rem] leading-tight' : 'px-2'"
         >
           {{ entry.group }}
         </span>
@@ -280,13 +280,13 @@ function isActive(path: string): boolean {
    滑块换白系贴 #0B0E14 深色 chrome —— 系统默认灰轨在暗侧栏上像贴错
    系统的补丁。引擎分流原因见 ActivityTimeline 同款注释。 */
 .nav-scroll { scrollbar-gutter: stable; }
-.nav-scroll::-webkit-scrollbar { width: 8px; }
+.nav-scroll::-webkit-scrollbar { width: 0.5rem; }
 .nav-scroll::-webkit-scrollbar-track { background: transparent; }
 .nav-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
   border: 3px solid transparent;
   background-clip: content-box;
-  border-radius: 999px;
+  border-radius: 62.4375rem;
 }
 .nav-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); }
 @supports (-moz-appearance: none) {

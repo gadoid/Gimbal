@@ -93,9 +93,9 @@ onMounted(() => { void store.ensureWindow() })
 
 /* 场景行:名称 1fr / 模块 / 时间 */
 .sc-row { grid-template-columns: minmax(0, 1fr) auto auto; }
-.sc-name-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sc-name-cell { display: flex; align-items: center; gap: 0.375rem; min-width: 0; }
 .sc-expired {
-  flex: none; padding: 1px 6px; font-size: 10px; font-weight: 600;
-  color: var(--sl-warn); background: var(--sl-warn-soft); border-radius: 4px;
+  flex: none; padding: 0.0625rem 0.375rem; font-size: 0.625rem; font-weight: 600;
+  color: var(--sl-warn); background: var(--sl-warn-soft); border-radius: 0.25rem;
 }
 </style>

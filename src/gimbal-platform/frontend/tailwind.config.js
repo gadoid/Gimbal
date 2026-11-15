@@ -114,27 +114,27 @@ export default {
       fontSize: {
         // E-scale 字号阶:字号/字重/行高(label/caption 同取 16 使 chip/pill
         // 基线对齐;micro 收编 10px 徽标档,字重 500,确需 400 显式 font-normal)
-        'display-lg': ['26px', { fontWeight: '700', lineHeight: '34px' }],
-        display: ['22px', { fontWeight: '600', lineHeight: '30px' }],
-        heading: ['14px', { fontWeight: '600', lineHeight: '20px' }],
-        body: ['13px', { fontWeight: '400', lineHeight: '18px' }],
-        label: ['12px', { fontWeight: '500', lineHeight: '16px' }],
-        caption: ['11px', { fontWeight: '400', lineHeight: '16px' }],
-        micro: ['10px', { fontWeight: '500', lineHeight: '14px' }],
+        'display-lg': ['1.625rem', { fontWeight: '700', lineHeight: '2.125rem' }],
+        display: ['1.375rem', { fontWeight: '600', lineHeight: '1.875rem' }],
+        heading: ['0.875rem', { fontWeight: '600', lineHeight: '1.25rem' }],
+        body: ['0.8125rem', { fontWeight: '400', lineHeight: '1.125rem' }],
+        label: ['0.75rem', { fontWeight: '500', lineHeight: '1rem' }],
+        caption: ['0.6875rem', { fontWeight: '400', lineHeight: '1rem' }],
+        micro: ['0.625rem', { fontWeight: '500', lineHeight: '0.875rem' }],
       },
       borderRadius: {
         // E-scale 圆角阶:3 卡片/代码 · 4 chip/徽标 · 6 表单/表格 · 8 空状态 · 10 主卡片
         none: '0',
-        sm: '3px',
-        chip: '4px',
-        field: '6px',
-        empty: '8px',
-        card: '10px',
-        full: '9999px',
+        sm: '0.1875rem',
+        chip: '0.25rem',
+        field: '0.375rem',
+        empty: '0.5rem',
+        card: '0.625rem',
+        full: '624.9375rem',
         // shadcn-vue 组件消费的语义圆角(lg=8/md=6/sm=4,由 --radius 推导)
         lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        DEFAULT: 'calc(var(--radius) - 2px)',
+        md: 'calc(var(--radius) - 0.125rem)',
+        DEFAULT: 'calc(var(--radius) - 0.125rem)',
       },
       // 间距沿用 Tailwind 默认 4px 网格(4/8/12/.../32),与 E-scale 一致,不重录
       boxShadow: {

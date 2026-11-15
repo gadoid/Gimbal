@@ -164,19 +164,19 @@ onMounted(async () => {
 
 <style scoped>
 /* 适配抽屉里的预览块:灰阶与语义色走服务区域基座令牌 */
-.op-preview { font-size: 13px; }
+.op-preview { font-size: 0.8125rem; }
 .fragment {
-  margin: 6px 0 0;
-  padding: 8px;
+  margin: 0.375rem 0 0;
+  padding: 0.5rem;
   background: var(--sl-canvas);
-  border-radius: 4px;
-  max-height: 180px;
+  border-radius: 0.25rem;
+  max-height: 11.25rem;
   overflow: auto;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
-.map-table { margin-top: 6px; border-collapse: collapse; }
-.map-table td { padding: 2px 8px; border: 1px solid var(--sl-line); }
-.hint { margin-left: 8px; color: var(--sl-ink-3); }
+.map-table { margin-top: 0.375rem; border-collapse: collapse; }
+.map-table td { padding: 0.125rem 0.5rem; border: 1px solid var(--sl-line); }
+.hint { margin-left: 0.5rem; color: var(--sl-ink-3); }
 .error { color: var(--sl-bad); }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

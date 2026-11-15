@@ -27,9 +27,9 @@ const tone = computed(() => {
   @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 0.125rem 0.5rem;
   font-family: var(--font-mono, monospace);
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 
 .tone-fin    { color: var(--accent); background: #eef2ff; border: 0.5px solid #c7d2fe; }

@@ -50,7 +50,7 @@
               :data-testid="`board-node-${nodeProps.id}`"
               class="board-node select-none"
               :class="[nodeProps.data.kind === 'card' ? 'is-card' : 'is-plain',
-                       nodeProps.data.kind === 'zone' ? 'w-[600px]' : 'w-[220px]']"
+                       nodeProps.data.kind === 'zone' ? 'w-[37.5rem]' : 'w-[13.75rem]']"
             >
               <!-- 象限占位区 -->
               <template v-if="nodeProps.data.kind === 'zone'">
@@ -508,11 +508,11 @@ onMounted(async () => {
    内容撑开);右栏固定 340px,窄屏折到画布之后。 */
 .board-wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 21.25rem;
+  gap: 0.875rem;
   align-items: start;
 }
-.board-rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.board-rail { display: flex; flex-direction: column; gap: 0.875rem; min-width: 0; }
 @media (max-width: 1180px) {
   .board-wrap { grid-template-columns: minmax(0, 1fr); }
   .board-rail { flex-direction: row; align-items: stretch; }
@@ -523,12 +523,12 @@ onMounted(async () => {
    双层 inset 阴影 = 卡的"垫边",让象限框不与画布边线黏在一起 ── */
 .board-canvas {
   position: relative;
-  height: calc(100vh - 300px);
-  min-height: 520px;
+  height: calc(100vh - 18.75rem);
+  min-height: 32.5rem;
   overflow: hidden;
   background: #f7f9fb;
   border: 1px solid #aeb8c4;
-  border-radius: 10px;
+  border-radius: 0.625rem;
   box-shadow: inset 0 0 0 8px #dfe5ec, inset 0 0 0 9px #bfc8d3;
 }
 .board-canvas :deep(.vue-flow__pane) {
@@ -538,29 +538,29 @@ onMounted(async () => {
 }
 
 /* ── 节点 ────────────────────────────────────────────────────── */
-.board-node { border-radius: 10px; font-size: 12px; cursor: grab; }
+.board-node { border-radius: 0.625rem; font-size: 0.75rem; cursor: grab; }
 .board-node.is-plain {
-  padding: 10px;
+  padding: 0.625rem;
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
 }
 /* 自建卡 = 黑底,与图上其他节点用材质区分(它是人写的上下文,不是索引项) */
 .board-node.is-card {
-  padding: 10px;
+  padding: 0.625rem;
   color: #fff;
   background: var(--sl-ink);
   border: 2px solid var(--sl-ink);
   box-shadow: 0 2px 8px rgba(16, 21, 28, 0.18);
 }
 .node-title {
-  margin-top: 4px;
-  font-size: 10px;
+  margin-top: 0.25rem;
+  font-size: 0.625rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.node-badge { margin-top: 4px; font-size: 10px; font-weight: 500; }
+.node-badge { margin-top: 0.25rem; font-size: 0.625rem; font-weight: 500; }
 .node-badge.ok { color: var(--sl-ok); }
 .node-badge.bad { color: var(--sl-bad); }
 .node-badge.warn { color: var(--sl-warn); }
@@ -568,17 +568,17 @@ onMounted(async () => {
 .is-card .node-badge.mute { color: rgba(255, 255, 255, 0.68); }
 .zone-box {
   display: flex;
-  height: 300px;
+  height: 18.75rem;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   border: 1px dashed #bcc6d2;
-  border-radius: 10px;
+  border-radius: 0.625rem;
 }
-.zone-label { font-size: 12.5px; font-weight: 600; color: var(--sl-ink-2); }
-.zone-hint { margin-top: 4px; font-size: 11px; color: var(--sl-ink-3); }
+.zone-label { font-size: 0.78125rem; font-weight: 600; color: var(--sl-ink-2); }
+.zone-hint { margin-top: 0.25rem; font-size: 0.6875rem; color: var(--sl-ink-3); }
 .kind-tag {
-  border-radius: 4px; padding: 0 5px; font-size: 10px; font-weight: 600;
+  border-radius: 0.25rem; padding: 0 0.3125rem; font-size: 0.625rem; font-weight: 600;
   background: var(--sl-canvas); color: var(--sl-ink-2);
 }
 .is-card .kind-tag { background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.82); }
@@ -586,68 +586,68 @@ onMounted(async () => {
 /* ── 图例 ────────────────────────────────────────────────────── */
 .board-legend {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
+  bottom: 0.5rem;
+  left: 0.5rem;
   z-index: 10;
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
   align-items: center;
-  padding: 6px 10px;
-  font-size: 10px;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.625rem;
   color: var(--sl-ink-2);
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
   pointer-events: none;
 }
-.lg { display: inline-flex; align-items: center; gap: 5px; }
-.lg-line { display: inline-block; width: 16px; height: 2px; background: var(--sl-star-off); }
+.lg { display: inline-flex; align-items: center; gap: 0.3125rem; }
+.lg-line { display: inline-block; width: 1rem; height: 0.125rem; background: var(--sl-star-off); }
 .lg-line.dashed { height: 0; border-top: 1px dashed #a8b0bc; background: none; }
-.lg-line.trail { height: 2px; background: var(--sl-bad); }
+.lg-line.trail { height: 0.125rem; background: var(--sl-bad); }
 
 /* ── 右栏内容 ────────────────────────────────────────────────── */
-.rail-empty { font-size: 11.5px; line-height: 1.6; color: var(--sl-ink-3); }
+.rail-empty { font-size: 0.71875rem; line-height: 1.6; color: var(--sl-ink-3); }
 .node-detail-key {
-  margin-bottom: 6px;
-  font-size: 12px;
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--sl-ink);
   overflow-wrap: anywhere;
 }
 .svc-kv-list { margin: 0; }
 .board-card {
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
-  border-radius: 8px;
-  font-size: 11.5px;
+  border-radius: 0.5rem;
+  font-size: 0.71875rem;
 }
-.card-readonly { font-size: 10px; color: var(--sl-ink-3); }
-.card-body { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: break-word; color: var(--sl-ink); }
-.card-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
-.card-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sl-divider); display: flex; flex-direction: column; gap: 6px; }
+.card-readonly { font-size: 0.625rem; color: var(--sl-ink-3); }
+.card-body { margin: 0.3125rem 0 0; white-space: pre-wrap; overflow-wrap: break-word; color: var(--sl-ink); }
+.card-acts { display: flex; flex-wrap: wrap; gap: 0.625rem; margin-top: 0.375rem; }
+.card-form { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--sl-divider); display: flex; flex-direction: column; gap: 0.375rem; }
 .card-textarea {
   width: 100%;
-  padding: 7px 9px;
+  padding: 0.4375rem 0.5625rem;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   color: var(--sl-ink);
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   outline: none;
   resize: vertical;
 }
 .card-textarea:focus { border-color: var(--sl-accent); }
 .card-select {
-  padding: 4px 8px;
+  padding: 0.25rem 0.5rem;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   color: var(--sl-ink);
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   outline: none;
 }
 .card-select:focus { border-color: var(--sl-accent); }

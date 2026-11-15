@@ -87,11 +87,11 @@ onMounted(async () => {
 <style scoped>
 /* 形制在基座 scenario-lib.css;本卡留行列宽、未读点与卡头未读高亮。 */
 .nt-row {
-  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  grid-template-columns: 0.5rem minmax(0, 1fr) auto auto;
   align-items: center;
 }
 .nt-dot {
-  width: 6px; height: 6px; border-radius: 50%;
+  width: 0.375rem; height: 0.375rem; border-radius: 50%;
   background: transparent; border: 1px solid rgb(100 116 139 / 40%);
 }
 .nt-dot.on { background: #d97706; border-color: #d97706; }

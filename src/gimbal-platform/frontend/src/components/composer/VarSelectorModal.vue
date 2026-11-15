@@ -7,7 +7,7 @@
 -->
 <template>
   <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
-    <DialogContent class="max-w-[560px]">
+    <DialogContent class="max-w-[35rem]">
     <DialogHeader>
       <DialogTitle>Ⓥ 选择变量（${var.&lt;name&gt;} 模板）</DialogTitle>
     </DialogHeader>
@@ -109,30 +109,30 @@ function confirm() {
 
 <style scoped>
 .empty {
-  padding: 20px 0;
+  padding: 1.25rem 0;
   text-align: center;
   color: var(--c-text-tertiary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .var-list {
-  max-height: 300px;
+  max-height: 18.75rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.25rem;
 }
 .var-item {
   display: grid;
-  grid-template-columns: minmax(100px, 1.2fr) 64px 1.4fr;
-  gap: 8px;
+  grid-template-columns: minmax(6.25rem, 1.2fr) 4rem 1.4fr;
+  gap: 0.5rem;
   align-items: center;
   text-align: left;
-  padding: 7px 10px;
+  padding: 0.4375rem 0.625rem;
   background: var(--c-bg-secondary);
   border: 1px solid var(--c-border);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .var-item:hover { border-color: var(--c-accent-soft-border, #c7d2fe); }
 .var-item.active { border-color: #4f46e5; background: #eef2ff; }
@@ -140,9 +140,9 @@ function confirm() {
 .var-item.disabled { opacity: 0.5; cursor: not-allowed; }
 .var-item.disabled:hover { border-color: var(--c-border); }
 .split-hint {
-  margin: 10px 0 0; padding: 6px 10px; border-radius: 6px;
+  margin: 0.625rem 0 0; padding: 0.375rem 0.625rem; border-radius: 0.375rem;
   background: #fffbeb; border: 1px solid #fde68a;
-  color: #92400e; font-size: 11px; line-height: 1.6;
+  color: #92400e; font-size: 0.6875rem; line-height: 1.6;
 }
 .var-name {
   font-family: var(--font-mono);
@@ -152,10 +152,10 @@ function confirm() {
   white-space: nowrap;
 }
 .var-badge {
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   text-align: center;
 }
@@ -163,25 +163,25 @@ function confirm() {
 .var-badge.config { background: #eef2ff; color: var(--accent); }
 .var-producer {
   color: var(--c-text-secondary);
-  font-size: 11px;
+  font-size: 0.6875rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .var-expr {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--c-text-tertiary);
-  margin-left: 4px;
+  margin-left: 0.25rem;
 }
 .preview-hint {
-  margin: 10px 0 0;
-  font-size: 12px;
+  margin: 0.625rem 0 0;
+  font-size: 0.75rem;
   color: var(--c-text-secondary);
 }
 .preview {
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
   background: #ecfdf5;
   color: #047857;
 }

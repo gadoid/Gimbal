@@ -1367,25 +1367,25 @@ function formatJson(v: unknown): string {
 
 <style scoped>
 .field-form {
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: 0.875rem;
 }
-.field { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
+.field { display: flex; flex-direction: column; gap: 0.25rem; padding-left: 0.375rem; }
 .field.required .label-text { color: #1a1d24; }
 
 /* ── 容器节点(§5.3):对象折叠面板 / 数组行组 / 开放字典 KV ── */
 .obj-node, .arr-node, .dict-node {
-  display: flex; flex-direction: column; gap: 6px;
-  border-left: 3px solid #c7d2fe; border-radius: 4px;
-  background: var(--surface-raised); padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 0.375rem;
+  border-left: 3px solid #c7d2fe; border-radius: 0.25rem;
+  background: var(--surface-raised); padding: 0.5rem 0.625rem;
 }
 .node-head {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 500;
+  display: flex; align-items: center; gap: 0.375rem;
+  font-size: 0.75rem; font-weight: 500;
 }
 .obj-toggle {
-  width: 20px; height: 20px; flex-shrink: 0;
+  width: 1.25rem; height: 1.25rem; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: 4px; background: transparent;
+  border: none; border-radius: 0.25rem; background: transparent;
   color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s;
 }
 .obj-toggle:hover { background: var(--color-border-tertiary); color: #334155; }
@@ -1396,40 +1396,40 @@ function formatJson(v: unknown): string {
    ☰ 已改外置静态按钮(2026-09-14),锚内容自适应不再固定 22×20 */
 .node-fa {
   position: relative; flex-shrink: 0;
-  margin-left: 2px;
+  margin-left: 0.125rem;
 }
 .obj-body {
-  display: flex; flex-direction: column; gap: 12px;
-  padding: 8px 0 2px 10px; border-left: 1px dashed var(--color-border-secondary); margin-left: 4px;
+  display: flex; flex-direction: column; gap: 0.75rem;
+  padding: 0.5rem 0 0.125rem 0.625rem; border-left: 1px dashed var(--color-border-secondary); margin-left: 0.25rem;
 }
 /* 数组/字典区块体:与 obj-body 同款缩进导轨(区块级折叠 P2) */
 .arr-body {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 8px 0 2px 10px; border-left: 1px dashed var(--color-border-secondary); margin-left: 4px;
+  display: flex; flex-direction: column; gap: 0.625rem;
+  padding: 0.5rem 0 0.125rem 0.625rem; border-left: 1px dashed var(--color-border-secondary); margin-left: 0.25rem;
 }
 .arr-count {
-  font-family: var(--font-mono); font-size: 10px;
-  color: var(--color-text-tertiary); background: var(--soft-neutral-bg); padding: 1px 5px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 0.625rem;
+  color: var(--color-text-tertiary); background: var(--soft-neutral-bg); padding: 0.0625rem 0.3125rem; border-radius: 0.1875rem;
 }
 .arr-add {
   flex-shrink: 0; margin-left: auto;
-  border: 1px dashed #a5b4fc; border-radius: 4px;
+  border: 1px dashed #a5b4fc; border-radius: 0.25rem;
   background: transparent; color: #6366f1;
-  font-size: 10.5px; font-family: var(--font-mono); font-weight: 600;
-  padding: 1px 8px; line-height: 1.5; cursor: pointer; transition: all 0.15s;
+  font-size: 0.65625rem; font-family: var(--font-mono); font-weight: 600;
+  padding: 0.0625rem 0.5rem; line-height: 1.5; cursor: pointer; transition: all 0.15s;
 }
 .arr-add:hover { background: #eef2ff; border-color: #6366f1; }
-.arr-row { display: flex; gap: 6px; align-items: flex-start; }
+.arr-row { display: flex; gap: 0.375rem; align-items: flex-start; }
 .arr-idx {
-  flex-shrink: 0; width: 20px; margin-top: 4px; text-align: center;
-  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
-  color: #6366f1; background: #eef2ff; border-radius: 3px; padding: 1px 0;
+  flex-shrink: 0; width: 1.25rem; margin-top: 0.25rem; text-align: center;
+  font-family: var(--font-mono); font-size: 0.65625rem; font-weight: 700;
+  color: #6366f1; background: #eef2ff; border-radius: 0.1875rem; padding: 0.0625rem 0;
 }
-.arr-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.arr-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.625rem; }
 .arr-del {
-  flex-shrink: 0; width: 26px; height: 32px;
-  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
-  color: var(--color-text-tertiary); cursor: pointer; font-size: 14px; line-height: 1;
+  flex-shrink: 0; width: 1.625rem; height: 2rem;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 0.5rem;
+  color: var(--color-text-tertiary); cursor: pointer; font-size: 0.875rem; line-height: 1;
   transition: all 0.15s;
 }
 .arr-del:hover:not(:disabled) {
@@ -1437,32 +1437,32 @@ function formatJson(v: unknown): string {
 }
 .arr-del:disabled { cursor: not-allowed; opacity: 0.5; }
 .arr-empty, .dict-empty {
-  margin: 0; font-size: 11px; color: var(--color-text-tertiary); font-style: normal;
+  margin: 0; font-size: 0.6875rem; color: var(--color-text-tertiary); font-style: normal;
 }
-.kv-row { display: flex; gap: 6px; align-items: flex-start; }
+.kv-row { display: flex; gap: 0.375rem; align-items: flex-start; }
 .kv-key {
-  flex-shrink: 0; width: 130px; box-sizing: border-box;
-  background: #fafbfc; border: 1.5px dashed #e6e8ec; border-radius: 8px;
-  padding: 7px 10px; font-size: 12px;
+  flex-shrink: 0; width: 8.125rem; box-sizing: border-box;
+  background: #fafbfc; border: 1.5px dashed #e6e8ec; border-radius: 0.5rem;
+  padding: 0.4375rem 0.625rem; font-size: 0.75rem;
   font-family: var(--font-mono); color: var(--color-text-strong);
 }
 .kv-key:focus { outline: none; border-color: #6366f1; background: var(--c-surface); }
-.kv-value { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.kv-value { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
 
 /* 控件 + Ⓥ 按钮同排(text)/叠排(textarea/json)。
    relative:☰ 菜单浮层的锚点(enum/bool/textarea/json 分支没有
    .ctl-cand-wrap,2026-09-14 ☰ 外置后统一在本层挂靠) */
-.ctl-with-var { display: flex; gap: 6px; align-items: stretch; position: relative; }
+.ctl-with-var { display: flex; gap: 0.375rem; align-items: stretch; position: relative; }
 .ctl-with-var .ctl { flex: 1; min-width: 0; }
 .ctl-with-var.col { flex-direction: column; align-items: flex-end; }
 .var-btn {
   flex-shrink: 0;
-  width: 30px;
-  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
-  color: #047857; cursor: pointer; font-size: 13px;
+  width: 1.875rem;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 0.5rem;
+  color: #047857; cursor: pointer; font-size: 0.8125rem;
   transition: all 0.15s;
 }
-.ctl-with-var.col .var-btn { width: 30px; height: 24px; font-size: 11px; }
+.ctl-with-var.col .var-btn { width: 1.875rem; height: 1.5rem; font-size: 0.6875rem; }
 .var-btn:hover { border-color: #6ee7b7; background: #d1fae5; }
 .var-btn.dark { background: #313244; border-color: #45475a; color: #a6e3a1; }
 .var-btn.dark:hover { border-color: #6ee7b7; }
@@ -1471,53 +1471,53 @@ function formatJson(v: unknown): string {
 .ctl-cand-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
 .ctl-cand-wrap .ctl { flex: 1; }
 .cand-btn {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: 20px; height: 20px;
-  border: none; border-radius: 4px; background: transparent;
-  color: var(--color-text-tertiary); cursor: pointer; font-size: 10px; line-height: 1;
+  position: absolute; right: 0.25rem; top: 50%; transform: translateY(-50%);
+  width: 1.25rem; height: 1.25rem;
+  border: none; border-radius: 0.25rem; background: transparent;
+  color: var(--color-text-tertiary); cursor: pointer; font-size: 0.625rem; line-height: 1;
   display: flex; align-items: center; justify-content: center;
 }
 .cand-btn:hover { background: var(--color-border-tertiary); color: var(--color-text-strong); }
 .cand-list {
-  position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+  position: absolute; top: calc(100% + 0.125rem); left: 0; right: 0;
   z-index: 30;
-  max-height: 200px; overflow-y: auto;
-  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 6px;
+  max-height: 12.5rem; overflow-y: auto;
+  background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 0.375rem;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
-  padding: 3px;
+  padding: 0.1875rem;
 }
 .cand-item {
   display: block; width: 100%; text-align: left;
-  padding: 5px 8px; border: none; border-radius: 4px;
+  padding: 0.3125rem 0.5rem; border: none; border-radius: 0.25rem;
   background: transparent; cursor: pointer;
 }
 .cand-item:hover { background: var(--soft-neutral-bg); }
 .cand-item code {
-  font-family: var(--font-mono); font-size: 11px; color: #334155;
+  font-family: var(--font-mono); font-size: 0.6875rem; color: #334155;
 }
 
 .field-label {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 500;
+  display: flex; align-items: center; gap: 0.375rem;
+  font-size: 0.75rem; font-weight: 500;
 }
 .label-text { color: #1a1d24; font-weight: 600; }
 .req-mark { color: #ef4444; font-weight: 700; }
 .field-path {
-  font-family: var(--font-mono); font-size: 10px;
-  color: var(--color-text-tertiary); background: var(--soft-neutral-bg); padding: 1px 4px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 0.625rem;
+  color: var(--color-text-tertiary); background: var(--soft-neutral-bg); padding: 0.0625rem 0.25rem; border-radius: 0.1875rem;
 }
 /* 深层字段 path 角标(D5):path ≠ $.+name 的字段以角标替代灰 chip —
    mono 小字 slate 族(对齐 .fa-note/策略角标惯例) */
 .path-badge {
-  font-family: var(--font-mono); font-size: 9.5px;
-  padding: 1px 5px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 0.59375rem;
+  padding: 0.0625rem 0.3125rem; border-radius: 0.1875rem;
   background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary);
   cursor: default;
-  max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 21.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ui-tag {
-  font-size: 9px; font-weight: 700; text-transform: uppercase;
-  padding: 1px 4px; border-radius: 3px;
+  font-size: 0.5625rem; font-weight: 700; text-transform: uppercase;
+  padding: 0.0625rem 0.25rem; border-radius: 0.1875rem;
   background: #eef2ff; color: #4f46e5;
 }
 .ui-tag.k-number { background: #fef3c7; color: #92400e; }
@@ -1529,34 +1529,34 @@ function formatJson(v: unknown): string {
 .ui-tag.k-unknown { background: #fee2e2; color: #991b1b; }
 /* assertable ✓ 标(Response 页契约参考线) */
 .assertable-mark {
-  font-size: 11px; font-weight: 700; color: #059669;
+  font-size: 0.6875rem; font-weight: 700; color: #059669;
 }
 /* PRD §5.6 4 色 source_kind 视觉区分 (literal / static / dynamic / auto) */
 .src-tag {
-  font-size: 9px; font-weight: 600;
-  padding: 1px 6px; border-radius: 3px;
+  font-size: 0.5625rem; font-weight: 600;
+  padding: 0.0625rem 0.375rem; border-radius: 0.1875rem;
   background: var(--soft-neutral-bg); color: var(--color-text-strong);        /* literal 灰 */
 }
 .src-tag.s-lookup { background: #faf5ff; color: #7c3aed; }   /* static 紫 */
 .src-tag.s-generated { background: #ede9fe; color: #7c3aed; } /* dynamic 紫 */
 /* 策略角标(需求1):字段已挂策略 → 行尾定位入口,点击跳转下方策略卡 */
 .strategy-tag {
-  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
-  padding: 1px 6px; border-radius: 3px; border: none; cursor: pointer;
+  font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700;
+  padding: 0.0625rem 0.375rem; border-radius: 0.1875rem; border: none; cursor: pointer;
   background: #e0e7ff; color: var(--accent);
 }
 .strategy-tag:hover { background: #c7d2fe; color: #3730ea; }
 /* 动态取数源查钮(§7):青绿族 — 与策略角标(靛)区分,指向查询动作 */
 .vs-query-btn {
-  font-size: 10px; font-weight: 700;
-  padding: 1px 7px; border-radius: 3px; border: 1px solid #99f6e4;
+  font-size: 0.625rem; font-weight: 700;
+  padding: 0.0625rem 0.4375rem; border-radius: 0.1875rem; border: 1px solid #99f6e4;
   cursor: pointer; background: #f0fdfa; color: #0f766e;
 }
 .vs-query-btn:hover { background: #ccfbf1; border-color: #5eead4; }
 /* 取数来源徽标(§7.5):只读展示,钉 view 不钉 group */
 .vs-badge {
-  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
-  padding: 1px 6px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 600;
+  padding: 0.0625rem 0.375rem; border-radius: 0.1875rem;
   background: #ecfdf5; color: #047857;
 }
 /* 字段行 4 色左边框 */
@@ -1566,22 +1566,22 @@ function formatJson(v: unknown): string {
 
 /* 动态注入态提示条:琥珀族与 sk-generated 橙同源 — 值由 assign 运行时覆盖。
    wrap 相对定位给 ☰ 菜单浮层做锚(同 ctl-cand-wrap)。 */
-.ctl-injected-wrap { position: relative; display: flex; gap: 6px; width: 100%; }
+.ctl-injected-wrap { position: relative; display: flex; gap: 0.375rem; width: 100%; }
 .ctl-injected {
   flex: 1; min-width: 0;
-  display: flex; align-items: center; gap: 6px;
-  background: #fffbeb; border: 1.5px dashed #f59e0b; border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 12px; color: #92400e;
+  display: flex; align-items: center; gap: 0.375rem;
+  background: #fffbeb; border: 1.5px dashed #f59e0b; border-radius: 0.5rem;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.75rem; color: #92400e;
   cursor: default; user-select: none;
 }
 .ctl-injected svg { flex-shrink: 0; }
 /* 容器头注入徽标(P6):同琥珀族紧凑形态 — 整区块运行时被 assign 覆盖 */
 .node-injected {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 1px 8px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.0625rem 0.5rem; border-radius: 62.4375rem;
   background: #fffbeb; border: 1.5px dashed #f59e0b;
-  font-size: 11px; color: #92400e;
+  font-size: 0.6875rem; color: #92400e;
   cursor: default; user-select: none; flex-shrink: 0;
 }
 .node-injected svg { flex-shrink: 0; }
@@ -1591,10 +1591,10 @@ function formatJson(v: unknown): string {
 /* 提取态(域感知提取):绿色族(与变量注册表 extract 出身徽章同源)—
    只读取不覆盖,值控件不锁,仅提示运行时读取 */
 .node-extracted {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 1px 8px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.0625rem 0.5rem; border-radius: 62.4375rem;
   background: #ecfdf5; border: 1.5px dashed #059669;
-  font-size: 11px; color: #065f46;
+  font-size: 0.6875rem; color: #065f46;
   cursor: default; user-select: none; flex-shrink: 0;
 }
 .node-extracted svg { flex-shrink: 0; }
@@ -1602,35 +1602,35 @@ function formatJson(v: unknown): string {
    头部靛蓝徽标(收起态也可见)+ 单行模板输入替行组/KV 编辑 */
 .node-tpl-badge {
   display: inline-flex; align-items: center;
-  padding: 1px 8px; border-radius: 999px;
+  padding: 0.0625rem 0.5rem; border-radius: 62.4375rem;
   background: #eef2ff; border: 1.5px dashed #6366f1;
-  font-size: 11px; color: var(--accent);
+  font-size: 0.6875rem; color: var(--accent);
   cursor: default; user-select: none; flex-shrink: 0;
 }
-.node-tpl-ctl { display: flex; flex-direction: column; gap: 3px; }
+.node-tpl-ctl { display: flex; flex-direction: column; gap: 0.1875rem; }
 .node-tpl-hint {
   margin: 0;
-  font-size: 11px; color: var(--accent);
+  font-size: 0.6875rem; color: var(--accent);
 }
 .extracted-hint {
-  display: flex; align-items: center; gap: 4px;
-  margin: 1px 0 0;
-  font-size: 11px; color: #047857;
+  display: flex; align-items: center; gap: 0.25rem;
+  margin: 0.0625rem 0 0;
+  font-size: 0.6875rem; color: #047857;
 }
 .extracted-hint code {
-  font-family: var(--font-mono); font-size: 10.5px;
-  background: #d1fae5; border-radius: 3px; padding: 0 5px;
+  font-family: var(--font-mono); font-size: 0.65625rem;
+  background: #d1fae5; border-radius: 0.1875rem; padding: 0 0.3125rem;
   max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* 兜底原值行:continue 语义透出,长值 code 内截断 */
 .injected-fallback {
-  display: flex; align-items: center; gap: 4px;
-  margin: 1px 0 0;
-  font-size: 11px; color: var(--sl-warn);
+  display: flex; align-items: center; gap: 0.25rem;
+  margin: 0.0625rem 0 0;
+  font-size: 0.6875rem; color: var(--sl-warn);
 }
 .injected-fallback code {
-  font-family: var(--font-mono); font-size: 10.5px;
-  background: #fef3c7; border-radius: 3px; padding: 0 5px;
+  font-family: var(--font-mono); font-size: 0.65625rem;
+  background: #fef3c7; border-radius: 0.1875rem; padding: 0 0.3125rem;
   max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -1638,9 +1638,9 @@ function formatJson(v: unknown): string {
   width: 100%;
   /* border-box: content-box 下 100% + padding + 边框会超出策略卡/字段行容器 */
   box-sizing: border-box;
-  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 13px; color: #1a1d24; font-family: inherit;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 0.5rem;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.8125rem; color: #1a1d24; font-family: inherit;
   transition: all 0.15s;
   outline: none;
 }
@@ -1650,61 +1650,61 @@ function formatJson(v: unknown): string {
 
 /* 模板态降级输入(typed 字段值为 ${...}):等宽字体 + 靛蓝底提示语域切换 */
 .ctl.tpl {
-  font-family: var(--font-mono); font-size: 12px;
+  font-family: var(--font-mono); font-size: 0.75rem;
   border-color: #c7d2fe; background: #f5f7ff;
 }
 
-.ctl-area { resize: vertical; min-height: 60px; }
+.ctl-area { resize: vertical; min-height: 3.75rem; }
 .ctl-code {
-  font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+  font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.5;
   background: #1e1e2e; color: #a6e3a1; border-color: #313244;
 }
 .ctl-code:focus { background: #1e1e2e; color: #a6e3a1; border-color: #6366f1; }
 
 .ctl-bool {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.8125rem; cursor: pointer;
 }
-.ctl-bool input { width: 16px; height: 16px; accent-color: #4f46e5; }
+.ctl-bool input { width: 1rem; height: 1rem; accent-color: #4f46e5; }
 
 .ctl-file {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; background: #fafbfc; border: 1.5px dashed var(--color-border-secondary); border-radius: 8px;
-  color: #5a6273; font-size: 12px;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4375rem 0.625rem; background: #fafbfc; border: 1.5px dashed var(--color-border-secondary); border-radius: 0.5rem;
+  color: #5a6273; font-size: 0.75rem;
 }
 .file-tag { font-weight: 700; color: var(--color-text-strong); }
-.file-hint { font-size: 11px; }
+.file-hint { font-size: 0.6875rem; }
 
 .field-desc {
-  display: flex; align-items: flex-start; gap: 5px;
-  margin: 1px 0 0;
-  font-size: 11.5px; color: var(--color-text-secondary); line-height: 1.5;
+  display: flex; align-items: flex-start; gap: 0.3125rem;
+  margin: 0.0625rem 0 0;
+  font-size: 0.71875rem; color: var(--color-text-secondary); line-height: 1.5;
 }
-.field-desc svg { flex-shrink: 0; margin-top: 2px; color: var(--color-text-tertiary); }
+.field-desc svg { flex-shrink: 0; margin-top: 0.125rem; color: var(--color-text-tertiary); }
 
 /* ── 已折叠字段区(§5.4 折叠区):中性 slate —— 渐进披露而非警示
    (与「其他字段」琥珀警示区分;值仍在 body,仅布局收纳) ── */
 .folded {
-  padding: 8px 10px 8px 12px;
+  padding: 0.5rem 0.625rem 0.5rem 0.75rem;
   background: var(--surface-raised);
   border: 1px solid var(--color-border-tertiary);
   border-left: 3px solid var(--color-text-tertiary);
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
 .folded-toggle {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 0.375rem;
   width: 100%; padding: 0; border: none; background: transparent;
-  font-size: 12px; text-align: left; cursor: pointer;
+  font-size: 0.75rem; text-align: left; cursor: pointer;
 }
 .folded-arrow {
-  display: inline-block; font-size: 10px; color: var(--color-text-secondary);
+  display: inline-block; font-size: 0.625rem; color: var(--color-text-secondary);
   transition: transform 0.15s;
 }
 .folded-arrow.open { transform: rotate(90deg); }
 .folded-title { font-weight: 600; color: var(--color-text-strong); }
-.folded-hint { margin-left: auto; font-size: 11px; color: var(--color-text-tertiary); }
-.folded-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
-.folded-row { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
-.folded-label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.folded-hint { margin-left: auto; font-size: 0.6875rem; color: var(--color-text-tertiary); }
+.folded-body { margin-top: 0.625rem; display: flex; flex-direction: column; gap: 0.625rem; }
+.folded-row { display: flex; flex-direction: column; gap: 0.25rem; padding-left: 0.375rem; }
+.folded-label { display: flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; }
 .folded-control .ctl { width: 100%; }
 </style>

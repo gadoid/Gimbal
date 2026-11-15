@@ -591,26 +591,26 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 <style scoped>
 .rc-panel { display: flex; flex-direction: column; min-width: 0; }
 
-.run-section { margin-bottom: 24px; }
+.run-section { margin-bottom: 1.5rem; }
 .run-section:last-child { margin-bottom: 0; }
 .run-label {
-  display: block; font-size: 13px; font-weight: 600; color: var(--sl-ink);
-  margin-bottom: 12px;
+  display: block; font-size: 0.8125rem; font-weight: 600; color: var(--sl-ink);
+  margin-bottom: 0.75rem;
 }
 .run-label .muted { font-weight: 400; color: #8B93A1; }
 
 /* ── 方案栏 v2(spec §7 + 执行设计 1 号原型:选中 = 深色实心 chip)── */
 .rd-scheme-chips {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  margin-bottom: 20px;
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin-bottom: 1.25rem;
 }
 /* S7.3 生效预览入口:顶到行尾,不与方案 chip 抢位 */
-.rd-preview-btn { margin-left: auto; font-size: 12px; padding: 4px 12px; }
+.rd-preview-btn { margin-left: auto; font-size: 0.75rem; padding: 0.25rem 0.75rem; }
 .rd-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 6px 14px;
-  border: 1.5px solid var(--sl-line); border-radius: 999px;
-  background: var(--c-surface); font-size: 12px; color: #5B6472;
+  display: inline-flex; align-items: center; gap: 0.3125rem;
+  padding: 0.375rem 0.875rem;
+  border: 1.5px solid var(--sl-line); border-radius: 62.4375rem;
+  background: var(--c-surface); font-size: 0.75rem; color: #5B6472;
   cursor: pointer; transition: all 0.15s;
 }
 .rd-chip:hover { border-color: var(--sl-accent); color: var(--sl-ink); }
@@ -619,157 +619,157 @@ const previewEnvNames = computed<Record<number, string>>(() =>
   background: var(--sl-ink);
 }
 .rd-chip-tag {
-  font-size: 10px; font-weight: 600; padding: 1px 6px;
-  border-radius: 999px; background: var(--soft-accent-bg); color: var(--sl-accent);
+  font-size: 0.625rem; font-weight: 600; padding: 0.0625rem 0.375rem;
+  border-radius: 62.4375rem; background: var(--soft-accent-bg); color: var(--sl-accent);
 }
 .rd-chip.active .rd-chip-tag { background: rgba(255, 255, 255, .16); color: #fff; }
-.rd-chip-warn { font-size: 11px; color: var(--sl-bad); }
+.rd-chip-warn { font-size: 0.6875rem; color: var(--sl-bad); }
 .rd-chip.active .rd-chip-warn { color: #FCA5A5; }
 
 /* ── 默认方案态:基线提示 ──────────────────────────────────── */
 .rd-baseline-note {
-  padding: 10px 12px; margin-bottom: 24px;
-  border: 1.5px dashed rgba(47, 111, 237, .35); border-radius: 10px;
+  padding: 0.625rem 0.75rem; margin-bottom: 1.5rem;
+  border: 1.5px dashed rgba(47, 111, 237, .35); border-radius: 0.625rem;
   background: #F6F8FC;
-  font-size: 12px; color: #5B6472; line-height: 1.6;
+  font-size: 0.75rem; color: #5B6472; line-height: 1.6;
 }
 .rd-link { color: var(--sl-accent); cursor: pointer; }
 .rd-link:hover { text-decoration: underline; }
 
 /* ── 绑定行(spec D3;M2a S6 后一行一个别名选择)────────────── */
 .rd-bind-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; margin-bottom: 8px;
-  border: 1px solid var(--sl-line); border-radius: 8px;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.625rem; margin-bottom: 0.5rem;
+  border: 1px solid var(--sl-line); border-radius: 0.5rem;
 }
 .rd-bind-row:last-child { margin-bottom: 0; }
 /* 降级(M2a S6):选中的别名已从注册表删除 — 标红不报废,退回服务键本身 */
 .rd-bind-row.is-degraded { border-color: #fca5a5; background: #fef2f2; }
 .rd-bind-svc {
-  min-width: 120px; font-family: var(--font-mono);
-  font-size: 12px; font-weight: 600;
+  min-width: 7.5rem; font-family: var(--font-mono);
+  font-size: 0.75rem; font-weight: 600;
 }
 .rd-bind-user {
-  min-width: 128px; padding: 5px 8px;
-  border: 1px solid var(--sl-line); border-radius: 6px;
-  font-size: 12px; background: var(--c-surface);
+  min-width: 8rem; padding: 0.3125rem 0.5rem;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem;
+  font-size: 0.75rem; background: var(--c-surface);
 }
 .rd-bind-row.is-degraded .rd-bind-user { border-color: #fca5a5; }
 /* 无同基候选 → 静默说明代替下拉(用服务键本身) */
-.rd-bind-none { font-size: 11px; color: #8B93A1; }
-.rd-bind-warn { font-size: 11px; color: #b91c1c; white-space: nowrap; }
-.rd-empty { margin: 4px 0 0; font-size: 12px; color: #8B93A1; }
+.rd-bind-none { font-size: 0.6875rem; color: #8B93A1; }
+.rd-bind-warn { font-size: 0.6875rem; color: #b91c1c; white-space: nowrap; }
+.rd-empty { margin: 0.25rem 0 0; font-size: 0.75rem; color: #8B93A1; }
 
 /* 基础设置(stepTo / nRuns × parallel) */
 .adv-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
 }
 @media (max-width: 720px) { .adv-grid { grid-template-columns: 1fr; } }
 .adv-field {
-  padding: 10px 12px;
-  border: 1.5px solid var(--sl-line); border-radius: 10px;
+  padding: 0.625rem 0.75rem;
+  border: 1.5px solid var(--sl-line); border-radius: 0.625rem;
 }
 .adv-name {
-  display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px;
+  display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.375rem;
 }
 .adv-select {
-  width: 100%; padding: 6px 8px;
-  border: 1px solid var(--sl-line); border-radius: 6px;
-  font-size: 12px; background: var(--c-surface);
+  width: 100%; padding: 0.375rem 0.5rem;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem;
+  font-size: 0.75rem; background: var(--c-surface);
 }
 .num-row {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 0.375rem;
 }
 .adv-input {
-  width: 100%; padding: 6px 8px;
-  border: 1px solid var(--sl-line); border-radius: 6px;
-  font-size: 12px; background: var(--c-surface);
+  width: 100%; padding: 0.375rem 0.5rem;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem;
+  font-size: 0.75rem; background: var(--c-surface);
 }
-.num-row .adv-input { width: 72px; }
-.num-sep { font-size: 11px; color: #8B93A1; }
+.num-row .adv-input { width: 4.5rem; }
+.num-sep { font-size: 0.6875rem; color: #8B93A1; }
 
 /* ── 另存为方案(默认方案态)───────────────────────────────── */
-.rd-save-row { display: flex; align-items: center; gap: 8px; }
+.rd-save-row { display: flex; align-items: center; gap: 0.5rem; }
 .rd-scheme-name {
-  flex: 1; min-width: 0; max-width: 320px; padding: 6px 8px;
-  border: 1px solid var(--sl-line); border-radius: 6px;
-  font-size: 12px; background: var(--c-surface);
+  flex: 1; min-width: 0; max-width: 20rem; padding: 0.375rem 0.5rem;
+  border: 1px solid var(--sl-line); border-radius: 0.375rem;
+  font-size: 0.75rem; background: var(--c-surface);
 }
-.rd-save-row .ghost-btn { padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+.rd-save-row .ghost-btn { padding: 0.375rem 0.75rem; font-size: 0.75rem; white-space: nowrap; }
 
 /* ── 自建方案只读概要(spec §7 路径①)──────────────────────── */
 .rd-summary {
-  border: 1.5px solid var(--sl-line); border-radius: 10px;
-  padding: 6px 14px; background: var(--c-surface);
+  border: 1.5px solid var(--sl-line); border-radius: 0.625rem;
+  padding: 0.375rem 0.875rem; background: var(--c-surface);
 }
 .rd-sum-row {
-  display: flex; gap: 12px; align-items: baseline;
-  padding: 10px 0;
+  display: flex; gap: 0.75rem; align-items: baseline;
+  padding: 0.625rem 0;
   border-bottom: 1px dashed #eef0f4;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .rd-sum-row:last-child { border-bottom: none; }
 .rd-sum-label {
-  min-width: 64px; font-size: 12px; font-weight: 600; color: #1a1d24;
+  min-width: 4rem; font-size: 0.75rem; font-weight: 600; color: #1a1d24;
 }
 .rd-sum-value { flex: 1; min-width: 0; color: #3f4756; line-height: 1.8; }
 .rd-sum-bind {
-  display: inline-block; margin: 0 6px 2px 0;
-  font-family: var(--font-mono); font-size: 11px;
-  background: var(--soft-neutral-bg); padding: 1px 6px; border-radius: 4px;
+  display: inline-block; margin: 0 0.375rem 0.125rem 0;
+  font-family: var(--font-mono); font-size: 0.6875rem;
+  background: var(--soft-neutral-bg); padding: 0.0625rem 0.375rem; border-radius: 0.25rem;
 }
 /* 降级(概要态,spec §9):绑定 alias 已删 — 底色微红 + 警示(与默认态 .is-degraded 同口径) */
 .rd-sum-bind.is-degraded { background: #fef2f2; color: #b91c1c; }
-.rd-sum-warn { margin-left: 4px; font-family: inherit; }
+.rd-sum-warn { margin-left: 0.25rem; font-family: inherit; }
 
 /* 失效横幅内的修复按钮 */
-.rd-fix-btn { margin-top: 8px; padding: 5px 10px; font-size: 12px; }
+.rd-fix-btn { margin-top: 0.5rem; padding: 0.3125rem 0.625rem; font-size: 0.75rem; }
 
 .run-error, .run-success {
-  display: flex; gap: 10px; align-items: flex-start;
-  padding: 12px 14px; border-radius: 8px; margin-bottom: 16px;
+  display: flex; gap: 0.625rem; align-items: flex-start;
+  padding: 0.75rem 0.875rem; border-radius: 0.5rem; margin-bottom: 1rem;
 }
 .run-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-.run-error svg { flex-shrink: 0; color: #ef4444; margin-top: 2px; }
-.err-title { font-weight: 600; font-size: 13px; }
-.err-msg { font-size: 12px; margin-top: 2px; font-family: var(--font-mono); }
+.run-error svg { flex-shrink: 0; color: #ef4444; margin-top: 0.125rem; }
+.err-title { font-weight: 600; font-size: 0.8125rem; }
+.err-msg { font-size: 0.75rem; margin-top: 0.125rem; font-family: var(--font-mono); }
 .run-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
-.run-success svg { flex-shrink: 0; color: #10b981; margin-top: 2px; }
-.success-title { font-weight: 600; font-size: 13px; }
-.success-msg { font-size: 12px; margin-top: 2px; }
-.success-msg code { font-family: var(--font-mono); background: #dcfce7; padding: 1px 4px; border-radius: 3px; }
+.run-success svg { flex-shrink: 0; color: #10b981; margin-top: 0.125rem; }
+.success-title { font-weight: 600; font-size: 0.8125rem; }
+.success-msg { font-size: 0.75rem; margin-top: 0.125rem; }
+.success-msg code { font-family: var(--font-mono); background: #dcfce7; padding: 0.0625rem 0.25rem; border-radius: 0.1875rem; }
 
 /* footer */
 .run-footer {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-  padding: 16px 0 0; margin-top: 8px;
+  gap: 0.75rem; flex-wrap: wrap;
+  padding: 1rem 0 0; margin-top: 0.5rem;
   border-top: 1px solid var(--sl-line);
 }
-.run-summary { display: flex; gap: 6px; flex-wrap: wrap; }
+.run-summary { display: flex; gap: 0.375rem; flex-wrap: wrap; }
 .summary-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 10px; border-radius: 999px;
-  font-size: 11px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.25rem 0.625rem; border-radius: 62.4375rem;
+  font-size: 0.6875rem; font-weight: 500;
   background: var(--soft-accent-bg); color: var(--sl-accent);
 }
 .summary-chip.total { background: #E4F5EA; color: var(--sl-ok); }
 /* 总量超闸(dispatch 409 too_many_runs)→ 红色警示,confirm 亦被拦 */
 .summary-chip.total.over { background: #FEE2E2; color: var(--sl-bad); }
-.run-actions { display: flex; gap: 8px; }
+.run-actions { display: flex; gap: 0.5rem; }
 
 .ghost-btn {
-  background: transparent; border: 1px solid var(--sl-line); border-radius: 8px;
-  padding: 8px 14px; font-size: 13px; color: #5B6472;
+  background: transparent; border: 1px solid var(--sl-line); border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem; font-size: 0.8125rem; color: #5B6472;
   cursor: pointer; transition: all 0.15s;
 }
 .ghost-btn:hover { background: #F3F5F8; }
 
 .primary-btn {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 0.375rem;
   background: var(--sl-accent);
-  color: #fff; border: none; border-radius: 8px;
-  padding: 8px 18px; font-size: 13px; font-weight: 600;
+  color: #fff; border: none; border-radius: 0.5rem;
+  padding: 0.5rem 1.125rem; font-size: 0.8125rem; font-weight: 600;
   cursor: pointer; transition: all 0.15s;
   box-shadow: 0 1px 2px rgba(47, 111, 237, 0.25);
 }
@@ -779,7 +779,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.small { font-size: 11px; }
-.env-select { border: 1px solid var(--color-border-secondary); border-radius: 6px;
+.small { font-size: 0.6875rem; }
+.env-select { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem;
   padding: 0.3rem 0.5rem; background: var(--c-surface); max-width: 16rem; }
 </style>

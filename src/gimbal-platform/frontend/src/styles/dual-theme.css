@@ -163,9 +163,9 @@ html[data-theme="dark"] {
   --el-fill-color-dark: #242424;
   --el-fill-color-darker: #2b2b2b;
   --el-mask-color: rgba(0, 0, 0, 70%);
-  --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 36%),
+  --el-box-shadow: 0 0.75rem 2rem 0.25rem rgba(0, 0, 0, 36%),
     0 8px 20px rgba(0, 0, 0, 32%);
-  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 40%);
+  --el-box-shadow-light: 0 0 0.75rem rgba(0, 0, 0, 40%);
 
   /* 主色:indigo 提亮档 + Element 语义阶梯(dark 模式下 light-N 是
      深色软底档,dark-2 是 hover 提亮) */

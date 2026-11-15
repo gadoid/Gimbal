@@ -147,9 +147,9 @@ onUnmounted(() => clearTimeout(pulseTimer))
 
 /* 轨数占位与统一高度都在基座 .tile-grid / .tile[data-span]
    (scenario-lib.css);这里只补一处卡内滚动层。
-   卡内行用 margin:0 -8px 往框垫白里出血,滚动层得自己让出同样的 8px,
+   卡内行用 margin:0 -0.5rem 往框垫白里出血,滚动层得自己让出同样的 0.5rem,
    否则出血会被裁成一条横向滚动条。 */
-.slot-body { flex: 1; min-height: 0; overflow: auto; margin: 0 -8px; padding: 0 8px; }
+.slot-body { flex: 1; min-height: 0; overflow: auto; margin: 0 -0.5rem; padding: 0 0.5rem; }
 
 /* ── 卡片视觉框架(统一供给,§7 第 3 条 + 设计文档 §2)──────────
      分类色边 = border-top 3px:与卡片描边/圆角由浏览器一并绘制,
@@ -160,12 +160,12 @@ onUnmounted(() => clearTimeout(pulseTimer))
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 11px 16px 16px;
+  gap: 0.625rem;
+  padding: 0.6875rem 1rem 1rem;
   background: var(--c-surface);
   border: 1px solid var(--sl-line);
   border-top: 3px solid var(--card-accent, var(--sl-accent));
-  border-radius: 12px;
+  border-radius: 0.75rem;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -182,7 +182,7 @@ onUnmounted(() => clearTimeout(pulseTimer))
 /* 换档微过渡:轻淡入 + 微上移(不 remount,保卡内状态) */
 .size-pulse { animation: wb-size-in 0.24s ease; }
 @keyframes wb-size-in {
-  from { opacity: 0.45; transform: translateY(3px); }
+  from { opacity: 0.45; transform: translateY(0.1875rem); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -198,14 +198,14 @@ onUnmounted(() => clearTimeout(pulseTimer))
 /* ── 左边缘拖拽条(§3:16px 纵向抓取条,贴内侧;hover 显形)───── */
 .card-handle {
   position: absolute;
-  left: 0; top: 12px; bottom: 12px;
-  width: 16px;
+  left: 0; top: 0.75rem; bottom: 0.75rem;
+  width: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #b6c2d4;
   cursor: grab;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 0.375rem 0.375rem 0;
   opacity: 0;
   transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
   z-index: 2;
@@ -219,10 +219,10 @@ onUnmounted(() => clearTimeout(pulseTimer))
 /* ── 右上角控件簇(§3/§4:hover 显形;✕ 半悬浮边框外圆形徽标)── */
 .corner-controls {
   position: absolute;
-  top: -1px; right: 10px;
+  top: -0.0625rem; right: 0.625rem;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
   transform: translateY(-45%);
   opacity: 0;
   transition: opacity 0.12s ease;
@@ -242,15 +242,15 @@ onUnmounted(() => clearTimeout(pulseTimer))
 .card-slot:not(:hover) .corner-controls { pointer-events: none; }
 /* ⤢ 尺寸:小方钮,点击循环 紧凑→标准→展开;按压有反馈 */
 .ctl-size {
-  width: 22px; height: 22px;
+  width: 1.375rem; height: 1.375rem;
   color: var(--color-text-secondary);
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .ctl-size:hover { color: var(--sl-accent); border-color: var(--sl-accent); transform: scale(1.08); }
 .ctl-size:active { transform: scale(0.94); }
 /* ✕ 删除:圆形徽标,半悬浮边框外(可关闭标签页同款) */
 .ctl-remove {
-  width: 20px; height: 20px;
+  width: 1.25rem; height: 1.25rem;
   color: var(--color-text-secondary);
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(16, 21, 28, 0.1);
@@ -259,18 +259,18 @@ onUnmounted(() => clearTimeout(pulseTimer))
 
 /* ── 状态面(loading / error)────────────────────────────── */
 .card-state {
-  padding: 22px 16px;
-  font-size: 12.5px;
+  padding: 1.375rem 1rem;
+  font-size: 0.78125rem;
   color: var(--color-text-secondary);
   background: var(--surface-raised);
   border: 1px dashed var(--sl-line);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   text-align: center;
 }
 .card-state.bad { color: var(--sl-bad); border-color: #f6c6c6; background: #fdf5f5; }
 .retry {
-  margin-left: 8px; padding: 2px 10px; font-size: 12px;
+  margin-left: 0.5rem; padding: 0.125rem 0.625rem; font-size: 0.75rem;
   color: var(--sl-accent); background: none;
-  border: 1px solid var(--sl-accent); border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--sl-accent); border-radius: 0.25rem; cursor: pointer;
 }
 </style>

@@ -111,22 +111,22 @@
 
     <!-- ── 新增/编辑弹框(动态控制面板,reactive form + canSubmit 门控)── -->
     <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
-      <DialogContent class="max-w-[560px]">
+      <DialogContent class="max-w-[35rem]">
         <DialogHeader>
           <DialogTitle>{{ editing ? '编辑常量' : '新增常量' }}</DialogTitle>
         </DialogHeader>
 
         <!-- data-testid 放内层真实元素:Portal 组件的 attrs 穿透不可查询 -->
         <div class="flex flex-col gap-3" data-testid="entry-dialog">
-          <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+          <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
             <span class="text-label font-medium text-signal-ink">名称 *</span>
             <Input v-model="form.name" data-field="name" :disabled="!!editing" placeholder="A-Z a-z 0-9 _,1-64 字符" />
           </div>
-          <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+          <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
             <span class="text-label font-medium text-signal-ink">说明</span>
             <Input v-model="form.description" data-field="description" placeholder="可选" />
           </div>
-          <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+          <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
             <span class="text-label font-medium text-signal-ink">类型</span>
             <div class="seg" data-field="entry_kind">
               <button
@@ -149,7 +149,7 @@
           </div>
 
           <template v-if="form.entry_kind === 'literal'">
-            <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+            <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
               <span class="text-label font-medium text-signal-ink">值类型</span>
               <Select v-model="form.valueType">
                 <SelectTrigger data-field="valueType" class="h-8"><SelectValue /></SelectTrigger>
@@ -161,7 +161,7 @@
                 </SelectContent>
               </Select>
             </div>
-            <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+            <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
               <span class="text-label font-medium text-signal-ink">值 *</span>
               <Switch
                 v-if="form.valueType === 'boolean'"
@@ -173,7 +173,7 @@
                 type="number"
                 :model-value="form.valueNum"
                 data-field="valueNum"
-                class="h-8 w-[160px]"
+                class="h-8 w-[10rem]"
                 @update:model-value="(v) => (form.valueNum = Number(v))"
               />
               <Input v-else v-model="form.valueStr" data-field="valueStr" placeholder="字面值文本" />
@@ -181,7 +181,7 @@
           </template>
 
           <template v-else>
-            <div class="grid grid-cols-[80px_1fr] items-start gap-2">
+            <div class="grid grid-cols-[5rem_1fr] items-start gap-2">
               <span class="mt-1.5 text-label font-medium text-signal-ink">生成器 *</span>
               <div class="kind-chips">
                 <button
@@ -200,7 +200,7 @@
             <div
               v-for="p in genParams"
               :key="p.name"
-              class="grid grid-cols-[80px_1fr] items-center gap-2"
+              class="grid grid-cols-[5rem_1fr] items-center gap-2"
             >
               <span class="text-label font-medium text-signal-ink">{{ p.name }}{{ p.required ? ' *' : '' }}</span>
               <div class="flex flex-col gap-0.5">
@@ -227,7 +227,7 @@
                   :min="p.min ?? undefined"
                   :max="p.max ?? undefined"
                   :data-field="`param-${p.name}`"
-                  class="h-8 w-[160px]"
+                  class="h-8 w-[10rem]"
                   @update:model-value="(v) => setParam(p.name, v === '' ? undefined : Number(v))"
                 />
                 <Input
@@ -240,7 +240,7 @@
                 <span class="muted param-hint">{{ p.description }}</span>
               </div>
             </div>
-            <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+            <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
               <span class="text-label font-medium text-signal-ink">spec 预览</span>
               <div class="spec-preview">
                 <pre data-testid="spec-preview">{{ specPreview }}</pre>
@@ -528,24 +528,24 @@ function copySpec(): void {
 .card {
   background: var(--c-surface, #fff);
   border: 1px solid var(--c-border, var(--sl-line));
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: 0.625rem;
+  padding: 0.875rem 1rem;
 }
 .section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 0.625rem;
 }
 .degraded { @apply text-label font-normal; color: var(--sl-warn); }
-.kind-card { border: 1px solid var(--c-border, var(--sl-line)); border-radius: 8px; margin-bottom: 8px; }
+.kind-card { border: 1px solid var(--c-border, var(--sl-line)); border-radius: 0.5rem; margin-bottom: 0.5rem; }
 .kind-head {
   @apply text-label font-normal;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   width: 100%;
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -555,21 +555,21 @@ function copySpec(): void {
 .chevron.open { transform: rotate(90deg); }
 .kind-name { font-family: var(--font-mono, monospace); font-weight: 600; }
 .kind-summary { color: var(--color-text-secondary); }
-.kind-body { padding: 0 12px 10px; }
-.kind-desc { @apply text-label font-normal; margin: 4px 0 8px; }
+.kind-body { padding: 0 0.75rem 0.625rem; }
+.kind-desc { @apply text-label font-normal; margin: 0.25rem 0 0.5rem; }
 /* 发丝线表格;列头形制统一走 .slib-table thead th,这里只压密度 */
 .params-table { @apply text-caption font-normal; width: 100%; border-collapse: collapse; }
 .params-table th,
-.params-table td { padding: 5px 8px; text-align: left; }
+.params-table td { padding: 0.3125rem 0.5rem; text-align: left; }
 .params-table td { border-bottom: 1px solid var(--c-divider, #eef1f5); }
 .params-table tbody tr:last-child td { border-bottom: none; }
-.example-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.example-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
 .example-json {
   @apply text-caption font-normal;
   font-family: var(--font-mono, monospace);
   background: #f6f8fa;
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
   margin: 0;
 }
 .entry-value {
@@ -581,16 +581,16 @@ function copySpec(): void {
   @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
-  border-radius: 4px;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 0.25rem;
 }
-.kind-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kind-chips { display: flex; flex-wrap: wrap; gap: 0.375rem; }
 .kind-chip {
   @apply text-caption font-normal;
   border: 1px solid var(--c-border, var(--sl-line));
   background: #f6f8fa;
-  border-radius: 12px;
-  padding: 2px 10px;
+  border-radius: 0.75rem;
+  padding: 0.125rem 0.625rem;
   font-family: var(--font-mono, monospace);
   cursor: pointer;
 }
@@ -601,10 +601,10 @@ function copySpec(): void {
   color: var(--sl-accent);
 }
 /* 类型分段选择(替代 el-radio-button) */
-.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 8px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--sl-line); border-radius: 0.5rem; overflow: hidden; }
 .seg-btn {
   @apply text-label font-normal;
-  padding: 6px 14px;
+  padding: 0.375rem 0.875rem;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -612,15 +612,15 @@ function copySpec(): void {
 }
 .seg-btn.active { background: var(--sl-accent); color: #fff; font-weight: 600; }
 .seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.param-hint { display: block; margin-top: 2px; }
-.spec-preview { display: flex; align-items: center; gap: 8px; width: 100%; }
+.param-hint { display: block; margin-top: 0.125rem; }
+.spec-preview { display: flex; align-items: center; gap: 0.5rem; width: 100%; }
 .spec-preview pre {
   @apply text-caption font-normal;
   flex: 1;
   font-family: var(--font-mono, monospace);
   background: #f6f8fa;
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;

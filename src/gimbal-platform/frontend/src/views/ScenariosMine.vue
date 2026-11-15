@@ -83,7 +83,7 @@
       <table class="slib-table">
         <thead>
           <tr>
-            <th style="width:30px" class="c-center">
+            <th style="width:1.875rem" class="c-center">
               <input
                 type="checkbox"
                 data-testid="mine-select-page"
@@ -93,15 +93,15 @@
               />
             </th>
             <th>场景名</th>
-            <th style="width:120px">系统</th>
-            <th style="width:90px">模块</th>
-            <th style="width:70px" class="c-center">优先级</th>
-            <th style="width:60px" class="c-center">数据集</th>
-            <th style="width:54px" class="c-center">步骤</th>
-            <th style="width:54px" class="c-center">变量</th>
-            <th style="width:100px">最后编辑</th>
+            <th style="width:7.5rem">系统</th>
+            <th style="width:5.625rem">模块</th>
+            <th style="width:4.375rem" class="c-center">优先级</th>
+            <th style="width:3.75rem" class="c-center">数据集</th>
+            <th style="width:3.375rem" class="c-center">步骤</th>
+            <th style="width:3.375rem" class="c-center">变量</th>
+            <th style="width:6.25rem">最后编辑</th>
             <th>Tags</th>
-            <th style="width:56px" class="c-center">操作</th>
+            <th style="width:3.5rem" class="c-center">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -769,27 +769,27 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 
 <style scoped>
 .qr-mask { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.qr-card { background: var(--c-surface); border-radius: 12px; padding: 1.1rem 1.3rem; width: min(380px, 92vw); display: flex; flex-direction: column; gap: 0.7rem; }
+.qr-card { background: var(--c-surface); border-radius: 0.75rem; padding: 1.1rem 1.3rem; width: min(23.75rem, 92vw); display: flex; flex-direction: column; gap: 0.7rem; }
 .qr-card h3 { margin: 0; font-size: 0.95rem; }
 .qr-sub { margin: 0; color: var(--color-text-secondary); font-size: 0.8rem; }
-.qr-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #334155; }
-.qr-row select { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 4px 8px; font-size: 0.8rem; }
-.qr-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.qr-actions button { border-radius: 6px; padding: 4px 12px; font-size: 0.8rem; cursor: pointer; border: 1px solid var(--color-border-secondary); }
+.qr-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #334155; }
+.qr-row select { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+.qr-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.qr-actions button { border-radius: 0.375rem; padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer; border: 1px solid var(--color-border-secondary); }
 .qr-actions .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .qr-actions .btn-ghost { background: none; }
 
 /* 场景表行含描述行(~78px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
-.slib { --lib-card-max: 850px; }
-.sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.slib { --lib-card-max: 53.125rem; }
+.sys-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .row-expired td { opacity: 0.55; }
 /* F1:未读分享标签 —— hover title 由模板提供,这里只管形态 */
 .handoff-badge {
   flex: none;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1;
-  padding: 3px 8px;
-  border-radius: 999px;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 62.4375rem;
   color: var(--sl-warn);
   background: rgb(245 158 11 / 12%);
   border: 1px solid rgb(245 158 11 / 45%);
@@ -801,10 +801,10 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 /* P1 尾巴①:批量加入 Suite 入口(与筛选/导入同排)。 */
 .slib-addsuite {
   flex: none;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1;
-  padding: 7px 12px;
-  border-radius: 8px;
+  padding: 0.4375rem 0.75rem;
+  border-radius: 0.5rem;
   cursor: pointer;
   color: var(--sl-ok);
   background: rgb(34 197 94 / 10%);
@@ -822,10 +822,10 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 /* 场景导入入口(与 addsuite 同排同尺,蓝系以示「流入」;member+ 可见) */
 .slib-import {
   flex: none;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1;
-  padding: 7px 12px;
-  border-radius: 8px;
+  padding: 0.4375rem 0.75rem;
+  border-radius: 0.5rem;
   cursor: pointer;
   color: var(--sl-accent);
   background: rgb(47 111 237 / 8%);

@@ -111,11 +111,11 @@ function onFocusOut(e: FocusEvent): void {
 <style scoped>
 .fss-search { position: relative; display: inline-block; }
 .fss-search-input {
-  width: 220px;
-  padding: 2px 8px;
-  font-size: 12px;
+  width: 13.75rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
   border: 1px solid var(--el-border-color, #dcdfe6);
-  border-radius: 4px;
+  border-radius: 0.25rem;
   background: transparent;
   color: inherit;
 }
@@ -124,30 +124,30 @@ function onFocusOut(e: FocusEvent): void {
   outline: none; /* tabindex=-1 聚焦锚(点击面板空白不失焦),不显聚焦框 */
   position: absolute;
   z-index: 30;
-  top: calc(100% + 4px);
+  top: calc(100% + 0.25rem);
   left: 0;
-  max-height: 300px;
+  max-height: 18.75rem;
   overflow-y: auto;
-  min-width: 440px;
-  padding: 4px 6px;
+  min-width: 27.5rem;
+  padding: 0.25rem 0.375rem;
   background: var(--el-bg-color-overlay, #fff);
   border: 1px solid var(--el-border-color-light, #e4e7ed);
-  border-radius: 4px;
+  border-radius: 0.25rem;
   box-shadow: var(--el-box-shadow-light, 0 0 12px rgba(0, 0, 0, .12));
-  font-size: 12px;
+  font-size: 0.75rem;
 }
-.fss-search-more { padding: 2px 4px; color: var(--el-text-color-secondary, #909399); }
+.fss-search-more { padding: 0.125rem 0.25rem; color: var(--el-text-color-secondary, #909399); }
 .fss-search-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 4px;
-  border-radius: 3px;
+  gap: 0.5rem;
+  padding: 0.1875rem 0.25rem;
+  border-radius: 0.1875rem;
 }
 .fss-search-row:hover { background: var(--el-fill-color-light, #f5f7fa); }
 .fss-search-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fss-breadcrumb { color: var(--el-text-color-secondary, #909399); }
-.fss-search-type { margin-left: 4px; color: var(--el-text-color-secondary, #909399); }
+.fss-search-type { margin-left: 0.25rem; color: var(--el-text-color-secondary, #909399); }
 .fss-search-desc {
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

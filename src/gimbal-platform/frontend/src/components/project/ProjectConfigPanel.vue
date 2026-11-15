@@ -142,8 +142,8 @@
         配置压项目变体之上)。
       </p>
       <table v-if="execCfgs.length" class="tbl">
-        <thead><tr><th>名称</th><th>覆盖</th><th style="width:90px">默认</th>
-            <th v-if="canManage" style="width:150px">操作</th></tr></thead>
+        <thead><tr><th>名称</th><th>覆盖</th><th style="width:5.625rem">默认</th>
+            <th v-if="canManage" style="width:9.375rem">操作</th></tr></thead>
         <tbody>
           <tr v-for="c in execCfgs" :key="c.id" :data-testid="`prj-ec-${c.id}`">
             <td>{{ c.name }}</td>
@@ -394,9 +394,9 @@ section { display: flex; flex-direction: column; gap: 0.45rem; }
 h2 { margin: 0; font-size: 0.95rem; color: #1e293b; }
 .hint { margin: 0; color: var(--color-text-secondary); font-size: 0.8rem; }
 .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-select, .svc-input { padding: 6px 8px; border-radius: 8px; border: 1px solid rgb(100 116 139 / 30%); background: transparent; font-size: 0.85rem; }
-.svc-input { max-width: 260px; }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.35rem 0.9rem; background: var(--c-surface); cursor: pointer; font-size: 0.85rem; }
+select, .svc-input { padding: 0.375rem 0.5rem; border-radius: 0.5rem; border: 1px solid rgb(100 116 139 / 30%); background: transparent; font-size: 0.85rem; }
+.svc-input { max-width: 16.25rem; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.35rem 0.9rem; background: var(--c-surface); cursor: pointer; font-size: 0.85rem; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .err { color: var(--sl-bad); font-size: 0.8rem; margin: 0; }
@@ -406,10 +406,10 @@ select, .svc-input { padding: 6px 8px; border-radius: 8px; border: 1px solid rgb
                    border-bottom: 1px solid #eef2f7; }
 .mono { font-family: var(--font-mono, monospace); }
 .ok { color: #16a34a; font-size: 0.8rem; }
-.slot-card { border: 1px solid var(--color-border-tertiary); border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.slot-card { border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .slot-card header { display: flex; align-items: baseline; gap: 0.6rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.chip { font-size: 0.75rem; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--color-border-tertiary); }
+.chip { font-size: 0.75rem; padding: 0.125rem 0.625rem; border-radius: 62.4375rem; border: 1px solid var(--color-border-tertiary); }
 .chip.ok { background: rgb(34 197 94 / 8%); color: var(--sl-ok); border-color: rgb(34 197 94 / 35%); }
 .chip.miss { background: rgb(245 158 11 / 10%); color: var(--sl-warn); border-color: rgb(245 158 11 / 40%); }
 .chip.proj { background: rgb(37 99 235 / 8%); color: #1d4ed8; border-color: rgb(37 99 235 / 35%); }

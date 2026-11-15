@@ -175,43 +175,43 @@ function onMapRow(i: number, pos: 0 | 1, value: string): void {
 
 <style scoped>
 .uset {
-  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-  margin: 4px 0 6px 26px; padding: 8px 12px;
-  border: 1px solid var(--accent-soft-border); border-radius: 8px;
-  background: var(--accent-soft); font-size: 12px;
+  display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;
+  margin: 0.25rem 0 0.375rem 1.625rem; padding: 0.5rem 0.75rem;
+  border: 1px solid var(--accent-soft-border); border-radius: 0.5rem;
+  background: var(--accent-soft); font-size: 0.75rem;
 }
-.uset-field { display: flex; align-items: center; gap: 6px; }
+.uset-field { display: flex; align-items: center; gap: 0.375rem; }
 .uset-field > span { color: rgb(100 116 139); }
 .uset select, .uset input {
-  padding: 4px 8px; font-size: 12px; border-radius: 6px;
+  padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 0.375rem;
   border: 1px solid rgb(100 116 139 / 35%); background: transparent; color: inherit;
 }
-.uset input { width: 56px; }
-.uset-note { font-style: normal; font-size: 11px; color: rgb(100 116 139); }
+.uset input { width: 3.5rem; }
+.uset-note { font-style: normal; font-size: 0.6875rem; color: rgb(100 116 139); }
 
 /* 同名改名(map)编辑区 */
 .uset-map {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 8px 10px; border-left: 1px dashed rgb(100 116 139 / 35%);
-  padding-left: 12px; min-width: 250px;
+  display: flex; flex-direction: column; gap: 0.375rem;
+  padding: 0.5rem 0.625rem; border-left: 1px dashed rgb(100 116 139 / 35%);
+  padding-left: 0.75rem; min-width: 15.625rem;
 }
-.uset-map-label { font-size: 11.5px; color: rgb(100 116 139); }
-.uset-map-row { display: flex; align-items: center; gap: 6px; }
+.uset-map-label { font-size: 0.71875rem; color: rgb(100 116 139); }
+.uset-map-row { display: flex; align-items: center; gap: 0.375rem; }
 .uset-map-in {
-  width: 110px; padding: 3px 7px; font-size: 11.5px;
+  width: 6.875rem; padding: 0.1875rem 0.4375rem; font-size: 0.71875rem;
   font-family: ui-monospace, monospace;
-  border-radius: 6px; border: 1px solid rgb(100 116 139 / 35%);
+  border-radius: 0.375rem; border: 1px solid rgb(100 116 139 / 35%);
   background: transparent; color: inherit;
 }
-.uset-map-arrow { color: rgb(100 116 139); font-size: 11px; }
+.uset-map-arrow { color: rgb(100 116 139); font-size: 0.6875rem; }
 .uset-map-x {
-  width: 18px; height: 18px; border-radius: 5px; cursor: pointer;
+  width: 1.125rem; height: 1.125rem; border-radius: 0.3125rem; cursor: pointer;
   border: 1px solid rgb(100 116 139 / 30%); background: transparent;
-  color: inherit; font-size: 11px; line-height: 1; padding: 0;
+  color: inherit; font-size: 0.6875rem; line-height: 1; padding: 0;
 }
 .uset-map-add {
-  align-self: flex-start; font-size: 11.5px; padding: 3px 9px;
-  border-radius: 6px; cursor: pointer; color: var(--accent); background: var(--accent-soft);
+  align-self: flex-start; font-size: 0.71875rem; padding: 0.1875rem 0.5625rem;
+  border-radius: 0.375rem; cursor: pointer; color: var(--accent); background: var(--accent-soft);
   background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
 }
 </style>

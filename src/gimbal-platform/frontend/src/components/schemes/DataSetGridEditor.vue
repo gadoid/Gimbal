@@ -326,52 +326,52 @@ function onSlotCandidateChange(ev: Event) {
 </template>
 
 <style scoped>
-.dsg { display: flex; flex-direction: column; gap: 8px; }
-.dsg-top, .dsg-foot { display: flex; align-items: center; gap: 8px; }
-.dsg-stats { font-size: 11px; color: var(--color-text-secondary, var(--color-text-secondary)); }
+.dsg { display: flex; flex-direction: column; gap: 0.5rem; }
+.dsg-top, .dsg-foot { display: flex; align-items: center; gap: 0.5rem; }
+.dsg-stats { font-size: 0.6875rem; color: var(--color-text-secondary, var(--color-text-secondary)); }
 .flex-1 { flex: 1; }
 
 .dsg-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  padding: 5px 10px; font-size: 11px; border-radius: 6px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem;
+  padding: 0.3125rem 0.625rem; font-size: 0.6875rem; border-radius: 0.375rem;
   color: var(--color-text-secondary, var(--color-text-strong)); background: var(--surface-raised); border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary));
 }
 .dsg-bar.warn { color: var(--sl-warn); background: #fffbeb; border-color: #fde68a; }
 
-.dsg-scroll { max-height: 420px; overflow: auto; border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); border-radius: 8px; }
-.dsg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
-.dsg-table th, .dsg-table td { border-bottom: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); padding: 4px 8px; text-align: left; }
+.dsg-scroll { max-height: 26.25rem; overflow: auto; border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); border-radius: 0.5rem; }
+.dsg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.75rem; }
+.dsg-table th, .dsg-table td { border-bottom: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); padding: 0.25rem 0.5rem; text-align: left; }
 .dsg-table thead th, .dsg-table thead td { background: var(--c-surface); position: sticky; z-index: 2; }
 .dsg-desc-row th, .dsg-desc-row td { top: 0; }
 /* 字段行吸在描述行之下(描述行 ~28px) */
-.dsg-table thead tr:nth-child(2) th { top: 28px; }
+.dsg-table thead tr:nth-child(2) th { top: 1.75rem; }
 .dsg-gutter, .dsg-gutter-2 {
   position: sticky; left: 0; background: var(--c-surface);
-  min-width: 64px; width: 64px; font-weight: 600; color: var(--color-text-secondary, var(--color-text-strong));
+  min-width: 4rem; width: 4rem; font-weight: 600; color: var(--color-text-secondary, var(--color-text-strong));
 }
 .dsg-desc-row .dsg-gutter { z-index: 4; }
 .dsg-gutter-2 { z-index: 3; }
-.dsg-desc { color: var(--color-text-tertiary, var(--color-text-tertiary)); font-weight: 400; font-size: 10.5px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsg-desc { color: var(--color-text-tertiary, var(--color-text-tertiary)); font-weight: 400; font-size: 0.65625rem; max-width: 12.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsg-colhead { white-space: nowrap; }
 .dsg-name { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 600; color: var(--color-text-primary, #0f172a); }
 .dsg-name.slot { color: #1d4ed8; }
-.dsg-ref { margin-left: 4px; padding: 0 4px; font-size: 9px; border-radius: 3px; background: #eef2ff; color: var(--accent); }
-.dsg-kind { margin-left: 4px; padding: 0 4px; font-size: 9px; border-radius: 3px; background: rgb(37 99 235 / 8%); color: #1d4ed8; }
-.dsg-lock { margin-left: 4px; border: 0; background: none; font-size: 10px; color: var(--accent, #4f46e5); cursor: pointer; padding: 0; }
+.dsg-ref { margin-left: 0.25rem; padding: 0 0.25rem; font-size: 0.5625rem; border-radius: 0.1875rem; background: #eef2ff; color: var(--accent); }
+.dsg-kind { margin-left: 0.25rem; padding: 0 0.25rem; font-size: 0.5625rem; border-radius: 0.1875rem; background: rgb(37 99 235 / 8%); color: #1d4ed8; }
+.dsg-lock { margin-left: 0.25rem; border: 0; background: none; font-size: 0.625rem; color: var(--accent, #4f46e5); cursor: pointer; padding: 0; }
 .dsg-lock:hover { text-decoration: underline; }
 
 .dsg-baseline th, .dsg-baseline td { background: var(--surface-raised); color: var(--color-text-secondary, var(--color-text-strong)); }
-.dsg-baseline-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; }
-.dsg-chip { padding: 0 5px; font-size: 9px; border-radius: 3px; background: #fce7f3; color: #be185d; font-weight: 700; }
+.dsg-baseline-cell { max-width: 12.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.6875rem; }
+.dsg-chip { padding: 0 0.3125rem; font-size: 0.5625rem; border-radius: 0.1875rem; background: #fce7f3; color: #be185d; font-weight: 700; }
 
-.dsg-cell { max-width: 220px; }
+.dsg-cell { max-width: 13.75rem; }
 .dsg-cell.override-empty { box-shadow: inset 3px 0 0 #ef4444; }
 .dsg-cell.override-empty :deep(input) { color: #b91c1c; }
-select.dsg-slot-add, .dsg-cell select { height: 26px; font-size: 11.5px; border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); border-radius: 6px; background: var(--c-surface); color: inherit; }
+select.dsg-slot-add, .dsg-cell select { height: 1.625rem; font-size: 0.71875rem; border: 1px solid var(--color-border-tertiary, var(--color-border-tertiary)); border-radius: 0.375rem; background: var(--c-surface); color: inherit; }
 
-.dsg-rowhead { display: flex; align-items: center; gap: 4px; }
-.dsg-del { border: 0; background: none; color: var(--color-text-tertiary, var(--color-text-tertiary)); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+.dsg-rowhead { display: flex; align-items: center; gap: 0.25rem; }
+.dsg-del { border: 0; background: none; color: var(--color-text-tertiary, var(--color-text-tertiary)); cursor: pointer; font-size: 0.8125rem; line-height: 1; padding: 0 0.125rem; }
 .dsg-del:hover { color: var(--sl-bad); }
-.dsg-norow { color: var(--color-text-tertiary, var(--color-text-tertiary)); text-align: center; font-size: 11px; padding: 14px 8px !important; }
-.dsg-hint { font-size: 10.5px; color: var(--color-text-tertiary, var(--color-text-tertiary)); }
+.dsg-norow { color: var(--color-text-tertiary, var(--color-text-tertiary)); text-align: center; font-size: 0.6875rem; padding: 0.875rem 0.5rem !important; }
+.dsg-hint { font-size: 0.65625rem; color: var(--color-text-tertiary, var(--color-text-tertiary)); }
 </style>

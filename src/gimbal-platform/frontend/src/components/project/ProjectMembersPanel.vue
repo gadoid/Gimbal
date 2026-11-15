@@ -107,13 +107,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.card { border: 1px solid var(--color-border-tertiary); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.card { border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .row { display: flex; gap: 0.5rem; align-items: center; }
 .add { margin-bottom: 0.5rem; }
 .muted { color: var(--color-text-tertiary); font-size: 0.8rem; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tbl th, .tbl td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eef2f7; }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 6px; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
+.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
 .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
 .btn.sm { padding: 0.15rem 0.5rem; font-size: 0.78rem; }
 .btn.danger { color: var(--sl-bad); border-color: #fca5a5; }

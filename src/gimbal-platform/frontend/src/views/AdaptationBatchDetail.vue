@@ -117,7 +117,7 @@
     />
 
     <Dialog :open="editOpen" @update:open="editOpen = $event">
-      <DialogContent class="max-w-[520px]">
+      <DialogContent class="max-w-[32.5rem]">
         <DialogHeader>
           <DialogTitle>编辑 payload(JSON,仅 pending)</DialogTitle>
         </DialogHeader>
@@ -136,7 +136,7 @@
     </Dialog>
 
     <Dialog :open="reportOpen" @update:open="reportOpen = $event">
-      <DialogContent class="max-w-[520px]">
+      <DialogContent class="max-w-[32.5rem]">
         <DialogHeader>
           <DialogTitle>回滚报告</DialogTitle>
         </DialogHeader>
@@ -156,13 +156,13 @@
       </DialogContent>
     </Dialog>
   </HubDetailPage>
-  <div v-else-if="adminOnly" class="mx-auto w-full max-w-[min(1480px,100%)] px-4 py-6">
+  <div v-else-if="adminOnly" class="mx-auto w-full max-w-[min(92.5rem,100%)] px-4 py-6">
     <div class="empty-state">
       <p>仅管理员:批次工作台为管理员专用</p>
       <router-link to="/adaptations" class="link">返回变更适配</router-link>
     </div>
   </div>
-  <div v-else-if="loaded" class="mx-auto w-full max-w-[min(1480px,100%)] px-4 py-6">
+  <div v-else-if="loaded" class="mx-auto w-full max-w-[min(92.5rem,100%)] px-4 py-6">
     <div class="empty-state">
       <p>批次不存在或已清理</p>
       <router-link to="/adaptations" class="link">返回变更适配</router-link>
@@ -377,36 +377,36 @@ onMounted(reload)
 <style scoped>
 /* 配色对齐服务区域基座令牌(此前残留 Element-Plus 蓝 #409eff 与灰阶) */
 .hint { @apply text-label font-normal; color: var(--sl-ink-3); }
-.op-tag { margin-right: 4px; }
+.op-tag { margin-right: 0.25rem; }
 .chip {
   @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
-  border-radius: 4px;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 0.25rem;
 }
 .op-check { accent-color: var(--sl-accent); flex: none; }
 .snapshots summary {
   @apply text-body font-semibold;
   cursor: pointer;
   color: var(--sl-ink);
-  margin: 18px 0 8px;
+  margin: 1.125rem 0 0.5rem;
 }
-.snapshots ul { margin: 8px 0; padding-left: 18px; }
+.snapshots ul { margin: 0.5rem 0; padding-left: 1.125rem; }
 .snapshots li { @apply text-label font-normal; }
 .op-row {
   border: 1px solid var(--sl-line);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-bottom: 10px;
+  border-radius: 0.625rem;
+  padding: 0.625rem 0.875rem;
+  margin-bottom: 0.625rem;
   background: var(--c-surface);
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
-.op-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.op-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.375rem; }
 .op-actions { margin-left: auto; }
-.note { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
-.snapshots { margin-top: 18px; }
-.snapshots ul { padding-left: 18px; }
+.note { max-width: 21.25rem; overflow: hidden; text-overflow: ellipsis; }
+.snapshots { margin-top: 1.125rem; }
+.snapshots ul { padding-left: 1.125rem; }
 .link { color: var(--sl-accent); }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

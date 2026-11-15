@@ -990,163 +990,163 @@ defineExpose({ addEdge, addUnit })
 <style scoped>
 /* 容器与管理页/列表页同款节奏(.slib 规范:1480 居中 + 56/32/48) */
 .scp {
-  box-sizing: border-box; max-width: 1480px; min-width: 0;
-  margin: 0 auto; padding: 56px 32px 48px;
-  display: flex; flex-direction: column; gap: 12px;
+  box-sizing: border-box; max-width: 92.5rem; min-width: 0;
+  margin: 0 auto; padding: 3.5rem 2rem 3rem;
+  display: flex; flex-direction: column; gap: 0.75rem;
 }
-.scp-loading { padding: 40px; color: var(--color-text-secondary); }
+.scp-loading { padding: 2.5rem; color: var(--color-text-secondary); }
 
-.scp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.scp-head-main { flex: 1 1 360px; display: flex; flex-direction: column; gap: 2px; }
-.scp-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.scp-head-main { flex: 1 1 22.5rem; display: flex; flex-direction: column; gap: 0.125rem; }
+.scp-title-row { display: flex; align-items: center; gap: 0.625rem; flex-wrap: wrap; }
 .scp-name {
-  font-size: 22px; font-weight: 600; color: inherit; width: 300px;
-  border: 1px solid transparent; border-radius: 6px; padding: 0 6px;
-  margin-left: -6px; background: transparent;
+  font-size: 1.375rem; font-weight: 600; color: inherit; width: 18.75rem;
+  border: 1px solid transparent; border-radius: 0.375rem; padding: 0 0.375rem;
+  margin-left: -0.375rem; background: transparent;
 }
 .scp-name:hover, .scp-name:focus { border-color: rgb(199 210 254); background: var(--c-surface); }
-.scp-save { font-size: 12px; color: var(--color-text-secondary); }
-.scp-actions { display: flex; gap: 10px; }
+.scp-save { font-size: 0.75rem; color: var(--color-text-secondary); }
+.scp-actions { display: flex; gap: 0.625rem; }
 .scp-ghost {
-  height: 36px; padding: 0 14px; border: 1px solid rgb(199 210 254);
-  border-radius: 6px; background: var(--accent-soft); color: var(--accent);
+  height: 2.25rem; padding: 0 0.875rem; border: 1px solid rgb(199 210 254);
+  border-radius: 0.375rem; background: var(--accent-soft); color: var(--accent);
   font: inherit; font-weight: 600; cursor: pointer;
 }
 .scp-ghost:disabled { border-color: var(--color-border-tertiary); background: var(--c-surface); color: var(--color-text-tertiary); cursor: not-allowed; }
 .scp-primary {
-  height: 36px; padding: 0 16px; border: 0; border-radius: 6px;
+  height: 2.25rem; padding: 0 1rem; border: 0; border-radius: 0.375rem;
   background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
 }
 .scp-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .scp-cols {
-  display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch;
+  display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: stretch;
 }
-.scp-center { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.scp-center { flex: 999 1 40rem; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .scp-rail {
-  flex: 1 1 260px; max-width: 320px; border: 1px solid var(--color-border-tertiary); border-radius: 10px;
-  padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  flex: 1 1 16.25rem; max-width: 20rem; border: 1px solid var(--color-border-tertiary); border-radius: 0.625rem;
+  padding: 0.875rem; display: flex; flex-direction: column; gap: 0.625rem;
   background: var(--c-surface); color: var(--color-text-primary);
 }
 
 .scp-strip {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 8px 12px; border: 1px dashed var(--color-border-secondary); border-radius: 8px; background: var(--c-surface);
-  min-height: 36px;
+  display: flex; align-items: center; gap: 0.625rem; flex-wrap: wrap;
+  padding: 0.5rem 0.75rem; border: 1px dashed var(--color-border-secondary); border-radius: 0.5rem; background: var(--c-surface);
+  min-height: 2.25rem;
 }
-.scp-strip-title { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); }
-.scp-strip-hint { font-size: 12px; color: var(--color-text-tertiary); }
+.scp-strip-title { font-size: 0.75rem; font-weight: 600; color: var(--color-text-secondary); }
+.scp-strip-hint { font-size: 0.75rem; color: var(--color-text-tertiary); }
 .scp-strip-chip {
-  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px;
-  border-radius: 4px; background: var(--surface-raised); border: 1px solid var(--color-border-tertiary); font-size: 12px;
+  display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.125rem 0.625rem;
+  border-radius: 0.25rem; background: var(--surface-raised); border: 1px solid var(--color-border-tertiary); font-size: 0.75rem;
 }
-.scp-strip-chip .mono { color: var(--color-text-secondary); font-size: 11px; }
+.scp-strip-chip .mono { color: var(--color-text-secondary); font-size: 0.6875rem; }
 .scp-strip-chip button { border: 0; background: none; cursor: pointer; color: var(--color-text-secondary); }
 
 .scp-canvas {
-  position: relative; height: 500px; overflow: hidden;
-  border: 1px solid var(--color-border-tertiary); border-radius: 10px; background: var(--c-surface);
+  position: relative; height: 31.25rem; overflow: hidden;
+  border: 1px solid var(--color-border-tertiary); border-radius: 0.625rem; background: var(--c-surface);
 }
 .scp-canvas :deep(.vue-flow__pane) {
   background-image: radial-gradient(var(--color-border-tertiary) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 .scp-empty {
-  position: absolute; left: 140px; top: 40%; z-index: 4; pointer-events: none;
-  width: 260px; padding: 18px; box-sizing: border-box;
-  border: 2px dashed var(--accent-soft-border); border-radius: 10px; background: var(--accent-soft);
-  display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--accent);
+  position: absolute; left: 8.75rem; top: 40%; z-index: 4; pointer-events: none;
+  width: 16.25rem; padding: 1.125rem; box-sizing: border-box;
+  border: 2px dashed var(--accent-soft-border); border-radius: 0.625rem; background: var(--accent-soft);
+  display: flex; flex-direction: column; align-items: center; gap: 0.125rem; color: var(--accent);
 }
 .scp-empty strong { font-weight: 600; }
-.scp-empty span { font-size: 12px; color: var(--color-text-secondary); }
+.scp-empty span { font-size: 0.75rem; color: var(--color-text-secondary); }
 .scp-cycle {
-  position: absolute; right: 14px; bottom: 14px; z-index: 5; max-width: 320px;
-  padding: 8px 10px; border-radius: 6px; background: #fee2e2; color: #991b1b;
-  font-size: 12px; box-shadow: 0 1px 6px rgb(67 56 202 / 12%);
+  position: absolute; right: 0.875rem; bottom: 0.875rem; z-index: 5; max-width: 20rem;
+  padding: 0.5rem 0.625rem; border-radius: 0.375rem; background: #fee2e2; color: #991b1b;
+  font-size: 0.75rem; box-shadow: 0 1px 6px rgb(67 56 202 / 12%);
 }
 
 .scu {
-  width: 176px; height: 56px; box-sizing: border-box; padding: 6px 12px;
-  border: 1px solid var(--color-border-secondary); border-radius: 8px; background: var(--c-surface); color: var(--color-text-primary);
+  width: 11rem; height: 3.5rem; box-sizing: border-box; padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border-secondary); border-radius: 0.5rem; background: var(--c-surface); color: var(--color-text-primary);
   display: flex; flex-direction: column; justify-content: center; cursor: grab;
 }
 .scu.sel { border: 2px solid var(--accent); box-shadow: 0 1px 6px rgb(67 56 202 / 12%); }
-.scu-ref { font-size: 11px; color: var(--accent); }
+.scu-ref { font-size: 0.6875rem; color: var(--accent); }
 .scu-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scu-handle {
-  width: 10px !important; height: 10px !important; right: -6px !important;
+  width: 0.625rem !important; height: 0.625rem !important; right: -0.375rem !important;
   border: 2px solid var(--accent) !important; background: var(--c-surface) !important;
 }
 .scu-handle-in {
-  width: 8px !important; height: 8px !important; left: -5px !important;
+  width: 0.5rem !important; height: 0.5rem !important; left: -0.3125rem !important;
   border: 2px solid var(--accent-soft-border) !important; background: var(--c-surface) !important;
 }
 .scs {
-  width: 150px; height: 48px; box-sizing: border-box; padding: 6px 12px;
-  border: 1.5px dashed var(--accent); border-radius: 8px; background: var(--accent-soft);
-  opacity: 0.85; display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 9.375rem; height: 3rem; box-sizing: border-box; padding: 0.375rem 0.75rem;
+  border: 1.5px dashed var(--accent); border-radius: 0.5rem; background: var(--accent-soft);
+  opacity: 0.85; display: flex; align-items: center; justify-content: center; gap: 0.375rem;
 }
-.scs-label { color: var(--accent); font-size: 12.5px; font-weight: 600; }
-.scs-x { border: 0; background: none; color: var(--color-text-tertiary); cursor: pointer; font-size: 14px; }
+.scs-label { color: var(--accent); font-size: 0.78125rem; font-weight: 600; }
+.scs-x { border: 0; background: none; color: var(--color-text-tertiary); cursor: pointer; font-size: 0.875rem; }
 .scstart {
-  width: 88px; height: 40px; border-radius: 9999px; background: var(--color-text-primary); color: #f5f3ff;
+  width: 5.5rem; height: 2.5rem; border-radius: 624.9375rem; background: var(--color-text-primary); color: #f5f3ff;
   display: flex; align-items: center; justify-content: center; font-weight: 600;
 }
 
 .scp-status {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-  padding: 10px 14px; border: 1px solid var(--accent-soft-border); border-radius: 8px; background: var(--c-surface);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
+  padding: 0.625rem 0.875rem; border: 1px solid var(--accent-soft-border); border-radius: 0.5rem; background: var(--c-surface);
 }
-.scp-status-label { font-size: 12px; color: var(--color-text-secondary); }
+.scp-status-label { font-size: 0.75rem; color: var(--color-text-secondary); }
 .scp-mode-chip {
-  padding: 2px 10px; border-radius: 4px; background: var(--accent-soft); color: var(--accent);
+  padding: 0.125rem 0.625rem; border-radius: 0.25rem; background: var(--accent-soft); color: var(--accent);
   font-weight: 600;
 }
-.scp-stats { font-size: 12px; }
-.scp-why { flex: 1 1 240px; font-size: 12px; color: var(--color-text-secondary); }
+.scp-stats { font-size: 0.75rem; }
+.scp-why { flex: 1 1 15rem; font-size: 0.75rem; color: var(--color-text-secondary); }
 .scp-q {
-  width: 24px; height: 24px; border: 1px solid var(--accent-soft-border); border-radius: 9999px;
+  width: 1.5rem; height: 1.5rem; border: 1px solid var(--accent-soft-border); border-radius: 624.9375rem;
   background: var(--c-surface); color: var(--accent); font-weight: 600; cursor: pointer;
 }
 
-.scp-rail-title { margin: 0; font-size: 14px; font-weight: 600; }
-.scp-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--color-text-secondary); }
+.scp-rail-title { margin: 0; font-size: 0.875rem; font-weight: 600; }
+.scp-steps { margin: 0; padding-left: 1.125rem; display: flex; flex-direction: column; gap: 0.375rem; color: var(--color-text-secondary); }
 .scp-steps b { color: var(--color-text-primary); }
-.scp-rail-note { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
-.scp-linklike { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
-.scp-rail-cap { font-size: 11px; color: var(--color-text-secondary); }
-.scp-sel-title { font-size: 14px; font-weight: 600; }
-.scp-sel-sid { font-size: 11px; color: var(--color-text-tertiary); }
-.scp-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--color-text-secondary); }
+.scp-rail-note { margin: 0; font-size: 0.75rem; color: var(--color-text-secondary); }
+.scp-linklike { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 0.75rem; }
+.scp-rail-cap { font-size: 0.6875rem; color: var(--color-text-secondary); }
+.scp-sel-title { font-size: 0.875rem; font-weight: 600; }
+.scp-sel-sid { font-size: 0.6875rem; color: var(--color-text-tertiary); }
+.scp-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.75rem; font-weight: 500; color: var(--color-text-secondary); }
 .scp-field-label { font-weight: 500; }
 .scp-ref-in, .scp-finish input {
-  height: 30px; padding: 0 8px; border: 1px solid var(--color-border-tertiary); border-radius: 6px;
-  font: inherit; font-size: 12.5px; color: var(--color-text-primary);
+  height: 1.875rem; padding: 0 0.5rem; border: 1px solid var(--color-border-tertiary); border-radius: 0.375rem;
+  font: inherit; font-size: 0.78125rem; color: var(--color-text-primary);
 }
 .scp-danger {
-  height: 30px; border: 1px solid var(--color-border-tertiary); border-radius: 6px;
-  background: var(--c-surface); color: #ef4444; font: inherit; font-size: 12px; cursor: pointer;
+  height: 1.875rem; border: 1px solid var(--color-border-tertiary); border-radius: 0.375rem;
+  background: var(--c-surface); color: #ef4444; font: inherit; font-size: 0.75rem; cursor: pointer;
 }
 
 .scp-fmask {
   position: fixed; inset: 0; z-index: 70; display: flex; align-items: center;
-  justify-content: center; background: rgb(15 23 42 / 45%); padding: 16px;
+  justify-content: center; background: rgb(15 23 42 / 45%); padding: 1rem;
 }
 .scp-finish {
-  width: min(420px, 100%); background: var(--c-surface); border: 1px solid var(--accent-soft-border); border-radius: 10px;
-  padding: 16px; display: flex; flex-direction: column; gap: 10px; color: var(--color-text-primary);
+  width: min(26.25rem, 100%); background: var(--c-surface); border: 1px solid var(--accent-soft-border); border-radius: 0.625rem;
+  padding: 1rem; display: flex; flex-direction: column; gap: 0.625rem; color: var(--color-text-primary);
   box-shadow: 0 20px 50px rgb(0 0 0 / 12%);
 }
-.scp-finish h2 { margin: 0; font-size: 14px; }
-.scp-ferr { color: var(--sl-bad); font-size: 12px; }
+.scp-finish h2 { margin: 0; font-size: 0.875rem; }
+.scp-ferr { color: var(--sl-bad); font-size: 0.75rem; }
 .scp-fsummary {
-  padding: 8px 10px; border-radius: 6px; background: var(--surface-raised); font-size: 12px;
+  padding: 0.5rem 0.625rem; border-radius: 0.375rem; background: var(--surface-raised); font-size: 0.75rem;
 }
-.scp-fcheck { font-size: 12px; color: #166534; }
+.scp-fcheck { font-size: 0.75rem; color: #166534; }
 .scp-fcheck.bad { color: var(--sl-warn); }
-.scp-fafter { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.scp-fafter legend { font-weight: 500; color: var(--color-text-secondary); margin-bottom: 4px; }
-.scp-facts { display: flex; justify-content: flex-end; gap: 8px; }
+.scp-fafter { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.75rem; }
+.scp-fafter legend { font-weight: 500; color: var(--color-text-secondary); margin-bottom: 0.25rem; }
+.scp-facts { display: flex; justify-content: flex-end; gap: 0.5rem; }
 
 .mono { font-family: ui-monospace, Menlo, monospace; }
 </style>

@@ -117,13 +117,13 @@ function onKeydown(e: KeyboardEvent) {
 .jpi-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
   font-family: var(--font-mono);
   color: var(--c-text-primary, #1f2937);
   background: var(--c-bg-primary, #fff);
   border: 1px solid var(--c-border, #d0d7de);
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 .jpi-list {
   position: absolute;
@@ -131,34 +131,34 @@ function onKeydown(e: KeyboardEvent) {
   top: 100%;
   left: 0;
   min-width: 100%;
-  max-height: 220px;
+  max-height: 13.75rem;
   overflow-y: auto;
-  margin-top: 2px;
-  padding: 4px;
+  margin-top: 0.125rem;
+  padding: 0.25rem;
   background: var(--c-bg-primary, #fff);
   border: 1px solid var(--c-border, #d0d7de);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   box-shadow: 0 6px 16px rgba(15, 23, 42, .12);
 }
 .jpi-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   width: 100%;
-  padding: 4px 6px;
+  padding: 0.25rem 0.375rem;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   cursor: pointer;
   text-align: left;
 }
 .jpi-item:hover, .jpi-item.jpi-active { background: var(--c-bg-secondary, #f3f4f6); }
-.jpi-seg { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-primary, #1f2937); }
+.jpi-seg { font-family: var(--font-mono); font-size: 0.75rem; color: var(--c-text-primary, #1f2937); }
 .jpi-state {
-  font-size: 10px; padding: 0 4px; border-radius: 3px;
+  font-size: 0.625rem; padding: 0 0.25rem; border-radius: 0.1875rem;
   background: var(--c-bg-secondary, #f3f4f6); color: var(--c-text-tertiary, #6b7280);
 }
 .jpi-state.s-carry { background: #fef3c7; color: #92400e; }
-.jpi-kind { font-size: 10px; color: var(--c-text-tertiary, #6b7280); }
-.jpi-count { font-size: 10px; color: var(--c-text-tertiary, #6b7280); margin-left: auto; }
+.jpi-kind { font-size: 0.625rem; color: var(--c-text-tertiary, #6b7280); }
+.jpi-count { font-size: 0.625rem; color: var(--c-text-tertiary, #6b7280); margin-left: auto; }
 </style>

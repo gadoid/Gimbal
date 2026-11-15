@@ -8,7 +8,7 @@
     <!-- 配置列 -->
     <div class="flex min-w-0 flex-1 flex-col gap-5">
       <div class="flex flex-wrap items-center gap-2">
-        <h2 class="m-0 text-[16px] leading-[22px] font-semibold">工作台身份卡</h2>
+        <h2 class="m-0 text-[1rem] leading-[1.375rem] font-semibold">工作台身份卡</h2>
         <QTip text="改动即时保存，换设备同步" />
         <div class="flex-grow" />
         <Button variant="outline" size="sm" data-testid="card-reset" @click="reset">恢复默认</Button>
@@ -35,7 +35,7 @@
               >▼</button>
             </span>
             <input
-              type="checkbox" class="h-[15px] w-[15px] flex-none" :checked="selected(s.id)"
+              type="checkbox" class="h-[0.9375rem] w-[0.9375rem] flex-none" :checked="selected(s.id)"
               :disabled="!selected(s.id) && cfg.stats.length >= 4"
               @change="toggleStat(s.id)"
             />
@@ -86,7 +86,7 @@
     </div>
 
     <!-- 预览列 -->
-    <div class="flex w-[288px] flex-none flex-col gap-2">
+    <div class="flex w-[18rem] flex-none flex-col gap-2">
       <span class="text-caption font-semibold text-signal-ink/60">预览</span>
       <UserIdentityCard :config="cfg" :summary="summary" preview />
     </div>

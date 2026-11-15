@@ -249,42 +249,42 @@ onUnmounted(stop)            // 卸载即断流(§8 连接预算)
 </template>
 
 <style scoped>
-.logs-panel { border: 1px solid var(--border, var(--color-border-tertiary)); border-radius: 8px; overflow: hidden; }
+.logs-panel { border: 1px solid var(--border, var(--color-border-tertiary)); border-radius: 0.5rem; overflow: hidden; }
 .logs-toolbar {
-  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.625rem;
   border-bottom: 1px solid var(--border, var(--color-border-tertiary)); background: var(--surface-raised); flex-wrap: wrap;
 }
-.logs-title { font-size: 13px; font-weight: 600; }
+.logs-title { font-size: 0.8125rem; font-weight: 600; }
 .logs-select, .logs-input {
-  font-size: 12px; padding: 2px 6px; border: 1px solid var(--color-border-secondary);
-  border-radius: 4px; background: var(--c-surface); height: 24px;
+  font-size: 0.75rem; padding: 0.125rem 0.375rem; border: 1px solid var(--color-border-secondary);
+  border-radius: 0.25rem; background: var(--c-surface); height: 1.5rem;
 }
-.logs-input { width: 130px; }
-.logs-state { font-size: 11px; padding: 1px 8px; border-radius: 10px; }
+.logs-input { width: 8.125rem; }
+.logs-state { font-size: 0.6875rem; padding: 0.0625rem 0.5rem; border-radius: 0.625rem; }
 .st-live { background: #dcfce7; color: var(--sl-ok); }
 .st-connecting { background: #fef9c3; color: #a16207; }
 .st-done { background: #e0e7ff; color: var(--accent); }
 .st-failed, .st-idle { background: #fee2e2; color: #b91c1c; }
-.logs-count { font-size: 11px; margin-left: auto; }
+.logs-count { font-size: 0.6875rem; margin-left: auto; }
 /* 300px → 480px(2026-11-12 +60%):实时日志升默认 tab,加大可视窗口 */
-.logs-scroll { height: 480px; overflow-y: auto; padding: 4px 0; background: var(--c-surface); }
+.logs-scroll { height: 30rem; overflow-y: auto; padding: 0.25rem 0; background: var(--c-surface); }
 .log-row {
   /* S7:行高恒定(窗口化渲染的前提)—— 改此值须同步 script 里 ROW_H */
-  display: flex; gap: 8px; padding: 0 10px; font-size: 12px;
-  height: 22px; line-height: 22px; white-space: nowrap; align-items: baseline;
+  display: flex; gap: 0.5rem; padding: 0 0.625rem; font-size: 0.75rem;
+  height: 1.375rem; line-height: 1.375rem; white-space: nowrap; align-items: baseline;
 }
 .log-row:hover { background: var(--soft-neutral-bg); }
-.log-ts { color: var(--color-text-tertiary); flex: none; width: 86px; }
-.log-lv { flex: none; width: 64px; font-weight: 600; }
+.log-ts { color: var(--color-text-tertiary); flex: none; width: 5.375rem; }
+.log-lv { flex: none; width: 4rem; font-weight: 600; }
 .lv-warning .log-lv { color: var(--sl-warn); }
 .lv-error .log-lv, .lv-critical .log-lv { color: #b91c1c; }
 .lv-success .log-lv { color: var(--sl-ok); }
 .lv-info .log-lv, .lv-debug .log-lv, .lv-trace .log-lv { color: var(--color-text-strong); }
 .log-cat {
-  flex: none; font-size: 11px; background: #eff6ff; color: #1d4ed8;
-  padding: 0 6px; border-radius: 4px;
+  flex: none; font-size: 0.6875rem; background: #eff6ff; color: #1d4ed8;
+  padding: 0 0.375rem; border-radius: 0.25rem;
 }
-.log-step { flex: none; width: 76px; overflow: hidden; text-overflow: ellipsis; }
+.log-step { flex: none; width: 4.75rem; overflow: hidden; text-overflow: ellipsis; }
 .log-msg { overflow: hidden; text-overflow: ellipsis; }
-.logs-empty { text-align: center; padding: 24px 0; font-size: 12px; }
+.logs-empty { text-align: center; padding: 1.5rem 0; font-size: 0.75rem; }
 </style>

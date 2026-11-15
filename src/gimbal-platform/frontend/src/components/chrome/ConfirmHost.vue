@@ -12,7 +12,7 @@
   <Dialog :open="!!dialogState.current" @update:open="onOpenChange">
     <DialogContent
       v-if="dialogState.current"
-      class="max-w-[420px] gap-4"
+      class="max-w-[26.25rem] gap-4"
       @escape-key-down.prevent="cancelDialog"
       @interact-outside.prevent="cancelDialog"
       @open-auto-focus="onOpenAutoFocus"

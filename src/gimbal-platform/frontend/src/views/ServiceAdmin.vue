@@ -154,7 +154,7 @@
                 <!-- 说明列:服务级元数据,格内点击即编辑 -->
                 <td class="mx-desc-cell">
                   <template v-if="descEdit && descEdit.svc === svc">
-                    <Input v-model="descEdit.text" class="h-8 w-full min-w-[160px]"
+                    <Input v-model="descEdit.text" class="h-8 w-full min-w-[10rem]"
                            placeholder="该服务的基本信息(做什么/负责人/注意点)"
                            :data-testid="`meta-input-${svc}`" />
                     <div class="row-acts mt-1">
@@ -177,7 +177,7 @@
                   <!-- 有地址:点击行内编辑 -->
                   <template v-if="depOf(svc, e.id)">
                     <template v-if="cellEdit && cellEdit.svc === svc && cellEdit.envId === e.id">
-                      <Input v-model="cellEdit.url" class="h-8 w-full min-w-[160px]"
+                      <Input v-model="cellEdit.url" class="h-8 w-full min-w-[10rem]"
                              :data-testid="`mx-url-${svc}-${e.id}`" />
                       <div class="row-acts mt-1">
                         <button type="button" class="svc-link"
@@ -197,7 +197,7 @@
                   <!-- 缺:就地登记(点开才变输入,不满屏噪音) -->
                   <template v-else>
                     <template v-if="cellNew && cellNew.svc === svc && cellNew.envId === e.id">
-                      <Input v-model="cellNew.url" class="h-8 w-full min-w-[160px]"
+                      <Input v-model="cellNew.url" class="h-8 w-full min-w-[10rem]"
                              placeholder="https://…" :data-testid="`mx-new-url-${svc}-${e.id}`" />
                       <div class="row-acts mt-1">
                         <button type="button" class="svc-link"
@@ -521,7 +521,7 @@ onMounted(async () => {
 
 <style scoped>
 /* 矩阵:首两列 sticky(服务/说明)+ 环境列聚焦高亮(卡片内双向滚动) */
-.mx-wrap { overflow: auto; max-height: 620px; }
+.mx-wrap { overflow: auto; max-height: 38.75rem; }
 .mx-table th:first-child,
 .mx-table td.mx-svc-cell,
 .mx-table th:nth-child(2),
@@ -532,11 +532,11 @@ onMounted(async () => {
 .mx-table th:first-child,
 .mx-table td.mx-svc-cell { left: 0; }
 .mx-table th:nth-child(2),
-.mx-table td.mx-desc-cell { left: 300px; }
+.mx-table td.mx-desc-cell { left: 18.75rem; }
 .mx-table thead th { z-index: 2; }
 .mx-table td.mx-svc-cell {
-  min-width: 300px;
-  max-width: 340px;
+  min-width: 18.75rem;
+  max-width: 21.25rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -544,67 +544,67 @@ onMounted(async () => {
 .mx-svc-link {
   color: var(--sl-ink, var(--sl-ink));
   text-decoration: none;
-  margin: 0 2px;
+  margin: 0 0.125rem;
   font-weight: 600;
 }
 .mx-svc-link:hover {
   color: var(--sl-accent, var(--sl-accent));
   text-decoration: underline;
 }
-.mx-svc-cell .svc-link { margin-left: 8px; }
-.mx-desc-cell { min-width: 180px; max-width: 260px; }
+.mx-svc-cell .svc-link { margin-left: 0.5rem; }
+.mx-desc-cell { min-width: 11.25rem; max-width: 16.25rem; }
 .mx-desc {
   display: block;
-  max-width: 240px;
+  max-width: 15rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  padding: 2px 4px;
+  padding: 0.125rem 0.25rem;
   border: 0;
   background: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--sl-ink, var(--sl-ink));
 }
 .mx-desc:hover { color: var(--sl-accent, var(--sl-accent)); }
-.mx-cell { min-width: 170px; }
+.mx-cell { min-width: 10.625rem; }
 .mx-cell.mx-focus, .mx-table th.mx-focus { background: var(--sl-accent-soft, #eef4ff); }
 .mx-url {
   display: block;
-  max-width: 260px;
+  max-width: 16.25rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  padding: 2px 4px;
+  padding: 0.125rem 0.25rem;
   border: 0;
   background: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--sl-ink, var(--sl-ink));
 }
 .mx-url:hover { color: var(--sl-accent, var(--sl-accent)); }
 .mx-kind td {
   background: var(--sl-canvas, #f7f8fa);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 /* 环境表单(自原独立部署页随迁) */
 .form-grid {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 8px 10px;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 0.5rem 0.625rem;
   align-items: center;
-  max-width: 640px;
-  margin-bottom: 10px;
+  max-width: 40rem;
+  margin-bottom: 0.625rem;
 }
-.form-grid .lb { font-size: 11.5px; color: var(--sl-ink-3); }
+.form-grid .lb { font-size: 0.71875rem; color: var(--sl-ink-3); }
 .line-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 640px;
-  margin-top: 6px;
+  gap: 0.5rem;
+  max-width: 40rem;
+  margin-top: 0.375rem;
 }
 </style>

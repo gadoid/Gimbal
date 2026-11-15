@@ -267,27 +267,27 @@ function hasKeys(v: unknown): boolean {
 </script>
 
 <style scoped>
-.rp { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
+.rp { display: flex; flex-direction: column; gap: 0.875rem; margin-bottom: 1rem; }
 .rp-empty {
   @apply text-label font-normal;
-  margin: 0; padding: 18px; color: var(--color-text-tertiary);
-  background: var(--c-surface); border: 0.5px dashed var(--color-border-tertiary); border-radius: 8px;
+  margin: 0; padding: 1.125rem; color: var(--color-text-tertiary);
+  background: var(--c-surface); border: 0.5px dashed var(--color-border-tertiary); border-radius: 0.5rem;
 }
 .rp-error { color: var(--sl-bad); }
 .rp-summary {
-  display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center;
-  padding: 12px 16px; background: var(--c-surface); border: 0.5px solid var(--color-border-tertiary); border-radius: 8px;
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center;
+  padding: 0.75rem 1rem; background: var(--c-surface); border: 0.5px solid var(--color-border-tertiary); border-radius: 0.5rem;
   @apply text-label font-normal;
 }
-.rp-verdict { @apply text-label font-semibold; padding: 2px 10px; border-radius: 4px; }
+.rp-verdict { @apply text-label font-semibold; padding: 0.125rem 0.625rem; border-radius: 0.25rem; }
 .rp-kv { color: var(--color-text-secondary); }
 .rp-kv b { color: var(--color-text-primary); font-weight: 600; }
 .rp-failure {
-  padding: 14px 16px; background: var(--c-surface); border: 0.5px solid #fecaca;
-  border-left: 3px solid var(--sl-bad); border-radius: 8px;
-  display: flex; flex-direction: column; gap: 8px;
+  padding: 0.875rem 1rem; background: var(--c-surface); border: 0.5px solid #fecaca;
+  border-left: 3px solid var(--sl-bad); border-radius: 0.5rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
 }
-.rp-failure-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.rp-failure-head { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: baseline; }
 /* S1 深链入口(自「查看日志」迁入):链接式按钮,推到行尾 */
 .rp-locate {
   @apply text-label font-normal; color: var(--sl-accent); background: none;
@@ -295,41 +295,41 @@ function hasKeys(v: unknown): boolean {
 }
 .rp-step-title { color: var(--color-text-primary); font-weight: 600; }
 .rp-dim { color: var(--color-text-tertiary); @apply text-label font-normal; }
-.rp-pad { padding: 8px 12px; margin: 0; }
+.rp-pad { padding: 0.5rem 0.75rem; margin: 0; }
 .rp-call { margin: 0; color: var(--color-text-secondary); @apply text-label font-normal; }
 .rp-err {
-  margin: 0; padding: 6px 10px; color: #991b1b; background: #fef2f2;
-  border-radius: 4px; @apply text-label font-normal; white-space: pre-wrap; word-break: break-all;
+  margin: 0; padding: 0.375rem 0.625rem; color: #991b1b; background: #fef2f2;
+  border-radius: 0.25rem; @apply text-label font-normal; white-space: pre-wrap; word-break: break-all;
 }
-.rp-tag { @apply text-micro font-semibold; display: inline-flex; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.rp-tag { @apply text-micro font-semibold; display: inline-flex; padding: 0.125rem 0.5rem; border-radius: 0.25rem; white-space: nowrap; }
 .rp-assert, .rp-steps {
   width: 100%; border-collapse: collapse; @apply text-label font-normal; background: var(--c-surface);
 }
 .rp-assert th, .rp-steps th {
-  text-align: left; padding: 6px 10px; color: var(--color-text-secondary);
+  text-align: left; padding: 0.375rem 0.625rem; color: var(--color-text-secondary);
   font-weight: 500; border-bottom: 0.5px solid var(--color-border-tertiary);
 }
-.rp-assert td, .rp-steps td { padding: 6px 10px; border-bottom: 0.5px solid var(--soft-neutral-bg); vertical-align: top; }
+.rp-assert td, .rp-steps td { padding: 0.375rem 0.625rem; border-bottom: 0.5px solid var(--soft-neutral-bg); vertical-align: top; }
 .rp-actual { color: var(--sl-bad); font-weight: 600; }
-.rp-evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.rp-ev-col h4 { margin: 0 0 4px; @apply text-label font-semibold; color: var(--color-text-secondary); }
-.rp-ev-col p { margin: 0 0 4px; word-break: break-all; }
+.rp-evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.rp-ev-col h4 { margin: 0 0 0.25rem; @apply text-label font-semibold; color: var(--color-text-secondary); }
+.rp-ev-col p { margin: 0 0 0.25rem; word-break: break-all; }
 .rp-ev-col pre {
-  margin: 0 0 6px; padding: 8px 10px; max-height: 260px; overflow: auto;
-  background: var(--surface-raised); border: 0.5px solid var(--color-border-tertiary); border-radius: 4px;
+  margin: 0 0 0.375rem; padding: 0.5rem 0.625rem; max-height: 16.25rem; overflow: auto;
+  background: var(--surface-raised); border: 0.5px solid var(--color-border-tertiary); border-radius: 0.25rem;
   @apply text-micro font-normal; white-space: pre-wrap; word-break: break-all;
 }
-.rp-group { background: var(--c-surface); border: 0.5px solid var(--color-border-tertiary); border-radius: 8px; overflow: hidden; }
+.rp-group { background: var(--c-surface); border: 0.5px solid var(--color-border-tertiary); border-radius: 0.5rem; overflow: hidden; }
 .rp-group-head {
-  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
-  padding: 8px 12px; background: var(--surface-raised); border-bottom: 0.5px solid var(--color-border-tertiary);
+  display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center;
+  padding: 0.5rem 0.75rem; background: var(--surface-raised); border-bottom: 0.5px solid var(--color-border-tertiary);
 }
 .rp-group-title { @apply text-label font-semibold; color: var(--color-text-primary); }
 .rp-row-fail td { background: #fffafa; }
-.rp-call-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); }
+.rp-call-cell { max-width: 22.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); }
 .rp-detail td { background: #fcfcfd; }
 .rp-toggle { @apply text-label font-normal; color: var(--sl-accent); background: none; border: 0; cursor: pointer; padding: 0; }
-.rp-extracts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0 0; }
+.rp-extracts { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.5rem 0 0; }
 .rp-extracts dt { color: var(--color-text-secondary); }
 .rp-extracts dd { margin: 0; word-break: break-all; }
 .mono { font-family: var(--font-mono, monospace); }

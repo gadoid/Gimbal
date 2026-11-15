@@ -104,14 +104,14 @@ onMounted(async () => {
 .ex-row { grid-template-columns: auto minmax(0, 1fr) auto auto auto; }
 .ex-id { color: var(--sl-ink-3); }
 .ex-status {
-  padding: 1px 7px;
-  font-size: 10.5px;
+  padding: 0.0625rem 0.4375rem;
+  font-size: 0.65625rem;
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   white-space: nowrap;
 }
 .ex-counts { color: var(--sl-ink-2); white-space: nowrap; }
-.ex-counts em { font-style: normal; color: var(--color-border-secondary); padding: 0 1px; }
+.ex-counts em { font-style: normal; color: var(--color-border-secondary); padding: 0 0.0625rem; }
 </style>
 
 <style src="@/styles/status-colors.css"></style>

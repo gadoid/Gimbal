@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import './styles/theme.css'
+import './styles/page-scale.css'
 import './styles/dual-theme.css'
 import './styles/composer.css'
 import './styles/scenario-lib.css'

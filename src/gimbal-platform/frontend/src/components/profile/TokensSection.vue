@@ -10,7 +10,7 @@
   <section id="tokens" class="flex flex-col gap-4" data-testid="tokens-section">
     <!-- 分区头(说明收进问号悬浮,2026-11-05 归集轮) -->
     <div class="flex flex-wrap items-center gap-2">
-      <h2 class="m-0 text-[16px] leading-[22px] font-semibold">
+      <h2 class="m-0 text-[1rem] leading-[1.375rem] font-semibold">
         {{ mode === 'admin' ? `${props.ownerName ?? '该用户'} 的访问令牌` : '访问令牌' }}
       </h2>
       <QTip :text="sectionTip" />
@@ -121,7 +121,7 @@
       {{ mode === 'admin' ? '该用户还没有访问令牌。' : `还没有${kindLabel}；点右上角「创建访问令牌」签发第一张。` }}
     </div>
     <div v-else class="overflow-x-auto rounded-card border border-signal-line bg-signal-card" data-testid="token-list">
-      <table class="w-full min-w-[900px] border-collapse text-body">
+      <table class="w-full min-w-[56.25rem] border-collapse text-body">
         <thead>
           <tr class="bg-signal-soft text-left text-caption text-signal-ink/60">
             <th class="px-4 py-2.5 font-medium">名称</th>
@@ -185,7 +185,7 @@
               <td colspan="7" class="bg-signal-soft p-4">
                 <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
                   <div class="flex flex-col gap-3">
-                    <dl class="m-0 grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 gap-y-2 text-caption">
+                    <dl class="m-0 grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-caption">
                       <dt class="text-signal-ink/60">令牌</dt>
                       <dd class="m-0 mono">{{ t.name }} · gtk_{{ t.tokenHint }}</dd>
                       <template v-if="detailOf(t)">
@@ -271,19 +271,19 @@
           <DialogDescription>吊销是终态：令牌永久不可用，不能续期或重新生成，只保留查看</DialogDescription>
         </DialogHeader>
         <div class="flex flex-col gap-3.5">
-          <div class="flex items-start gap-2.5 rounded-lg border border-[#C7D7FB] bg-[#EEF4FF] px-3 py-2.5 text-[12px] text-[#1F3B73]">
+          <div class="flex items-start gap-2.5 rounded-lg border border-[#C7D7FB] bg-[#EEF4FF] px-3 py-2.5 text-[0.75rem] text-[#1F3B73]">
             <span class="font-semibold whitespace-nowrap">只是轮换？</span>
             <span>用「重新生成」：令牌 id 不变，旧明文立即作废，经它注册的定时任务不受影响。</span>
             <div class="flex-grow" />
             <button class="font-medium whitespace-nowrap text-signal hover:underline" @click="revokeToRegen">改为重新生成</button>
           </div>
           <div v-if="revokePending.length" class="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3.5">
-            <span class="text-[12px] font-semibold text-red-800">
+            <span class="text-[0.75rem] font-semibold text-red-800">
               经此令牌注册的 {{ revokePending.length }} 个任务将暂停，需要在集成详情「解绑令牌」后由你接管
             </span>
             <div
               v-for="t in revokePending" :key="t.id"
-              class="flex items-center gap-2.5 rounded-md border border-signal-line bg-white px-2.5 py-2 text-[12px]"
+              class="flex items-center gap-2.5 rounded-md border border-signal-line bg-white px-2.5 py-2 text-[0.75rem]"
             >
               <span class="flex-1">{{ t.name }}</span>
               <RouterLink :to="`/integrations/${t.id}`" class="text-signal hover:underline">打开</RouterLink>
@@ -816,13 +816,13 @@ onMounted(() => void reload())
 
 <style scoped>
 .chip-toggle {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
+  height: 1.625rem;
+  padding: 0 0.625rem;
+  border-radius: 62.4375rem;
   border: 1px solid var(--color-signal-line, var(--sl-line));
   background: var(--c-surface);
   color: var(--color-signal-ink, var(--sl-ink));
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .chip-toggle.is-on {
   border-color: var(--color-signal, var(--sl-accent));
@@ -830,17 +830,17 @@ onMounted(() => void reload())
   color: #1f55c4;
 }
 .chip-pill {
-  padding: 1px 8px;
-  border-radius: 999px;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 62.4375rem;
   background: var(--soft-accent-bg);
   color: #1f55c4;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 .status-pill {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  border-radius: 62.4375rem;
   white-space: nowrap;
 }
 .st-active { background: #e4f5ea; color: var(--sl-ok); }
@@ -848,9 +848,9 @@ onMounted(() => void reload())
 .st-invalidated { background: #fee2e2; color: #b91c1c; }
 .st-revoked { background: #eef0f3; color: #5b6472; }
 .badge-oos {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 999px;
+  font-size: 0.6875rem;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 62.4375rem;
   border: 1px dashed var(--sl-warn);
   color: var(--sl-warn);
   white-space: nowrap;
@@ -860,12 +860,12 @@ onMounted(() => void reload())
   color: #fff;
   border-color: var(--color-signal, var(--sl-accent));
 }
-/* 行操作钮(原型 Tokens:26px / 4px 圆角 / 12px;危险红字描边;
+/* 行操作钮(原型 Tokens:1.625rem / 0.25rem 圆角 / 0.75rem;危险红字描边;
    强调态蓝底白字 —— 续期对到期、重新生成对失效) */
 .row-btn {
-  height: 26px; padding: 0 10px; margin-left: 6px;
-  border: 1px solid var(--sl-line); border-radius: 4px;
-  background: var(--c-surface); color: var(--sl-ink); font-size: 12px; cursor: pointer;
+  height: 1.625rem; padding: 0 0.625rem; margin-left: 0.375rem;
+  border: 1px solid var(--sl-line); border-radius: 0.25rem;
+  background: var(--c-surface); color: var(--sl-ink); font-size: 0.75rem; cursor: pointer;
 }
 .row-btn:first-child { margin-left: 0; }
 .row-btn:hover { background: #f6f8fc; }
