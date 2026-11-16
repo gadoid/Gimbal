@@ -292,10 +292,10 @@ describe('Auths — 被引用列与反查侧板(配套方案 §1)', () => {
   })
 })
 
-// ── authz M2a S3.3:槽位绑定字段面 ──────────────────────────────────
+// ── authz M2a S3.3:槽位绑定字段面(2026-11-16 二轮:系统分组口径)─────
 
-describe('Auths — 槽位绑定(S3)', () => {
-  it('槽名 ≠ 别名时展示槽;默认行带 chip;系统/环境随 URL 展示', async () => {
+describe('Auths — 系统分组与槽语义露出', () => {
+  it('按系统分组;显式槽名行内露出;默认 chip 与环境列展示', async () => {
     vi.spyOn(api, 'list').mockResolvedValue({
       items: [{
         ...sample, id: 7, alias: 'jira-sit', slot: 'jira', isDefault: true,
@@ -307,10 +307,17 @@ describe('Auths — 槽位绑定(S3)', () => {
     } as never)
     const w = mountPage()
     await flushPromises()
-    expect(w.text()).toContain('槽 jira')
-    expect(document.body.querySelector('[data-testid="default-chip-7"]')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="binding-ctx-7"]')?.textContent)
-      .toContain('jira · 环境#3')
+    // 分组键 = 系统;jira-sit 有 system,qa-main 无 → 未归类组
+    expect(w.find('[data-testid="sys-card-jira"]').text()).toContain('jira')
+    expect(w.find('[data-testid="sys-card-uncategorized"]').exists()).toBe(true)
+    expect(w.findAll('[data-testid^="sys-card-"]')).toHaveLength(2)
+    // 槽语义露出①:slot≠alias 的行内小字
+    expect(w.find('[data-testid="auth-row-7"]').text()).toContain('槽 jira')
+    // slot===alias 的行不露槽小字(概念退居语义层)
+    expect(w.find('[data-testid="auth-row-8"]').text()).not.toContain('槽 qa-main')
+    expect(w.find('[data-testid="default-chip-7"]').exists()).toBe(true)
+    // 环境列:envs 未加载(真实请求失败)→ 回落 环境#id
+    expect(w.find('[data-testid="auth-row-7"]').text()).toContain('环境#3')
     w.unmount()
   })
 
@@ -333,77 +340,86 @@ describe('Auths — 槽位绑定(S3)', () => {
   })
 })
 
-// ── 状态优先改造:行内测试一键 + 本机记忆 + 卡面聚合 + 只看问题 ────
-describe('Auths — 状态优先(卡面聚合 · 只看问题)', () => {
-  it('本机测败记忆 → 卡面 ✕N 测败 + 红顶边;「只看问题」只留问题卡', async () => {
+// ── 状态优先改造(2026-11-16 二轮:系统组聚合口径)──────────────────
+describe('Auths — 状态优先(组头聚合 · 只看问题)', () => {
+  it('本机测败记忆 → 组头 ✕N 测败 + 红色带;「只看问题」只留问题组', async () => {
     localStorage.setItem('auths.test-memory:v1',
       JSON.stringify({ 1: { ok: false, at: Date.now() } }))
     vi.spyOn(api, 'list').mockResolvedValue({
       items: [
-        { ...sample, id: 1, alias: 'qa1', slot: 'qa1', isDefault: true },
-        { ...sample, id: 2, alias: 'ok-alias', slot: 'ok-slot', isDefault: true },
+        { ...sample, id: 1, alias: 'qa1', slot: 'qa1', isDefault: true, system: 'pay' },
+        { ...sample, id: 2, alias: 'ok-alias', slot: 'ok-slot', isDefault: true, system: 'wms' },
       ],
       total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
     } as never)
     const w = mountPage()
     await flushPromises()
-    // qa1 槽有测败记忆 → 卡面红 chip + 红顶边;健康槽不亮
-    expect(w.find('[data-testid="slot-fail-qa1"]').exists()).toBe(true)
-    expect(w.find('[data-testid="slot-fail-ok-slot"]').exists()).toBe(false)
-    expect(w.find('[data-testid="slot-card-qa1"]').classes()).toContain('tone-bad')
-    // 只看问题:健康槽整卡滤掉
+    // pay 组有测败记忆 → 组头红 chip + 红色带;健康组不亮
+    expect(w.find('[data-testid="sys-fail-pay"]').exists()).toBe(true)
+    expect(w.find('[data-testid="sys-fail-wms"]').exists()).toBe(false)
+    expect(w.find('[data-testid="sys-card-pay"]').classes()).toContain('tone-bad')
+    // 只看问题:健康组整组滤掉
     await w.find('[data-testid="problem-filter"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="slot-card-qa1"]').exists()).toBe(true)
-    expect(w.find('[data-testid="slot-card-ok-slot"]').exists()).toBe(false)
+    expect(w.find('[data-testid="sys-card-pay"]').exists()).toBe(true)
+    expect(w.find('[data-testid="sys-card-wms"]').exists()).toBe(false)
     expect(w.findAll('[data-testid^="auth-row-"]')).toHaveLength(1)
     w.unmount()
   })
 
-  it('无默认的槽也算问题:只看问题保留无默认卡;健康卡排后', async () => {
-    // s2 已在服务注册声明槽位 → 健康绿;s1 未声明 ∨ 无默认 → 琥珀
+  it('无默认/未声明的槽算问题:组头聚合徽章;问题组排前,健康组滤除', async () => {
+    // svc-b 组:s2 已声明且有默认 → 健康绿;svc-a 组:s1 未声明 ∨ 无默认 → 琥珀
     vi.spyOn(aliasApi, 'listAllAliases').mockResolvedValue([
       { aliasName: 'b', baseService: 'b-svc', slot: 's2', kind: 'plate',
         createdAt: '', updatedAt: '' },
     ] as never)
     vi.spyOn(api, 'list').mockResolvedValue({
       items: [
-        { ...sample, id: 2, alias: 'b', slot: 's2', isDefault: true },
-        { ...sample, id: 1, alias: 'a', slot: 's1', isDefault: false },
+        { ...sample, id: 2, alias: 'b', slot: 's2', isDefault: true, system: 'svc-b' },
+        { ...sample, id: 1, alias: 'a', slot: 's1', isDefault: false, system: 'svc-a' },
       ],
       total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
     } as never)
     const w = mountPage()
     await flushPromises()
-    const cards = w.findAll('[data-testid^="slot-card-"]')
-    // 问题卡(无默认 s1)排前
-    expect(cards[0].attributes('data-testid')).toBe('slot-card-s1')
-    expect(cards[1].attributes('data-testid')).toBe('slot-card-s2')
-    // 顶边状态色:无默认琥珀 / 健康绿
+    const cards = w.findAll('[data-testid^="sys-card-"]')
+    // 问题组(无默认+未声明)排前
+    expect(cards[0].attributes('data-testid')).toBe('sys-card-svc-a')
+    expect(cards[1].attributes('data-testid')).toBe('sys-card-svc-b')
+    // 组头聚合:1 条无默认 + ✕1 未声明(琥珀);健康组绿
+    expect(cards[0].text()).toContain('1 条无默认')
+    expect(w.find('[data-testid="sys-undeclared-svc-a"]').exists()).toBe(true)
     expect(cards[0].classes()).toContain('tone-warn')
     expect(cards[1].classes()).toContain('tone-ok')
+    // 单绑定槽无默认 → 行内也直示
+    expect(w.find('[data-testid="auth-row-1"]').text()).toContain('无默认')
     await w.find('[data-testid="problem-filter"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="slot-card-s1"]').exists()).toBe(true)
-    expect(w.find('[data-testid="slot-card-s2"]').exists()).toBe(false)
+    expect(w.find('[data-testid="sys-card-svc-a"]').exists()).toBe(true)
+    expect(w.find('[data-testid="sys-card-svc-b"]').exists()).toBe(false)
     w.unmount()
   })
 
-  it('>5 绑定的槽:卡内收前 5,展开/收起切换', async () => {
+  it('>5 凭证的系统组:收前 5,展开/收起切换(凭证平铺,无槽容器层)', async () => {
     const items = Array.from({ length: 7 }, (_, i) => ({
       ...sample, id: i + 1, alias: `a${i + 1}`, slot: 'big', isDefault: i === 0,
+      system: 'bulk',
     }))
     vi.spyOn(api, 'list').mockResolvedValue({
       items, total: 7, page: 1, pageSize: 20, tokenTypeCounts: {},
     } as never)
     const w = mountPage()
     await flushPromises()
+    // 凭证一等公民:组内平铺无簇头容器,同槽相邻靠行内槽小字关联
+    expect(w.find('.cluster-lead').exists()).toBe(false)
     expect(w.findAll('[data-testid^="auth-row-"]')).toHaveLength(5)
-    expect(w.find('[data-testid="slot-more-big"]').text()).toContain('还有 2 条绑定')
-    await w.find('[data-testid="slot-more-big"]').trigger('click')
+    expect(w.find('[data-testid="sys-more-bulk"]').text()).toContain('还有 2 条凭证')
+    await w.find('[data-testid="sys-more-bulk"]').trigger('click')
     await flushPromises()
     expect(w.findAll('[data-testid^="auth-row-"]')).toHaveLength(7)
-    expect(w.find('[data-testid="slot-more-big"]').text()).toContain('收起')
+    // 7 条同槽:每行都带「槽 big」属性小字(slot≠alias)
+    expect(w.findAll('.slot-sub')).toHaveLength(7)
+    expect(w.find('[data-testid="sys-more-bulk"]').text()).toContain('收起')
     w.unmount()
   })
 })
@@ -437,22 +453,22 @@ describe('Auths — 表单渐进披露', () => {
 
 // ── 槽位主轴直连:该槽在服务注册的身份面注册表有无声明 ────────────
 describe('Auths — 槽位声明反查(与服务注册直连)', () => {
-  it('槽无任何身份面声明 → 组头 ✕ 未声明;有声明的槽不亮', async () => {
+  it('槽无任何身份面声明 → 组头 ✕N 未声明;有声明的槽不计入', async () => {
     vi.spyOn(aliasApi, 'listAllAliases').mockResolvedValue([
       { aliasName: 'fin-service-uat', baseService: 'fin-service',
         slot: 'ok-slot', kind: 'plate', createdAt: '', updatedAt: '' },
     ] as never)
     vi.spyOn(api, 'list').mockResolvedValue({
       items: [
-        { ...sample, id: 1, alias: 'qa1', slot: 'qa1', isDefault: true },
-        { ...sample, id: 2, alias: 'ok-alias', slot: 'ok-slot', isDefault: true },
+        { ...sample, id: 1, alias: 'qa1', slot: 'qa1', isDefault: true, system: 'pay' },
+        { ...sample, id: 2, alias: 'ok-alias', slot: 'ok-slot', isDefault: true, system: 'wms' },
       ],
       total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
     } as never)
     const w = mountPage()
     await flushPromises()
-    expect(w.find('[data-testid="slot-undeclared-qa1"]').exists()).toBe(true)
-    expect(w.find('[data-testid="slot-undeclared-ok-slot"]').exists()).toBe(false)
+    expect(w.find('[data-testid="sys-undeclared-pay"]').exists()).toBe(true)
+    expect(w.find('[data-testid="sys-undeclared-wms"]').exists()).toBe(false)
     w.unmount()
   })
 })

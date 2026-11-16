@@ -1,16 +1,22 @@
-<!-- Auths.vue — 凭证池管理页(2026-11-13 形态重塑:槽位卡片看板)。
-     槽位是执行取凭证的键,所以一槽一卡:卡面 = 槽名 + 状态徽章(测败/
-     无默认/未声明)+ 引用聚合;绑定行卡内直渲染(>5 条折叠),行级操作
-     (测试一键/设默认/编辑/删除)与被引用侧板原样。状态色顶边:红=有
-     测败记忆、琥珀=无默认∨未声明、绿=健康;问题槽排前,「只看问题」
-     一键滤出。取数单一链路(200 封顶与旧分组口径一致),搜索/类型过滤
-     照旧下推服务端。创建/编辑(渐进披露)/删除/测试弹框/反查侧板不动。 -->
+<!-- Auths.vue — 凭证池管理页(2026-11-16 三轮:凭证一等公民)。
+     心智模型:先有凭证,槽位是「引用凭证的键」— 关系方向 = 凭证 →
+     挂载槽(数据模型里 slot 是凭证的单值字段,一条凭证只挂一个槽),
+     引用它的服务别名/场景模板在行内「引用」列可数、可反查。槽不作为
+     容器/分组层出现,只在两处作为属性露出:① 显式命名槽(slot≠alias)
+     的行内小字(未声明时琥珀) ② 无默认/未声明/测败等槽级取用隐患,
+     聚合为系统组头的徽章计数(独占槽的无默认直示行内)。浏览组织 =
+     按系统分组、组内凭证平铺(同槽相邻,默认在前 → 环境 → alias)、
+     环境名列示。组级状态由分组头 3px 左缘色带承载:红=有测败、琥珀=
+     无默认∨未声明、绿=健康;问题组排前,「只看问题」一键滤出。取数
+     单一链路(200 封顶),搜索/类型过滤照旧下推服务端;系统/环境为
+     客户端过滤。创建/编辑(渐进披露)/删除(alias 硬确认 + 引用预取
+     内联警示)/测试弹框(共享 CredentialTestDialog)/反查侧板原样。 -->
 <template>
   <section class="slib">
     <PageHead
       icon="lock"
       title="凭证管理"
-      :count="rowsTotal ? `${slotCount} 槽 · ${rowsTotal} 绑定` : undefined"
+      :count="rowsTotal ? `${sysCount} 系统 · ${bindCount} 条凭证` : undefined"
       :meta="metaText"
     />
 
@@ -18,7 +24,7 @@
       <input
         v-model="searchQuery"
         class="slib-search"
-        placeholder="搜索 alias / username / url"
+        placeholder="搜索 alias / url"
         data-testid="auth-search"
       />
       <span class="svc-stats tight" data-testid="tt-filter-group">
@@ -32,6 +38,21 @@
           @click="tokenTypeFilter = t"
         >{{ t === 'all' ? '全部类型' : t }}</button>
       </span>
+      <!-- 客户端过滤:系统取值来自已加载数据,环境选项与表单共用 -->
+      <Select v-model="systemFilter">
+        <SelectTrigger class="tb-select" data-testid="sys-filter"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部系统</SelectItem>
+          <SelectItem v-for="s in systemOptions" :key="s" :value="s">{{ s }}</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select v-model="envFilter">
+        <SelectTrigger class="tb-select" data-testid="env-filter"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部环境</SelectItem>
+          <SelectItem v-for="e in envs" :key="e.id" :value="String(e.id)">{{ e.name }}</SelectItem>
+        </SelectContent>
+      </Select>
       <!-- 状态优先:只看有问题的槽(无默认 · 上次测试失败) -->
       <button
         type="button" class="svc-chip" :class="{ on: problemOnly }"
@@ -40,120 +61,161 @@
       <button type="button" class="slib-create" data-testid="open-create" @click="openCreate()">+ 新增认证</button>
     </div>
 
-    <!-- 槽位卡片看板 -->
-    <div v-if="slotCards.length" class="auth-board">
-      <div
-        v-for="card in slotCards" :key="card.slot"
-        class="slot-card" :class="`tone-${card.tone}`"
-        :data-testid="`slot-card-${card.slot}`"
-      >
-        <div class="sc-head">
-          <span class="sc-slot">槽 <b class="mono">{{ card.slot }}</b></span>
-          <span class="muted sc-n">{{ card.binds.length }} 绑定</span>
-          <span v-if="!card.hasDefault" class="svc-chip warn">无默认</span>
-          <!-- 状态聚合:本机记录的上次测试失败数(卡面一眼看穿) -->
-          <span
-            v-if="card.failCount" class="svc-flag red"
-            :data-testid="`slot-fail-${card.slot}`"
-            title="本机记录:该槽存在上次测试失败的绑定"
-          >✕{{ card.failCount }} 测败</span>
-          <!-- 槽位主轴直连:该槽在服务注册的身份面注册表里无声明 -->
-          <span
-            v-if="slotsReady && !declaredSlots.has(card.slot)"
-            class="svc-flag amber"
-            :data-testid="`slot-undeclared-${card.slot}`"
-            title="服务注册无身份面声明此槽 — 经别名注入不会取用;仅场景 ${slot.X} 直接引用可达"
-          >✕ 未声明</span>
-          <span class="flex-1" />
-          <!-- 引用聚合(点开 = 该槽默认绑定的被引用侧板) -->
-          <button
-            v-if="card.aliasRefs" type="button" class="svc-chip"
-            :data-testid="`slot-refs-${card.slot}`" @click="openSlotRefs(card)"
-          >{{ card.aliasRefs }} 别名</button>
-          <button
-            v-if="card.scenarioRefs" type="button" class="svc-chip"
-            @click="openSlotRefs(card)"
-          >{{ card.scenarioRefs }} 场景</button>
-        </div>
+    <!-- 按系统分组的凭证表格:凭证行 = 管理主体(组内平铺,无容器层),
+         行内按环境列示。槽是凭证的属性(挂载键),不是分组容器 —
+         槽级取用隐患(无默认/未声明/测败)聚合为组头徽章计数 -->
+    <div v-if="sysGroups.length" class="lib-card auth-table" data-testid="auth-board">
+      <table class="slib-table">
+        <thead>
+          <tr>
+            <th style="width:10.75rem">alias</th>
+            <th style="width:9.25rem">状态</th>
+            <th style="width:6.75rem">类型</th>
+            <th>环境 / 登录地址</th>
+            <th style="width:7.25rem">账号</th>
+            <th style="width:10rem">引用</th>
+            <th style="width:7.5rem" />
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="g in sysGroups" :key="g.key">
+            <!-- 系统组头:系统名 + 组级健康聚合(测败/无默认/未声明都是槽级
+                 取用隐患,聚合到组头一眼看穿;3px 左缘色带承载组级状态) -->
+            <tr class="grp" :class="`tone-${g.tone}`" :data-testid="`sys-card-${g.key}`">
+              <td colspan="7">
+                <div class="grp-in">
+                  <span class="grp-sys"><b class="mono">{{ g.system || '未归类' }}</b></span>
+                  <span class="muted grp-n">{{ g.binds.length }} 条凭证</span>
+                  <span v-if="g.noDefaultSlots" class="svc-chip warn grp-chip" title="名字解析与环境未命中时无默认凭证可取">{{ g.noDefaultSlots }} 条无默认</span>
+                  <span
+                    v-if="g.failCount" class="svc-flag red"
+                    :data-testid="`sys-fail-${g.key}`"
+                    title="本机记录:该系统存在上次测试失败的凭证"
+                  >✕{{ g.failCount }} 测败</span>
+                  <span
+                    v-if="g.undeclaredSlots" class="svc-flag amber"
+                    :data-testid="`sys-undeclared-${g.key}`"
+                    title="这些槽在服务注册的身份面无声明 — 经别名注入不会取用;仅场景 ${slot.X} 直接引用可达"
+                  >✕{{ g.undeclaredSlots }} 未声明</span>
+                  <span class="flex-1" />
+                  <button
+                    type="button" class="grp-add" :data-testid="`sys-add-${g.key}`"
+                    @click="openCreate('', g.system)"
+                  >+ 登记</button>
+                </div>
+              </td>
+            </tr>
 
-        <div class="sc-binds">
-          <div v-for="row in card.visible" :key="row.id" class="sc-bind" :data-testid="`auth-row-${row.id}`">
-            <div class="bind-line">
-              <span class="mono svc-key">{{ row.alias }}</span>
-              <span
-                v-if="row.isDefault" class="svc-chip"
-                style="font-size:0.6875rem" :data-testid="`default-chip-${row.id}`"
-                title="名字解析与环境未命中时的取用行">默认</span>
-              <span
-                v-if="testMemory[row.id]" class="svc-flag"
-                :class="testMemory[row.id].ok ? 'green' : 'red'"
-                style="font-size:0.6875rem" :data-testid="`test-mem-${row.id}`"
-                :title="`上次测试:${testMemory[row.id].ok ? '成功' : '失败'} · ${shortDateTime(new Date(testMemory[row.id].at))}(本机记录)`"
-              >{{ testMemory[row.id].ok ? '✓ 测通' : '✗ 测败' }} {{ shortDateTime(new Date(testMemory[row.id].at)) }}</span>
-              <span class="flex-1" />
-              <span class="svc-flag" :class="ttClass[row.token_type] ?? 'ink'">{{ row.token_type }}</span>
-              <span class="muted" style="font-size:0.6875rem">{{ formatExpires(row.expires_in) }}</span>
-            </div>
-            <div class="bind-line sub">
-              <span class="mono muted">{{ row.url }}</span>
-              <span
-                v-if="row.system || row.envId" class="muted"
-                style="font-size:0.6875rem" :data-testid="`binding-ctx-${row.id}`"
-              >{{ row.system || '未归类' }}<template v-if="row.envId"> · 环境#{{ row.envId }}</template></span>
-            </div>
-            <div class="bind-line acts">
-              <div class="flex flex-wrap items-center gap-1">
+            <template v-for="row in g.visible" :key="row.id">
+              <tr class="auth-row" :data-testid="`auth-row-${row.id}`">
+                <td>
+                  <div class="cell-alias">
+                    <span class="mono alias-name">{{ row.alias }}</span>
+                    <span
+                      v-if="row.isDefault" class="svc-chip is-default"
+                      :data-testid="`default-chip-${row.id}`"
+                      title="名字解析与环境未命中时的取用行">默认</span>
+                  </div>
+                  <!-- 槽属性露出:此凭证挂载的槽(场景经 ${slot.X} 取用的键) -->
+                  <div
+                    v-if="row.slot && row.slot !== row.alias" class="slot-sub"
+                    :class="{ 'slot-undeclared': slotsReady && !declaredSlots.has(row.slot) }"
+                    :title="slotsReady && !declaredSlots.has(row.slot)
+                      ? '槽未被服务注册声明 — 经别名注入不会取用' : `此凭证挂载到槽 ${row.slot} — 场景经 \${slot.${row.slot}} 取用`"
+                  >槽 {{ row.slot }}</div>
+                </td>
+                <td>
+                  <div class="cell-status">
+                    <span
+                      v-if="testMemory[row.id]" class="svc-flag mem-flag"
+                      :class="testMemory[row.id].ok ? 'green' : 'red'"
+                      :data-testid="`test-mem-${row.id}`"
+                      :title="`上次测试:${testMemory[row.id].ok ? '成功' : '失败'} · ${shortDateTime(new Date(testMemory[row.id].at))}(本机记录)`"
+                    >{{ testMemory[row.id].ok ? '✓ 测通' : '✗ 测败' }} {{ shortDateTime(new Date(testMemory[row.id].at)) }}</span>
+                    <span v-else class="muted">—</span>
+                    <!-- 未设默认的取用键 = 隐患,行内直示(多键组由组头计数) -->
+                    <span
+                      v-if="!row.isDefault && soloSlots.has(row.slot || row.alias)"
+                      class="svc-chip warn grp-chip"
+                      title="此槽没有默认绑定行 — 名字解析与环境未命中时无凭证可取">无默认</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="cell-tt">
+                    <span class="svc-flag" :class="ttClass[row.token_type] ?? 'ink'">{{ row.token_type }}</span>
+                    <span class="muted tt-exp">{{ formatExpires(row.expires_in) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="tgt-env">{{ envName(row.envId) }}</div>
+                  <div class="mono muted tgt-url" :title="row.url">{{ row.url || '静态令牌' }}</div>
+                </td>
+                <td><span class="mono muted">{{ row.username }}</span></td>
+                <td>
+                  <div class="cell-refs">
+                    <!-- 引用方向:别名绑定/场景模板引用的是槽,经槽取到此凭证 -->
+                    <button
+                      v-if="row.alias_ref_count" type="button" class="svc-chip"
+                      :data-testid="`refs-open-${row.alias}`"
+                      :title="`${row.alias_ref_count} 个服务别名绑定槽 ${row.slot || row.alias} — 经别名注入取到此凭证,点击反查`"
+                      @click="openRefs(row)"
+                    >{{ row.alias_ref_count }} 别名</button>
+                    <button
+                      v-if="row.scenario_ref_count" type="button" class="svc-chip"
+                      :data-testid="`refs-open-scenario-${row.alias}`"
+                      :title="`${row.scenario_ref_count} 个场景经 \${slot.*} 模板引用,点击反查`"
+                      @click="openRefs(row)"
+                    >{{ row.scenario_ref_count }} 场景</button>
+                    <span
+                      v-if="!row.alias_ref_count && !row.scenario_ref_count" class="muted unref"
+                      title="别名绑定与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
+                    >未被引用 · 可安全删除</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="cell-acts">
+                    <!-- 高频操作升为一键:测试连通不进菜单(结果回写行内状态) -->
+                    <button
+                      type="button" class="svc-link"
+                      :data-testid="`auth-test-inline-${row.id}`"
+                      @click="runTest(row)"
+                    >测试</button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        class="more-btn"
+                        aria-label="更多操作"
+                        :data-testid="`auth-more-${row.id}`"
+                      >⋯</DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" class="sl-menu">
+                        <DropdownMenuItem
+                          v-if="!row.isDefault"
+                          class="sl-menu-item" data-testid="auth-set-default"
+                          @click="makeDefault(row)"
+                        >设为默认</DropdownMenuItem>
+                        <DropdownMenuItem class="sl-menu-item" data-testid="auth-edit" @click="openEdit(row)">编辑</DropdownMenuItem>
+                        <DropdownMenuItem
+                          class="sl-menu-item danger"
+                          data-testid="auth-del"
+                          @click="openDelete(row)"
+                        >删除</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <tr v-if="g.collapsible" class="grp-more">
+              <td colspan="7">
                 <button
-                  v-if="row.alias_ref_count" type="button" class="svc-chip"
-                  :data-testid="`refs-open-${row.alias}`" @click="openRefs(row)"
-                >{{ row.alias_ref_count }} 别名</button>
-                <button
-                  v-if="row.scenario_ref_count" type="button" class="svc-chip"
-                  :data-testid="`refs-open-scenario-${row.alias}`" @click="openRefs(row)"
-                >{{ row.scenario_ref_count }} 场景</button>
-                <span
-                  v-if="!row.alias_ref_count && !row.scenario_ref_count" class="muted"
-                  title="别名绑定与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
-                >未被引用 · 可安全删除</span>
-                <span class="flex-1" />
-                <span class="mono muted" style="font-size:0.6875rem">{{ row.username }}</span>
-              </div>
-              <div class="row-acts">
-                <!-- 高频操作升为一键:测试连通不进菜单(结果回写行内状态) -->
-                <button
-                  type="button" class="svc-link"
-                  :data-testid="`auth-test-inline-${row.id}`"
-                  @click="runTest(row)"
-                >测试</button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    class="more-btn"
-                    aria-label="更多操作"
-                    :data-testid="`auth-more-${row.id}`"
-                  >⋯</DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" class="sl-menu">
-                    <DropdownMenuItem
-                      v-if="!row.isDefault"
-                      class="sl-menu-item" data-testid="auth-set-default"
-                      @click="makeDefault(row)"
-                    >设为槽默认</DropdownMenuItem>
-                    <DropdownMenuItem class="sl-menu-item" data-testid="auth-edit" @click="openEdit(row)">编辑</DropdownMenuItem>
-                    <DropdownMenuItem
-                      class="sl-menu-item danger"
-                      data-testid="auth-del"
-                      @click="openDelete(row)"
-                    >删除</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          </div>
-          <button
-            v-if="card.collapsible" type="button" class="sc-more"
-            :data-testid="`slot-more-${card.slot}`" @click="toggleSlot(card.slot)"
-          >{{ expandedSlots.has(card.slot) ? '收起' : `还有 ${card.hiddenCount} 条绑定` }}</button>
-        </div>
-      </div>
+                  type="button" class="more-link"
+                  :data-testid="`sys-more-${g.key}`" @click="toggleSys(g.key)"
+                >{{ expandedSys.has(g.key) ? '收起' : `还有 ${g.hiddenCount} 条凭证` }}</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
     </div>
 
     <div v-else-if="rowsLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
@@ -175,19 +237,6 @@
               <FormControl>
                 <Input v-bind="componentField" :disabled="!!editingId"
                   placeholder="例 qa1 / staging-codfish（同 owner 内唯一）" data-testid="f-alias" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <!-- S7.3:槽位/系统/环境/账号字段 —— 创建时可指定槽(缺省=alias,
-               同槽多绑定按环境/默认分层取用);编辑态槽位不可改(改名=重建) -->
-          <FormField v-slot="{ componentField }" name="slot">
-            <FormItem>
-              <FormLabel>槽位 slot</FormLabel>
-              <FormControl>
-                <Input v-bind="componentField" :disabled="!!editingId"
-                  placeholder="缺省 = alias;场景经 ${slot.X} 引用" data-testid="f-slot" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -225,8 +274,10 @@
           </FormField>
 
           <!-- 渐进披露:90% 场景是 alias+账号密码+URL;系统/环境/账号字段/
-               token 类型/有效期收进「高级」折叠区(默认收起;编辑态有非
-               缺省值时自动展开;v-show 保持字段常驻,vee-validate 不感知) -->
+               token 类型/有效期收进「高级」折叠区(默认收起;深链预填或
+               编辑态有非缺省值时自动展开;v-show 保持字段常驻,vee-validate
+               不感知)。取用键 = alias 本身(slot 后端缺省 = alias),表单
+               不再暴露槽概念 -->
           <button
             type="button" class="adv-toggle" data-testid="f-advanced-toggle"
             @click="advancedOpen = !advancedOpen"
@@ -318,44 +369,17 @@
       </DialogContent>
     </Dialog>
 
-    <!-- ── 测试结果弹框(状态主视觉式)─────────────────────────── -->
-    <Dialog :open="testOpen" @update:open="testOpen = $event">
-      <DialogContent class="max-w-[28.75rem]">
-        <DialogHeader>
-          <DialogTitle>认证测试</DialogTitle>
-        </DialogHeader>
-        <div v-if="testTarget" class="test-hero">
-          <div class="test-sub">{{ testTarget.alias }} · {{ testTarget.url }}</div>
+    <!-- ── 测试结果弹框(共享件:个人池/项目凭证面板同一交互)────── -->
+    <CredentialTestDialog
+      :open="testOpen"
+      :target="testTarget"
+      :phase="testPhase"
+      :result="testResult"
+      @update:open="testOpen = $event"
+      @retest="testTarget && runTest(testTarget)"
+    />
 
-          <div v-if="testPhase === 'testing'" class="test-state testing">
-            <span class="test-icon spinner" />
-            <span class="test-word">认证中…</span>
-          </div>
-
-          <template v-else-if="testResult">
-            <div class="test-state" :class="testPhase">
-              <span class="test-icon">{{ testPhase === 'success' ? '✓' : '✗' }}</span>
-              <span class="test-word">{{ testPhase === 'success' ? '认证成功' : '认证失败' }}</span>
-              <span v-if="testResult.status_code != null" class="test-code">
-                HTTP {{ testResult.status_code }}
-              </span>
-            </div>
-            <button class="detail-toggle" type="button" @click="testDetailOpen = !testDetailOpen">
-              {{ testDetailOpen ? '▾' : '▸' }} 详情
-            </button>
-            <code v-if="testDetailOpen" class="mono detail">{{ testResult.message }}</code>
-          </template>
-        </div>
-        <DialogFooter>
-          <Button v-if="testPhase !== 'testing' && testTarget" variant="outline" @click="runTest(testTarget)">
-            重新测试
-          </Button>
-          <Button @click="testOpen = false">关闭</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <!-- ── 删除确认(输入 alias 硬确认)────────────────────────── -->
+    <!-- ── 删除确认(输入 alias 硬确认 + 引用预取内联警示)─────── -->
     <Dialog :open="deleteOpen" @update:open="deleteOpen = $event">
       <DialogContent class="max-w-[26.25rem]">
         <DialogHeader>
@@ -366,6 +390,11 @@
             此操作不可撤销。alias <code class="rounded-chip bg-signal-failed/10 px-1.5 font-mono text-signal-failed">{{ deleteTarget.alias }}</code>
             将从凭证池中移除（已使用此 alias 的历史执行记录不受影响）。
           </p>
+          <!-- 与反查侧板同源的数据:把 409 拦截预告内联进确认框 -->
+          <div v-if="deleteBlocking.length" class="drawer-warn" data-testid="del-block-warn">
+            <p class="m-0 font-semibold">删除会被拦截:仍有 {{ deleteBlocking.length }} 个本人场景引用(模板)</p>
+            <p class="m-0 mt-0.5">先解除别名绑定,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
+          </div>
           <p class="m-0 text-body">要继续请输入 <code class="font-mono">{{ deleteTarget.alias }}</code> 确认：</p>
           <Input v-model="deleteConfirmInput" :placeholder="`输入 ${deleteTarget.alias} 以确认`" data-testid="del-confirm" />
         </div>
@@ -461,6 +490,7 @@ import { listAllAliases } from '@/api/service-aliases'
 import { listEnvironments } from '@/api/environments'
 import { shortDateTime } from '@/utils/datetime'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import CredentialTestDialog from '@/components/credential/CredentialTestDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -530,72 +560,120 @@ watch([searchQuery, tokenTypeFilter], () => {
 const declaredSlots = ref<Set<string>>(new Set())
 const slotsReady = ref(false)
 
-/** 只看问题:无默认 ∨ 有测败的槽(卡片级过滤)。 */
+/** 只看问题:无默认 ∨ 有测败的槽(分组级过滤)。 */
 const problemOnly = ref(false)
 
-// ── 槽位卡片看板 ──────────────────────────────────────────────
-const BIND_CAP = 5   // 单卡绑定行折叠阈值(>5 收起为「还有 N 条」)
+// ── 客户端过滤(系统/环境;数据已整页在端上,不必下推服务端)──────
+const systemFilter = ref('all')
+const envFilter = ref('all')
+/** 系统选项来自已加载绑定行的取值并集(密文字段外的可聚合一列) */
+const systemOptions = computed(() =>
+  [...new Set(rows.value.map((r) => r.system).filter((s): s is string => Boolean(s)))].sort())
 
-interface SlotCard {
-  slot: string
-  binds: AuthSession[]
-  visible: AuthSession[]
+/** 搜索/类型走服务端;系统/环境在端上再滤一层(组表的数据面) */
+const filteredRows = computed(() => rows.value.filter((r) =>
+  (systemFilter.value === 'all' || r.system === systemFilter.value)
+  && (envFilter.value === 'all' || String(r.envId) === envFilter.value)))
+const bindCount = computed(() => filteredRows.value.length)
+
+// ── 按系统分组的凭证列表(凭证是一等公民,槽是行属性)──────────────
+const BIND_CAP = 5   // 单系统组凭证行折叠阈值(>5 收起为「还有 N 条」)
+const UNCLASSIFIED = 'uncategorized'   // system 为空时的组键(展示为「未归类」,排最后)
+
+interface SysGroup {
+  key: string            // system || 'uncategorized'
+  system: string         // 展示用原始值('' → 未归类)
+  binds: AuthSession[]   // 全量(计数/折叠判定/信号聚合)
+  visible: AuthSession[] // 折叠截断后的行(平铺,无簇层)
   collapsible: boolean
   hiddenCount: number
-  hasDefault: boolean
   failCount: number
+  noDefaultSlots: number
+  undeclaredSlots: number
   tone: 'bad' | 'warn' | 'ok'
-  aliasRefs: number
-  scenarioRefs: number
 }
 
-const expandedSlots = ref<Set<string>>(new Set())
-function toggleSlot(slot: string): void {
-  const next = new Set(expandedSlots.value)
-  if (next.has(slot)) next.delete(slot)
-  else next.add(slot)
-  expandedSlots.value = next
+const expandedSys = ref<Set<string>>(new Set())
+function toggleSys(key: string): void {
+  const next = new Set(expandedSys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedSys.value = next
 }
 
-/** 卡片序:问题槽(测败 ∨ 无默认)排前,其余字典序;槽内默认在前。 */
-const slotCards = computed<SlotCard[]>(() => {
-  const bySlot = new Map<string, AuthSession[]>()
-  for (const a of rows.value) {
-    const k = a.slot || a.alias
-    const arr = bySlot.get(k)
-    if (arr) arr.push(a)
-    else bySlot.set(k, [a])
+/** 环境列:环境名(表单同源 envs);未命中/未填回落 #id / 不限。 */
+function envName(envId: number | null | undefined): string {
+  if (envId == null) return '环境不限'
+  const hit = envs.value.find((e) => e.id === envId)
+  return hit ? hit.name : `环境#${envId}`
+}
+
+/** 独占槽(全池仅此一条凭证挂载)→ 无默认时行内直示该隐患。 */
+const soloSlots = computed<Set<string>>(() => {
+  const n = new Map<string, number>()
+  for (const r of filteredRows.value) {
+    const s = r.slot || r.alias
+    n.set(s, (n.get(s) ?? 0) + 1)
   }
-  const cards: SlotCard[] = []
-  for (const [slot, list] of bySlot) {
-    const binds = [...list].sort((x, y) =>
-      Number(y.isDefault) - Number(x.isDefault) || x.alias.localeCompare(y.alias))
-    const failCount = binds.filter((r) => testMemory.value[r.id]?.ok === false).length
-    const hasDefault = binds.some((r) => r.isDefault)
-    const undeclared = slotsReady.value && !declaredSlots.value.has(slot)
-    const open = expandedSlots.value.has(slot)
-    cards.push({
-      slot, binds,
-      visible: open ? binds : binds.slice(0, BIND_CAP),
-      collapsible: binds.length > BIND_CAP,
-      hiddenCount: Math.max(0, binds.length - BIND_CAP),
-      hasDefault, failCount,
-      tone: failCount ? 'bad' : (!hasDefault || undeclared) ? 'warn' : 'ok',
-      aliasRefs: binds.reduce((n, r) => n + (r.alias_ref_count ?? 0), 0),
-      scenarioRefs: binds.reduce((n, r) => n + (r.scenario_ref_count ?? 0), 0),
+  return new Set([...n.entries()].filter(([, c]) => c === 1).map(([s]) => s))
+})
+
+/** 组序:问题组(测败 ∨ 无默认槽)排前,「未归类」殿后,其余字典序;
+ *  组内凭证平铺:同槽相邻(槽是行属性,不是容器)→ 槽内默认在前 → 环境 → alias。 */
+const sysGroups = computed<SysGroup[]>(() => {
+  const bySys = new Map<string, AuthSession[]>()
+  for (const a of filteredRows.value) {
+    const k = a.system || ''
+    const arr = bySys.get(k)
+    if (arr) arr.push(a)
+    else bySys.set(k, [a])
+  }
+  const groups: SysGroup[] = []
+  for (const [system, list] of bySys) {
+    const key = system || UNCLASSIFIED
+    const ordered = [...list].sort((x, y) => {
+      const sx = x.slot || x.alias
+      const sy = y.slot || y.alias
+      return sx.localeCompare(sy)
+        || Number(y.isDefault) - Number(x.isDefault)
+        || (x.envId ?? -1) - (y.envId ?? -1)
+        || x.alias.localeCompare(y.alias)
+    })
+    const open = expandedSys.value.has(key)
+    // 组级聚合:槽是取用键,无默认/未声明都是槽级隐患 → 计槽数报组头
+    const bySlot = new Map<string, AuthSession[]>()
+    for (const r of ordered) {
+      const s = r.slot || r.alias
+      const arr = bySlot.get(s)
+      if (arr) arr.push(r)
+      else bySlot.set(s, [r])
+    }
+    const noDefaultSlots = [...bySlot.values()].filter((b) => !b.some((r) => r.isDefault)).length
+    const undeclaredSlots = slotsReady.value
+      ? [...bySlot.keys()].filter((s) => !declaredSlots.value.has(s)).length
+      : 0
+    const failCount = ordered.filter((r) => testMemory.value[r.id]?.ok === false).length
+    groups.push({
+      key, system,
+      binds: ordered,
+      visible: open ? ordered : ordered.slice(0, BIND_CAP),
+      collapsible: ordered.length > BIND_CAP,
+      hiddenCount: Math.max(0, ordered.length - BIND_CAP),
+      failCount, noDefaultSlots, undeclaredSlots,
+      tone: failCount ? 'bad' : (noDefaultSlots || undeclaredSlots) ? 'warn' : 'ok',
     })
   }
-  const weight = (c: SlotCard) => (c.failCount ? 1 : 0) + (c.hasDefault ? 0 : 1)
-  const kept = problemOnly.value ? cards.filter((c) => weight(c) > 0) : cards
-  return kept.sort((x, y) => weight(y) - weight(x) || x.slot.localeCompare(y.slot))
+  // 问题口径与旧版一致:测败 ∨ 无默认(「未声明」只染色不计数 —
+  // 声明注册表缺席/拉空时不宜把整池都判成问题)
+  const weight = (g: SysGroup) =>
+    (g.failCount ? 2 : 0) + (g.noDefaultSlots ? 1 : 0)
+  const kept = problemOnly.value ? groups.filter((g) => weight(g) > 0) : groups
+  return kept.sort((x, y) =>
+    weight(y) - weight(x)
+    || Number(x.key === UNCLASSIFIED) - Number(y.key === UNCLASSIFIED)
+    || x.key.localeCompare(y.key))
 })
-const slotCount = computed(() => slotCards.value.length)
-
-/** 卡面引用聚合 → 打开该槽默认(或首个)绑定的被引用侧板。 */
-function openSlotRefs(card: SlotCard): void {
-  const target = card.binds.find((r) => r.isDefault) ?? card.binds[0]
-  if (target) openRefs(target)
-}
+const sysCount = computed(() => sysGroups.value.length)
 
 const metaText = computed(() => {
   const total = rowsTotal.value
@@ -628,9 +706,6 @@ const schema = toTypedSchema(z.object({
   alias: z.string()
     .min(1, '请输入 alias')
     .regex(/^[A-Za-z0-9_-]{1,64}$/, '1-64 位字母数字下划线连字符'),
-  // S7.3 槽位(缺省 = alias;编辑态禁改,改名=重建)
-  slot: z.string()
-    .regex(/^[A-Za-z0-9_-]{0,64}$/, '0-64 位字母数字下划线连字符'),
   system: z.string(),
   // 环境选值是字符串 id('none' 哨兵 = 不限),提交时转 number
   envId: z.string(),
@@ -646,7 +721,7 @@ const schema = toTypedSchema(z.object({
 const { handleSubmit, resetForm, setFieldError } = useForm({
   validationSchema: schema,
   initialValues: {
-    alias: '', slot: '', system: '', envId: 'none',
+    alias: '', system: '', envId: 'none',
     url: '', username: '', password: '',
     token_type: 'Bearer' as const, expires_in: 7200,
   },
@@ -671,27 +746,28 @@ function accountFieldsToObject(): Record<string, string> {
   return out
 }
 
-/** ``slot``:预填槽位(S7.5 导入结果「去绑定」深链 ?newSlot=);
+/** ``slot``(深链 ?newSlot=):预填别名 — 取用键 = alias 本身(S7.5 导入
+ *  结果「去绑定」;表单不再暴露槽字段,后端 slot 缺省 = alias);
  *  ``system``/``envId``:执行配置枢纽「缺失深链预填直达」(分层③)。 */
 function openCreate(slot = '', system = '', envId = '') {
   editingId.value = null
   accountFields.value = []
-  // 高级区:深链带 system/envId 预填时自动展开(否则默认收起)
+  // 高级区:深链带 system/envId 预填时自动展开(alias 预填在主区)
   advancedOpen.value = Boolean(system || envId)
   resetForm({
     values: {
-      alias: slot, slot, system, envId: envId || 'none',
+      alias: slot, system, envId: envId || 'none',
       url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200,
     },
   })
   createOpen.value = true
 }
 
-/** authz M2a S3:置为该槽默认(同槽旧默认由后端原子清除)。 */
+/** authz M2a S3:置为默认取用行(名字/环境未命中时取这条;后端原子清除旧默认)。 */
 async function makeDefault(row: AuthSession) {
   try {
     await apiSetDefault(row.id)
-    toast.success(`已将 ${row.alias} 设为槽「${row.slot || row.alias}」的默认绑定`)
+    toast.success(`已将 ${row.alias} 设为默认取用`)
     await reloadList()
   } catch (e) {
     showError('设为默认', undefined, (e as Error).message)
@@ -708,7 +784,6 @@ function openEdit(row: AuthSession) {
   resetForm({
     values: {
       alias: row.alias,
-      slot: row.slot || row.alias,
       system: row.system || '',
       envId: row.envId != null ? String(row.envId) : 'none',
       url: row.url,
@@ -737,7 +812,7 @@ const onSubmitForm = handleSubmit(async (values) => {
         username: values.username,
         token_type: values.token_type,
         expires_in: values.expires_in,
-        // S7.3 槽位辅面(槽不可改;env none=清空,显式 null 语义由值本身表达)
+        // env none=清空(显式 null 语义由值本身表达)
         system: values.system,
         envId: values.envId === 'none' ? null : Number(values.envId),
         accountFields: accountFieldsToObject(),
@@ -748,8 +823,7 @@ const onSubmitForm = handleSubmit(async (values) => {
     } else {
       await store.createAuth({
         alias: values.alias,
-        // 槽位:显式且 ≠ alias 才送(缺省 = alias 是后端口径)
-        ...(values.slot && values.slot !== values.alias ? { slot: values.slot } : {}),
+        // 不送 slot:后端缺省 = alias,取用键即别名(表单无槽概念)
         system: values.system,
         ...(values.envId !== 'none' ? { envId: Number(values.envId) } : {}),
         accountFields: accountFieldsToObject(),
@@ -773,25 +847,21 @@ const onSubmitForm = handleSubmit(async (values) => {
 })
 
 // ── test ───────────────────────────────────────────────────────
-// 状态机:开弹框即 testing(修复历史 bug — 标题三元把 null 折叠成
-// "连通失败",在途假失败);返回/异常切终态。失败详情默认展开。
+// 状态机:开弹框即 testing(在途不假失败);返回/异常切终态。
+// 详情展开/收起策略移入共享 CredentialTestDialog(成功收起/失败展开)。
 const testOpen = ref(false)
 const testPhase = ref<'testing' | 'success' | 'fail'>('testing')
 const testResult = ref<TestResult | null>(null)
 const testTarget = ref<AuthSession | null>(null)
-const testDetailOpen = ref(true)
 
 async function runTest(row: AuthSession) {
   testTarget.value = row
   testResult.value = null
   testPhase.value = 'testing'
-  testDetailOpen.value = true
   testOpen.value = true
   try {
     testResult.value = await store.testConnection(row.id)
     testPhase.value = testResult.value.ok ? 'success' : 'fail'
-    // 成功默认收起(信息就一行 token 预览);失败保持展开直接看到原因
-    if (testPhase.value === 'success') testDetailOpen.value = false
   } catch (e) {
     testResult.value = {
       ok: false,
@@ -828,6 +898,16 @@ const deleteOpen = ref(false)
 const deleteSubmitting = ref(false)
 const deleteTarget = ref<AuthSession | null>(null)
 const deleteConfirmInput = ref('')
+/** 删除框内联的 409 拦截预告(与反查侧板同源同口径) */
+const deleteRefs = ref<AuthReferences | null>(null)
+
+const deleteBlocking = computed(() => {
+  const me = auth.currentUser?.id
+  if (!deleteRefs.value || me == null) return []
+  return deleteRefs.value.scenario_refs.visible.filter(
+    (v) => v.owner_id === me && v.kinds.includes('template'),
+  )
+})
 
 // ── 被引用反查侧板(配套方案 §1.2/§1.3)──────────────────────────
 const auth = useAuthStore()
@@ -890,7 +970,13 @@ const deleteConfirmed = computed(() =>
 function openDelete(row: AuthSession) {
   deleteTarget.value = row
   deleteConfirmInput.value = ''
+  deleteRefs.value = null
   deleteOpen.value = true
+  // 预取反查(打开即查,不另设"检查引用"步骤):失败静默 — 硬确认仍在,
+  // 409 拦截兜底语义不变
+  getReferences(row.alias)
+    .then((d) => { deleteRefs.value = d })
+    .catch(() => { deleteRefs.value = null })
 }
 
 async function submitDelete() {
@@ -921,7 +1007,7 @@ onMounted(async () => {
       slotsReady.value = true
     })
     .catch(() => { /* 注册表拉不到 — ✕ 未声明 chip 不亮 */ })
-  // S7.5:导入结果「去绑定」→ 直接开新建表单并预填槽位;分层③:执行配置
+  // S7.5:导入结果「去绑定」→ 直接开新建表单并预填别名;分层③:执行配置
   // 枢纽的缺失深链补 system/envId 预填(?newSlot=&system=&envId=)
   const q = route?.query ?? {}
   const newSlot = typeof q.newSlot === 'string' ? q.newSlot : ''
@@ -953,76 +1039,78 @@ onMounted(async () => {
 }
 .adv-toggle:hover { color: var(--sl-ink, var(--sl-ink)); }
 
-/* ── 槽位卡片看板(借 .svc-tile 语言:白卡 + 状态色 3px 顶边)────── */
-.auth-board {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fill, minmax(21.25rem, 1fr));
-  align-items: start;
+/* ── 按槽分组的表格(槽级状态 = 分组头 3px 左缘色带;凭证行 = 主体)── */
+.auth-table { --lib-card-max: none; }   /* 分组随页面流,不卡内滚动 */
+.tb-select { height: 2.125rem; width: 8.75rem; font-size: 0.78125rem; flex: none; }
+
+.grp > td {
+  padding: 0.375rem 0.75rem;
+  background: var(--sl-th-bg);
+  border-left: 3px solid var(--sl-divider);
 }
-.slot-card {
-  background: var(--c-surface);
-  border: 1px solid var(--sl-line, var(--sl-line));
-  border-top: 3px solid var(--sl-divider, #c3c9d4);
-  border-radius: 0.625rem;
-  box-shadow: 0 1px 3px rgba(16, 21, 28, 0.06);
-  padding: 0.625rem 0.8125rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 0;
-}
-.slot-card.tone-ok { border-top-color: var(--sl-ok, #22a55e); }
-.slot-card.tone-warn { border-top-color: var(--sl-warn, #e0a03c); }
-.slot-card.tone-bad { border-top-color: var(--sl-bad, #d9534f); }
-.sc-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-}
-.sc-slot { font-size: 0.78125rem; color: var(--sl-ink, var(--sl-ink)); }
-.sc-slot b { font-size: 0.8125rem; }
-.sc-n { font-size: 0.6875rem; }
-.sc-binds {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-.sc-bind {
-  border: 1px solid var(--sl-divider, #e8ebf0);
-  border-radius: 0.5rem;
-  padding: 0.4375rem 0.5625rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  background: var(--sl-canvas, #fbfcfe);
-}
-.bind-line {
+.grp.tone-ok > td { border-left-color: var(--sl-ok); }
+.grp.tone-warn > td { border-left-color: var(--sl-warn); }
+.grp.tone-bad > td { border-left-color: var(--sl-bad); }
+.grp-in {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.375rem;
   min-width: 0;
 }
-.bind-line.sub { justify-content: space-between; }
-.bind-line.sub .mono {
-  font-size: 0.6875rem;
+.grp-sys { font-size: 0.78125rem; color: var(--sl-ink); white-space: nowrap; }
+.grp-sys b { font-size: 0.8125rem; }
+.grp-n { font-size: 0.6875rem; }
+.grp-chip { height: auto; min-height: 1.1875rem; padding: 0 0.5rem; }
+.grp-add {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.71875rem;
+  color: var(--sl-accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.grp-add:hover { text-decoration: underline; }
+
+.auth-row:hover td { background: var(--sl-row-hover); }
+.cell-alias { display: flex; align-items: center; gap: 0.375rem; min-width: 0; flex-wrap: wrap; }
+.alias-name {
+  font-size: 0.78125rem;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.bind-line.acts { justify-content: space-between; }
-.sc-more {
-  align-self: flex-start;
-  padding: 0.125rem 0;
+/* 语义露出①:显式命名槽的行内小字(场景 ${slot.X} 的引用键) */
+.slot-sub { font-size: 0.65625rem; color: var(--sl-ink-3); white-space: nowrap; }
+.slot-sub.slot-undeclared { color: var(--sl-warn); }
+.is-default { height: auto; min-height: 1.1875rem; padding: 0 0.5rem; font-size: 0.6875rem; flex: none; }
+.cell-status { display: flex; flex-direction: column; gap: 0.1875rem; align-items: flex-start; }
+.mem-flag { font-size: 0.6875rem; white-space: nowrap; }
+.cell-tt { display: flex; flex-direction: column; gap: 0.125rem; align-items: flex-start; }
+.tt-exp { font-size: 0.6875rem; }
+.tgt-env { font-size: 0.71875rem; color: var(--sl-ink-2); white-space: nowrap; }
+.tgt-url {
+  font-size: 0.6875rem;
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell-refs { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+.unref { font-size: 0.6875rem; }
+.cell-acts { display: flex; align-items: center; justify-content: flex-end; gap: 0.375rem; }
+.grp-more > td { padding: 0.25rem 0.75rem; }
+.more-link {
+  padding: 0;
   border: 0;
   background: none;
   font-size: 0.71875rem;
-  color: var(--sl-accent, var(--sl-accent));
+  color: var(--sl-accent);
   cursor: pointer;
 }
-.sc-more:hover { text-decoration: underline; }
+.more-link:hover { text-decoration: underline; }
 
 /* ── 反查侧板 ─────────────────────────────────────────────── */
 .drawer-warn {
@@ -1052,76 +1140,4 @@ onMounted(async () => {
 .required-dot {
   @apply ml-1 font-bold text-signal-failed;
 }
-
-/* ── 测试弹框:状态主视觉式(开框即认证中 → 成功/失败终态)──── */
-.test-hero { text-align: center; }
-
-.test-sub {
-  margin-bottom: 1.125rem;
-  overflow: hidden;
-  font-size: 0.75rem;
-  color: var(--sl-ink-2);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.test-state {
-  display: flex;
-  gap: 0.625rem;
-  align-items: center;
-  justify-content: center;
-  margin: 0.375rem 0 0.875rem;
-}
-
-.test-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  font-size: 1.25rem;
-  font-weight: 700;
-  border-radius: 50%;
-}
-
-.testing .test-icon {
-  border: 3px solid var(--sl-line);
-  border-top-color: var(--sl-accent);
-  animation: test-spin 0.9s linear infinite;
-}
-
-.success .test-icon { color: var(--sl-ok); background: var(--sl-ok-soft); }
-.fail .test-icon { color: var(--sl-bad); background: var(--sl-bad-soft); }
-
-.test-word { font-size: 1rem; font-weight: 600; }
-.testing .test-word { color: var(--sl-ink-2); }
-.success .test-word { color: var(--sl-ok); }
-.fail .test-word { color: var(--sl-bad); }
-
-.test-code {
-  padding: 0.125rem 0.5rem;
-  font-size: 0.6875rem;
-  color: var(--sl-ink-2);
-  background: var(--sl-canvas);
-  border-radius: 0.25rem;
-}
-
-.detail {
-  display: block;
-  padding: 0.5rem 0.625rem;
-  color: var(--sl-ink);
-  background: var(--sl-canvas);
-  border-radius: 0.25rem;
-  word-break: break-all;
-}
-
-.detail-toggle {
-  background: none;
-  border: none;
-  color: var(--sl-ink-2);
-  cursor: pointer;
-  font-size: 0.75rem;
-}
-
-@keyframes test-spin { to { transform: rotate(360deg); } }
 </style>

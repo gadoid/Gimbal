@@ -36,13 +36,13 @@ async function mountPage() {
 }
 
 describe('Auths ?newSlot 深链(S7.5)', () => {
-  it('带 newSlot → 新建表单打开且 alias/slot 预填', async () => {
+  it('带 newSlot → 新建表单打开且别名预填(表单无槽字段,取用键=alias)', async () => {
     routeQuery.newSlot = 'maker'
     const w = await mountPage()
     const alias = document.body.querySelector<HTMLInputElement>('[data-testid="f-alias"]')
-    const slot = document.body.querySelector<HTMLInputElement>('[data-testid="f-slot"]')
     expect(alias?.value).toBe('maker')
-    expect(slot?.value).toBe('maker')
+    // 2026-11-16 四轮:表单不再暴露槽概念(slot 后端缺省 = alias)
+    expect(document.body.querySelector('[data-testid="f-slot"]')).toBeNull()
     w.unmount()
   })
 
