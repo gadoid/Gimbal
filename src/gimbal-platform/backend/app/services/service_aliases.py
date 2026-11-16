@@ -133,7 +133,9 @@ async def create_alias_in_transaction(
             raise ValueError(
                 "base_service_required: kind=external 须显式选择 base_service"
                 "(主档登记的第三方服务名;不再派生 alias_name)")
-        svc = await db.get(Service, base_service)
+        svc = (await db.execute(
+            select(Service).where(Service.name == base_service)
+        )).scalar_one_or_none()
         if svc is None or svc.kind not in ("external", "integration"):
             raise UnknownBaseService(
                 f"unknown_base_service: {base_service!r} 不在服务主档的"
@@ -186,8 +188,10 @@ async def create_alias(
         ref_mode=ref_mode, ref_username=ref_username, display=display)
     await db.commit()
     await db.refresh(row)  # server_default 时间列:刷新防异步懒加载
-    kind_of = (await db.get(Service, row.base_service))
-    return identity_out(row, kind=(kind_of.kind if kind_of else "plate"))
+    kind_row = (await db.execute(
+        select(Service.kind).where(Service.name == row.base_service)
+    )).scalar()
+    return identity_out(row, kind=(kind_row or "plate"))
 
 
 async def classify_services(
@@ -243,13 +247,17 @@ async def patch_alias(
     row = await db.get(ServiceIdentity, alias_name)
     if row is None:
         raise KeyError(f"alias_not_found: {alias_name}")
-    svc = await db.get(Service, row.base_service)
+    svc = (await db.execute(
+        select(Service).where(Service.name == row.base_service)
+    )).scalar_one_or_none()
     svc_kind = (svc.kind if svc else "plate")
     if base_service is not ...:
         if svc_kind != "external":
             raise ValueError(
                 "base_service_immutable: 仅 external 条目可设置 base_service")
-        target = await db.get(Service, base_service)
+        target = (await db.execute(
+            select(Service).where(Service.name == base_service)
+        )).scalar_one_or_none()
         if target is None or target.kind not in ("external", "integration"):
             raise ValueError(
                 f"kind_mismatch: base_service={base_service!r} 须指向主档"

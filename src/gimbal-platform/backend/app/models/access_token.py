@@ -134,8 +134,11 @@ class AccessTokenScope(Base):
         ForeignKey("access_tokens.id", ondelete="CASCADE"), nullable=False)
     alias_name: Mapped[str | None] = mapped_column(
         String(128),
-        ForeignKey("service_aliases.alias_name",
+        # 重构:别名 → 身份条目(键域不变,FK 随底座换表)
+        ForeignKey("service_identities.alias_name",
                    onupdate="CASCADE", ondelete="CASCADE"), nullable=True)
     auth_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("auth_sessions.id", ondelete="CASCADE"),
+        Integer,
+        # 重构:凭证行 → 账户(id 域不变)
+        ForeignKey("auth_accounts.id", ondelete="CASCADE"),
         nullable=True)

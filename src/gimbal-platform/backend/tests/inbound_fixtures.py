@@ -36,14 +36,32 @@ async def seed_platform_user() -> int:
 async def seed_alias(name: str = "agent-sys", *,
                      base_url: str | None = "https://cb.example.local",
                      **over) -> None:
-    """别名本体 + 地址(authz M2a S6:地址落部署表默认环境,基础服务 =
-    别名自身 —— 各别名地址互不覆盖)。``slot`` 等其余列经 ``over``。"""
+    """身份条目 + 地址(registry 重构:条目无 kind 列 —— kind 自主档
+    派生;地址落部署表默认环境,基础服务 = 条目自身 —— 各条目地址互
+    不覆盖)。``env_id`` 等其余列经 ``over``。"""
     from .helpers import seed_deployment
 
-    row = ServiceAlias(alias_name=name, base_service=name, kind="external")
+    row = ServiceAlias(alias_name=name, base_service=name)
     for k, v in over.items():
         setattr(row, k, v)
     async with db_module.SessionLocal() as s:
+        if row.env_id is None:
+            # env 必填(§1.4):缺省挂默认环境;库无环境行则建一个
+            # (调用方显式给 env_id 时以 over 为准)
+            from app.models.environment import Environment
+            env_id = (await s.execute(sa.text(
+                "SELECT id FROM environments WHERE is_default = TRUE"
+            ))).scalar()
+            if env_id is None:
+                env_id = (await s.execute(sa.text(
+                    "SELECT id FROM environments ORDER BY id LIMIT 1"
+                ))).scalar()
+            if env_id is None:
+                env = Environment(name="测试", is_default=True)
+                s.add(env)
+                await s.flush()
+                env_id = env.id
+            row.env_id = env_id
         s.add(row)
         if base_url:
             await seed_deployment(s, row.base_service, base_url)

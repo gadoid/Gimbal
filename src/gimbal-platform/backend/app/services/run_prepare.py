@@ -347,7 +347,7 @@ async def _materialize_identities(
         try:
             runtime = RuntimeAuthSession(
                 url=inst_urls.get((p.system, p.env_id), ""),
-                username=fernet_decrypt(a.username_enc),
+                username=a.username,  # 账户实体键为明文列(§1.4)
                 password=fernet_decrypt(a.password_enc),
                 token_type=a.token_type,
                 expires_in=a.expires_in,

@@ -154,7 +154,8 @@ async def create_service(
             raise
         except Exception:  # noqa: BLE001 — plate 不可达放行(主档自足)
             pass
-    dup = await db.get(Service, body.name)
+    dup = (await db.execute(select(Service.id).where(
+        Service.name == body.name))).scalar()
     if dup is not None:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             f"service '{body.name}' already registered")
@@ -177,7 +178,8 @@ async def create_service(
 async def patch_service(
     name: str, user: MemberUser, body: ServicePatch, db: DbSession,
 ) -> ServiceOut:
-    row = await db.get(Service, name)
+    row = (await db.execute(select(Service).where(
+        Service.name == name))).scalar_one_or_none()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"service not found: {name}")
@@ -201,7 +203,8 @@ async def delete_service(
     from ..models.deployment import Deployment
     from ..models.service_identity import ServiceIdentity
 
-    row = await db.get(Service, name)
+    row = (await db.execute(select(Service).where(
+        Service.name == name))).scalar_one_or_none()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"service not found: {name}")

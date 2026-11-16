@@ -120,7 +120,7 @@ async def test_grid_signal_matrix(fresh_db, plate):
     assert full["signals"] == {"req": None, "cases": True,
                                "lastRun": "pass", "alarm": True}
     assert full["caseCount"] == 1
-    assert full["lastRunAt"] == "2026-09-10T00:00:00"
+    assert full["lastRunAt"] == "2026-09-10T00:00:00Z"   # 73806242:API 时间戳全站 UTC Z 后缀
 
     # 锚点行硬化:零字段步的场景同样计入覆盖
     anchor = by_id[EP_ANCHOR]
@@ -170,4 +170,4 @@ async def test_grid_api_route(client, fresh_db, plate):
     ep = next(e for e in body["endpoints"] if e["id"] == EP_FULL)
     assert ep["signals"] == {"req": None, "cases": True, "lastRun": "pass",
                              "alarm": True}
-    assert ep["caseCount"] == 1 and ep["lastRunAt"] == "2026-09-10T00:00:00"
+    assert ep["caseCount"] == 1 and ep["lastRunAt"] == "2026-09-10T00:00:00Z"   # 73806242:API 时间戳全站 UTC Z 后缀

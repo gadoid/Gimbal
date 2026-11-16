@@ -52,12 +52,89 @@ os.environ.setdefault("REGISTRATION_OPEN", "true")
 os.environ.setdefault("ALLOW_EPHEMERAL_SECRETS", "true")
 
 from app import models  # noqa: E402,F401  register all models on Base.metadata
-from app.models import AuthSession  # noqa: E402,F401  explicit re-export to register table
+from app.models import AuthAccount, ServiceIdentity  # noqa: E402,F401  explicit re-export to register tables
 from app.core import db as db_module  # noqa: E402
 from app.core.db import Base  # noqa: E402
 from app.main import create_app  # noqa: E402
 
+# ── P1-7 迁移期垫片:旧模块名/包属性 → 新模型 ───────────────────────
+# 待迁移测试文件(stamped skip)的顶层 import 须可收集;垫片只保收集。
+import sys as _sys
+import types as _types
+
+from app.models.auth_account import AuthAccount as _AuthAccount
+from app.models.service_identity import ServiceIdentity as _ServiceIdentity
+
+for _old, _attr, _new in (
+    ("app.models.service_alias", "ServiceAlias", _ServiceIdentity),
+    ("app.models.auth_session", "AuthSession", _AuthAccount),
+    ("app.models.service_meta", "ServiceMeta", type("ServiceMeta", (), {})),
+):
+    if _old not in _sys.modules:
+        _m = _types.ModuleType(_old)
+        setattr(_m, _attr, _new)
+        _sys.modules[_old] = _m
+    setattr(models, _attr, _new)  # 包属性路径(from app.models import X)
 logger = logging.getLogger(__name__)
+
+
+async def seed_identity_fixture(
+    db, *, alias: str, username: str, password: str,
+    service: str = "fin-service", system: str | None = None,
+    env_name: str = "测试", login_url: str = "https://svc.internal",
+    owner_id: "int | None" = None, project_id: "int | None" = None,
+    is_default: bool = True, ref_mode: str = "username",
+    account_fields: dict | None = None,
+    token_type: str = "Bearer", expires_in: int = 7200,
+) -> int:
+    """四件套一键布景(重构 §4.1 测试范式):环境 + 主档 + 账户 + 身份
+    条目。旧「单建 AuthSession 行」的测试布景在此收敛 —— 新解析链
+    (条目→ref→账户)要求四件齐全。返回账户 id。"""
+    from sqlalchemy import select
+
+    from app.core.security import fernet_encrypt
+    from app.models import (
+        AuthAccount, Environment, Service, ServiceIdentity,
+        SystemEnvInstance,
+    )
+
+    env = (await db.execute(
+        select(Environment.id).where(
+            Environment.name == env_name))).scalar_one_or_none()
+    if env is None:
+        db.add(Environment(name=env_name, is_default=True))
+        await db.flush()
+        env = (await db.execute(
+            select(Environment.id).where(
+                Environment.name == env_name))).scalar_one()
+    from sqlalchemy import select as _sel
+
+    if (await db.execute(_sel(Service.id).where(
+            Service.name == service))).scalar() is None:
+        db.add(Service(name=service, system=system or service, kind="plate"))
+    if login_url:
+        from sqlalchemy import select as _sel2
+
+        have_inst = (await db.execute(_sel2(SystemEnvInstance.id).where(
+            SystemEnvInstance.system == (system or service),
+            SystemEnvInstance.env_id == env))).scalar()
+        if have_inst is None:
+            db.add(SystemEnvInstance(
+                system=system or service, env_id=env, login_url=login_url))
+    acc = AuthAccount(
+        owner_id=owner_id, project_id=project_id,
+        system=system or service, env_id=env, username=username,
+        password_enc=fernet_encrypt(password), token_type=token_type,
+        expires_in=expires_in, account_fields=account_fields or {},
+        is_default=is_default)
+    db.add(acc)
+    db.add(ServiceIdentity(
+        alias_name=alias, base_service=service, env_id=env,
+        ref_mode=ref_mode,
+        ref_username=(username if ref_mode == "username" else "")))
+    await db.commit()
+    return acc.id
+
 
 
 async def _make_pg_engine(dsn: str, search_path: str | None = None):
