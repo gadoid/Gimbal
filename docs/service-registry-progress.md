@@ -6,8 +6,9 @@
 
 ## 1. 一句话状态
 
-**Phase 1（底座）已闭环并通过全量测试基线；Phase 2（页面）完成凭证域账户化与服务注册主档重做，
-剩余「身份条目子页 / 环境配置页拆页 / 文案清账」未完成；生产环境已迁移并部署，登录后的场景试跑待凭据。**
+**Phase 1（底座）已闭环并通过全量测试基线；Phase 2（页面）完成凭证域账户化、服务注册主档重做、
+身份条目子页条目化（ServiceAliasDetail），剩余「ProjectConfigPanel（C2b）/ ExecConfigs（C3a）/ carry 写面（C3b）/ 文案清账」未完成；
+生产环境已迁移并部署，登录后的场景试跑待凭据。**
 
 ## 2. 已完成
 
@@ -58,7 +59,7 @@ env 必填收紧 / 环境不符=missing / 双条目共享账户（同 binding_id
 | `CredentialSelect` / `AuthSelectorModal` | 凭证别名下拉 → **身份条目选择器**（`${auth.<条目名>}` 域） |
 | `CaseComposerCanvas` | F4 注入改条目口径（选中已登记条目即注入 `${auth.<条目名>}.token`，切未登记名清行）；`auths` 与 `registeredAliases` 同源一次拉取 |
 | `UsersCard` / `ImportScenarioDialog` | 快照导入账户形状（键 `username@system`）；挂认证下拉退役（后端 slot 兼容忽略） |
-| `ServiceAliasDetail` | face 表单 slot→display；其余 tab 仍旧口径（见 §4） |
+| `ServiceAliasDetail` | **条目化重做**：头部徽标 槽位→环境+ref（`ref 默认`/`ref 用户名·x`）；概览补 系统/环境/账户装载行；地址就绪矩阵扩 实例登录口/版本线两列（主档查系统归属，未登记主档显「—」）；凭证 tab→账户装载（ref 语义+去凭证管理）；身份条目登记表单补 环境选择（实体键不可改）+ refMode/refUsername；列表补 环境/账户装载列；键合法性校验集合 = 主档 ∪ 目录（§2.2） |
 
 **验证**：`vitest 171 文件 / 1427 用例全绿`、`vue-tsc 0 错误`、`eslint 干净`。
 
@@ -93,7 +94,8 @@ accounts   2   18180789650(默认) / 18180789652
 | `4a9a1083` | 修复 carry `select` 导入 + 空库 bootstrap stamp head |
 | `c49cfbb1` | P1-7 测试基线（垫片/四件套/stamp/新语义 7 用例） |
 | `3f526d2c` | P1-8 前端适配（账户化凭证面 + 条目选择器 + 主档 API） |
-| 本次 | 服务注册页重做（主档注册簿 + 对账 + 实例弹框）+ 本文档 |
+| `619a754c` | 服务注册页重做（主档注册簿 + 对账 + 实例弹框） |
+| 本次 | 身份条目子页条目化（ServiceAliasDetail 概览/矩阵/账户装载 tab/登记表单 env+ref）+ 本文档 |
 
 ## 4. 未完成 / 后续计划
 
@@ -108,15 +110,18 @@ accounts   2   18180789650(默认) / 18180789652
 
 ### P2-B 页面收尾
 
-1. **ServiceAliasDetail 子页**（身份条目详情）：
-   - 概览 tab：`凭证槽位` → `账户装载`（refMode/refUsername + 去向凭证管理）；
-   - 地址就绪矩阵：补 `(system, env)` 登录口/版本线两列（当前只有 deployments 地址）；
-   - 头部徽标 `槽位 N` → `ref 默认 / ref 用户名`。
+1. ~~**ServiceAliasDetail 子页**（身份条目详情）~~ ✅ 已完成：
+   - 概览 tab：`凭证槽位` → `账户装载`（refMode/refUsername + 去向凭证管理），补 系统/环境 行；
+   - 地址就绪矩阵：补 `(system, env)` 登录口/版本线两列（自主档查系统归属）；
+   - 头部徽标 `槽位 N` → `环境 x` + `ref 默认 / ref 用户名·x`；
+   - 登记表单补 环境（实体键不可改）+ refMode/refUsername；本页术语全面切「身份条目」；
+   - 键合法性校验集合 = 主档 ∪ plate 目录（§2.2，external 行不再依赖目录可达性）。
 2. **环境配置页（拆页决策）**：设计文档原计划独立「环境配置页（实例+条目+字段默认值）」。
    当前实现把实例配置并入服务注册页（组头「实例配置」+ 格内登录口小钮），未拆独立页。
    若后续环境数/系统数增长，可再拆；**当前不建议拆**（服务注册页即 mapping 入口）。
 3. **ProjectConfigPanel**：槽位状态/预览仍读旧槽位语义，需切条目+实例（台账 C2b）。
-4. **Phase 3 文案清账**：「槽位」字样全站退场（条目/身份/账户口径）；runbook / 概念地图同步。
+4. **ExecConfigsView**：就绪度/绑定面板仍按旧槽位口径（台账 C3a）。
+5. **Phase 3 文案清账**：「槽位」字样全站退场（条目/身份/账户口径）；runbook / 概念地图同步。
 
 ### P2-C 验证收口
 

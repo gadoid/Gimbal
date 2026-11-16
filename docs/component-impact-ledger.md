@@ -6,8 +6,8 @@
 >
 > **进度快照 2026-11-16**:C1 已做账户化最小适配(表单/行/拨测/反查全部切换,
 > 搜索占位符与「system 主档选择」待清);C2a 已账户化;C4 的 ServiceAdmin
-> 主档注册簿+对账+实例弹框已完成,ServiceAliasDetail 仅 face 表单切 display,
-> 概览/凭证 tab 待改;其余未动。详见 `service-registry-progress.md`。
+> 主档注册簿+对账+实例弹框已完成,ServiceAliasDetail 已条目化(徽标/概览/
+> 矩阵/账户装载 tab/登记表单 env+ref);其余未动。详见 `service-registry-progress.md`。
 
 ## C1 凭证管理(Auths.vue / routers/auth_sessions.py)
 
@@ -75,8 +75,9 @@
 ## C4 服务注册 + 环境配置页(Phase 2 重做主体,非欠账,列此对齐)
 
 **状态**: 🟡 ServiceAdmin 重做完成(主档注册簿 + 对账 + 实例弹框 + 删除/登记);
-环境配置页未拆独立页(实例配置并入服务注册页,见 redesign §6.0 偏离 1);
-ServiceAliasDetail 仅 face 表单切 display,概览/凭证 tab 待改。
+ServiceAliasDetail 已条目化(头部徽标 环境+ref / 概览补账户装载行 / 就绪矩阵扩
+实例登录口·版本线两列 / 凭证 tab→账户装载 / 登记表单补 env+ref、列表扩列);
+环境配置页未拆独立页(实例配置并入服务注册页,见 redesign §6.0 偏离 1)。
 
 - ServiceAdmin.vue → 结构面:系统分组注册簿 + 对账条(未注册/漂移/不可达)
   + external 登记
@@ -95,6 +96,6 @@ ServiceAliasDetail 仅 face 表单切 display,概览/凭证 tab 待改。
 
 ## 销账顺序建议
 
-C4(页面骨架,ServiceAdmin ✅ / AliasDetail 待续)→ C1(凭证,🟡)→
+C4(页面骨架,ServiceAdmin ✅ / AliasDetail ✅)→ C1(凭证,🟡)→
 C2b(项目配置,⬜)→ C3a/C3b(配置,⬜)→ C3c 随 C4。C5 观察项随遇随销。
 P1-7 测试续期(52 文件)与上述页面改造并行推进,不阻塞。
