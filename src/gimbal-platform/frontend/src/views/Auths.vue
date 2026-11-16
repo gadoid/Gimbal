@@ -1,22 +1,20 @@
-<!-- Auths.vue — 凭证池管理页(2026-11-16 三轮:凭证一等公民)。
-     心智模型:先有凭证,槽位是「引用凭证的键」— 关系方向 = 凭证 →
-     挂载槽(数据模型里 slot 是凭证的单值字段,一条凭证只挂一个槽),
-     引用它的服务别名/场景模板在行内「引用」列可数、可反查。槽不作为
-     容器/分组层出现,只在两处作为属性露出:① 显式命名槽(slot≠alias)
-     的行内小字(未声明时琥珀) ② 无默认/未声明/测败等槽级取用隐患,
-     聚合为系统组头的徽章计数(独占槽的无默认直示行内)。浏览组织 =
-     按系统分组、组内凭证平铺(同槽相邻,默认在前 → 环境 → alias)、
-     环境名列示。组级状态由分组头 3px 左缘色带承载:红=有测败、琥珀=
-     无默认∨未声明、绿=健康;问题组排前,「只看问题」一键滤出。取数
-     单一链路(200 封顶),搜索/类型过滤照旧下推服务端;系统/环境为
-     客户端过滤。创建/编辑(渐进披露)/删除(alias 硬确认 + 引用预取
-     内联警示)/测试弹框(共享 CredentialTestDialog)/反查侧板原样。 -->
+<!-- Auths.vue — 账户池管理页(registry 重构 P1-8:凭证=账户实体)。
+     心智模型:账户 = 登录信息实体,(system, env, username) 唯一,密码
+     只存一份 —— 改密一处、所有装载它的身份条目/场景同时生效。alias/
+     url/slot 已退役:登录地址在环境×系统实例(只读回显),装载关系在
+     身份条目(ref 引用账户,反查可数)。浏览组织 = 按 system 分组、
+     组内账户平铺(默认在前 → username);组级状态由分组头 3px 左缘
+     色带承载:红=有测败、琥珀=有 (system,env) 无默认、绿=健康;问题组
+     排前,「只看问题」一键滤出。取数单一链路(200 封顶),搜索(q 打
+     username/system)/类型过滤下推服务端。创建/编辑(渐进披露)/删除
+     (username 硬确认 + 引用预取内联警示)/测试弹框(共享
+     CredentialTestDialog)/反查侧板(身份条目 + 场景引用)原样。 -->
 <template>
   <section class="slib">
     <PageHead
       icon="lock"
       title="凭证管理"
-      :count="rowsTotal ? `${sysCount} 系统 · ${bindCount} 条凭证` : undefined"
+      :count="rowsTotal ? `${sysCount} 系统 · ${bindCount} 个账户` : undefined"
       :meta="metaText"
     />
 
@@ -24,7 +22,7 @@
       <input
         v-model="searchQuery"
         class="slib-search"
-        placeholder="搜索 alias / url"
+        placeholder="搜索 username / system"
         data-testid="auth-search"
       />
       <span class="svc-stats tight" data-testid="tt-filter-group">
@@ -53,54 +51,48 @@
           <SelectItem v-for="e in envs" :key="e.id" :value="String(e.id)">{{ e.name }}</SelectItem>
         </SelectContent>
       </Select>
-      <!-- 状态优先:只看有问题的槽(无默认 · 上次测试失败) -->
+      <!-- 状态优先:只看有问题的账户(无默认 · 上次测试失败) -->
       <button
         type="button" class="svc-chip" :class="{ on: problemOnly }"
         data-testid="problem-filter" @click="problemOnly = !problemOnly"
       >只看问题</button>
-      <button type="button" class="slib-create" data-testid="open-create" @click="openCreate()">+ 新增认证</button>
+      <button type="button" class="slib-create" data-testid="open-create" @click="openCreate()">+ 新增账户</button>
     </div>
 
-    <!-- 按系统分组的凭证表格:凭证行 = 管理主体(组内平铺,无容器层),
-         行内按环境列示。槽是凭证的属性(挂载键),不是分组容器 —
-         槽级取用隐患(无默认/未声明/测败)聚合为组头徽章计数 -->
+    <!-- 按 system 分组的账户表格:账户行 = 管理主体(组内平铺,无容器层)。
+         (system, env) 无默认是取用隐患(default 型条目取不到行),聚合到
+         组头徽章计数 -->
     <div v-if="sysGroups.length" class="lib-card auth-table" data-testid="auth-board">
       <table class="slib-table">
         <thead>
           <tr>
-            <th style="width:10.75rem">alias</th>
+            <th style="width:11rem">username</th>
             <th style="width:9.25rem">状态</th>
             <th style="width:6.75rem">类型</th>
             <th>环境 / 登录地址</th>
-            <th style="width:7.25rem">账号</th>
             <th style="width:10rem">引用</th>
             <th style="width:7.5rem" />
           </tr>
         </thead>
         <tbody>
           <template v-for="g in sysGroups" :key="g.key">
-            <!-- 系统组头:系统名 + 组级健康聚合(测败/无默认/未声明都是槽级
-                 取用隐患,聚合到组头一眼看穿;3px 左缘色带承载组级状态) -->
+            <!-- 系统组头:系统名 + 组级健康聚合(测败/(system,env) 无默认
+                 都是取用隐患,聚合到组头一眼看穿;3px 左缘色带承载组级状态) -->
             <tr class="grp" :class="`tone-${g.tone}`" :data-testid="`sys-card-${g.key}`">
-              <td colspan="7">
+              <td colspan="6">
                 <div class="grp-in">
-                  <span class="grp-sys"><b class="mono">{{ g.system || '未归类' }}</b></span>
-                  <span class="muted grp-n">{{ g.binds.length }} 条凭证</span>
-                  <span v-if="g.noDefaultSlots" class="svc-chip warn grp-chip" title="名字解析与环境未命中时无默认凭证可取">{{ g.noDefaultSlots }} 条无默认</span>
+                  <span class="grp-sys"><b class="mono">{{ g.system }}</b></span>
+                  <span class="muted grp-n">{{ g.binds.length }} 个账户</span>
+                  <span v-if="g.noDefaultPairs" class="svc-chip warn grp-chip" title="default 型身份条目在该 (系统,环境) 取不到默认账户">{{ g.noDefaultPairs }} 组无默认</span>
                   <span
                     v-if="g.failCount" class="svc-flag red"
                     :data-testid="`sys-fail-${g.key}`"
-                    title="本机记录:该系统存在上次测试失败的凭证"
+                    title="本机记录:该系统存在上次测试失败的账户"
                   >✕{{ g.failCount }} 测败</span>
-                  <span
-                    v-if="g.undeclaredSlots" class="svc-flag amber"
-                    :data-testid="`sys-undeclared-${g.key}`"
-                    title="这些槽在服务注册的身份面无声明 — 经别名注入不会取用;仅场景 ${slot.X} 直接引用可达"
-                  >✕{{ g.undeclaredSlots }} 未声明</span>
                   <span class="flex-1" />
                   <button
                     type="button" class="grp-add" :data-testid="`sys-add-${g.key}`"
-                    @click="openCreate('', g.system)"
+                    @click="openCreate(g.system)"
                   >+ 登记</button>
                 </div>
               </td>
@@ -110,19 +102,12 @@
               <tr class="auth-row" :data-testid="`auth-row-${row.id}`">
                 <td>
                   <div class="cell-alias">
-                    <span class="mono alias-name">{{ row.alias }}</span>
+                    <span class="mono alias-name">{{ row.username }}</span>
                     <span
                       v-if="row.isDefault" class="svc-chip is-default"
                       :data-testid="`default-chip-${row.id}`"
-                      title="名字解析与环境未命中时的取用行">默认</span>
+                      title="default 型身份条目在该 (系统,环境) 的取用行">默认</span>
                   </div>
-                  <!-- 槽属性露出:此凭证挂载的槽(场景经 ${slot.X} 取用的键) -->
-                  <div
-                    v-if="row.slot && row.slot !== row.alias" class="slot-sub"
-                    :class="{ 'slot-undeclared': slotsReady && !declaredSlots.has(row.slot) }"
-                    :title="slotsReady && !declaredSlots.has(row.slot)
-                      ? '槽未被服务注册声明 — 经别名注入不会取用' : `此凭证挂载到槽 ${row.slot} — 场景经 \${slot.${row.slot}} 取用`"
-                  >槽 {{ row.slot }}</div>
                 </td>
                 <td>
                   <div class="cell-status">
@@ -133,11 +118,11 @@
                       :title="`上次测试:${testMemory[row.id].ok ? '成功' : '失败'} · ${shortDateTime(new Date(testMemory[row.id].at))}(本机记录)`"
                     >{{ testMemory[row.id].ok ? '✓ 测通' : '✗ 测败' }} {{ shortDateTime(new Date(testMemory[row.id].at)) }}</span>
                     <span v-else class="muted">—</span>
-                    <!-- 未设默认的取用键 = 隐患,行内直示(多键组由组头计数) -->
+                    <!-- 独占 (system,env) 组(全池仅此一账户)→ 无默认时行内直示 -->
                     <span
-                      v-if="!row.isDefault && soloSlots.has(row.slot || row.alias)"
+                      v-if="!row.isDefault && soloPairs.has(pairKey(row))"
                       class="svc-chip warn grp-chip"
-                      title="此槽没有默认绑定行 — 名字解析与环境未命中时无凭证可取">无默认</span>
+                      title="该 (系统,环境) 没有默认账户 — default 型身份条目取不到行">无默认</span>
                   </div>
                 </td>
                 <td>
@@ -148,27 +133,28 @@
                 </td>
                 <td>
                   <div class="tgt-env">{{ envName(row.envId) }}</div>
-                  <div class="mono muted tgt-url" :title="row.url">{{ row.url || '静态令牌' }}</div>
+                  <div
+                    class="mono muted tgt-url" :title="row.loginUrl || '实例未配置登录地址(环境×系统实例页维护)'"
+                  >{{ row.loginUrl || '— 实例未配置' }}</div>
                 </td>
-                <td><span class="mono muted">{{ row.username }}</span></td>
                 <td>
                   <div class="cell-refs">
-                    <!-- 引用方向:别名绑定/场景模板引用的是槽,经槽取到此凭证 -->
+                    <!-- 引用方向:身份条目按 ref 装载本账户;场景经条目取到 -->
                     <button
-                      v-if="row.alias_ref_count" type="button" class="svc-chip"
-                      :data-testid="`refs-open-${row.alias}`"
-                      :title="`${row.alias_ref_count} 个服务别名绑定槽 ${row.slot || row.alias} — 经别名注入取到此凭证,点击反查`"
+                      v-if="row.identityRefCount" type="button" class="svc-chip"
+                      :data-testid="`refs-open-${row.id}`"
+                      :title="`${row.identityRefCount} 个身份条目 ref 本账户 — 点击反查`"
                       @click="openRefs(row)"
-                    >{{ row.alias_ref_count }} 别名</button>
+                    >{{ row.identityRefCount }} 条目</button>
                     <button
-                      v-if="row.scenario_ref_count" type="button" class="svc-chip"
-                      :data-testid="`refs-open-scenario-${row.alias}`"
-                      :title="`${row.scenario_ref_count} 个场景经 \${slot.*} 模板引用,点击反查`"
+                      v-if="row.scenarioRefCount" type="button" class="svc-chip"
+                      :data-testid="`refs-open-scenario-${row.id}`"
+                      :title="`${row.scenarioRefCount} 个场景引用装载本账户的条目,点击反查`"
                       @click="openRefs(row)"
-                    >{{ row.scenario_ref_count }} 场景</button>
+                    >{{ row.scenarioRefCount }} 场景</button>
                     <span
-                      v-if="!row.alias_ref_count && !row.scenario_ref_count" class="muted unref"
-                      title="别名绑定与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
+                      v-if="!row.identityRefCount && !row.scenarioRefCount" class="muted unref"
+                      title="身份条目与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
                     >未被引用 · 可安全删除</span>
                   </div>
                 </td>
@@ -206,11 +192,11 @@
             </template>
 
             <tr v-if="g.collapsible" class="grp-more">
-              <td colspan="7">
+              <td colspan="6">
                 <button
                   type="button" class="more-link"
                   :data-testid="`sys-more-${g.key}`" @click="toggleSys(g.key)"
-                >{{ expandedSys.has(g.key) ? '收起' : `还有 ${g.hiddenCount} 条凭证` }}</button>
+                >{{ expandedSys.has(g.key) ? '收起' : `还有 ${g.hiddenCount} 个账户` }}</button>
               </td>
             </tr>
           </template>
@@ -220,43 +206,52 @@
 
     <div v-else-if="rowsLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
     <div v-else class="empty-cta" data-testid="auths-empty">
-      <p>暂无认证 — 复制用例中的 alias 在此登记</p>
-      <Button variant="outline" size="sm" @click="openCreate()">+ 新增认证</Button>
+      <p>暂无账户 — 按系统登记登录账号</p>
+      <Button variant="outline" size="sm" @click="openCreate()">+ 新增账户</Button>
     </div>
 
-    <!-- ── 创建 / 编辑(定稿表单范式)──────────────────────────── -->
+    <!-- ── 创建 / 编辑(定稿表单范式;账户四元组 = 实体键)────────── -->
     <Dialog :open="createOpen" @update:open="createOpen = $event">
       <DialogContent class="max-w-[32.5rem]">
         <DialogHeader>
-          <DialogTitle>{{ editingId ? '编辑认证' : '+ 新增认证' }}</DialogTitle>
+          <DialogTitle>{{ editingId ? '编辑账户' : '+ 新增账户' }}</DialogTitle>
         </DialogHeader>
         <form class="flex flex-col gap-3" @submit="onSubmitForm">
-          <FormField v-slot="{ componentField }" name="alias">
-            <FormItem>
-              <FormLabel>alias<span class="required-dot">*</span></FormLabel>
-              <FormControl>
-                <Input v-bind="componentField" :disabled="!!editingId"
-                  placeholder="例 qa1 / staging-codfish（同 owner 内唯一）" data-testid="f-alias" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ componentField }" name="url">
-            <FormItem>
-              <FormLabel>登录 URL<span class="required-dot">*</span></FormLabel>
-              <FormControl>
-                <Input v-bind="componentField" placeholder="https://target/auth/login" data-testid="f-url" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
+          <div class="grid grid-cols-2 gap-3">
+            <FormField v-slot="{ componentField }" name="system">
+              <FormItem>
+                <FormLabel>系统<span class="required-dot">*</span></FormLabel>
+                <FormControl>
+                  <Input v-bind="componentField" :disabled="!!editingId"
+                    placeholder="例 fin-service(与 Plate 侧一致)" data-testid="f-system" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+            <FormField v-slot="{ componentField }" name="envId">
+              <FormItem>
+                <FormLabel>环境<span class="required-dot">*</span></FormLabel>
+                <FormControl>
+                  <!-- 原生 select(P1-8):jsdom 可测 + 键盘可达;Phase 2 页面
+                       重做时统一 ui/Select -->
+                  <select v-bind="componentField" class="native-select" data-testid="f-env">
+                    <option value="" disabled>选择环境</option>
+                    <option v-for="e in envs" :key="e.id" :value="String(e.id)">
+                      {{ e.name }}
+                    </option>
+                  </select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            </FormField>
+          </div>
 
           <FormField v-slot="{ componentField }" name="username">
             <FormItem>
               <FormLabel>username<span class="required-dot">*</span></FormLabel>
               <FormControl>
-                <Input v-bind="componentField" placeholder="登录用户名" data-testid="f-username" />
+                <Input v-bind="componentField" :disabled="!!editingId"
+                  placeholder="登录用户名(同系统内唯一,创建后不可改)" data-testid="f-username" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -267,53 +262,22 @@
               <FormLabel>password<span v-if="!editingId" class="required-dot">*</span></FormLabel>
               <FormControl>
                 <Input v-bind="componentField" type="password"
-                  :placeholder="editingId ? '留空表示不修改' : '登录密码'" data-testid="f-password" />
+                  :placeholder="editingId ? '留空表示不修改(改密一处,所有装载它的条目/场景同时生效)' : '登录密码'" data-testid="f-password" />
               </FormControl>
               <FormMessage />
             </FormItem>
           </FormField>
 
-          <!-- 渐进披露:90% 场景是 alias+账号密码+URL;系统/环境/账号字段/
-               token 类型/有效期收进「高级」折叠区(默认收起;深链预填或
-               编辑态有非缺省值时自动展开;v-show 保持字段常驻,vee-validate
-               不感知)。取用键 = alias 本身(slot 后端缺省 = alias),表单
-               不再暴露槽概念 -->
+          <!-- 渐进披露:90% 场景是 system+env+账号密码;账号字段/token
+               类型/有效期收进「高级」折叠区(默认收起;深链预填或编辑态
+               有非缺省值时自动展开;v-show 保持字段常驻,vee-validate
+               不感知)。system/env/username 是实体键,编辑态锁定 -->
           <button
             type="button" class="adv-toggle" data-testid="f-advanced-toggle"
             @click="advancedOpen = !advancedOpen"
-          >{{ advancedOpen ? '▾' : '▸' }} 高级(系统 / 环境 / 账号字段 / token 类型 / 有效期)</button>
+          >{{ advancedOpen ? '▾' : '▸' }} 高级(账号字段 / token 类型 / 有效期)</button>
 
           <div v-show="advancedOpen" class="flex flex-col gap-3" data-testid="f-advanced-body">
-            <div class="grid grid-cols-2 gap-3">
-              <FormField v-slot="{ componentField }" name="system">
-                <FormItem>
-                  <FormLabel>系统</FormLabel>
-                  <FormControl>
-                    <Input v-bind="componentField" placeholder="例 fin-service(空=未归类)" data-testid="f-system" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              </FormField>
-              <FormField v-slot="{ componentField }" name="envId">
-                <FormItem>
-                  <FormLabel>环境</FormLabel>
-                  <FormControl>
-                    <Select v-bind="componentField">
-                      <SelectTrigger data-testid="f-env"><SelectValue placeholder="不限" /></SelectTrigger>
-                      <SelectContent>
-                        <!-- Radix Select 禁空串 value → 'none' 哨兵 = 不限 -->
-                        <SelectItem value="none">不限</SelectItem>
-                        <SelectItem v-for="e in envs" :key="e.id" :value="String(e.id)">
-                          {{ e.name }}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              </FormField>
-            </div>
-
             <!-- FormField 外置 KV 行(vee-validate 不管控,提交时聚合) -->
             <div class="flex flex-col gap-1.5">
               <label class="text-label font-medium text-signal-ink">账号字段(供 ${slot.X.field} 注入,如 orgNo)</label>
@@ -372,31 +336,32 @@
     <!-- ── 测试结果弹框(共享件:个人池/项目凭证面板同一交互)────── -->
     <CredentialTestDialog
       :open="testOpen"
-      :target="testTarget"
+      :target="testTarget && { name: `${testTarget.system} / ${testTarget.username}`,
+                               target: testTarget.loginUrl || '实例未配置登录地址' }"
       :phase="testPhase"
       :result="testResult"
       @update:open="testOpen = $event"
       @retest="testTarget && runTest(testTarget)"
     />
 
-    <!-- ── 删除确认(输入 alias 硬确认 + 引用预取内联警示)─────── -->
+    <!-- ── 删除确认(输入 username 硬确认 + 引用预取内联警示)───── -->
     <Dialog :open="deleteOpen" @update:open="deleteOpen = $event">
       <DialogContent class="max-w-[26.25rem]">
         <DialogHeader>
-          <DialogTitle>删除认证</DialogTitle>
+          <DialogTitle>删除账户</DialogTitle>
         </DialogHeader>
         <div v-if="deleteTarget" class="flex flex-col gap-3">
           <p class="m-0 text-body leading-relaxed">
-            此操作不可撤销。alias <code class="rounded-chip bg-signal-failed/10 px-1.5 font-mono text-signal-failed">{{ deleteTarget.alias }}</code>
-            将从凭证池中移除（已使用此 alias 的历史执行记录不受影响）。
+            此操作不可撤销。<code class="rounded-chip bg-signal-failed/10 px-1.5 font-mono text-signal-failed">{{ deleteTarget.system }} / {{ deleteTarget.username }}</code>
+            将从账户池中移除(ref 它的身份条目将取不到凭据,历史执行记录不受影响)。
           </p>
           <!-- 与反查侧板同源的数据:把 409 拦截预告内联进确认框 -->
           <div v-if="deleteBlocking.length" class="drawer-warn" data-testid="del-block-warn">
             <p class="m-0 font-semibold">删除会被拦截:仍有 {{ deleteBlocking.length }} 个本人场景引用(模板)</p>
-            <p class="m-0 mt-0.5">先解除别名绑定,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
+            <p class="m-0 mt-0.5">先解除身份条目的 ref,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
           </div>
-          <p class="m-0 text-body">要继续请输入 <code class="font-mono">{{ deleteTarget.alias }}</code> 确认：</p>
-          <Input v-model="deleteConfirmInput" :placeholder="`输入 ${deleteTarget.alias} 以确认`" data-testid="del-confirm" />
+          <p class="m-0 text-body">要继续请输入 <code class="font-mono">{{ deleteTarget.username }}</code> 确认：</p>
+          <Input v-model="deleteConfirmInput" :placeholder="`输入 ${deleteTarget.username} 以确认`" data-testid="del-confirm" />
         </div>
         <DialogFooter>
           <Button variant="outline" @click="deleteOpen = false">取消</Button>
@@ -406,9 +371,8 @@
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    <!-- ── 被引用反查侧板(配套方案 §1.2/§1.3)──────────────────
-         原型 H-auths-v2 = 右侧滑入面板:用 Sheet(side=right)。项目的 vaul
-         Drawer 是底部抽屉,先前把 max-w 加在它上面 = 底部居中窄条(位置不对)。 -->
+    <!-- ── 被引用反查侧板(重构 §1.2/§1.3:条目 ref + 场景)─────────
+         原型 H-auths-v2 = 右侧滑入面板:用 Sheet(side=right)。 -->
     <Sheet :open="refsOpen" @update:open="refsOpen = $event">
       <SheetContent
         side="right"
@@ -416,31 +380,31 @@
         data-testid="refs-sheet"
       >
         <SheetHeader class="border-b border-signal-line px-4 py-3">
-          <SheetTitle class="text-left">被引用 · {{ refsTarget?.alias }}</SheetTitle>
+          <SheetTitle class="text-left">被引用 · {{ refsTarget?.username }}</SheetTitle>
           <SheetDescription class="text-left">
-            名字引用 — 场景与别名解析按执行者本人凭证池,非本条凭证对象(§1.4)
+            身份条目按 ref 装载本账户;场景经条目取到凭据(§1.4)
           </SheetDescription>
         </SheetHeader>
         <div class="flex-1 overflow-y-auto px-4 py-3 text-caption">
-          <p v-if="refsLoading" class="m-0 py-4 text-center text-muted-foreground">扫描场景引用中…</p>
+          <p v-if="refsLoading" class="m-0 py-4 text-center text-muted-foreground">扫描引用中…</p>
           <template v-else-if="refsData">
             <h4 class="m-0 mb-1.5 text-label font-semibold text-signal-ink">
-              别名绑定({{ refsData.alias_refs.length }})
+              身份条目({{ refsData.identityRefs.length }})
             </h4>
-            <div v-for="a in refsData.alias_refs" :key="a.alias_name" class="ref-row">
+            <div v-for="a in refsData.identityRefs" :key="a.aliasName" class="ref-row">
               <router-link
-                :to="`/service-admin/${encodeURIComponent(a.alias_name)}?tab=credential`"
+                :to="`/service-admin/${encodeURIComponent(a.aliasName)}?tab=credential`"
                 class="mono link"
-              >{{ a.alias_name }}</router-link>
-              <span class="ref-dim">→ {{ a.base_service }}</span>
+              >{{ a.aliasName }}</router-link>
+              <span class="ref-dim">→ {{ a.baseService }} · {{ envName(a.envId) }} · {{ refModeText(a) }}</span>
             </div>
-            <p v-if="!refsData.alias_refs.length" class="ref-dim m-0">无别名绑定</p>
+            <p v-if="!refsData.identityRefs.length" class="ref-dim m-0">无身份条目装载</p>
 
             <h4 class="m-0 mb-1.5 mt-4 text-label font-semibold text-signal-ink">
-              场景引用(可见 {{ refsData.scenario_refs.visible.length }})
+              场景引用(可见 {{ refsData.scenarioRefs.visible.length }})
             </h4>
-            <div v-for="v in refsData.scenario_refs.visible" :key="v.scenario_id" class="ref-row">
-              <router-link :to="`/scenarios/${v.scenario_id}/detail`" class="link">
+            <div v-for="v in refsData.scenarioRefs.visible" :key="v.scenarioId" class="ref-row">
+              <router-link :to="`/scenarios/${v.scenarioId}/detail`" class="link">
                 {{ v.name }}
               </router-link>
               <span
@@ -451,19 +415,18 @@
                 :title="kindTitle(k)"
               >{{ kindLabel(k) }}</span>
             </div>
-            <p v-if="!refsData.scenario_refs.visible.length" class="ref-dim m-0">无可见场景引用</p>
+            <p v-if="!refsData.scenarioRefs.visible.length" class="ref-dim m-0">无可见场景引用</p>
             <p
-              v-if="refsData.scenario_refs.hidden_count"
+              v-if="refsData.scenarioRefs.hidden_count"
               class="ref-dim m-0 mt-1"
               data-testid="refs-hidden-count"
-            >另有 {{ refsData.scenario_refs.hidden_count }} 条不可见(他人私有场景,仅计数不显名)</p>
+            >另有 {{ refsData.scenarioRefs.hidden_count }} 条不可见(他人私有场景,仅计数不显名)</p>
 
             <!-- 原型 H-auths-v2 抽屉底部淡红预警:与 DELETE 409 同口径
-                 (本人场景的模板引用才拦截;M2a S6 后方案绑定不再点名凭证)
-                 提前告知,避免撞 409 -->
+                 (本人场景的模板引用才拦截)提前告知,避免撞 409 -->
             <div v-if="drawerBlocking.length" class="drawer-warn" data-testid="refs-block-warn">
               <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景引用(模板)</p>
-              <p class="m-0 mt-0.5">先解除别名绑定,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
+              <p class="m-0 mt-0.5">先解除身份条目的 ref,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
             </div>
           </template>
         </div>
@@ -484,9 +447,8 @@ import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import { useAuthStore } from '@/stores/auth'
 import {
   getReferences, list as apiList, setDefault as apiSetDefault,
-  type AuthReferences, type AuthSession, type TestResult,
+  type AuthReferences, type AuthSession, type IdentityRefItem, type TestResult,
 } from '@/api/auth_sessions'
-import { listAllAliases } from '@/api/service-aliases'
 import { listEnvironments } from '@/api/environments'
 import { shortDateTime } from '@/utils/datetime'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
@@ -501,9 +463,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const store = useAuthSessionsStore()
 
-/** 引用类型 → 徽标配色档:模板引用绿、快照(不拦截)灰。
- *  scheme(方案绑定)已随 authz M2a S6 退役 — serviceBindings 选注册表
- *  别名,不再点名凭证,反查不会再报该种类。 */
+/** 引用类型 → 徽标配色档:模板引用绿、快照(不拦截)灰。 */
 const KIND_TONE: Record<string, string> = {
   template: 'green',
   snapshot: 'ink',
@@ -518,9 +478,9 @@ const ttClass: Record<string, string> = {
 
 // ── filters(M4:检索/类型过滤下推服务端,Page 信封)───────────────
 // useServerList 观察 params 签名:q/类型任一变化 → 300ms 防抖重拉 + 回页 1。
-// username 是服务端 Fernet 密文不可检索(q 只打 alias/url,占位文案如实)。
+// q 打 username/system(账户实体键,账户池可检索面)。
 const route = useRoute()
-// W3:凭证角标跳转带 ?q=别名 定位缺失项(无路由环境守卫)
+// W3:凭证角标跳转带 ?q= 定位缺失项(无路由环境守卫)
 const searchQuery = ref(
   typeof route?.query?.q === 'string' ? route.query.q : '')
 const TT_FILTERS = ['all', 'Bearer', 'Basic', 'Cookie', 'Authorization'] as const
@@ -555,20 +515,15 @@ watch([searchQuery, tokenTypeFilter], () => {
   filterDebounce = setTimeout(() => { void reloadList() }, 300)
 })
 
-// ── 槽位主轴直连:该槽在服务注册的身份面注册表里有无声明 ──────────
-// 读面全员(listAllAliases);拉不到不亮 chip(静默降级,不阻塞凭证池)
-const declaredSlots = ref<Set<string>>(new Set())
-const slotsReady = ref(false)
-
-/** 只看问题:无默认 ∨ 有测败的槽(分组级过滤)。 */
+/** 只看问题:无默认 ∨ 有测败的账户(分组级过滤)。 */
 const problemOnly = ref(false)
 
 // ── 客户端过滤(系统/环境;数据已整页在端上,不必下推服务端)──────
 const systemFilter = ref('all')
 const envFilter = ref('all')
-/** 系统选项来自已加载绑定行的取值并集(密文字段外的可聚合一列) */
+/** 系统选项来自已加载账户行的取值并集 */
 const systemOptions = computed(() =>
-  [...new Set(rows.value.map((r) => r.system).filter((s): s is string => Boolean(s)))].sort())
+  [...new Set(rows.value.map((r) => r.system).filter(Boolean))].sort())
 
 /** 搜索/类型走服务端;系统/环境在端上再滤一层(组表的数据面) */
 const filteredRows = computed(() => rows.value.filter((r) =>
@@ -576,20 +531,18 @@ const filteredRows = computed(() => rows.value.filter((r) =>
   && (envFilter.value === 'all' || String(r.envId) === envFilter.value)))
 const bindCount = computed(() => filteredRows.value.length)
 
-// ── 按系统分组的凭证列表(凭证是一等公民,槽是行属性)──────────────
-const BIND_CAP = 5   // 单系统组凭证行折叠阈值(>5 收起为「还有 N 条」)
-const UNCLASSIFIED = 'uncategorized'   // system 为空时的组键(展示为「未归类」,排最后)
+// ── 按 system 分组的账户列表(账户是一等公民)────────────────────
+const BIND_CAP = 5   // 单系统组账户行折叠阈值(>5 收起为「还有 N 条」)
 
 interface SysGroup {
-  key: string            // system || 'uncategorized'
-  system: string         // 展示用原始值('' → 未归类)
+  key: string            // system
+  system: string
   binds: AuthSession[]   // 全量(计数/折叠判定/信号聚合)
-  visible: AuthSession[] // 折叠截断后的行(平铺,无簇层)
+  visible: AuthSession[] // 折叠截断后的行
   collapsible: boolean
   hiddenCount: number
   failCount: number
-  noDefaultSlots: number
-  undeclaredSlots: number
+  noDefaultPairs: number // (system, env) 组内无默认账户的组数
   tone: 'bad' | 'warn' | 'ok'
 }
 
@@ -601,25 +554,29 @@ function toggleSys(key: string): void {
   expandedSys.value = next
 }
 
-/** 环境列:环境名(表单同源 envs);未命中/未填回落 #id / 不限。 */
+/** 环境列:环境名(表单同源 envs);未命中回落 #id。 */
 function envName(envId: number | null | undefined): string {
-  if (envId == null) return '环境不限'
+  if (envId == null) return '环境未定'
   const hit = envs.value.find((e) => e.id === envId)
   return hit ? hit.name : `环境#${envId}`
 }
 
-/** 独占槽(全池仅此一条凭证挂载)→ 无默认时行内直示该隐患。 */
-const soloSlots = computed<Set<string>>(() => {
+function pairKey(r: AuthSession): string {
+  return `${r.system}::${r.envId}`
+}
+
+/** 独占 (system,env) 组(全池仅此一账户)→ 无默认时行内直示该隐患。 */
+const soloPairs = computed<Set<string>>(() => {
   const n = new Map<string, number>()
   for (const r of filteredRows.value) {
-    const s = r.slot || r.alias
-    n.set(s, (n.get(s) ?? 0) + 1)
+    const k = pairKey(r)
+    n.set(k, (n.get(k) ?? 0) + 1)
   }
-  return new Set([...n.entries()].filter(([, c]) => c === 1).map(([s]) => s))
+  return new Set([...n.entries()].filter(([, c]) => c === 1).map(([k]) => k))
 })
 
-/** 组序:问题组(测败 ∨ 无默认槽)排前,「未归类」殿后,其余字典序;
- *  组内凭证平铺:同槽相邻(槽是行属性,不是容器)→ 槽内默认在前 → 环境 → alias。 */
+/** 组序:问题组(测败 ∨ 无默认组)排前,其余字典序;
+ *  组内账户平铺:默认在前 → username。 */
 const sysGroups = computed<SysGroup[]>(() => {
   const bySys = new Map<string, AuthSession[]>()
   for (const a of filteredRows.value) {
@@ -630,28 +587,21 @@ const sysGroups = computed<SysGroup[]>(() => {
   }
   const groups: SysGroup[] = []
   for (const [system, list] of bySys) {
-    const key = system || UNCLASSIFIED
-    const ordered = [...list].sort((x, y) => {
-      const sx = x.slot || x.alias
-      const sy = y.slot || y.alias
-      return sx.localeCompare(sy)
-        || Number(y.isDefault) - Number(x.isDefault)
-        || (x.envId ?? -1) - (y.envId ?? -1)
-        || x.alias.localeCompare(y.alias)
-    })
+    const key = system
+    const ordered = [...list].sort((x, y) =>
+      Number(y.isDefault ?? false) - Number(x.isDefault ?? false)
+        || x.username.localeCompare(y.username))
     const open = expandedSys.value.has(key)
-    // 组级聚合:槽是取用键,无默认/未声明都是槽级隐患 → 计槽数报组头
-    const bySlot = new Map<string, AuthSession[]>()
+    // 组级聚合:(system,env) 是 default 型条目的取用坐标,无默认即取用隐患
+    const byPair = new Map<string, AuthSession[]>()
     for (const r of ordered) {
-      const s = r.slot || r.alias
-      const arr = bySlot.get(s)
+      const k = pairKey(r)
+      const arr = byPair.get(k)
       if (arr) arr.push(r)
-      else bySlot.set(s, [r])
+      else byPair.set(k, [r])
     }
-    const noDefaultSlots = [...bySlot.values()].filter((b) => !b.some((r) => r.isDefault)).length
-    const undeclaredSlots = slotsReady.value
-      ? [...bySlot.keys()].filter((s) => !declaredSlots.value.has(s)).length
-      : 0
+    const noDefaultPairs = [...byPair.values()].filter(
+      (b) => !b.some((r) => r.isDefault)).length
     const failCount = ordered.filter((r) => testMemory.value[r.id]?.ok === false).length
     groups.push({
       key, system,
@@ -659,34 +609,28 @@ const sysGroups = computed<SysGroup[]>(() => {
       visible: open ? ordered : ordered.slice(0, BIND_CAP),
       collapsible: ordered.length > BIND_CAP,
       hiddenCount: Math.max(0, ordered.length - BIND_CAP),
-      failCount, noDefaultSlots, undeclaredSlots,
-      tone: failCount ? 'bad' : (noDefaultSlots || undeclaredSlots) ? 'warn' : 'ok',
+      failCount, noDefaultPairs,
+      tone: failCount ? 'bad' : noDefaultPairs ? 'warn' : 'ok',
     })
   }
-  // 问题口径与旧版一致:测败 ∨ 无默认(「未声明」只染色不计数 —
-  // 声明注册表缺席/拉空时不宜把整池都判成问题)
   const weight = (g: SysGroup) =>
-    (g.failCount ? 2 : 0) + (g.noDefaultSlots ? 1 : 0)
+    (g.failCount ? 2 : 0) + (g.noDefaultPairs ? 1 : 0)
   const kept = problemOnly.value ? groups.filter((g) => weight(g) > 0) : groups
   return kept.sort((x, y) =>
-    weight(y) - weight(x)
-    || Number(x.key === UNCLASSIFIED) - Number(y.key === UNCLASSIFIED)
-    || x.key.localeCompare(y.key))
+    weight(y) - weight(x) || x.key.localeCompare(y.key))
 })
 const sysCount = computed(() => sysGroups.value.length)
 
 const metaText = computed(() => {
   const total = rowsTotal.value
-  if (total === 0) return '用户级独立凭证池 · 与 yaml 文件 Config.users 解耦'
+  if (total === 0) return '用户级账户池 · 登录信息一处管理,身份条目按 ref 装载'
   const unref = rows.value.filter(
-    (a) => !a.alias_ref_count && !a.scenario_ref_count,
+    (a) => !a.identityRefCount && !a.scenarioRefCount,
   ).length
-  // 原型 H-auths-v2 统计行:「N 条凭证 · …未被任何引用」(已过期无数据源,不列)。
-  // 类型计数走 tokenTypeCounts(全量口径,M4 服务端聚合;unref 是当前页口径)。
-  const unrefSeg = unref ? ` · ${unref} 条未被任何引用` : ''
+  const unrefSeg = unref ? ` · ${unref} 个未被任何引用` : ''
   const bearer = tokenTypeCounts.value.Bearer ?? 0
   const wholeHeader = tokenTypeCounts.value.Authorization ?? 0
-  return `${total} 条凭证${unrefSeg} · ${bearer} Bearer · ${wholeHeader} 整段头`
+  return `${total} 个账户${unrefSeg} · ${bearer} Bearer · ${wholeHeader} 整段头`
 })
 
 function formatExpires(seconds: number): string {
@@ -699,18 +643,14 @@ function formatExpires(seconds: number): string {
 const createOpen = ref(false)
 const editingId = ref<number | null>(null)
 const submitting = ref(false)
-/** 渐进披露:高级区(系统/环境/账号字段/token/有效期)默认收起 */
+/** 渐进披露:高级区(账号字段/token/有效期)默认收起 */
 const advancedOpen = ref(false)
 
 const schema = toTypedSchema(z.object({
-  alias: z.string()
-    .min(1, '请输入 alias')
-    .regex(/^[A-Za-z0-9_-]{1,64}$/, '1-64 位字母数字下划线连字符'),
-  system: z.string(),
-  // 环境选值是字符串 id('none' 哨兵 = 不限),提交时转 number
-  envId: z.string(),
-  // authz C2:静态令牌认证(自举系统 platform 等)—— 登录 URL 可空
-  url: z.string().url('URL 格式不正确').or(z.literal('')),
+  // 实体键三件套(编辑态锁定;system 与 Plate 侧系统名一致)
+  system: z.string().min(1, '请输入系统名'),
+  // 环境选值是字符串 id(必选,无「不限」)
+  envId: z.string().min(1, '请选择环境').refine((v) => v !== '', '请选择环境'),
   username: z.string().min(1, '请输入 username'),
   // 编辑态可留空(= 不修改) — 创建态必填由 onSubmitForm 补判
   password: z.string(),
@@ -721,18 +661,18 @@ const schema = toTypedSchema(z.object({
 const { handleSubmit, resetForm, setFieldError } = useForm({
   validationSchema: schema,
   initialValues: {
-    alias: '', system: '', envId: 'none',
-    url: '', username: '', password: '',
+    system: '', envId: '',
+    username: '', password: '',
     token_type: 'Bearer' as const, expires_in: 7200,
   },
 })
 
-// ── S7.3 表单辅面:环境选项 + 账号字段 KV 行(vee-validate 外置)──
+// ── 表单辅面:环境选项 + 账号字段 KV 行(vee-validate 外置)──────
 const envs = ref<Array<{ id: number; name: string }>>([])
 const accountFields = ref<Array<{ key: string; value: string }>>([])
 
 function accountFieldsFromRow(row: AuthSession): Array<{ key: string; value: string }> {
-  const src = (row as AuthSession & { accountFields?: Record<string, unknown> }).accountFields
+  const src = row.accountFields
   if (!src || typeof src !== 'object') return []
   return Object.entries(src).map(([k, v]) => ({ key: k, value: v == null ? '' : String(v) }))
 }
@@ -746,28 +686,27 @@ function accountFieldsToObject(): Record<string, string> {
   return out
 }
 
-/** ``slot``(深链 ?newSlot=):预填别名 — 取用键 = alias 本身(S7.5 导入
- *  结果「去绑定」;表单不再暴露槽字段,后端 slot 缺省 = alias);
- *  ``system``/``envId``:执行配置枢纽「缺失深链预填直达」(分层③)。 */
-function openCreate(slot = '', system = '', envId = '') {
+/** ``system``/``envId``:执行配置枢纽「缺失深链预填直达」(分层③);
+ *  旧 ``?newSlot=`` 深链随槽概念退役,收到 system 预填位。 */
+function openCreate(system = '', envId = '') {
   editingId.value = null
   accountFields.value = []
-  // 高级区:深链带 system/envId 预填时自动展开(alias 预填在主区)
-  advancedOpen.value = Boolean(system || envId)
+  // 高级区:无实体键预填时保持收起
+  advancedOpen.value = false
   resetForm({
     values: {
-      alias: slot, system, envId: envId || 'none',
-      url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200,
+      system, envId,
+      username: '', password: '', token_type: 'Bearer', expires_in: 7200,
     },
   })
   createOpen.value = true
 }
 
-/** authz M2a S3:置为默认取用行(名字/环境未命中时取这条;后端原子清除旧默认)。 */
+/** 置为 (system, env) 默认账户(default 型条目的取用行;后端原子清除旧默认)。 */
 async function makeDefault(row: AuthSession) {
   try {
     await apiSetDefault(row.id)
-    toast.success(`已将 ${row.alias} 设为默认取用`)
+    toast.success(`已将 ${row.username} 设为默认账户`)
     await reloadList()
   } catch (e) {
     showError('设为默认', undefined, (e as Error).message)
@@ -779,14 +718,12 @@ function openEdit(row: AuthSession) {
   accountFields.value = accountFieldsFromRow(row)
   // 编辑态:高级项有非缺省值时自动展开,一眼看到全部存量
   advancedOpen.value = Boolean(
-    row.system || row.envId != null || accountFields.value.length
+    accountFields.value.length
     || row.token_type !== 'Bearer' || row.expires_in !== 7200)
   resetForm({
     values: {
-      alias: row.alias,
-      system: row.system || '',
-      envId: row.envId != null ? String(row.envId) : 'none',
-      url: row.url,
+      system: row.system,
+      envId: row.envId != null ? String(row.envId) : '',
       username: row.username,
       password: '',
       // AuthSession.token_type 是宽 string;schema 是枚举 — 数据源即四选一
@@ -804,17 +741,17 @@ const onSubmitForm = handleSubmit(async (values) => {
     setFieldError('password', '请输入 password')
     return
   }
+  if (!values.envId) {
+    setFieldError('envId', '请选择环境')
+    return
+  }
   submitting.value = true
   try {
     if (editingId.value) {
+      // 实体键(system/env/username)不可改;能改的只有密码与展示属性
       const patch: Record<string, unknown> = {
-        url: values.url,
-        username: values.username,
         token_type: values.token_type,
         expires_in: values.expires_in,
-        // env none=清空(显式 null 语义由值本身表达)
-        system: values.system,
-        envId: values.envId === 'none' ? null : Number(values.envId),
         accountFields: accountFieldsToObject(),
       }
       if (values.password) patch.password = values.password
@@ -822,18 +759,15 @@ const onSubmitForm = handleSubmit(async (values) => {
       toast.success('已保存')
     } else {
       await store.createAuth({
-        alias: values.alias,
-        // 不送 slot:后端缺省 = alias,取用键即别名(表单无槽概念)
         system: values.system,
-        ...(values.envId !== 'none' ? { envId: Number(values.envId) } : {}),
+        envId: Number(values.envId),
         accountFields: accountFieldsToObject(),
-        url: values.url,
         username: values.username,
         password: values.password,
         token_type: values.token_type,
         expires_in: values.expires_in,
       })
-      toast.success(`已创建 ${values.alias}`)
+      toast.success(`已创建 ${values.username}`)
     }
     createOpen.value = false
     void reloadList()
@@ -848,7 +782,6 @@ const onSubmitForm = handleSubmit(async (values) => {
 
 // ── test ───────────────────────────────────────────────────────
 // 状态机:开弹框即 testing(在途不假失败);返回/异常切终态。
-// 详情展开/收起策略移入共享 CredentialTestDialog(成功收起/失败展开)。
 const testOpen = ref(false)
 const testPhase = ref<'testing' | 'success' | 'fail'>('testing')
 const testResult = ref<TestResult | null>(null)
@@ -875,8 +808,6 @@ async function runTest(row: AuthSession) {
 }
 
 // ── 测试结果本机记忆(状态优先:列表回答"哪些还能用")─────────────
-// 后端无测试历史面,v1 以 localStorage 记每条凭证的最近一次结果
-// (per-browser;跨设备不同步 — chip 标注"本机记录"如实降级)。
 const TEST_MEM_KEY = 'auths.test-memory:v1'
 const testMemory = ref<Record<number, { ok: boolean; at: number }>>({})
 
@@ -904,12 +835,12 @@ const deleteRefs = ref<AuthReferences | null>(null)
 const deleteBlocking = computed(() => {
   const me = auth.currentUser?.id
   if (!deleteRefs.value || me == null) return []
-  return deleteRefs.value.scenario_refs.visible.filter(
-    (v) => v.owner_id === me && v.kinds.includes('template'),
+  return deleteRefs.value.scenarioRefs.visible.filter(
+    (v) => v.ownerId === me && v.kinds.includes('template'),
   )
 })
 
-// ── 被引用反查侧板(配套方案 §1.2/§1.3)──────────────────────────
+// ── 被引用反查侧板(重构 §1.2/§1.3)──────────────────────────────
 const auth = useAuthStore()
 const refsOpen = ref(false)
 const refsTarget = ref<AuthSession | null>(null)
@@ -917,15 +848,20 @@ const refsLoading = ref(false)
 const refsData = ref<AuthReferences | null>(null)
 
 /** 删除拦截预告(与后端 DELETE 409 同口径):可见引用里
- *  「本人场景 × template」的条数(M2a S6 后 scheme 种类已退役)—
- *  抽屉底部淡红警示。 */
+ *  「本人场景 × template」的条数 — 抽屉底部淡红警示。 */
 const drawerBlocking = computed(() => {
   const me = auth.currentUser?.id
   if (!refsData.value || me == null) return []
-  return refsData.value.scenario_refs.visible.filter(
-    (v) => v.owner_id === me && v.kinds.includes('template'),
+  return refsData.value.scenarioRefs.visible.filter(
+    (v) => v.ownerId === me && v.kinds.includes('template'),
   )
 })
+
+function refModeText(a: IdentityRefItem): string {
+  return a.refMode === 'username'
+    ? `ref ${a.refUsername}`
+    : 'ref 默认'
+}
 
 function openRefs(row: AuthSession) {
   refsTarget.value = row
@@ -938,7 +874,7 @@ async function loadRefs() {
   if (!refsTarget.value) return
   refsLoading.value = true
   try {
-    refsData.value = await getReferences(refsTarget.value.alias)
+    refsData.value = await getReferences(refsTarget.value.id)
   } catch (e) {
     showError('反查', undefined, (e as Error).message)
     refsData.value = null
@@ -951,8 +887,8 @@ const KIND_LABELS: Record<string, string> = {
   template: '模板', snapshot: '快照',
 }
 const KIND_TITLES: Record<string, string> = {
-  template: 'steps 里的 ${auth.<alias>.*} 模板 — 下次运行会用到',
-  snapshot: 'config.users 的同名快照副本 — 自足,不随凭证池轮换',
+  template: 'steps 里的 ${auth.<条目名>.*} 模板 — 下次运行会用到',
+  snapshot: 'config.users 的同名快照副本 — 自足,不随账户池轮换',
 }
 
 function kindLabel(k: string): string {
@@ -964,7 +900,7 @@ function kindTitle(k: string): string {
 }
 
 const deleteConfirmed = computed(() =>
-  Boolean(deleteTarget.value && deleteConfirmInput.value === deleteTarget.value.alias),
+  Boolean(deleteTarget.value && deleteConfirmInput.value === deleteTarget.value.username),
 )
 
 function openDelete(row: AuthSession) {
@@ -974,7 +910,7 @@ function openDelete(row: AuthSession) {
   deleteOpen.value = true
   // 预取反查(打开即查,不另设"检查引用"步骤):失败静默 — 硬确认仍在,
   // 409 拦截兜底语义不变
-  getReferences(row.alias)
+  getReferences(row.id)
     .then((d) => { deleteRefs.value = d })
     .catch(() => { deleteRefs.value = null })
 }
@@ -984,12 +920,12 @@ async function submitDelete() {
   deleteSubmitting.value = true
   try {
     await store.deleteAuth(deleteTarget.value.id)
-    toast.success(`已删除 ${deleteTarget.value.alias}`)
+    toast.success(`已删除 ${deleteTarget.value.username}`)
     deleteOpen.value = false
     void reloadList()
   } catch (e) {
-    // 409 = 本人场景的模板/方案引用拦截(配套方案 §1.5 窄口径):
-    // 错误信息带场景清单 — 保持弹框开着让用户看完再处理
+    // 409 = 本人场景的模板引用拦截:错误信息带场景清单 —
+    // 保持弹框开着让用户看完再处理
     showError('删除', undefined, (e as Error).message)
   } finally {
     deleteSubmitting.value = false
@@ -999,25 +935,17 @@ async function submitDelete() {
 // ── init ───────────────────────────────────────────────────────
 onMounted(async () => {
   loadTestMemory()
-  // 槽位声明反查(服务注册身份面注册表,读面全员;失败静默不亮 chip)
-  listAllAliases()
-    .then((rows) => {
-      declaredSlots.value = new Set(
-        rows.map((a) => a.slot).filter((s): s is string => Boolean(s)))
-      slotsReady.value = true
-    })
-    .catch(() => { /* 注册表拉不到 — ✕ 未声明 chip 不亮 */ })
-  // S7.5:导入结果「去绑定」→ 直接开新建表单并预填别名;分层③:执行配置
-  // 枢纽的缺失深链补 system/envId 预填(?newSlot=&system=&envId=)
+  // 深链补 system/envId 预填(?system=&envId=);旧 ?newSlot= 槽概念
+  // 退役,收到 system 位兼容打开表单
   const q = route?.query ?? {}
-  const newSlot = typeof q.newSlot === 'string' ? q.newSlot : ''
-  const qSystem = typeof q.system === 'string' ? q.system : ''
+  const qSystem = typeof q.system === 'string' ? q.system
+    : (typeof q.newSlot === 'string' ? q.newSlot : '')
   const qEnv = typeof q.envId === 'string' ? q.envId : ''
-  if (newSlot || qSystem || qEnv) openCreate(newSlot, qSystem, qEnv)
+  if (qSystem || qEnv) openCreate(qSystem, qEnv)
   // 环境选项给表单下拉
   listEnvironments()
     .then((rows) => { envs.value = rows.map((e) => ({ id: e.id, name: e.name })) })
-    .catch(() => { /* 表单环境下拉退化为「不限」单项 */ })
+    .catch(() => { /* 表单环境下拉退化为空 */ })
   try {
     await reloadList()
   } catch {
@@ -1039,7 +967,21 @@ onMounted(async () => {
 }
 .adv-toggle:hover { color: var(--sl-ink, var(--sl-ink)); }
 
-/* ── 按槽分组的表格(槽级状态 = 分组头 3px 左缘色带;凭证行 = 主体)── */
+/* 原生 select(表单环境字段):观感对齐 ui/Input */
+.native-select {
+  height: 2.25rem;
+  width: 100%;
+  padding: 0 0.625rem;
+  font-size: 0.875rem;
+  color: var(--sl-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.5rem;
+  outline: none;
+}
+.native-select:focus { border-color: var(--sl-accent); }
+
+/* ── 按系统分组的账户表格(组级状态 = 分组头 3px 左缘色带)──────── */
 .auth-table { --lib-card-max: none; }   /* 分组随页面流,不卡内滚动 */
 .tb-select { height: 2.125rem; width: 8.75rem; font-size: 0.78125rem; flex: none; }
 
@@ -1082,9 +1024,6 @@ onMounted(async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 语义露出①:显式命名槽的行内小字(场景 ${slot.X} 的引用键) */
-.slot-sub { font-size: 0.65625rem; color: var(--sl-ink-3); white-space: nowrap; }
-.slot-sub.slot-undeclared { color: var(--sl-warn); }
 .is-default { height: auto; min-height: 1.1875rem; padding: 0 0.5rem; font-size: 0.6875rem; flex: none; }
 .cell-status { display: flex; flex-direction: column; gap: 0.1875rem; align-items: flex-start; }
 .mem-flag { font-size: 0.6875rem; white-space: nowrap; }

@@ -1,8 +1,8 @@
-<!-- CredentialSelect.vue — 凭证别名样式化下拉(2026-09-22,任务6)。
-     替掉原生形态:AuthSelectorModal 的 native select(浏览器默认
-     箭头/面板与 Dialog 观感脱节)、ServiceAdmin 登记别名的 Input+datalist。
-     选项两行化:alias + token_type 在上,username · url 在下,选凭证时
-     URL 映射直接可见。可选字段场景传 clearable(值非空给清除钮)。
+<!-- CredentialSelect.vue — 身份条目样式化下拉(registry 重构:条目名即
+     ${auth.<X>} 的 X 域)。替掉原生形态:AuthSelectorModal 的 native
+     select(浏览器默认箭头/面板与 Dialog 观感脱节)。
+     选项两行化:aliasName + kind 在上,baseService · display 在下。
+     可选字段场景传 clearable(值非空给清除钮)。
      刻意不基于 reka-ui Select:自管展开面板(无 portal),jsdom 可直接
      以 click 驱动(项目测试约定,参 AuthSelectorModal 原 select 注释);
      键盘至少保证 Esc 收起、Enter 开合。
@@ -21,7 +21,7 @@
     >
       <span v-if="modelValue" class="cred-value">
         <code class="mono">{{ modelValue }}</code>
-        <span v-if="selected" class="cred-inline-sub">{{ selected.username }}</span>
+        <span v-if="selected" class="cred-inline-sub">{{ selected.baseService }}</span>
         <span v-else class="cred-out">不在当前列表</span>
       </span>
       <span v-else class="cred-placeholder">{{ placeholder }}</span>
@@ -46,29 +46,29 @@
         v-model="filter"
         class="cred-filter"
         data-testid="credential-filter"
-        placeholder="搜 alias / 用户名 / URL"
+        placeholder="搜条目名 / 服务 / 展示名"
         @keydown.esc.stop="close"
       />
       <div class="cred-options" role="listbox">
         <button
           v-for="c in filteredCredentials"
-          :key="c.id"
+          :key="c.aliasName"
           type="button"
           role="option"
           class="cred-option"
-          :class="{ selected: c.alias === modelValue }"
-          :aria-selected="c.alias === modelValue"
-          :data-testid="`credential-option-${c.alias}`"
-          @click="pick(c.alias)"
+          :class="{ selected: c.aliasName === modelValue }"
+          :aria-selected="c.aliasName === modelValue"
+          :data-testid="`credential-option-${c.aliasName}`"
+          @click="pick(c.aliasName)"
         >
           <span class="cred-line1">
-            <code class="mono">{{ c.alias }}</code>
-            <span class="cred-type">{{ c.token_type }}</span>
+            <code class="mono">{{ c.aliasName }}</code>
+            <span class="cred-type">{{ c.kind }}</span>
           </span>
-          <span class="cred-line2">{{ c.username }} · {{ c.url }}</span>
+          <span class="cred-line2">{{ c.baseService }}<template v-if="c.display"> · {{ c.display }}</template></span>
         </button>
         <p v-if="!filteredCredentials.length" class="cred-empty" data-testid="credential-empty">
-          {{ filter ? '没有匹配的凭证' : '当前列表为空' }}
+          {{ filter ? '没有匹配的身份条目' : '当前列表为空' }}
         </p>
       </div>
     </div>
@@ -77,11 +77,11 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import type { AuthSession } from '@/api/auth_sessions'
+import type { ServiceAliasRow } from '@/api/service-aliases'
 
 const props = defineProps<{
   modelValue: string
-  credentials: AuthSession[]
+  credentials: ServiceAliasRow[]
   placeholder?: string
   disabled?: boolean
   /** 可选字段场景:值非空时给清除钮(emit '' — 调用方按空串转 null) */
@@ -96,15 +96,15 @@ const root = ref<HTMLElement | null>(null)
 const open = ref(false)
 const filter = ref('')
 
-const selected = computed(() => props.credentials.find((c) => c.alias === props.modelValue))
+const selected = computed(() => props.credentials.find((c) => c.aliasName === props.modelValue))
 
 const filteredCredentials = computed(() => {
   const kw = filter.value.trim().toLowerCase()
   if (!kw) return props.credentials
   return props.credentials.filter(
-    (c) => c.alias.toLowerCase().includes(kw)
-      || c.username.toLowerCase().includes(kw)
-      || c.url.toLowerCase().includes(kw))
+    (c) => c.aliasName.toLowerCase().includes(kw)
+      || c.baseService.toLowerCase().includes(kw)
+      || (c.display ?? '').toLowerCase().includes(kw))
 })
 
 function toggle(): void {
@@ -117,8 +117,8 @@ function close(): void {
   open.value = false
 }
 
-function pick(alias: string): void {
-  emit('update:modelValue', alias)
+function pick(aliasName: string): void {
+  emit('update:modelValue', aliasName)
   close()
 }
 

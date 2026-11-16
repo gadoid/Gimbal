@@ -1,6 +1,7 @@
 /**
- * Auths.vue — S7.5 导入结果「去绑定」深链:?newSlot=X 直接打开新建表单
- * 并预填 alias/slot(独立文件:需 mock vue-router 的 useRoute)。
+ * Auths.vue — 深链预填(独立文件:需 mock vue-router 的 useRoute)。
+ * registry 重构:?system=X 直接打开新建表单并预填系统(实体键);
+ * 旧 ?newSlot=X(槽概念退役)兼容收敛到 system 预填位。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -35,20 +36,26 @@ async function mountPage() {
   return w
 }
 
-describe('Auths ?newSlot 深链(S7.5)', () => {
-  it('带 newSlot → 新建表单打开且别名预填(表单无槽字段,取用键=alias)', async () => {
-    routeQuery.newSlot = 'maker'
+describe('Auths ?system 深链(分层③)', () => {
+  it('带 system → 新建表单打开且系统预填(实体键,账户无槽概念)', async () => {
+    routeQuery.system = 'fin-service'
     const w = await mountPage()
-    const alias = document.body.querySelector<HTMLInputElement>('[data-testid="f-alias"]')
-    expect(alias?.value).toBe('maker')
-    // 2026-11-16 四轮:表单不再暴露槽概念(slot 后端缺省 = alias)
-    expect(document.body.querySelector('[data-testid="f-slot"]')).toBeNull()
+    const sys = document.body.querySelector<HTMLInputElement>('[data-testid="f-system"]')
+    expect(sys?.value).toBe('fin-service')
     w.unmount()
   })
 
-  it('无 newSlot → 不自动打开表单', async () => {
+  it('旧 ?newSlot= 兼容收敛到 system 预填位', async () => {
+    routeQuery.newSlot = 'maker'
     const w = await mountPage()
-    expect(document.body.querySelector('[data-testid="f-alias"]')).toBeNull()
+    const sys = document.body.querySelector<HTMLInputElement>('[data-testid="f-system"]')
+    expect(sys?.value).toBe('maker')
+    w.unmount()
+  })
+
+  it('无深链参数 → 不自动打开表单', async () => {
+    const w = await mountPage()
+    expect(document.body.querySelector('[data-testid="f-system"]')).toBeNull()
     w.unmount()
   })
 })

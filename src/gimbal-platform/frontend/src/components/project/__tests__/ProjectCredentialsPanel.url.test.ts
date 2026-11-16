@@ -1,9 +1,9 @@
 /**
- * ProjectCredentialsPanel — r5-2.2:编辑态改登录地址必须重录密码。
- * 改 url 不带密码 → 前置拦截不发请求(后端同口径 422);带密码 →
- * 正常 patch。未改 url 的编辑不受影响。
- * 2026-11-16 重塑后:编辑入口收进 ⋯ 菜单、表单进 ui/Dialog(经 Portal
- * 渲染进 body)→ 查询走 body DOMWrapper(与 Auths.test.ts 同惯例)。
+ * ProjectCredentialsPanel — registry 重构:账户实体键编辑态锁定。
+ * (system, env, username) 不可改,编辑表单只留密码(留空 = 不改);
+ * 改密一处、所有装载条目同时生效(旧 r5-2.2「改地址须重录密码」
+ * 随 url 字段退役 —— 地址在环境×系统实例,不在账户上)。
+ * 表单进 ui/Dialog(经 Portal 渲染进 body)→ 查询走 body DOMWrapper。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount, DOMWrapper } from '@vue/test-utils'
@@ -17,9 +17,8 @@ vi.mock('@/utils/toast', () => ({
 vi.mock('@/utils/errorFallback', () => ({ showError: vi.fn() }))
 
 const CRED = {
-  id: 11, slot: 'qa1', alias: 'qa1', isDefault: true,
-  system: 'fin', envId: null, token_type: 'Bearer',
-  username: 'proj-u', url: 'http://real-auth',
+  id: 11, system: 'fin-service', envId: 1, isDefault: true,
+  token_type: 'Bearer', username: 'proj-u', loginUrl: 'http://real-auth',
 } as unknown as AuthSession
 
 /** body 查询(Portal 落点);找不到返回 null(配合 toBeNull 断言) */
@@ -52,26 +51,41 @@ async function openEdit() {
   return w
 }
 
-describe('r5-2.2 · 项目凭证改地址须重录密码', () => {
-  it('改 url 未录密码:前置拦截,不发 patch,提示可见', async () => {
+describe('registry · 项目账户编辑态:实体键锁定,只改密码', () => {
+  it('实体键(system/env/username)禁改;无 url 字段(地址归实例)', async () => {
     const w = await openEdit()
-    expect(q('[data-testid="prj-cred-url-hint"]')).toBeNull()
-    await q('[data-testid="prj-cred-url"]')!.setValue('https://attacker.example/c')
-    expect(q('[data-testid="prj-cred-url-hint"]')).not.toBeNull()
-    await q('[data-testid="prj-cred-save"]')!.trigger('click')
-    expect(credApi.patchProjectCredential).not.toHaveBeenCalled()
-    expect(q('.err')!.text()).toContain('重新录入密码')
+    const sys = q('[data-testid="prj-cred-system"]')!.element as HTMLInputElement
+    expect((sys as HTMLInputElement).disabled).toBe(true)
+    expect((q('[data-testid="prj-cred-username"]')!.element as HTMLInputElement).disabled).toBe(true)
+    expect(q('[data-testid="prj-cred-url"]')).toBeNull()   // url 字段已退役
     w.unmount()
   })
 
-  it('改 url 并录密码:patch 正常发出', async () => {
+  it('密码留空 → 无改动:不发 patch,表单直接关闭', async () => {
     const w = await openEdit()
-    await q('[data-testid="prj-cred-url"]')!.setValue('http://new-auth')
+    await q('[data-testid="prj-cred-save"]')!.trigger('click')
+    await flushPromises()
+    expect(credApi.patchProjectCredential).not.toHaveBeenCalled()
+    expect(q('[data-testid="prj-cred-save"]')).toBeNull()   // Dialog 已关
+    w.unmount()
+  })
+
+  it('录密码 → patch 只带 password(一处改密,装载条目同时生效)', async () => {
+    const w = await openEdit()
     await q('[data-testid="prj-cred-password"]')!.setValue('p2x3y4z')
     await q('[data-testid="prj-cred-save"]')!.trigger('click')
     await flushPromises()
     expect(credApi.patchProjectCredential).toHaveBeenCalledWith(
-      5, 11, expect.objectContaining({ url: 'http://new-auth', password: 'p2x3y4z' }))
+      5, 11, { password: 'p2x3y4z' })
+    w.unmount()
+  })
+
+  it('短密码(<6)前置拦截:不发 patch,提示可见', async () => {
+    const w = await openEdit()
+    await q('[data-testid="prj-cred-password"]')!.setValue('p1')
+    await q('[data-testid="prj-cred-save"]')!.trigger('click')
+    expect(credApi.patchProjectCredential).not.toHaveBeenCalled()
+    expect(q('.err')!.text()).toContain('至少 6 位')
     w.unmount()
   })
 })

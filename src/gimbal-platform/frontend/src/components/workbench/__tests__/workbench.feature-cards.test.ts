@@ -153,10 +153,13 @@ describe('服务画像卡', () => {
 })
 
 describe('凭证管理卡', () => {
-  it('未被引用 = alias_ref_count 与 scenario_ref_count 都空', async () => {
+  it('未被引用 = identityRefCount 与 scenarioRefCount 都空', async () => {
+    // registry:账户实体,行键 = username@system
     const AUTHS = [
-      { id: 1, alias: 'codfish', token_type: 'Bearer', url: 'u', username: 'x', updated_at: '', alias_ref_count: 0, scenario_ref_count: 0 },
-      { id: 2, alias: 'svc-bot', token_type: 'Basic', url: 'u', username: 'y', updated_at: '', alias_ref_count: 0, scenario_ref_count: 2 },
+      { id: 1, system: 'fin', envId: 1, token_type: 'Bearer', loginUrl: 'u',
+        username: 'codfish', updated_at: '', identityRefCount: 0, scenarioRefCount: 0 },
+      { id: 2, system: 'fin', envId: 1, token_type: 'Basic', loginUrl: 'u',
+        username: 'svc-bot', updated_at: '', identityRefCount: 0, scenarioRefCount: 2 },
     ]
     vi.mocked(authSessionsApi.list).mockResolvedValue({
       items: AUTHS, total: 2, page: 1, pageSize: 200,

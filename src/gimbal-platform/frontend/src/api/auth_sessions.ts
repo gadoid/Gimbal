@@ -1,73 +1,75 @@
-/** auth_sessions.ts — typed wrappers around /api/auths/* endpoints. */
+/**
+ * auth_sessions.ts — typed wrappers around /api/auths/* endpoints.
+ *
+ * registry 重构(P1-8):凭证=账户实体(auth_accounts)。四元组
+ * (owner|project, system, env, username) 唯一,密码一份 —— 改密一处、
+ * 所有装载它的身份条目/场景同时生效。url/alias/slot 字段退役:
+ * 登录地址在环境×系统实例(services/instances),装载在身份条目
+ * (service-aliases,ref 引用账户)。username 不可改(实体键)。
+ */
 import http from './http'
 
 export interface AuthSession {
   id: number
-  alias: string
-  url: string
+  /** 系统名(与 Plate 侧一致;账户的 system 维度,跨服务共享登录) */
+  system: string
+  /** 账户归属环境(必填;无环境的执行无从解析身份) */
+  envId: number
   username: string
   token_type: string
   expires_in: number
   created_at: string
   updated_at: string
   password_masked: string
-  /** 反查双计数(配套方案 §1.2):N 别名 / N 场景(模板∪方案绑定,快照不计)。 */
-  alias_ref_count?: number
-  scenario_ref_count?: number
-  /** authz M2a S3 槽位绑定:system ''=未归类;env null=不限;slot=注入键;
-   * isDefault=名字解析取用行;accountFields=账号级字段(${slot.X.field} 消费) */
-  system?: string
-  envId?: number | null
-  slot?: string
   isDefault?: boolean
+  /** 账号级字段(${slot.X.field} 消费) */
   accountFields?: Record<string, unknown>
+  /** 回显:实例登录口(环境×系统唯一;缺席='') */
+  loginUrl?: string
+  /** 反查双计数:N 身份条目 / N 场景(模板∪方案绑定,快照不计) */
+  identityRefCount?: number
+  scenarioRefCount?: number
 }
 
-/** 反查面板(配套方案 §1.3):引用面,读时实时扫。authz M2a S6 起
- *  alias_refs 不再带 environment_id(别名不再归属环境);scheme 引用
- *  种类已退役 —— serviceBindings 选的是注册表别名,不再点名凭证。 */
-export interface AliasRefItem {
-  alias_name: string
-  base_service: string
+/** 反查面板(配套方案 §1.3):引用面,读时实时扫。 */
+export interface IdentityRefItem {
+  aliasName: string
+  baseService: string
+  envId: number
+  refMode: string
+  refUsername: string | null
 }
 
 /** kinds ⊆ {template, snapshot}(snake 契约对齐后端 auth schema)。 */
 export interface ScenarioRefItem {
-  scenario_id: string
+  scenarioId: string
   name: string
   kinds: string[]
   /** 与 DELETE 409 同口径的拦截预告:本人场景的 template/scheme 才阻断。 */
-  owner_id: number
+  ownerId: number
 }
 
 export interface AuthReferences {
-  alias_refs: AliasRefItem[]
-  scenario_refs: { visible: ScenarioRefItem[]; hidden_count: number }
+  identityRefs: IdentityRefItem[]
+  scenarioRefs: { visible: ScenarioRefItem[]; hidden_count: number }
 }
 
 export interface AuthSessionCreateIn {
-  alias: string
-  url: string
+  system: string
+  envId: number
   username: string
   password: string
   token_type?: string
   expires_in?: number
-  /** authz M2a S3:槽位绑定(槽名缺省 = alias) */
-  slot?: string
-  system?: string
-  envId?: number | null
   accountFields?: Record<string, unknown>
+  isDefault?: boolean
 }
 
+/** username/system/env 是账户实体键 —— 不可改;能改的只有密码与展示属性。 */
 export interface AuthSessionPatchIn {
-  url?: string
-  username?: string
   password?: string
   token_type?: string
   expires_in?: number
-  /** authz M2a S3:槽位字段(envId 显式 null = 清空;isDefault=true 换默认) */
-  system?: string
-  envId?: number | null
   accountFields?: Record<string, unknown>
   isDefault?: boolean
 }
@@ -115,15 +117,15 @@ export function remove(id: number) {
   return http.delete(`/auths/${id}`).then(() => undefined)
 }
 
-/** authz M2a S3:置为该槽的默认绑定(同槽旧默认原子清除)。 */
+/** 置为该 (system, env) 的默认账户(同组旧默认原子清除)。 */
 export function setDefault(id: number) {
   return http.post<AuthSession>(`/auths/${id}/default`).then((r) => r.data)
 }
 
-/** 反查面板数据:谁在用这个凭证名(别名绑定 + 场景引用,可见性过滤在后端)。 */
-export function getReferences(alias: string) {
+/** 反查面板数据:谁在装载这个账户(身份条目 + 场景引用,可见性过滤在后端)。 */
+export function getReferences(id: number) {
   return http.get<AuthReferences>(
-    `/auths/${encodeURIComponent(alias)}/references`).then((r) => r.data)
+    `/auths/${id}/references`).then((r) => r.data)
 }
 
 export function testConnection(id: number) {

@@ -1,26 +1,31 @@
 /**
- * api/service-aliases.ts — 服务别名注册表 API client(服务画像方案 §4.1 基础层)。
+ * api/service-aliases.ts — 身份条目注册表 API client(registry 重构 §3)。
  *
- * 读全员 / 写 admin;注册校验强约束(裸声明不猜,plate 宕机期间不能
- * 登记 —— 后端 409)。
+ * 条目 = 环境下的服务调用身份:aliasName 引用键(规约延续
+ * `<服务名>-<后缀>`,注入键 = 条目名)、baseService 服务锚、envId 必填、
+ * ref 引用账户(refMode default=取 (system,env) 默认账户 | username=
+ * 指定用户名)。地址归实例(services/instances),凭证归账户(/auths)。
  *
- * authz M2a S6「别名瘦身」:baseUrl/environmentId/environmentName/
- * credentialAlias/ownerUserId 已退役 —— 地址归部署表(部署地址页),
- * 凭证归槽位(slot,执行时按执行者本人认证池的槽位取),个人别名退役
- * (全部团队共享)。AliasOut = {aliasName, baseService, slot, kind,
- * createdAt, updatedAt};q 检索覆盖 alias/base/slot。
+ * 读全员 / 写 admin;plate 走派生强约束(目录 ∪ 主档 plate),external
+ * 显式 baseService(主档第三方服务)。q 检索覆盖 alias/base/slot。
  */
 import http from '@/api/http'
+
+export type AliasKind = 'plate' | 'external' | 'integration'
 
 export interface ServiceAliasRow {
   aliasName: string
   baseService: string
-  /** M2a S6:声明槽位 —— 执行注入取哪个凭证槽(null = 未声明) */
+  /** 注入键 = 条目名(恒等于 aliasName;null = 旧数据无条目名) */
   slot: string | null
-  /** 三态接入(P1.0):plate 受管(目录派生强约束)| external 第三方
-   *  (无版本管理,别名即服务本体;不触发预览/不阻塞集成,单独统计) */
-  kind: 'plate' | 'external'
-  /** 入站与回调(webhook 设计 v3 P1):secret 只回「是否已设」,密文不外露 */
+  /** 接入三态(自主档派生):plate 受管 | external 第三方 | integration 集成件 */
+  kind: AliasKind
+  /** 条目归属环境(新架构必填;null = 旧数据兜底) */
+  envId: number | null
+  /** 账户引用:default=取 (system,env) 默认账户 | username=指定用户名 */
+  refMode: 'default' | 'username'
+  refUsername: string | null
+  display: string
   createdAt: string | null
   updatedAt: string | null
 }
@@ -48,22 +53,29 @@ export function listAllAliases(base?: string): Promise<ServiceAliasRow[]> {
 
 export function createAlias(input: {
   aliasName: string
-  /** 三态接入(P1.0):缺省 plate(目录派生强约束);external 跳过
-   *  目录校验(第三方服务,别名即服务本体) */
+  /** 接入:缺省 plate(目录派生强约束);external 跳过目录校验 */
   kind?: 'plate' | 'external'
-  /** M2a S6:声明槽位(缺省 = 别名同名槽) */
+  /** 兼容参数(条目模型无槽;后端忽略) */
   slot?: string | null
-  /** b2.5:external 须显式 base_service(plate kind=integration 的服务) */
+  /** external 须显式 baseService(主档第三方服务) */
   baseService?: string | null
+  /** 重构新维度:环境(缺省 = 平台默认环境兜底) */
+  envId?: number | null
+  /** 账户引用:default | username(配 refUsername) */
+  refMode?: 'default' | 'username'
+  refUsername?: string
+  display?: string
 }): Promise<ServiceAliasRow> {
   return http.post<ServiceAliasRow>('/service-aliases', input)
     .then(({ data }) => data)
 }
 
+/** aliasName/baseService/envId 是条目实体键 —— 不可改;可改 ref 与展示名。 */
 export function patchAlias(
   aliasName: string,
-  input: { slot?: string | null; baseService?: string | null;
-         kind?: 'plate' | 'external' | null },
+  input: { refMode?: 'default' | 'username';
+           refUsername?: string | null;
+           display?: string | null },
 ): Promise<ServiceAliasRow> {
   return http
     .patch<ServiceAliasRow>(`/service-aliases/${encodeURIComponent(aliasName)}`, input)

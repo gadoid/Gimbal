@@ -174,7 +174,7 @@
               />
               <Input
                 v-model="faceSlot" class="w-[11.25rem]"
-                placeholder="凭证槽位(可选,如 maker)" data-testid="face-slot"
+                placeholder="展示名(可选,如 maker)" data-testid="face-slot"
               />
               <Button data-testid="face-save" :disabled="faceSaveDisabled || faceSaving" @click="saveFace">
                 {{ faceEditing ? '保存' : '登记' }}
@@ -183,7 +183,7 @@
             </div>
 
             <table class="ov-table mt-2" data-testid="faces-table">
-              <thead><tr><th>身份面</th><th>凭证槽位</th><th style="width:8.25rem" class="c-center">操作</th></tr></thead>
+              <thead><tr><th>身份面</th><th>展示名</th><th style="width:8.25rem" class="c-center">操作</th></tr></thead>
               <tbody>
                 <tr v-for="a in faces.items" :key="a.aliasName" :data-testid="`face-row-${a.aliasName}`">
                   <td>
@@ -197,7 +197,7 @@
                       title="无后缀身份面 = 该目录服务的默认面;三层查找:精确命中身份面 → 默认面 → 全局共享默认"
                     >默认面</span>
                   </td>
-                  <td class="mono">{{ a.slot || '未声明' }}</td>
+                  <td class="mono">{{ a.display || '—' }}</td>
                   <td class="c-center">
                     <div class="row-acts">
                       <button
@@ -459,7 +459,7 @@ function faceEdit(a: ServiceAliasRow): void {
   const prefix = `${key.value}-`
   faceSuffix.value = a.aliasName.startsWith(prefix)
     ? a.aliasName.slice(prefix.length) : a.aliasName
-  faceSlot.value = a.slot ?? ''
+  faceSlot.value = a.display ?? ''
 }
 function cancelFace(): void {
   facesOpen.value = false
@@ -471,13 +471,13 @@ async function saveFace(): Promise<void> {
   faceSaving.value = true
   try {
     if (faceEditing.value) {
-      // 身份面是主键:编辑只动槽位声明(slot null = 清空)
-      await patchAlias(faceEditing.value, { slot: faceSlot.value.trim() || null })
+      // 身份面是主键:编辑只动展示名(registry:slot 恒=条目名,不可改)
+      await patchAlias(faceEditing.value, { display: faceSlot.value.trim() || null })
       toast.success('已保存')
     } else {
       await createAlias({
         aliasName: `${key.value}-${faceSuffix.value.trim()}`,
-        slot: faceSlot.value.trim() || null,
+        display: faceSlot.value.trim(),
         kind: isExternalBase.value ? 'external' : 'plate',
         baseService: isExternalBase.value ? key.value : null,
       })

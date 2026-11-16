@@ -67,12 +67,12 @@ beforeEach(() => {
   } as never)
   vi.spyOn(credApi, 'listProjectCredentials').mockResolvedValue({
     items: [{
-      id: 11, alias: 'qa', url: 'http://a', username: 'proj-u',
+      id: 11, system: 'fin', envId: 1, username: 'proj-u',
       token_type: 'Bearer', expires_in: 7200, created_at: '', updated_at: '',
-      password_masked: '<REDACTED>', slot: 'qa', isDefault: true, system: 'fin',
+      password_masked: '<REDACTED>', isDefault: true, loginUrl: 'http://a',
     }],
     canManage: true,
-  })
+  } as never)
 })
 
 afterEach(() => { document.body.innerHTML = '' })

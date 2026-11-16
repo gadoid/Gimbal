@@ -132,21 +132,21 @@
           选择要快照到本场景的凭证 — 导入后与凭证池解耦;凭证池更新不会同步,如需刷新请删除该行后重新导入。
         </p>
         <div class="pool-list">
-          <p v-if="poolLoading" class="c-empty m-0">凭证池加载中…</p>
+          <p v-if="poolLoading" class="c-empty m-0">账户池加载中…</p>
           <div
             v-for="row in pool"
             :key="row.id"
             class="pool-item"
-            :class="{ disabled: isTaken(row.alias), selected: isSelected(row.id) }"
-            :title="isTaken(row.alias) ? '场景中已存在，如需刷新请先删除该行' : undefined"
+            :class="{ disabled: isTaken(snapKey(row)), selected: isSelected(row.id) }"
+            :title="isTaken(snapKey(row)) ? '场景中已存在，如需刷新请先删除该行' : undefined"
             @click="toggleSel(row)"
           >
-            <code class="alias">{{ row.alias }}</code>
+            <code class="alias">{{ snapKey(row) }}</code>
             <span class="pool-user">{{ row.username }}</span>
-            <span class="pool-url">{{ row.url }}</span>
-            <span v-if="isTaken(row.alias)" class="taken">已存在</span>
+            <span class="pool-url">{{ row.loginUrl }}</span>
+            <span v-if="isTaken(snapKey(row))" class="taken">已存在</span>
           </div>
-          <p v-if="!poolLoading && !pool.length" class="c-empty">凭证池为空 — 先到「凭证管理」添加</p>
+          <p v-if="!poolLoading && !pool.length" class="c-empty">账户池为空 — 先到「凭证管理」添加</p>
         </div>
         <DialogFooter>
           <Button variant="outline" @click="importOpen = false">取消</Button>
@@ -275,11 +275,16 @@ function isTaken(alias: string): boolean {
   // hasOwn:只认自有 key — `in` 会命中 Object.prototype(constructor/toString…),空表误报"已存在"
   return Object.hasOwn(props.modelValue || {}, alias)
 }
+/** 账户 → 快照键(registry:账户无条目名,快照键 = username@system;
+ *  场景本地 users 键即 ${auth.<X>} 的 X 域)。 */
+function snapKey(row: AuthSession): string {
+  return `${row.username}@${row.system}`
+}
 function isSelected(id: number): boolean {
   return selectedIds.value.includes(id)
 }
 function toggleSel(row: AuthSession) {
-  if (isTaken(row.alias)) return
+  if (isTaken(snapKey(row))) return
   selectedIds.value = isSelected(row.id)
     ? selectedIds.value.filter((i) => i !== row.id)
     : [...selectedIds.value, row.id]
@@ -292,7 +297,7 @@ async function openImport() {
   try {
     pool.value = await listAuths()
   } catch (e) {
-    toast.error(`凭证池加载失败：${(e as Error).message}`)
+    toast.error(`账户池加载失败：${(e as Error).message}`)
     importOpen.value = false
   } finally {
     poolLoading.value = false
@@ -306,11 +311,11 @@ async function submitImport() {
   for (const row of pool.value.filter((p) => isSelected(p.id))) {
     try {
       const detail = (await getAuth(row.id, true)) as {
-        url: string; username: string; password: string
+        username: string; password: string; loginUrl?: string
         token_type: string; expires_in: number
       }
-      next[row.alias] = {
-        url: detail.url,
+      next[snapKey(row)] = {
+        url: detail.loginUrl ?? '',
         username: detail.username,
         password: detail.password,
         token_type: detail.token_type,
@@ -318,7 +323,7 @@ async function submitImport() {
       }
       imported++
     } catch (e) {
-      toast.warning(`${row.alias} 导入失败：${(e as Error).message}（已跳过）`)
+      toast.warning(`${snapKey(row)} 导入失败：${(e as Error).message}（已跳过）`)
     }
   }
   importing.value = false

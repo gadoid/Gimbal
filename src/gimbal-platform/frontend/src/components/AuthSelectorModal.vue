@@ -19,7 +19,7 @@
           <CredentialSelect
             v-model="alias"
             :credentials="auths"
-            placeholder="选择一个凭证"
+            placeholder="选择一个身份条目"
             data-testid="auth-alias"
           />
           <p v-if="originNote" class="origin-note" data-testid="auth-origin-note">⤷ {{ originNote }}</p>
@@ -56,14 +56,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { AuthSession } from '@/api/auth_sessions'
+import type { ServiceAliasRow } from '@/api/service-aliases'
 import CredentialSelect from '@/components/credential/CredentialSelect.vue'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
 const props = defineProps<{
   modelValue: boolean
-  auths: AuthSession[]
+  auths: ServiceAliasRow[]
   /** 别名绑定带出的预填凭证名(配套方案 §1.1);null = 无绑定,不预填。 */
   preselectAlias?: string | null
   /** 预填来源说明(如「fin-service-uat 的绑定凭证」)。 */
@@ -90,9 +90,9 @@ watch(
   },
 )
 
-/** 预填名不在本人池:模板仍可插(执行时按执行者池解析),提示说清。 */
+/** 预填名不在条目表:模板仍可插(执行时按解析链取),提示说清。 */
 const preselectMissing = computed(() =>
-  !!props.preselectAlias && !props.auths.some((a) => a.alias === props.preselectAlias))
+  !!props.preselectAlias && !props.auths.some((a) => a.aliasName === props.preselectAlias))
 
 const templatePreview = computed(() => {
   if (!alias.value) return ''

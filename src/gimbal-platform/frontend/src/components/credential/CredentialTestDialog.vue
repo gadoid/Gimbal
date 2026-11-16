@@ -10,7 +10,7 @@
         <DialogTitle>认证测试</DialogTitle>
       </DialogHeader>
       <div v-if="target" class="test-hero">
-        <div class="test-sub">{{ target.alias }} · {{ target.url }}</div>
+        <div class="test-sub">{{ target.name }} · {{ target.target }}</div>
 
         <div v-if="phase === 'testing'" class="test-state testing">
           <span class="test-icon spinner" />
@@ -49,8 +49,8 @@ import type { TestResult } from '@/api/auth_sessions'
 
 const props = defineProps<{
   open: boolean
-  /** 被测凭证的展示名与目标地址(alias · url) */
-  target: { alias: string; url: string } | null
+  /** 被测对象的展示名与目标地址(账户:system/username · 实例 loginUrl) */
+  target: { name: string; target: string } | null
   /** testing = 在途;success / fail = 终态(状态机在调用方) */
   phase: 'testing' | 'success' | 'fail'
   result: TestResult | null

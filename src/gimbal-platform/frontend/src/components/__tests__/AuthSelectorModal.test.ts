@@ -12,14 +12,17 @@
 import { describe, it, expect } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import AuthSelectorModal from '@/components/AuthSelectorModal.vue'
-import type { AuthSession } from '@/api/auth_sessions'
+import type { ServiceAliasRow } from '@/api/service-aliases'
 
-const AUTHS: AuthSession[] = [
-  { id: 1, alias: 'qa1', url: 'https://a', username: 'u1', token_type: 'Bearer',
-    expires_in: null, created_at: '', updated_at: '' },
-  { id: 2, alias: 'uat-cred', url: 'https://b', username: 'u2', token_type: 'Basic',
-    expires_in: null, created_at: '', updated_at: '' },
-] as unknown as AuthSession[]
+/** registry:选择域 = 身份条目(aliasName 即 ${auth.<X>} 的 X 域)。 */
+const AUTHS: ServiceAliasRow[] = [
+  { aliasName: 'qa1', baseService: 'fin-service', slot: 'qa1', kind: 'plate',
+    envId: 1, refMode: 'default', refUsername: null, display: '',
+    createdAt: '', updatedAt: '' },
+  { aliasName: 'uat-cred', baseService: 'fin-service', slot: 'uat-cred',
+    kind: 'external', envId: 1, refMode: 'default', refUsername: null,
+    display: '', createdAt: '', updatedAt: '' },
+]
 
 async function openModal(props?: { preselectAlias?: string | null; originNote?: string | null }) {
   const w = mount(AuthSelectorModal, {
@@ -86,8 +89,8 @@ describe('AuthSelectorModal — 别名绑定预填(C3a)', () => {
     expect(q('[data-testid="auth-alias"] [data-testid="credential-panel"]')).not.toBeNull()
     const opt = q('[data-testid="auth-alias"] [data-testid="credential-option-qa1"]')
     expect(opt?.textContent).toContain('qa1')
-    expect(opt?.textContent).toContain('Bearer')
-    expect(opt?.textContent).toContain('u1 · https://a')
+    expect(opt?.textContent).toContain('plate')
+    expect(opt?.textContent).toContain('fin-service')
     await click('[data-testid="auth-alias"] [data-testid="credential-option-qa1"]')
     // 选中即收起
     expect(q('[data-testid="auth-alias"] [data-testid="credential-panel"]')).toBeNull()

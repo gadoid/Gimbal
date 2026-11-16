@@ -35,7 +35,11 @@ export const useAuthSessionsStore = defineStore('authSessions', () => {
 
   async function createAuth(payload: AuthSessionCreateIn): Promise<AuthSession> {
     const a = await authSessionsApi.create(payload)
-    list.value = [...list.value, a].sort((x, y) => x.alias.localeCompare(y.alias))
+    // 账户排序键:system → username(账户无 alias)
+    list.value = [...list.value, a].sort((x, y) =>
+      x.system === y.system
+        ? x.username.localeCompare(y.username)
+        : x.system.localeCompare(y.system))
     return a
   }
 

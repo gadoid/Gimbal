@@ -20,7 +20,8 @@ vi.mock('@/api/service-aliases', async (importOriginal) => {
 })
 
 const aliasRow = (aliasName: string, baseService: string, slot: string | null = null): ServiceAliasRow =>
-  ({ aliasName, baseService, slot, kind: 'plate', createdAt: '', updatedAt: '' })
+  ({ aliasName, baseService, slot, kind: 'plate', envId: null,
+    refMode: 'default', refUsername: null, display: '', createdAt: '', updatedAt: '' })
 
 const BASE = {
   serviceBindings: {}, serviceRows: [

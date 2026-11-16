@@ -29,7 +29,8 @@ const ROWS: ServiceRow[] = [
 ]
 
 const alias = (aliasName: string, baseService: string, slot: string | null = null): ServiceAliasRow =>
-  ({ aliasName, baseService, slot, kind: 'plate', createdAt: '', updatedAt: '' })
+  ({ aliasName, baseService, slot, kind: 'plate', envId: null,
+    refMode: 'default', refUsername: null, display: '', createdAt: '', updatedAt: '' })
 
 describe('run-bindings — 显式绑定口径(D3,M2a S6 别名瘦身)', () => {
   it('RB-1 非空 alias 才算显式;空/缺省 = undefined(键整个移除)', () => {

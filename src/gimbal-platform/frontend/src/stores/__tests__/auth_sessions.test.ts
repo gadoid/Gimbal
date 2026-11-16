@@ -2,6 +2,7 @@
  * Regression tests for the auth_sessions store (Spec-2 §4.4 D).
  *
  * The store proxies /api/auths/* and never caches plaintext passwords.
+ * registry 重构:账户实体((system, env, username) 键,无 alias/url)。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
@@ -11,8 +12,8 @@ import type { AuthSession } from '@/api/auth_sessions'
 
 const sample: AuthSession = {
   id: 1,
-  alias: 'qa1',
-  url: 'https://example.com/auth',
+  system: 'fin-service',
+  envId: 1,
   username: 'alice',
   token_type: 'Bearer',
   expires_in: 3600,
@@ -43,34 +44,40 @@ describe('useAuthSessionsStore', () => {
     expect(s.lastError).toBe('boom')
   })
 
-  it('createAuth adds + sorts by alias', async () => {
-    const created: AuthSession = { ...sample, id: 2, alias: 'aaa' }
+  it('createAuth adds + sorts by system', async () => {
+    const created: AuthSession = { ...sample, id: 2, system: 'audit', username: 'zoe' }
     vi.spyOn(api, 'create').mockResolvedValue(created)
     const s = useAuthSessionsStore()
     s.list = [sample]
     await s.createAuth({
-      alias: 'aaa',
-      url: 'https://x',
-      username: 'u',
-      password: 'p',
+      system: 'audit', envId: 1, username: 'zoe', password: 'p',
     })
     expect(s.list).toHaveLength(2)
-    expect(s.list[0].alias).toBe('aaa') // aaa < qa1
+    expect(s.list[0].system).toBe('audit') // audit < fin-service
+  })
+
+  it('createAuth sorts by username within same system', async () => {
+    const created: AuthSession = { ...sample, id: 3, username: 'bob' }
+    vi.spyOn(api, 'create').mockResolvedValue(created)
+    const s = useAuthSessionsStore()
+    s.list = [sample]   // alice
+    await s.createAuth({ system: 'fin-service', envId: 1, username: 'bob', password: 'p' })
+    expect(s.list.map((r) => r.username)).toEqual(['alice', 'bob'])   // username 升序
   })
 
   it('patchAuth updates the matching row in place', async () => {
-    const patched = { ...sample, url: 'https://new' }
+    const patched = { ...sample, token_type: 'Basic' }
     vi.spyOn(api, 'patch').mockResolvedValue(patched)
     const s = useAuthSessionsStore()
     s.list = [sample]
-    await s.patchAuth(1, { url: 'https://new' })
+    await s.patchAuth(1, { password: 'new-pw' })
     expect(s.list[0]).toEqual(patched)
   })
 
   it('deleteAuth removes the matching row', async () => {
     vi.spyOn(api, 'remove').mockResolvedValue(undefined)
     const s = useAuthSessionsStore()
-    s.list = [{ ...sample, id: 1 }, { ...sample, id: 2, alias: 'qa2' }]
+    s.list = [{ ...sample, id: 1 }, { ...sample, id: 2, username: 'bob' }]
     await s.deleteAuth(1)
     expect(s.list).toHaveLength(1)
     expect(s.list[0].id).toBe(2)

@@ -140,12 +140,8 @@
                   <td colspan="5">
                     <div class="imp-cfg-line">
                       <label>新别名名:<input v-model="createNames[row.serviceKey]" class="imp-input mono" :data-testid="`import-newname-${row.serviceKey}`" /></label>
-                      <label>认证配置(仅 ${auth.*} 账号):
-                        <select v-model="credentialAliases[row.serviceKey]" class="imp-input" :data-testid="`import-cred-${row.serviceKey}`">
-                          <option value="">(不挂)</option>
-                          <option v-for="a in authOptions" :key="a" :value="a">{{ a }}</option>
-                        </select>
-                      </label>
+                      <!-- registry:导入建的条目默认 ref=默认账户(后端兜底);
+                           账户装载关系在服务注册页按 ref 配置,导入面不再挂 -->
                     </div>
                     <p class="text-caption text-signal-muted">
                       base_url 与 carry 绑定对全平台生效(其他场景引用同名服务键也会命中);敏感字段不写入 carry,保留字面值。
@@ -216,7 +212,6 @@ import {
   type ImportPrecheck, type ImportServiceRow, type ImportMapping,
   type ImportAnchorEntry, type ImportResult,
 } from '@/api/scenario-import'
-import { listAll } from '@/api/auth_sessions'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ open: boolean; bundle: Record<string, unknown> | null }>()
@@ -233,8 +228,6 @@ const importing = ref(false)
 const reprechecking = ref(false)
 const decisions = ref<Record<string, 'reuse' | 'map' | 'create'>>({})
 const createNames = ref<Record<string, string>>({})
-const credentialAliases = ref<Record<string, string>>({})
-const authOptions = ref<string[]>([])
 const assignNewId = ref(true)
 /** S7.5:落库回报(非空 = 结果视图) */
 const result = ref<ImportResult | null>(null)
@@ -330,7 +323,6 @@ async function runPrecheck(): Promise<void> {
     result.value = null
     decisions.value = {}
     createNames.value = {}
-    credentialAliases.value = {}
     assignNewId.value = true
   } catch (e) {
     const detail = (e as { response?: { data?: { detail?: { message?: string } } } })
@@ -352,8 +344,6 @@ async function onConfirm(): Promise<void> {
       if (d === 'create') {
         const name = createNames.value[r.serviceKey]?.trim()
         if (name && name !== r.serviceKey) m.createName = name
-        const cred = credentialAliases.value[r.serviceKey]
-        if (cred) m.credentialAlias = cred
       }
       return m
     })
@@ -402,11 +392,6 @@ function onClose(): void {
 watch(() => props.open, (v) => {
   if (v) {
     void runPrecheck()
-    if (!authOptions.value.length) {
-      listAll().then((items) => {
-        authOptions.value = items.map((a) => a.alias)
-      }).catch(() => { authOptions.value = [] })
-    }
   }
 }, { immediate: true })
 </script>

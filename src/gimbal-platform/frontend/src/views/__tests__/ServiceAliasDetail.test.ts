@@ -31,14 +31,17 @@ const ENVS = [
 ]
 const ALIAS_ROWS: aliasApi.ServiceAliasRow[] = [
   { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate',
-    slot: 'uat-slot', createdAt: '', updatedAt: '' },
+    slot: 'uat-slot', envId: 1, refMode: 'default', refUsername: null,
+    display: '', createdAt: '', updatedAt: '' },
 ]
 /** listAliases 按服务端语义:base 精确 + q 子串 + 分页(身份面注册表)。 */
 const FACES: aliasApi.ServiceAliasRow[] = [
   { aliasName: 'fin-service', baseService: 'fin-service', kind: 'plate',
-    slot: null, createdAt: '', updatedAt: '' },
+    slot: null, envId: 1, refMode: 'default', refUsername: null,
+    display: '', createdAt: '', updatedAt: '' },
   { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate',
-    slot: 'uat-slot', createdAt: '', updatedAt: '' },
+    slot: 'uat-slot', envId: 1, refMode: 'default', refUsername: null,
+    display: 'uat-slot', createdAt: '', updatedAt: '' },
 ]
 
 beforeEach(() => {
@@ -159,7 +162,7 @@ describe('ServiceAliasDetail — 服务模式(身份面子页)', () => {
     await w.get('[data-testid="face-save"]').trigger('click')
     await flushPromises()
     expect(create).toHaveBeenCalledWith({
-      aliasName: 'fin-service-prod2', slot: 'maker',
+      aliasName: 'fin-service-prod2', display: 'maker',
       kind: 'plate', baseService: null,
     })
     w.unmount()
@@ -182,7 +185,7 @@ describe('ServiceAliasDetail — 服务模式(身份面子页)', () => {
     w.unmount()
   })
 
-  it('编辑槽位 → patchAlias(aliasName, {slot});清空 = null', async () => {
+  it('编辑展示名 → patchAlias(aliasName, {display});清空 = null', async () => {
     setAuth(true)
     const patch = vi.spyOn(aliasApi, 'patchAlias')
       .mockResolvedValue(ALIAS_ROWS[0])
@@ -198,7 +201,7 @@ describe('ServiceAliasDetail — 服务模式(身份面子页)', () => {
     await w.get('[data-testid="face-slot"]').setValue('maker2')
     await w.get('[data-testid="face-save"]').trigger('click')
     await flushPromises()
-    expect(patch).toHaveBeenCalledWith('fin-service-uat', { slot: 'maker2' })
+    expect(patch).toHaveBeenCalledWith('fin-service-uat', { display: 'maker2' })
     w.unmount()
   })
 

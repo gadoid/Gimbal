@@ -20,12 +20,12 @@ vi.mock('@/api/auth_sessions', () => ({
 }))
 
 const poolA = {
-  id: 1, alias: 'pool-a', url: 'https://a/auth', username: 'ua',
+  id: 1, system: 'fin', envId: 1, loginUrl: 'https://a/auth', username: 'ua',
   token_type: 'Bearer', expires_in: 3600,
   created_at: '', updated_at: '', password_masked: '<REDACTED>',
 }
 const poolB = {
-  id: 2, alias: 'pool-b', url: 'https://b/auth', username: 'ub',
+  id: 2, system: 'fin', envId: 1, loginUrl: 'https://b/auth', username: 'ub',
   token_type: 'Basic', expires_in: 60,
   created_at: '', updated_at: '', password_masked: '<REDACTED>',
 }
@@ -167,24 +167,24 @@ describe('UsersCard — 渲染与手动 CRUD', () => {
 describe('UsersCard — 凭证池导入', () => {
   it('已存在 alias 置灰;导入写入明文快照', async () => {
     const { w, users } = mountCard({
-      'pool-b': { url: 'https://old', username: 'old', password: 'old' },
+      'ub@fin': { url: 'https://old', username: 'old', password: 'old' },
     })
     await w.findAll('button').filter((b) => b.text().includes('从凭证池导入'))[0].trigger('click')
     await flushPromises()
     const items = [...document.querySelectorAll('.pool-item')] as HTMLElement[]
-    const taken = items.find((el) => el.textContent!.includes('pool-b'))!
+    const taken = items.find((el) => el.textContent!.includes('ub@fin'))!
     expect(taken.classList.contains('disabled')).toBe(true)
-    const fresh = items.find((el) => el.textContent!.includes('pool-a'))!
+    const fresh = items.find((el) => el.textContent!.includes('ua@fin'))!
     expect(fresh.classList.contains('disabled')).toBe(false)
     fresh.click()
     await flush()
     clickDialogButton('导入')
     await flushPromises()
-    expect(users.value['pool-a']).toEqual({
+    expect(users.value['ua@fin']).toEqual({
       url: 'https://a/auth', username: 'ua', password: 'plain-pw-1',
       token_type: 'Bearer', expires_in: 3600,
     })
-    expect(users.value['pool-b'].username).toBe('old') // 已存在未被覆盖
+    expect(users.value['ub@fin'].username).toBe('old') // 已存在未被覆盖
     w.unmount()
   })
 
@@ -203,8 +203,8 @@ describe('UsersCard — 凭证池导入', () => {
     await flush()
     clickDialogButton('导入')
     await flushPromises()
-    expect(users.value['pool-a']).toBeUndefined()
-    expect(users.value['pool-b']).toMatchObject({ password: 'plain-pw-2' })
+    expect(users.value['ua@fin']).toBeUndefined()
+    expect(users.value['ub@fin']).toMatchObject({ password: 'plain-pw-2' })
     w.unmount()
   })
 })

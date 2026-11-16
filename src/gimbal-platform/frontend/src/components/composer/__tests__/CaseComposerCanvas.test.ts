@@ -923,12 +923,13 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     w.unmount()
   })
 
-  it('F4 注入(M2a S6 槽位口径):选中声明了槽位的已登记别名 → headers 直接写入 ${auth.*} 行,既有 Authorization(含大小写变体)先清', async () => {
+  it('F4 注入(registry 条目口径):选中已登记身份条目 → headers 直接写入 ${auth.<条目名>} 行,既有 Authorization(含大小写变体)先清', async () => {
     const { listAllAliases } = await import('@/api/service-aliases')
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-uat', baseService: 'fin-service',
-        slot: 'uat-cred', kind: 'plate' as const,
+        slot: 'fin-service-uat', kind: 'plate' as const, envId: 1,
+        refMode: 'default' as const, refUsername: null, display: '',
         createdAt: '', updatedAt: '',
       },
     ] as never)
@@ -945,24 +946,26 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     await w.find('.svc-ref-select').setValue('fin-service-uat')
     expect(s0.call?.service).toBe('fin-service-uat')
     expect(s0.call?.headers).toEqual({
-      Authorization: '${auth.uat-cred.token}',
+      Authorization: '${auth.fin-service-uat.token}',
       'X-Trace': 't1',           // 无关头不动
     })
     w.unmount()
   })
 
-  it('F4 注入:headers 原本为空 → 注入 Authorization 行;未声明槽位的已登记别名不注入', async () => {
+  it('F4 注入:headers 原本为空也注入;切回未登记服务名清掉模板行', async () => {
     const { listAllAliases } = await import('@/api/service-aliases')
     const s0 = stepOf('fin-service')
     vi.mocked(listAllAliases).mockResolvedValueOnce([
       {
         aliasName: 'fin-service-uat', baseService: 'fin-service',
-        slot: 'uat-cred', kind: 'plate' as const,
+        slot: 'fin-service-uat', kind: 'plate' as const, envId: 1,
+        refMode: 'default' as const, refUsername: null, display: '',
         createdAt: '', updatedAt: '',
       },
       {
         aliasName: 'fin-service-bare', baseService: 'fin-service',
-        slot: null, kind: 'plate' as const,
+        slot: 'fin-service-bare', kind: 'plate' as const, envId: 1,
+        refMode: 'default' as const, refUsername: null, display: '',
         createdAt: '', updatedAt: '',
       },
     ] as never)
@@ -971,15 +974,15 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
       services: { 'fin-service': 'https://a' },
     })
     await flushPromises()
-    // 先选无凭证绑定的已登记别名:headers 保持空对象(不动)
+    // 任一已登记条目都注入(条目名即 ${auth.X} 域;条目必 ref 账户)
     await w.find('.svc-ref-select').setValue('fin-service-bare')
-    expect(s0.call?.headers).toEqual({})
-    // 再切到带凭证绑定的别名:空 headers 上注入一行
+    expect(s0.call?.headers).toEqual({ Authorization: '${auth.fin-service-bare.token}' })
+    // 换选另一条目:注入行随选刷新
     await w.find('.svc-ref-select').setValue('fin-service-uat')
-    expect(s0.call?.headers).toEqual({ Authorization: '${auth.uat-cred.token}' })
-    // 再切回无凭证别名:注入的模板行必须清掉 —— 不能带着上一个服务的
-    // token 发请求(2026-09-23 评审修补)
-    await w.find('.svc-ref-select').setValue('fin-service-bare')
+    expect(s0.call?.headers).toEqual({ Authorization: '${auth.fin-service-uat.token}' })
+    // 切回未登记的目录服务名:注入的模板行必须清掉 —— 不能带着上一个
+    // 服务的 token 发请求(2026-09-23 评审修补)
+    await w.find('.svc-ref-select').setValue('fin-service')
     expect(s0.call?.headers).toEqual({})
     w.unmount()
   })
@@ -992,20 +995,14 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
       headers: { Authorization: 'Bearer handwritten', 'X-Trace': 't1' },
       view_hints: { endpoint_id: 'ep-1' },
     }
-    vi.mocked(listAllAliases).mockResolvedValueOnce([
-      {
-        aliasName: 'fin-service-bare', baseService: 'fin-service',
-        slot: null, kind: 'plate' as const,
-        createdAt: '', updatedAt: '',
-      },
-    ] as never)
+    vi.mocked(listAllAliases).mockResolvedValueOnce([] as never)
     const { w } = mountCanvas({
       steps: [s0],
       services: { 'fin-service': 'https://a' },
     })
     await flushPromises()
-    // 无凭证别名:手写的字面凭证不是注入痕迹,原样保留
-    await w.find('.svc-ref-select').setValue('fin-service-bare')
+    // 未登记服务名:手写的字面凭证不是注入痕迹,原样保留
+    await w.find('.svc-ref-select').setValue('fin-service')
     expect(s0.call?.headers).toEqual({
       Authorization: 'Bearer handwritten',
       'X-Trace': 't1',

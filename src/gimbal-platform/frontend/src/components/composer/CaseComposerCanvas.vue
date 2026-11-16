@@ -588,7 +588,6 @@ import {
   listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
   validateEndpointFieldStates,
 } from '@/api/scenario-composer'
-import { listAll as listAuths } from '@/api/auth_sessions'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
 import { fetchQueryViewIndex, fetchQueryViewRows } from '@/api/query-views'
@@ -596,7 +595,6 @@ import type { QueryViewIndexEntry } from '@/api/query-views'
 import { ApiError } from '@/api/http'
 import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
 import type { TplRef } from '@/utils/tpl-refs'
-import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults, setByPath } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
 import { strategyLabelOf } from '@/utils/strategy-labels'
@@ -883,7 +881,9 @@ const COMMON_HEADER_KEYS = [
   'X-Request-ID', 'traceparent', 'X-Forwarded-For', 'X-Real-IP', 'X-API-Key', 'X-Trace-Id',
 ]
 
-const auths = ref<AuthSession[]>([])
+/** 条目表单份:ⓘ 选择器/悬空徽章共用(与 registeredAliases 同源,
+ *  拉取只在 registeredAliases 一处)。 */
+const auths = computed(() => registeredAliases.value)
 const authPickerOpen = ref(false)
 const authPickerKey = ref<string | null>(null)
 const authPickerVal = ref<string | null>(null)
@@ -891,14 +891,12 @@ const authPickerStep = ref<StepView | null>(null)
 /** 打开选择器时定格的步骤服务绑定(配套方案 §1.1 预填源)。 */
 const authPickerBound = ref<BoundCredential | null>(null)
 
-/** 预填凭证(M2a S6):槽位 → 池内凭证 — 声明该 slot 的凭证优先,
- *  否则槽名恰与凭证别名同名(槽缺省 = 别名本身的约定)。找不到 → null,
- *  选择器无预填,不阻塞手工选。 */
+/** 预填身份条目(registry:绑定携带的条目名即 ${auth.X} 的 X 域;
+ *  条目表里存在才预填,找不到 → null,选择器无预填,不阻塞手工选)。 */
 const authPickerPreselect = computed(() => {
   const b = authPickerBound.value
   if (!b) return null
-  return auths.value.find((a) => a.slot === b.slot)?.alias
-    ?? (auths.value.some((a) => a.alias === b.slot) ? b.slot : null)
+  return auths.value.some((a) => a.aliasName === b.slot) ? b.slot : null
 })
 
 function addHeader(step: StepView) {
@@ -1656,7 +1654,7 @@ watch([() => props.focusJump, () => props.steps?.length], ([j]) => {
  *  (③ 用户认证快照 — 场景本地用户执行期由 Config.users 解析,不能误标悬空) */
 const authAliases = computed(() => {
   const localUsers = Object.keys(draftStore.draft?.definition?.config?.users ?? {})
-  return [...new Set([...auths.value.map((a) => a.alias), ...localUsers])]
+  return [...new Set([...auths.value.map((a) => a.aliasName), ...localUsers])]
 })
 
 onMounted(() => {
@@ -1665,8 +1663,8 @@ onMounted(() => {
   void loadStrategyKinds().then(() => {
     for (const k of strategyKinds.value) void ensureStrategyDetail(k.kind)
   })
-  // 认证列表:ⓘ 选择器 + 悬空徽章判定共用。失败静默(ⓘ 打开时列表为空,可重进)
-  listAuths().then((a) => { auths.value = a }).catch(() => {})
+  // 认证列表(ⓘ 选择器 + 悬空徽章判定)与已登记条目同源 —— 见下方
+  // registeredAliases 的拉取(同一次 listAllAliases,不再各打一次)
   // 常量池条目(CaseComposer rail 之外的第二拉取点;store 内 in-flight/
   // 已有数据短路保证只发一次)
   void constantsStore.ensureEntries().catch(() => {})
@@ -2007,22 +2005,21 @@ function onServiceRefChange(step: StepView, value: string) {
   creatingAlias.value = false
   const call = stepCall(step)!       // call 唯一形态;local 直改经既有 watch 传播
   call.service = value
-  // F4 方案 B(M2a S6 槽位口径):选中已登记别名且声明了槽位 → headers
-  // 直接注入 ${auth.<slot>.*} 模板这一行(2026-09-23 调整:不做「已有
-  // Authorization 则跳过」的补缺守卫 —— 选中即写入,换选别名即刷新;既有
-  // 大小写 Authorization 键先清掉,保证注入后只有一行)。切到**无槽位**
-  // 别名时,上一轮注入的模板行必须一并清掉 —— 留着会让请求带别的服务的
-  // token 发出去;手写的字面 Authorization 不是注入痕迹,保留。不写
-  // services 声明 —— 地址走部署表(按执行环境解析),写了就成快照。
+  // F4(registry 口径):选中已登记身份条目 → headers 直接注入
+  // ${auth.<条目名>.*} 模板这一行(选中即写入,换选即刷新;既有大小写
+  // Authorization 键先清掉,保证注入后只有一行)。切到未登记服务名时,
+  // 上一轮注入的模板行必须一并清掉 —— 留着会让请求带别的服务的 token
+  // 发出去;手写的字面 Authorization 不是注入痕迹,保留。不写 services
+  // 声明 —— 地址走部署表(按执行环境解析),写了就成快照。
   const reg = registeredByName.value.get(value)
   const headers = (call.headers ||= {})
   for (const k of Object.keys(headers)) {
     if (k.toLowerCase() !== 'authorization') continue
-    if (reg?.slot || String((headers as Record<string, unknown>)[k]).startsWith('${auth.'))
+    if (reg || String((headers as Record<string, unknown>)[k]).startsWith('${auth.'))
       delete (headers as Record<string, unknown>)[k]
   }
-  if (reg?.slot) {
-    ;(headers as Record<string, unknown>).Authorization = `$\{auth.${reg.slot}.token}`
+  if (reg) {
+    ;(headers as Record<string, unknown>).Authorization = `$\{auth.${value}.token}`
   }
 }
 

@@ -1,9 +1,15 @@
 /**
- * api/service-meta.ts — 服务级元数据(服务注册页「说明」列)。
- * 读全员(登录用户);写 Admin+(ops.write,后端 MemberUser 闸)。
- * upsert 语义:PUT 不存在则建、存在则覆写(审计 service_meta.write)。
+ * api/service-meta.ts — 服务说明(legacy 门面,registry 重构 P1-8)。
+ *
+ * service_meta 表已退役:说明是服务主档 services.description 的一列。
+ * 本模块保形转发到 /api/services,让 ServiceAdmin/ServiceAliasDetail/
+ * ExecConfigsView 的既有调用签名不动(页面重做时再直接用 services API)。
+ *
+ * 语义变化:putServiceMeta 只能改主档已有行(upsert 不再凭空建行 ——
+ * 注册簿制:说明挂在登记的服务上)。
  */
-import http from '@/api/http'
+import { listServices, patchService } from '@/api/services'
+import type { ServiceRow } from '@/api/services'
 
 export interface ServiceMetaRow {
   serviceName: string
@@ -11,15 +17,17 @@ export interface ServiceMetaRow {
   updatedAt: string | null
 }
 
-export function listServiceMeta(): Promise<ServiceMetaRow[]> {
-  return http.get<ServiceMetaRow[]>('/service-meta').then(({ data }) => data)
+function toRow(s: ServiceRow): ServiceMetaRow {
+  return { serviceName: s.name, description: s.description,
+           updatedAt: s.updatedAt }
 }
 
-export function putServiceMeta(
+export function listServiceMeta(): Promise<ServiceMetaRow[]> {
+  return listServices().then(({ services }) => services.map(toRow))
+}
+
+export async function putServiceMeta(
   serviceName: string, description: string,
 ): Promise<ServiceMetaRow> {
-  return http.put<ServiceMetaRow>(
-    `/service-meta/${encodeURIComponent(serviceName)}`,
-    { description },
-  ).then(({ data }) => data)
+  return toRow(await patchService(serviceName, { description }))
 }
