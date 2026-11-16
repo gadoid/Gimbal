@@ -154,6 +154,19 @@ async def resolve_for_scenario(
         exec_env=exec_env, default_exec_env=default_exec_env)
 
 
+async def instance_lines(db: AsyncSession, env_id: int | None) -> dict[str, str]:
+    """环境的版本线声明(重构 §1.2:迁 ``system_env_instances.line``,
+    原 ``environments.lines`` JSON 列退役;空 = 未声明)。"""
+    if env_id is None:
+        return {}
+    from ..models.system_env_instance import SystemEnvInstance
+
+    rows = (await db.execute(select(
+        SystemEnvInstance.system, SystemEnvInstance.line).where(
+        SystemEnvInstance.env_id == env_id))).all()
+    return {s: ln for s, ln in rows if ln}
+
+
 async def deployment_urls(
     db: AsyncSession, raw_names: list[str], env_id: int,
 ) -> dict[str, str]:

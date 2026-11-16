@@ -804,6 +804,7 @@ async def _check_env_consistency(
     只有一个环境)。
     """
     from ..models.environment import Environment
+    from .env_chain import instance_lines
 
     if env_id is None:
         return []
@@ -813,7 +814,8 @@ async def _check_env_consistency(
     warnings: list[str] = []
     definition = definition_from_payload(scenario_payload)
     meta_plate = (definition.get("meta") or {}).get("plate") or {}
-    for system, line in (env.lines or {}).items():
+    # 重构 §1.2:版本线迁 system_env_instances(env.lines JSON 列退役)
+    for system, line in (await instance_lines(db, env_id)).items():
         declared = meta_plate.get(system)
         if ref_category(declared) == PIN:  # b2-3:线一致告警仅对钉定
             declared_line = declared.split("#")[0]

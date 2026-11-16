@@ -1537,14 +1537,13 @@ async def _check_payload(
         (refs_own if entry["owner_id"] == owner_id
          else refs_others).append(entry)
 
-    # ③ 保存方式推荐（§5.6 默认规则）
+    # ③ 保存方式推荐（§5.6 默认规则;重构 §1.2:版本线读实例表）
     from_line = from_ref.split("#")[0]
-    env_declares_old = False
-    envs = (await db.execute(select(Environment))).scalars().all()
-    for env in envs:
-        if (env.lines or {}).get(sys_) == from_line:
-            env_declares_old = True
-            break
+    from ..models.system_env_instance import SystemEnvInstance
+    env_declares_old = (await db.execute(
+        select(SystemEnvInstance.id).where(
+            SystemEnvInstance.system == sys_,
+            SystemEnvInstance.line == from_line))).first() is not None
     recommendation = ("copy" if (target_revision == "working"
                                  or refs_others or env_declares_old)
                       else "direct")
@@ -1785,6 +1784,13 @@ async def stale_scenarios(
     rows = (await db.execute(stmt)).scalars().all()
 
     envs = (await db.execute(select(Environment))).scalars().all()
+    # 重构 §1.2:版本线读实例表 —— (env_id, system) → line 预取,
+    # 替代逐环境 env.lines JSON
+    from ..models.system_env_instance import SystemEnvInstance
+    inst_lines: dict[tuple[int, str], str] = {
+        (eid, sysname): ln for eid, sysname, ln in (await db.execute(
+            select(SystemEnvInstance.env_id, SystemEnvInstance.system,
+                   SystemEnvInstance.line))).all() if ln}
 
     # plate 调用在请求内按系统缓存(stale 是入口页,不让 plate 放大 N 倍)
     lines_by_system: dict = {}
@@ -1826,9 +1832,9 @@ async def stale_scenarios(
                 newer = lines[-1].get("latest")
                 reasons.append(
                     f"{sys_}: 有新版本线 {newer}")
-            # 版本线已退役:没有任何环境声明该线
+            # 版本线已退役:没有任何环境声明该线(实例表口径,§1.2)
             declared_envs = [e.name for e in envs
-                             if (e.lines or {}).get(sys_) == line]
+                             if inst_lines.get((e.id, sys_)) == line]
             if not declared_envs and line_names and line in line_names:
                 reasons.append(
                     f"{sys_}: 版本线 {line} 未被任何环境声明(已退役)")

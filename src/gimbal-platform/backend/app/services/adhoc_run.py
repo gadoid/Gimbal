@@ -299,11 +299,13 @@ async def resolve_versions(
            if choice.env_id is not None else None)
     meta_plate: dict[str, str] = {}
     unresolved: list[dict] = []
+    # 重构 §1.2:版本线迁 system_env_instances(env.lines JSON 列退役)
+    env_line_map = await env_chain.instance_lines(db, choice.env_id)
     for system in systems:
         if release and system in release:
             meta_plate[system] = str(release[system])
             continue
-        line = (env.lines or {}).get(system) if env is not None else None
+        line = env_line_map.get(system)
         if not line:
             unresolved.append({"system": system, "reason": "no_line"})
             continue
