@@ -14,7 +14,7 @@ carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）�
 令牌复核 NameError/行级绑定两处等 —— 全是旧测试 skip 期从未被执行的死路径）**；
 **P2-B.6 导入映射按 ref 语义重做完成（`call.user`→条目名统一改写、回报 `authEntries`/`authRenames`
 + 登记坐标深链,13 条挂起用例按新语义恢复）**；
-剩余：migrations 时代造形 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
+剩余：Phase 3 文案清账;**migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 条时代重放用例恢复)**;生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
 
 ## 2. 已完成
 
@@ -158,7 +158,7 @@ migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 �
 | `test_scenario_composer_plate_integration.py` | 13 | 解密 fail-fast/注入只进 run 副本/跨 owner 取用隔离（${_}→四件套） |
 | 批次⑤ 零触点 9 文件 | 85 | m2b_q1 / r5 / s8_leftovers / c2 / debug_console / m4 / p35 / plate_gimbal_contract / public_content（含静态令牌/r6 掩码/q2 项目令牌等小修） |
 | 批次⑤ 修复续期 10 文件 | ~55 | r6 / m2b_q2 / s60 / s70 / suites_validate / user_delete_cascade / grep_guard（白名单重扫 88 条）/ export_overlay / s50 / m2b_q3（行级绑定） |
-| `test_migrations.py` | 3+17skip | 逐版本/整链重放按「时代造形缺失」记档（空库面由 empty_db_bootstrap 覆盖）；恢复 = 独立工作项 `_create_retired_tables` |
+| `test_migrations.py` | 3+17skip→0 | 时代重放曾按「造形缺失」记档;`_create_retired_tables` 落地后 17 条全恢复(空库产品面仍由 empty_db_bootstrap 覆盖) |
 | 导入簇（pipeline+s75） | 21+13skip | 通用导入 21 用例直过；凭证→槽位映射 13 用例随「导入映射按 ref 重做」（P2-B.6）恢复 |
 
 **修出的 P1 残留缺陷**：
@@ -201,14 +201,18 @@ migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 �
 （21m39s）；**P2-A 收口基线（2026-11-16）：2007 passed / 39 skipped / 0 failed**（24m51s）——
 对照 P1-7 基线 1560/461，恢复 ~450 用例；39 条残余 = 本轮 32 条记档 + 7 条既有口径；
 **P2-B.6 后（2026-11-17）：2020 passed / 26 skipped / 0 failed**（25m39s）——
-导入映射 13 条按新语义恢复，残余 26 = 时代重放 19 + 既有口径 7。
+导入映射 13 条按新语义恢复，残余 26 = 时代重放 19 + 既有口径 7；
+**时代造形后（2026-11-17）：2044 passed / 2 skipped / 0 failed**（28m26s，复跑
+一轮同数确认）—— 19 条时代重放恢复；残余 2 = 真 gimbal CLI 环境件
+（test_run_injectable_wire）。另 5 条引擎可用性用例（p35/debug_console，
+skipif 判引擎可导入）本轮引擎可用全部跑过 —— 记档口径:套件下限
+2039+、随引擎环境最多 +5。
 
 #### 残余 skip 的两类裁定（32+ 条,均有档可查）
 
 - **时代重放（19 条）**：`test_migrations` 17 + `test_exec_config_migration` 2 ——
-  baseline(create_all 当前模型)随 0057 退役旧表后,空库不可重放触碰旧表的历史增量;
-  空库产品面 = upgrade baseline + stamp head(决策 8)。恢复 = 独立工作项
-  （预建退役表时代形态 `_create_retired_tables`）。
+  ✅ 已随「migrations 时代造形」落地恢复(见 §4);空库产品面语义不变
+  (upgrade baseline + stamp head,决策 8)。
 - **导入映射重做（13 条)**：pipeline 7 + s75 6 —— ✅ 已随 P2-B.6 落地恢复
   （新语义见 §4「P2-B.6 导入映射按 ref 重做」）。
 
@@ -272,6 +276,41 @@ migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 �
 
 **验证**：导入两簇+aliases 回归 43 passed；后端全量 **2020 passed / 26 skipped /
 0 failed**（25m39s）；前端 vitest 全量 171 文件 1434 passed + vue-tsc + eslint 干净。
+
+### migrations 时代造形（2026-11-17，✅ 完成）
+
+**问题**：0057 退役 `service_aliases`/`auth_sessions`/`service_meta` 与
+`environments.lines` 后，`0001_baseline` 的 `create_all`（当前模型）不再产出
+它们 —— 触碰旧表的历史增量（0006/0016/0038/0044–0047/0057）在空库上无法
+重放，19 条逐版本/整链重放用例自 P1-7 起记档跳过。
+
+**机制**（`tests/test_migrations.py::_create_retired_tables`，纯测试造形，
+产品面空库语义不变 = 决策 8）：
+
+- **退役三表按退役前最终形态幂等补建**（形态冻结自 git 历史 `5ee3874a~1`
+  模型）：`service_aliases`（alias_name PK/slot/kind）、`auth_sessions`
+  （S8 终态：owner/project 恰一 CHECK + 四元组 NND 唯一键 + 默认槽部分唯
+  一索引）、`service_meta`（0055 有 `_has_table` 空转护栏，预建后其
+  create_table 空转）；`environments.lines` 补回 jsonb 终态列。
+- **生存表坐标回退**：`carry_service_bindings` 的 `config_key`→`service_name`
+  改名 + 撤 `env_id`（0057 §⑧改列无护栏；0046 去重/0054 搬迁按旧列名引用）；
+  唯一键不手动回退 —— 0046 按名 drop 后重建旧四列形态，0057 再重建终态。
+- **0057 四张新表撤除**：`services`/`system_env_instances`/`service_
+  identities`/`auth_accounts` 由 create_all 建出，但重放跨 0057 时由迁移
+  §①自建（无护栏）→ 造形 DROP CASCADE；`access_token_scopes` 两枚 FK 先
+  换回 0033 旧指向（0057 §⑨按**名** drop 后重建回新表；PG 默认 FK 名
+  create_all 与 0033 一致）。
+- **降级腿跨 0057 的用例帽到 0056**（0057 `downgrade = NotImplementedError`
+  是决策 8 的刻意行为；「升到头」的产品面由 `test_full_chain_from_empty`
+  覆盖）：0036×2 / 0041 / 0042 的 `upgrade head` → `upgrade 0056`。
+- **单段空库升级拆分**：0049–0052 与 0054 用例的 `command.upgrade(cfg, 旧rev)`
+  拆为 `_upgrade_to(url, rev)` = baseline → 造形 → 续升（exec_config 两个
+  用例同构 `_to_0053_era`）。
+
+**恢复明细**：`test_migrations` 22 passed（17 恢复 + 5 原有）；
+`test_exec_config_migration` 4 passed（2 恢复 + 2 原有）。修一个顺带发现：
+0038 用例的 `AuthSession` ORM 播种走 conftest 垫片映射到 `AuthAccount` 必炸
+→ 改裸 SQL 插造形表。
 
 ### P2-C 验证收口
 

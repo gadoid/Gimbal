@@ -6,16 +6,32 @@ environment_id(仅配置缺省时);迁后删个人层行(不做双源回落)。
 停读:carry 链个人层不再构成 tier;carry API scope=user 422 指路。
 """
 from __future__ import annotations
-import pytest  # noqa: E402
-
 import json
 
 from alembic import command
 
-from .test_migrations import _cfg, _revision, temp_schema
+from .test_migrations import (
+    _cfg, _create_retired_tables, _revision, temp_schema,
+)
 from .helpers import register_and_login
 from app.core import db as db_module
 from app.services.carry_injection import build_carry_context
+
+
+def _to_0053_era(sync_url: str) -> None:
+    """空 schema 先到 baseline → 时代造形(退役前三表 + environments.
+    lines)→ 续升 0053。0006/0016/0038 等触碰旧表的增量由此可重放
+    (P2-A「时代造形」机制,详见 test_migrations._create_retired_tables)。"""
+    from alembic import command as _command
+    from sqlalchemy import create_engine
+
+    _command.upgrade(_cfg(sync_url), "0001_baseline")
+    _eng = create_engine(sync_url)
+    try:
+        _create_retired_tables(_eng)
+    finally:
+        _eng.dispose()
+    _command.upgrade(_cfg(sync_url), "0053_exec_configs")
 
 
 def _sync(sync_url: str, stmts: list[tuple[str, dict]]) -> None:
@@ -41,19 +57,11 @@ def _sync_all(sync_url: str, sql: str):
         eng.dispose()
 
 
-_ERA_NOTE = (
-    "0054 历史重放需 0053 时代库形态:0001_baseline 是 create_all(当前"
-    "模型),0057 退役 service_aliases/auth_sessions 后空库无法重放触碰"
-    "旧表的增量(空库语义 = upgrade baseline + stamp head,决策 8 不留"
-    "过渡窗口);0054 已在生产与本地库执行,行为由 0053 时代记录背书")
-
-
-@pytest.mark.skip(reason=_ERA_NOTE)
 def test_0054_migrates_user_layer_into_default_config():
     """个人层绑定+环境偏好 → 默认配置 systems 覆盖 + environment_id;
     已有默认配置时并进(键冲突以配置现有值为准);迁后个人层行删除。"""
     with temp_schema() as (_schema, sync_url):
-        command.upgrade(_cfg(sync_url), "0053_exec_configs")
+        _to_0053_era(sync_url)
         # 造数:用户 + 环境偏好 + 个人层绑定(两服务)+ 已有默认配置
         # (无环境、fin-service 已带 grade=A 的覆盖)
         uid = _sync_all(sync_url,
@@ -110,11 +118,10 @@ def test_0054_migrates_user_layer_into_default_config():
         assert n == 0
 
 
-@pytest.mark.skip(reason=_ERA_NOTE)
 def test_0054_pref_only_creates_default_config():
     """只有环境偏好、无个人层行 → 也保证默认配置存在并带上环境。"""
     with temp_schema() as (_schema, sync_url):
-        command.upgrade(_cfg(sync_url), "0053_exec_configs")
+        _to_0053_era(sync_url)
         uid = _sync_all(sync_url,
                         "INSERT INTO users (username, password_hash,"
                         " display_name, role, is_active, is_system,"

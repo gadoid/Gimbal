@@ -1,7 +1,9 @@
 """逐版本迁移测试(authz T0.4,dev-plan §〇):stamp → upgrade → 断言 → downgrade。
 
-P1-7 续期:逐版本/整链重放用例按「时代造形缺失」记档跳过(见 _ERA_SKIP);
-空库产品面由 test_empty_db_bootstrap(stamp head 语义)覆盖。
+P1-7 曾按「时代造形缺失」记档跳过;本批补齐造形机制(``_create_
+retired_tables``:退役前三表 + environments.lines 按退役前最终形态幂等
+补建)后全量恢复 —— 触碰旧表的历史增量重新可重放。空库产品面语义不变
+(决策 8:upgrade baseline + stamp head,由 test_empty_db_bootstrap 覆盖)。
 
 空库门(test_empty_db_bootstrap)只覆盖「空库一把升到 head」;增量升级与
 回滚此前没有测试面。本模块补这个面:临时 schema 里造出旧版本形态 →
@@ -107,11 +109,142 @@ def _add_legacy_alias_columns(eng) -> None:
             "REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED")
 
 
-_ERA_SKIP = pytest.mark.skip(reason=(
-    "P1-7 续期裁定:逐版本重放需退役前时代库形态 —— 0001_baseline 是 create_all(当前模型),0057 退役 service_aliases/auth_sessions/ service_meta 后空库无法承载触碰旧表的历史增量(空库语义 = upgrade baseline + stamp head,决策 8 不留过渡窗口)。恢复需整套「时代造形」机制(_create_retired_tables),列为独立工作项"))
+def _create_retired_tables(eng) -> None:
+    """时代造形(P2-A 裁定的恢复机制,本批落地):0057 退役
+    ``service_aliases`` / ``auth_sessions`` / ``service_meta`` 与
+    ``environments.lines`` 后,baseline 的 ``create_all``(当前模型)不再
+    产出它们 —— 触碰旧表的历史增量(0006/0016/0038/0057 等)在空库上
+    无法重放。本助手按**退役前最终形态**幂等补建,使逐版本重放回到
+    0057 之前时代的测试环境:护栏型迁移(0006/0019/0044–0047,内省后
+    空转)照旧,0057 读空表后照常退役(数据转换零行 = 零副作用)。
+
+    仅测试造形用 —— 产品面空库语义不变(决策 8:upgrade baseline +
+    stamp head,不走本机制)。形态冻结自 git 历史(5ee3874a~1 的
+    ServiceAlias/AuthSession/ServiceMeta 模型 + c918a78f~1 的
+    environments.lines),退役表不会再演化。
+    """
+    with eng.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS service_aliases ("
+            " alias_name VARCHAR(128) PRIMARY KEY,"
+            " base_service VARCHAR(128) NOT NULL,"
+            " slot VARCHAR(64),"
+            " kind VARCHAR(16) NOT NULL DEFAULT 'plate',"
+            " created_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+            " updated_at TIMESTAMPTZ NOT NULL DEFAULT now())")
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_service_alias_base "
+            "ON service_aliases (base_service)")
+        conn.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS auth_sessions ("
+            " id SERIAL PRIMARY KEY,"
+            " owner_id INTEGER REFERENCES users(id)"
+            "   ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED,"
+            " project_id INTEGER,"
+            " alias VARCHAR(64) NOT NULL,"
+            " system VARCHAR(128) NOT NULL DEFAULT '',"
+            " env_id INTEGER REFERENCES environments(id)"
+            "   ON DELETE SET NULL,"
+            " slot VARCHAR(64) NOT NULL DEFAULT '',"
+            " account_fields JSONB NOT NULL DEFAULT '{}',"
+            " is_default BOOLEAN NOT NULL DEFAULT false,"
+            " url TEXT NOT NULL,"
+            " username_enc TEXT NOT NULL,"
+            " password_enc TEXT NOT NULL,"
+            " token_type VARCHAR(32) NOT NULL DEFAULT 'Bearer',"
+            " expires_in INTEGER NOT NULL DEFAULT 7200,"
+            " created_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+            " updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+            " CONSTRAINT uq_auth_owner_system_env_slot UNIQUE"
+            "   NULLS NOT DISTINCT"
+            "   (owner_id, project_id, system, env_id, slot),"
+            " CONSTRAINT ck_auth_owner_xor_project CHECK"
+            "   ((owner_id IS NULL) <> (project_id IS NULL)))")
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_auth_sessions_owner_id "
+            "ON auth_sessions (owner_id)")
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_auth_sessions_project_id "
+            "ON auth_sessions (project_id)")
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_auth_slot_default "
+            "ON auth_sessions (owner_id, project_id, slot)"
+            " NULLS NOT DISTINCT WHERE is_default")
+        conn.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS service_meta ("
+            " service_name VARCHAR(128) PRIMARY KEY,"
+            " description VARCHAR(512) NOT NULL DEFAULT '',"
+            " updated_by INTEGER,"
+            " created_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+            " updated_at TIMESTAMPTZ NOT NULL DEFAULT now())")
+        # environments.lines(0057 退役):0016 只在**建表**时带它,不会
+        # 给已存在的表补列 —— 造形统一管;建为 jsonb(0022 后终态)
+        conn.exec_driver_sql(
+            "ALTER TABLE environments ADD COLUMN IF NOT EXISTS lines "
+            "JSONB NOT NULL DEFAULT '{}'")
+        # carry_service_bindings 坐标回退(0057 §⑧改列,均无护栏):
+        # service_name→config_key、+env_id、唯一键 NND 重建 —— 0046 的
+        # 去重/回填与 0054 的搬迁都按 service_name 引用。唯一键不用手动
+        # 回退:0046 按名 drop 后重建旧四列形态,0057 再重建终态。
+        from sqlalchemy import inspect as _inspect
+        _cols = {c["name"] for c in _inspect(eng).get_columns(
+            "carry_service_bindings")}
+        if "config_key" in _cols and "service_name" not in _cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE carry_service_bindings "
+                "RENAME COLUMN config_key TO service_name")
+        if "env_id" in _cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE carry_service_bindings DROP COLUMN env_id")
+        # 0057 的四张新表(services/system_env_instances/service_
+        # identities/auth_accounts)create_all 已建出,但重放跨 0057 时
+        # 由迁移自建(§①create_table 无护栏)→ 造形撤掉。引用它们的
+        # access_token_scopes 两枚 FK 先换成 0033 旧指向(0057 §⑨ 按
+        # **名** drop 后重建回新表 —— 名字沿用 PG 默认,create_all 与
+        # 0033 一致)。
+        if _inspect(eng).has_table("service_identities"):
+            conn.exec_driver_sql(
+                "ALTER TABLE access_token_scopes DROP CONSTRAINT IF EXISTS "
+                "access_token_scopes_alias_name_fkey")
+            conn.exec_driver_sql(
+                "ALTER TABLE access_token_scopes DROP CONSTRAINT IF EXISTS "
+                "access_token_scopes_auth_id_fkey")
+            conn.exec_driver_sql(
+                "DROP TABLE IF EXISTS service_identities CASCADE")
+            conn.exec_driver_sql(
+                "DROP TABLE IF EXISTS auth_accounts CASCADE")
+            conn.exec_driver_sql("DROP TABLE IF EXISTS system_env_instances")
+            conn.exec_driver_sql("DROP TABLE IF EXISTS services")
+            conn.exec_driver_sql(
+                "ALTER TABLE access_token_scopes ADD CONSTRAINT "
+                "access_token_scopes_alias_name_fkey "
+                "FOREIGN KEY (alias_name) "
+                "REFERENCES service_aliases (alias_name)")
+            conn.exec_driver_sql(
+                "ALTER TABLE access_token_scopes ADD CONSTRAINT "
+                "access_token_scopes_auth_id_fkey "
+                "FOREIGN KEY (auth_id) REFERENCES auth_sessions (id) "
+                "ON DELETE CASCADE")
 
 
-@_ERA_SKIP
+def _upgrade_to(sync_url: str, rev: str) -> None:
+    """空 schema → baseline → 时代造形 → 续升 ``rev``。
+
+    等价于旧「单段 ``command.upgrade(cfg, rev)``」—— 那时 baseline 的
+    create_all 还产出退役表,如今须在 baseline 后插入造形才能继续重放。
+    """
+    from alembic import command
+    from sqlalchemy import create_engine
+
+    command.upgrade(_cfg(sync_url), "0001_baseline")
+    _eng = create_engine(sync_url)
+    try:
+        _create_retired_tables(_eng)
+    finally:
+        _eng.dispose()
+    command.upgrade(_cfg(sync_url), rev)
+
+
 def test_full_chain_from_empty():
     """空 schema → ``upgrade head``:全链从零可跑(空库门的产品面等价物,
     新迁移加入后自动纳入覆盖)。"""
@@ -121,12 +254,14 @@ def test_full_chain_from_empty():
 
     with temp_schema() as (_schema, sync_url):
         # S1.9:baseline 无 visibility 列,旧迁移引用 → stamp + 补列 + 升链
-        # 先跑到 baseline(建表),补 visibility 列,再升到 head
+        # 先跑到 baseline(建表),补 visibility 列 + 退役前三表(时代造形),
+        # 再升到 head
         command.upgrade(_cfg(sync_url), "0001_baseline")
         from sqlalchemy import create_engine as _ce
         _eng = _ce(sync_url)
         try:
             _add_legacy_visibility(_eng)
+            _create_retired_tables(_eng)
         finally:
             _eng.dispose()
         command.upgrade(_cfg(sync_url), "head")
@@ -188,7 +323,6 @@ def _to_0035_shape(eng) -> None:
 
 
 @pytest.mark.parametrize("seed", _ROLE_FORMS)
-@_ERA_SKIP
 def test_0036_role_rename(seed):
     """① 角色更名(三数据形态)+ ② must_change_password 列;downgrade 回填。"""
     from alembic import command
@@ -203,6 +337,7 @@ def test_0036_role_rename(seed):
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             with Session(eng) as s:
                 for row in seed:
                     s.add(User(
@@ -216,9 +351,9 @@ def test_0036_role_rename(seed):
             _to_0035_shape(eng)
             command.stamp(_cfg(sync_url), "0035_execution_steps")
 
-            # ── ① 角色更名 ──
-            command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == _head()
+            # ── ① 角色更名 ──(帽 0056:0057 无回滚,下文降级腿不得跨)
+            command.upgrade(_cfg(sync_url), "0056_client_ref_unique")
+            assert _revision(sync_url) == "0056_client_ref_unique"
             with eng.connect() as conn:
                 rows = {
                     u: (role, ts) for u, role, ts in conn.exec_driver_sql(
@@ -277,7 +412,6 @@ def test_0036_role_rename(seed):
             eng.dispose()
 
 
-@_ERA_SKIP
 def test_0036_revives_token_owner_ineligible():
     """③ 恢复 SQL:仅 ``template_id IS NOT NULL`` 且原因匹配的实例被恢复
     (state='idle' + paused_reason 清空 + next_run_at 刷新);其他暂停
@@ -306,6 +440,7 @@ def test_0036_revives_token_owner_ineligible():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             with Session(eng) as s:
                 root = User(username="root", display_name="",
                             password_hash="x", role="admin")
@@ -334,7 +469,7 @@ def test_0036_revives_token_owner_ineligible():
                 s.commit()
             _to_0035_shape(eng)
             command.stamp(_cfg(sync_url), "0035_execution_steps")
-            command.upgrade(_cfg(sync_url), "head")
+            command.upgrade(_cfg(sync_url), "0056_client_ref_unique")
 
             with eng.connect() as conn:
                 rows = {n: (st, pr, nr) for n, st, pr, nr in conn.exec_driver_sql(
@@ -353,7 +488,6 @@ def test_0036_revives_token_owner_ineligible():
 
 
 # ── 0037_report_def_maintainer(authz W9-2)─────────────────────────
-@_ERA_SKIP
 def test_0037_report_def_visibility_backfill():
     """公共态从 owner_id IS NULL 改为 visibility 列:存量无主行回填
     public(owner 保持 NULL);有主行保持 private;downgrade drop 列
@@ -370,6 +504,7 @@ def test_0037_report_def_visibility_backfill():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             # S1.9:create_all 已无 visibility 列(0043 删列后模型),
             # 天然即 0036 形态(无 visibility 列的 report_definitions)
             with eng.begin() as c:
@@ -399,7 +534,6 @@ def test_0037_report_def_visibility_backfill():
 
 
 # ── 0038_platform_retire(authz C1)─────────────────────────────────
-@_ERA_SKIP
 def test_0038_platform_retire():
     """四步各断言:① __platform__ 自持实例删;② 模板 personal ∧ public
     ∧ 属主 __platform__(实例行同改,个人模板不动);③ 系统用户会话与
@@ -417,6 +551,7 @@ def test_0038_platform_retire():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             with eng.begin() as c:
                 # 0052 CHECK(kind 形状)按当前模型建表即在 —— 模拟 0038 前
                 # 存量库(含平台令牌行)先摘掉
@@ -455,12 +590,17 @@ def test_0038_platform_retire():
                     trigger_cron="*/5 * * * *", result_policy="latest",
                     card_template="status", state="idle")
                 s.add(own)
-                # 平台凭证池(系统用户会话)与平台令牌
-                from app.models.auth_session import AuthSession
+                # 平台凭证池(系统用户会话)与平台令牌。会话行走裸 SQL
+                # (AuthSession 模型已随 0057 退役,造形表在;别名=槽位
+                # 兼容期同值)。
                 from app.models.access_token import AccessToken
-                s.add(AuthSession(owner_id=plat.id, alias="gitlab",
-                                  url="https://git", username_enc="u",
-                                  password_enc="p"))
+                s.execute(text(
+                    "INSERT INTO auth_sessions (owner_id, project_id,"
+                    " alias, system, slot, url, username_enc, password_enc,"
+                    " token_type, expires_in, account_fields, is_default)"
+                    " VALUES (:o, NULL, 'gitlab', '', 'gitlab',"
+                    " 'https://git', 'u', 'p', 'Bearer', 7200, '{}', true)"),
+                    {"o": plat.id})
                 from datetime import datetime, timedelta, timezone as _tz
                 s.add(AccessToken(kind="platform", name="pt",
                                   token_hash="x" * 64, token_hint="gtk-pt",
@@ -529,7 +669,6 @@ def test_0038_platform_retire():
 
 
 # ── 0039_drop_identity_mode(authz 收尾)───────────────────────────
-@_ERA_SKIP
 def test_0039_drop_identity_mode():
     """0038 终态(列 + CHECK)→ 0039 删约束与列;downgrade 还原列(回填
     personal)与约束。"""
@@ -554,6 +693,7 @@ def test_0039_drop_identity_mode():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             _add_legacy_identity_mode(eng)
             with eng.begin() as conn:
                 conn.exec_driver_sql(
@@ -594,7 +734,6 @@ def _to_0039_shape(eng) -> None:
         conn.exec_driver_sql("DROP TABLE projects")
 
 
-@_ERA_SKIP
 def test_0040_project_zone():
     """六步分别断言(s1-detail §二):① 两表 + 公共项目种子(created_by
     = __platform__,成员行恒空);② 加列;③ visibility='public' 迁入公共
@@ -619,6 +758,7 @@ def test_0040_project_zone():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             with eng.begin() as c:
                 # 0052 CHECK(kind 形状)按当前模型建表即在 —— 模拟 0038 前
                 # 存量库(含平台令牌行)先摘掉
@@ -817,7 +957,6 @@ def test_0040_project_zone():
 
 
 # ── 0041_public_shadow_backfill(authz M2a S1.1)────────────────────
-@_ERA_SKIP
 def test_0041_public_shadow_backfill():
     """0040→S1.1 发版窗口期里「发布」只翻 visibility 的漏网行,由 0041
     回填进公共项目(幂等;对象四表 + 集成模板行;私有行不动)。"""
@@ -838,6 +977,7 @@ def test_0041_public_shadow_backfill():
             # upgrade 0040(种子 + 空表迁移)→ **再造窗口期漏网行** →
             # upgrade head(0041 回填)
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             _to_0039_shape(eng)
             command.stamp(_cfg(sync_url), "0039_drop_identity_mode")
             command.upgrade(_cfg(sync_url), "0040_project_zone")
@@ -875,8 +1015,8 @@ def test_0041_public_shadow_backfill():
                     "SELECT count(*) FROM composer_scenarios "
                     "WHERE visibility='public' "
                     "AND project_id IS NULL")).scalar() == 1
-            command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == _head()
+            command.upgrade(_cfg(sync_url), "0056_client_ref_unique")
+            assert _revision(sync_url) == "0056_client_ref_unique"
 
             with eng.connect() as c:
                 pid = c.execute(text(
@@ -904,7 +1044,7 @@ def test_0041_public_shadow_backfill():
                     "WHERE template_id IS NULL AND name='tpl-win'")
 
             command.stamp(_cfg(sync_url), "0040_project_zone")
-            command.upgrade(_cfg(sync_url), "head")
+            command.upgrade(_cfg(sync_url), "0056_client_ref_unique")
             with eng.connect() as c:
                 assert c.execute(text(
                     "SELECT count(*) FROM projects "
@@ -951,7 +1091,6 @@ def _to_0041_shape(eng) -> None:
             "ON DELETE CASCADE")
 
 
-@_ERA_SKIP
 def test_0042_suite_member_zone():
     """① 拆旧(列/组合 FK/uq 索引)② 简化 FK ③ 同区触发器;存量成员
     行不变;直插违例被触发器拒;downgrade 还原组合外键形态。"""
@@ -969,6 +1108,7 @@ def test_0042_suite_member_zone():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             with Session(eng) as s:
                 alice = User(username="alice", display_name="",
                              password_hash="x", role="user")
@@ -993,8 +1133,8 @@ def test_0042_suite_member_zone():
                     "FROM suites s, composer_scenarios cs "
                     "WHERE cs.scenario_id = 'sc-a'")
             command.stamp(_cfg(sync_url), "0041_public_shadow_backfill")
-            command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == _head()
+            command.upgrade(_cfg(sync_url), "0056_client_ref_unique")
+            assert _revision(sync_url) == "0056_client_ref_unique"
 
             with eng.connect() as c:
                 cols = {r[0] for r in c.execute(text(
@@ -1106,7 +1246,6 @@ _DEPLOY_FORMS = [
 
 @pytest.mark.parametrize("envs,aliases,want_default,want_deploy",
                          _DEPLOY_FORMS)
-@_ERA_SKIP
 def test_0044_deployments_env_chain(envs, aliases, want_default,
                                     want_deploy):
     """① 建表/加列/删 visibility ② 单环境置默认 ③ 别名地址聚合回填
@@ -1122,6 +1261,7 @@ def test_0044_deployments_env_chain(envs, aliases, want_default,
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             _to_0043_shape(eng)
             with eng.begin() as conn:
                 for name in envs:
@@ -1227,7 +1367,6 @@ _SLOT_FORMS = [
 
 
 @pytest.mark.parametrize("aliases,want_systems", _SLOT_FORMS)
-@_ERA_SKIP
 def test_0045_auth_slot_bindings(aliases, want_systems):
     """① 五列 + 四元组键(NULLS NOT DISTINCT)+ 默认槽部分唯一索引
     ② slot=alias、system 推断、is_default=true ③ 别名 slot=credential_
@@ -1242,6 +1381,7 @@ def test_0045_auth_slot_bindings(aliases, want_systems):
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             _to_0044_shape(eng)
             with eng.begin() as conn:
                 # 两个 owner(u1/u2)各有 want_systems 里的凭证
@@ -1371,7 +1511,6 @@ def _to_0045_shape(eng) -> None:
                 f"ALTER TABLE {t} DROP COLUMN IF EXISTS scope")
 
 
-@_ERA_SKIP
 def test_0046_carry_scope():
     """① 两表加 scope/scope_id + 换键 ② 存量 → 公共项目层;个人别名键
     下的行 → 属主个人层 ③ 新键冲突被拒 ④ downgrade 公共层优先去重。"""
@@ -1385,6 +1524,7 @@ def test_0046_carry_scope():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             _to_0045_shape(eng)
             with eng.begin() as conn:
                 # 公共项目 id=1(conftest 同款种子口径:手工插)
@@ -1476,7 +1616,6 @@ def test_0046_carry_scope():
 
 
 # ── 0047_alias_slimming(authz M2a S6)──────────────────────────────────
-@_ERA_SKIP
 def test_0047_alias_slimming():
     """① slot 兜底回填 ② 无默认环境 + 无环境别名地址 → 建默认环境
     ③ 地址回落部署表(无环境:别名胜;挂环境:部署表已有不覆盖;冲突不落)
@@ -1497,6 +1636,7 @@ def test_0047_alias_slimming():
         eng = create_engine(sync_url)
         try:
             Base.metadata.create_all(eng)
+            _create_retired_tables(eng)
             _add_legacy_alias_columns(eng)
             with Session(eng) as s:
                 u1 = User(username="u1", display_name="u1",
@@ -1629,7 +1769,6 @@ def test_0047_alias_slimming():
             eng.dispose()
 
 
-@_ERA_SKIP
 def test_0049_drop_share_refs():
     """S7.4:表非空拒绝(防漏跑转换命令);空表 drop;downgrade 还原
     schema(数据不随 downgrade 恢复 —— 一次性决策)。"""
@@ -1639,8 +1778,8 @@ def test_0049_drop_share_refs():
     with temp_schema() as (_schema, sync_url):
         eng = create_engine(sync_url)
         try:
-            # 从基线建到 0048(share_refs 已在链上)
-            command.upgrade(_cfg(sync_url), "0048_project_promotions")
+            # 从基线建到 0048(share_refs 已在链上;先 baseline 造形)
+            _upgrade_to(sync_url, "0048_project_promotions")
             with eng.begin() as c:
                 uid = c.execute(text(
                     "SELECT id FROM users LIMIT 1")).scalar()
@@ -1686,7 +1825,6 @@ def test_0049_drop_share_refs():
             eng.dispose()
 
 
-@_ERA_SKIP
 def test_0050_carry_batch_scope():
     """S7.6:adaptation_batches 加 carry_scope/carry_scope_id(NULL = 公共层,
     无回填);fresh 链(baseline create_all 已含两列)空转;downgrade 删两列。"""
@@ -1697,8 +1835,8 @@ def test_0050_carry_batch_scope():
         eng = create_engine(sync_url)
         try:
             # 建到 0049;baseline 按当前模型建表 → 两列已在,手动摘列
-            # 模拟 0049 时代的存量库
-            command.upgrade(_cfg(sync_url), "0049_drop_share_refs")
+            # 模拟 0049 时代的存量库(先 baseline 造形)
+            _upgrade_to(sync_url, "0049_drop_share_refs")
             with eng.begin() as c:
                 c.execute(text(
                     "ALTER TABLE adaptation_batches"
@@ -1725,7 +1863,6 @@ def test_0050_carry_batch_scope():
             eng.dispose()
 
 
-@_ERA_SKIP
 def test_0051_project_credentials():
     """S8:auth_sessions 归属维度(owner 可空 + project_id + CHECK + 键并入)
     与 integration_tasks.credential_source;fresh 链空转;downgrade 删项目行
@@ -1737,8 +1874,8 @@ def test_0051_project_credentials():
         eng = create_engine(sync_url)
         try:
             # 建到 0050;baseline 按当前模型建表 → 新列已在,手动摘列/
-            # 还原旧键模拟 0050 时代的存量库
-            command.upgrade(_cfg(sync_url), "0050_carry_batch_scope")
+            # 还原旧键模拟 0050 时代的存量库(先 baseline 造形)
+            _upgrade_to(sync_url, "0050_carry_batch_scope")
             with eng.begin() as c:
                 c.execute(text(
                     "ALTER TABLE auth_sessions"
@@ -1816,7 +1953,6 @@ def test_0051_project_credentials():
             eng.dispose()
 
 
-@_ERA_SKIP
 def test_0052_project_tokens():
     """M2b Q2:access_tokens 项目 / 负责人维度 + CHECK;fresh 链空转;
     downgrade 删项目令牌后还原 user_id NOT NULL(个人令牌行不动)。"""
@@ -1826,7 +1962,7 @@ def test_0052_project_tokens():
     with temp_schema() as (_schema, sync_url):
         eng = create_engine(sync_url)
         try:
-            command.upgrade(_cfg(sync_url), "0051_project_credentials")
+            _upgrade_to(sync_url, "0051_project_credentials")
             with eng.begin() as c:
                 c.execute(text("ALTER TABLE access_tokens DROP CONSTRAINT"
                                " IF EXISTS ck_token_kind_shape"))
