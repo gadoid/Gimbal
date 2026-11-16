@@ -61,8 +61,16 @@ def ensure_schema_sync(async_url: str) -> None:
         has_tables = _has_business_tables(engine)
 
         if not has_version and not has_tables:
-            logger.info("schema: 空库 → alembic upgrade head 建库")
-            command.upgrade(_alembic_config(engine.url.render_as_string(hide_password=False)), "head")
+            # 空库 = 当前模型形态(baseline fresh 段 create_all + PG 特化
+            # 索引),然后直接 stamp head —— 不顺序重放 0002..N 历史增量:
+            # 0057 registry 重构退役了 service_aliases/auth_sessions/
+            # service_meta 模型后,0006 等历史 DDL 引用的表在当前模型里
+            # 已不存在,重放链对空库自相矛盾。fresh 语义 = 模型即形态;
+            # 存量库(有 alembic_version)仍走完整增量链,不受影响。
+            cfg = _alembic_config(engine.url.render_as_string(hide_password=False))
+            logger.info("schema: 空库 → baseline fresh 建表 + stamp head")
+            command.upgrade(cfg, "0001_baseline")
+            command.stamp(cfg, "head")
             return
 
         if has_version:

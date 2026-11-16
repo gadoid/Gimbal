@@ -15,6 +15,7 @@ from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason
 from typing import Any
 
 from loguru import logger
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import carry_store, service_names

@@ -84,7 +84,9 @@ def test_empty_db_pg_face():
             assert current == head, f"{current} != {head}"
             names = set(x for x in inspect(conn).get_table_names())
         for required in ("users", "composer_scenarios", "executions",
-                 "service_aliases"):
+                 # registry 重构四表(0057):service_aliases 已退役
+                 "services", "system_env_instances", "service_identities",
+                 "auth_accounts"):
             assert required in names, f"缺表 {required}"
         # ⑤ 核心回归面:JSON 列必须是 jsonb(不是 json)—— 唯一例外 =
         # 键长/字节序重排打乱表单字段序,x-order 盖章 + 列留 json 兜底)
