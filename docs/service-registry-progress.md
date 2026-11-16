@@ -121,7 +121,8 @@ accounts   2   18180789650(默认) / 18180789652
 | 本次 | P2-A 批次④ 配置/carry + 执行基建测试续期（7 文件 50 用例；2 个 0054 历史重放按空库不可重放记档跳过） |
 | 本次 | P2-A 批次⑤ 其余域收口（23 文件；~44 文件 ~430 用例恢复；修 5 个缺 env/死路径缺陷;残余 32 skip 两类裁定存档）—— P2-A 完成 |
 | `bfb75fd9` | docs(registry): P2-A 收口基线入档 — 2007 passed / 39 skipped / 0 failed |
-| 本次 | migrations 时代造形（`_create_retired_tables` 测试造形机制;17+2 条时代重放恢复;全量 2044/2/0）|
+| `16c4b731` | migrations 时代造形（`_create_retired_tables` 测试造形机制;17+2 条时代重放恢复;全量 2044/2/0）|
+| `668a6021` | Phase 3 文案清账（「槽位」全站退场 + ServiceAliasCard 重做 + conftest 垫片删除;全量 2044/2/0）|
 | `1dceea01` | P2-B.6 导入映射按 ref 语义重做（call.user→条目名统一改写;authEntries/authRenames + 登记坐标;slot/credentialAlias 键退役;no_environment 422;13 用例恢复）—— 全量 2020/26/0 |
 
 ## 4. 未完成 / 后续计划
