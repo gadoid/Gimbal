@@ -1,11 +1,12 @@
 <!-- ProjectConfigPanel.vue — M2a S7.3 项目详情「配置」页签;⑧ 增挂
      项目执行配置列表。
      普通项目:默认环境(项目管理员可改)+ 项目层 carry(默认值 / 按
-     服务)+ 槽位状态(成员凭证清单)+ 项目执行配置(项目变体;读 =
-     成员,写 = 项目管理员)+ 生效预览。公共项目:配置页签 =
-     原 /carry-config 的「全局默认」(Admin+ 可写;公共项目不可 PATCH,
-     无默认环境/槽位状态/执行配置节)。
-     2026-11-16 重塑:各节落分区卡(节头 + QTip 说明);槽位状态 chips
+     服务)+ 身份条目装载(成员凭证清单;registry C2b 口径:条目 ×
+     成员池装载矩阵)+ 项目执行配置(项目变体;读 = 成员,写 = 项目
+     管理员)+ 生效预览。公共项目:配置页签 = 原 /carry-config 的
+     「全局默认」(Admin+ 可写;公共项目不可 PATCH,无默认环境/条目
+     装载/执行配置节)。
+     2026-11-16 重塑:各节落分区卡(节头 + QTip 说明);装载 chips
      令牌化(夜间同色);项目执行配置表 → slib-table,行内四输入新建收
      进 Dialog,删除走 confirmAction;原生 select(默认环境/预览/服务键)
      保留 —— 高频快路径。 -->
@@ -37,7 +38,7 @@
       <h2>{{ isPublic ? '全局默认(公共项目层)' : '项目层 carry 默认值' }}</h2>
       <p class="hint">
         {{ isPublic
-          ? '服务 / 别名级都未命中时最后生效的兜底层;删行 = 不注入,null = 显式注入 JSON null。'
+          ? '条目/服务/系统级都未命中时最后生效的兜底层;删行 = 不注入,null = 显式注入 JSON null。'
           : '本项目内容执行时优先于全局默认生效;删行 = 不注入,null = 显式注入 JSON null。' }}
       </p>
       <CarryDefaultsEditor
@@ -51,7 +52,7 @@
     <!-- ③ 按服务编辑(项目层,普通项目):键选择 + ServiceBindingEditor -->
     <section v-if="!isPublic" class="cfg-section">
       <h2>项目层 carry · 按服务</h2>
-      <p class="hint">选服务 / 别名键编辑本项目的绑定值(键内继承:别名键 &gt; 基础服务 &gt; 默认值)。</p>
+      <p class="hint">选服务 / 条目键编辑本项目的绑定值(键内继承:条目键 &gt; 服务键 &gt; 系统键 &gt; 默认值)。</p>
       <div class="row">
         <select v-model="serviceKey" class="field-select" data-testid="prj-config-svc">
           <option value="" disabled>选择服务键…</option>
@@ -66,11 +67,12 @@
       <ServiceBindingEditor v-if="activeSvc" :key="activeSvc" :service-key="activeSvc" :target="projectTarget" />
     </section>
 
-    <!-- ④ 槽位状态 = 成员凭证清单(普通项目,只读不落库) -->
+    <!-- ④ 身份条目装载 = 成员凭证清单(普通项目,只读不落库;口径自
+         槽位切条目,C2b:条目 ref 能在成员池解析到账户 = 已装载) -->
     <section v-if="!isPublic" class="cfg-section">
-      <h2>槽位状态(成员凭证清单)</h2>
+      <h2>身份条目装载(成员凭证清单)</h2>
       <p class="hint">
-        项目场景引用的槽位 × 成员绑定情况 —— 凭证跟人走,成员各自绑定后执行才不缺槽。
+        项目场景引用的身份条目 × 成员装载情况 —— 条目按 ref 取执行者本人池的账户,装载到位执行才不缺凭据。
       </p>
       <p v-if="slotLoading" class="hint">加载中…</p>
       <template v-else-if="slots.length">
@@ -78,23 +80,23 @@
           <header>
             <b class="mono slot-name">{{ s.slot }}</b>
             <span class="muted">{{ s.scenarios.length }} 个场景引用</span>
-            <!-- S8:项目凭证已覆盖该槽 -->
+            <!-- S8:项目池已覆盖该条目(成员可切换为项目账户执行) -->
             <span
               v-if="s.projectBound" class="slot-chip proj"
               :data-testid="`prj-slot-${s.slot}-proj`"
-            >项目凭证 · 已登记</span>
+            >项目池 · 已覆盖</span>
           </header>
           <div class="chips">
             <span
               v-for="m in s.members" :key="m.userId"
               class="slot-chip" :class="m.bound ? 'ok' : 'miss'"
               :data-testid="`prj-slot-${s.slot}-${m.userId}`"
-            >{{ m.displayName }}{{ m.bound ? ' · 已绑' : ' · 未绑' }}</span>
+            >{{ m.displayName }}{{ m.bound ? ' · 已装载' : ' · 未装载' }}</span>
           </div>
         </div>
       </template>
       <p v-else class="hint" data-testid="prj-slots-empty">
-        项目场景还没有引用任何槽位(无槽位凭证的场景不在此列)。
+        项目场景还没有引用任何身份条目(无凭据注入的场景不在此列)。
       </p>
     </section>
 
@@ -107,7 +109,7 @@
     <!-- ⑤ 生效预览(普通项目):选场景 → 逐值带来源 -->
     <section v-if="!isPublic" class="cfg-section">
       <h2>生效预览</h2>
-      <p class="hint">选一个项目场景,预览本次执行将生效的环境 / 地址 / 槽位绑定 / carry(逐值带来源)。</p>
+      <p class="hint">选一个项目场景,预览本次执行将生效的 环境 / 地址 / 身份条目装载 / carry(逐值带来源)。</p>
       <div class="row">
         <select v-model="previewScenario" class="field-select" data-testid="prj-config-preview-scen">
           <option value="" disabled>选择场景…</option>

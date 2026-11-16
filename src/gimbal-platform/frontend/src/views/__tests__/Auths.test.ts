@@ -15,6 +15,7 @@ import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import Auths from '@/views/Auths.vue'
 import * as api from '@/api/auth_sessions'
 import * as envApi from '@/api/environments'
+import * as servicesApi from '@/api/services'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 
@@ -70,6 +71,14 @@ beforeEach(() => {
     })
   vi.spyOn(envApi, 'listEnvironments').mockResolvedValue(
     [{ id: 3, name: '测试' }] as never)
+  // 主档:pay 系统已登记(其余测试里的 jira/svc-* 等按未注册处理)
+  vi.spyOn(servicesApi, 'listServices').mockResolvedValue({
+    services: [
+      { name: 'pay-service', system: 'pay', kind: 'plate', abbr: '',
+        description: '', inCatalog: true, createdAt: '', updatedAt: '' },
+    ],
+    unregistered: [], plateReachable: true,
+  })
   vi.spyOn(api, 'create').mockResolvedValue(sample)
   vi.spyOn(api, 'patch').mockResolvedValue(sample)
   vi.spyOn(api, 'remove').mockResolvedValue(undefined)
@@ -155,9 +164,10 @@ describe('Auths — 创建 / 编辑 / 删除', () => {
 
     // 实体键缺位逐个拦截
     await q('form').trigger('submit')
-    await vi.waitFor(() => expect(document.body.textContent).toContain('请输入系统名'))
+    await vi.waitFor(() => expect(document.body.textContent).toContain('请选择系统'))
     expect(api.create).not.toHaveBeenCalled()
 
+    // 系统是主档选择:pay 自主档选项
     await q('[data-testid="f-system"]').setValue('pay')
     await q('form').trigger('submit')
     await vi.waitFor(() => expect(document.body.textContent).toContain('请选择环境'))
@@ -200,6 +210,22 @@ describe('Auths — 创建 / 编辑 / 删除', () => {
     expect('password' in payload).toBe(false)
     expect('username' in payload).toBe(false)
     expect('system' in payload).toBe(false)
+    w.unmount()
+  })
+
+  it('系统主档:未注册系统的组头标「未注册」,已注册的不标', async () => {
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items: [
+        { ...sample, id: 1, system: 'pay', isDefault: true },
+        { ...sample, id: 2, username: 'j-bot', system: 'jira', isDefault: true },
+      ],
+      total: 2, page: 1, pageSize: 50, tokenTypeCounts: {},
+    })
+    const w = mountPage()
+    await flushPromises()
+    // jira 不在主档 → 组头徽章 + 深链服务注册;pay 已登记 → 无徽章
+    expect(w.find('[data-testid="sys-unreg-jira"]').exists()).toBe(true)
+    expect(w.find('[data-testid="sys-unreg-pay"]').exists()).toBe(false)
     w.unmount()
   })
 

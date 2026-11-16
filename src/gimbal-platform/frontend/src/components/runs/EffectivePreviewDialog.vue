@@ -1,7 +1,8 @@
 <!-- EffectivePreviewDialog.vue — S7.3 生效预览(S5 resolve_effective_config
-     的展示面):本次执行将生效的 环境/服务地址/槽位绑定/carry 逐值带来源。
+     的展示面):本次执行将生效的 环境/服务地址/身份条目装载/carry 逐值带来源。
      双宿主:项目配置页签(选场景)与运行配置面板(场景/方案/环境已定,
-     透传上下文)。不含明文凭证(后端契约)。 -->
+     透传上下文)。不含明文凭证(后端契约)。registry C2b:装载表口径自
+     槽位切条目(行 = 条目名 → 池内账户行,bindingId = 账户 id)。 -->
 <template>
   <div v-if="open" class="overlay" @click.self="$emit('close')">
     <div class="dialog wide" data-testid="preview-dialog">
@@ -39,9 +40,9 @@
             <p v-else class="muted" data-testid="preview-env-none">未选定环境(地址走场景声明/别名旧链)</p>
           </section>
 
-          <!-- 缺槽:执行会被拒(S5 预检失败即中止)— 置顶提示 -->
+          <!-- 缺装载:执行会被拒(S5 预检失败即中止)— 置顶提示 -->
           <p v-if="cfg.missingAuths.length" class="warn" data-testid="preview-missing">
-            <b>缺槽位绑定:</b>{{ cfg.missingAuths.join('、') }} —— 执行将被拒绝,请先在「凭证管理」绑定
+            <b>缺身份条目装载:</b>{{ cfg.missingAuths.join('、') }} —— 执行将被拒绝,请先在「凭证管理」补账户(条目按 ref 取池内账户)
           </p>
 
           <!-- 服务地址:②场景声明 vs ③部署地址 -->
@@ -59,11 +60,11 @@
             </table>
           </section>
 
-          <!-- 槽位绑定:解析到哪条绑定(id/系统/环境/默认) -->
+          <!-- 身份条目装载:条目 → 解析到的账户行(账户#/系统/环境/默认) -->
           <section v-if="Object.keys(cfg.auths).length">
-            <h4>槽位绑定</h4>
+            <h4>身份条目装载</h4>
             <table class="tbl" data-testid="preview-auths">
-              <thead><tr><th>槽位</th><th style="width:5rem">绑定 #</th><th>系统</th><th style="width:5.625rem">环境</th><th style="width:4.375rem">默认</th><th style="width:5rem">来源</th><th style="width:6.875rem">取用</th></tr></thead>
+              <thead><tr><th>条目</th><th style="width:5rem">账户 #</th><th>系统</th><th style="width:5.625rem">环境</th><th style="width:4.375rem">默认</th><th style="width:5rem">来源</th><th style="width:6.875rem">取用</th></tr></thead>
               <tbody>
                 <tr v-for="(a, slot) in cfg.auths" :key="slot">
                   <td>{{ slot }}</td>
@@ -74,9 +75,9 @@
                   <td>{{ a.source === 'project' ? '项目凭证' : '个人' }}</td>
                   <td>
                     <span v-if="a.slotSource === 'exec_config'" class="src"
-                      :title="`执行配置绑定换用:${a.configuredSlot}`"
+                      :title="`执行配置绑定换用条目:${a.configuredSlot}`"
                     >执行配置 → {{ a.configuredSlot }}</span>
-                    <span v-else class="muted">声明槽位</span>
+                    <span v-else class="muted">条目声明</span>
                   </td>
                 </tr>
               </tbody>
@@ -114,7 +115,7 @@
           </section>
 
           <p v-if="!hasContent" class="muted" data-testid="preview-empty">
-            该场景无服务地址 / 槽位 / carry 注入。
+            该场景无服务地址 / 身份条目 / carry 注入。
           </p>
         </template>
       </div>

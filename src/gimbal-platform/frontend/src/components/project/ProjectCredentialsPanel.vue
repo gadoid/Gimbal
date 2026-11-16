@@ -90,9 +90,16 @@
         </DialogHeader>
         <form class="flex flex-col gap-3" @submit="save">
           <label class="field">
-            <span class="field-label">系统(与 Plate 侧一致{{ editing ? ',不可改' : '' }})<span class="req">*</span></span>
-            <input v-model="form.system" class="field-input" data-testid="prj-cred-system"
-              :disabled="!!editing" placeholder="例 fin-service" />
+            <span class="field-label">系统(主档选择{{ editing ? ',不可改' : '' }})<span class="req">*</span></span>
+            <!-- 与个人凭证页对称(C2a):系统来自服务主档,不再自由文本;
+                 编辑行的主档外存量系统并入选项(标「未注册」) -->
+            <select v-model="form.system" class="field-input" data-testid="prj-cred-system"
+              :disabled="!!editing">
+              <option value="" disabled>选择系统(主档)</option>
+              <option v-for="o in systemChoices" :key="o.value" :value="o.value">
+                {{ o.value }}{{ o.registered ? '' : '(未注册)' }}
+              </option>
+            </select>
           </label>
           <label class="field">
             <span class="field-label">环境{{ editing ? '(不可改)' : '' }}<span class="req">*</span></span>
@@ -151,6 +158,7 @@ import {
 } from '@/api/project_credentials'
 import type { AuthSession } from '@/api/auth_sessions'
 import { listEnvironments } from '@/api/environments'
+import { listServices } from '@/api/services'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
@@ -178,6 +186,23 @@ const saving = ref(false)
 const formError = ref('')
 const form = ref({ system: '', envId: '', username: '', password: '' })
 
+// ── 系统主档读面(与个人凭证页对称,C2a):选项来自主档 ───────────
+const svcSystems = ref<string[]>([])
+/** 主档不可达时不标「未注册」(避免误报) */
+const svcLoaded = ref(false)
+const systemExtra = ref('')
+const systemChoices = computed<Array<{ value: string; registered: boolean }>>(() => {
+  const pool = [
+    ...svcSystems.value,
+    ...rows.value.map((r) => r.system).filter(Boolean),
+  ]
+  if (systemExtra.value) pool.push(systemExtra.value)
+  const reg = new Set(svcSystems.value)
+  // 主档不可达时不标「未注册」(svcLoaded 门)
+  return [...new Set(pool)].sort()
+    .map((value) => ({ value, registered: !svcLoaded.value || reg.has(value) }))
+})
+
 const envName = computed(() => (id: number | null) =>
   id == null ? '环境未定' : envNames.value[id] ?? `环境 #${id}`)
 
@@ -203,6 +228,8 @@ function openCreate(): void {
 
 function openEdit(c: AuthSession): void {
   editing.value = c
+  // 编辑行的系统可能是主档外存量 — 并入选项(锁定态回显不落空)
+  systemExtra.value = c.system
   // 编辑态:实体键锁定,只有密码可改(留空 = 不改)
   form.value = {
     system: c.system, envId: c.envId != null ? String(c.envId) : '',
@@ -215,7 +242,7 @@ function openEdit(c: AuthSession): void {
 async function save(): Promise<void> {
   formError.value = ''
   if (!editing.value) {
-    if (!form.value.system.trim()) { formError.value = '请输入系统名'; return }
+    if (!form.value.system.trim()) { formError.value = '请选择系统'; return }
     if (!form.value.envId) { formError.value = '请选择环境'; return }
     if (!form.value.username.trim()) { formError.value = '请输入账号'; return }
   }
@@ -312,6 +339,13 @@ onMounted(async () => {
     envs.value = rows_.map((e) => ({ id: e.id, name: e.name }))
     envNames.value = Object.fromEntries(rows_.map((e) => [e.id, e.name]))
   }).catch(() => { /* 环境名缺席时回落 #id */ })
+  // 系统选项自主档(svcLoaded 未达前不判「未注册」)
+  listServices()
+    .then((out) => {
+      svcSystems.value = [...new Set(out.services.map((s) => s.system).filter(Boolean))]
+      svcLoaded.value = true
+    })
+    .catch(() => { /* 主档不可达 — 选项退化为行并集 */ })
 })
 </script>
 

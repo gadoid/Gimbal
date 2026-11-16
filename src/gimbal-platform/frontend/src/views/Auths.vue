@@ -82,6 +82,13 @@
               <td colspan="6">
                 <div class="grp-in">
                   <span class="grp-sys"><b class="mono">{{ g.system }}</b></span>
+                  <!-- 未注册主档:登录口/身份条目坐标取不到,提示去服务注册补录 -->
+                  <router-link
+                    v-if="svcLoaded && !registeredSystems.has(g.system)"
+                    to="/service-admin" class="svc-flag amber"
+                    :data-testid="`sys-unreg-${g.key}`"
+                    title="主档未登记该系统 — 实例登录口/身份条目坐标取不到;点击去服务注册补录"
+                  >未注册</router-link>
                   <span class="muted grp-n">{{ g.binds.length }} 个账户</span>
                   <span v-if="g.noDefaultPairs" class="svc-chip warn grp-chip" title="default 型身份条目在该 (系统,环境) 取不到默认账户">{{ g.noDefaultPairs }} 组无默认</span>
                   <span
@@ -222,8 +229,15 @@
               <FormItem>
                 <FormLabel>系统<span class="required-dot">*</span></FormLabel>
                 <FormControl>
-                  <Input v-bind="componentField" :disabled="!!editingId"
-                    placeholder="例 fin-service(与 Plate 侧一致)" data-testid="f-system" />
+                  <!-- 主档选择(C1 收口):系统来自服务主档,不再自由文本;
+                       未注册系统的存量行/深链预填值并入选项(标「未注册」) -->
+                  <select v-bind="componentField" :disabled="!!editingId"
+                    class="native-select" data-testid="f-system">
+                    <option value="" disabled>选择系统(主档)</option>
+                    <option v-for="o in systemChoices" :key="o.value" :value="o.value">
+                      {{ o.value }}{{ o.registered ? '' : '(未注册)' }}
+                    </option>
+                  </select>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -450,6 +464,7 @@ import {
   type AuthReferences, type AuthSession, type IdentityRefItem, type TestResult,
 } from '@/api/auth_sessions'
 import { listEnvironments } from '@/api/environments'
+import { listServices } from '@/api/services'
 import { shortDateTime } from '@/utils/datetime'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import CredentialTestDialog from '@/components/credential/CredentialTestDialog.vue'
@@ -647,8 +662,8 @@ const submitting = ref(false)
 const advancedOpen = ref(false)
 
 const schema = toTypedSchema(z.object({
-  // 实体键三件套(编辑态锁定;system 与 Plate 侧系统名一致)
-  system: z.string().min(1, '请输入系统名'),
+  // 实体键三件套(编辑态锁定;系统来自主档选择)
+  system: z.string().min(1, '请选择系统'),
   // 环境选值是字符串 id(必选,无「不限」)
   envId: z.string().min(1, '请选择环境').refine((v) => v !== '', '请选择环境'),
   username: z.string().min(1, '请输入 username'),
@@ -671,6 +686,25 @@ const { handleSubmit, resetForm, setFieldError } = useForm({
 const envs = ref<Array<{ id: number; name: string }>>([])
 const accountFields = ref<Array<{ key: string; value: string }>>([])
 
+// ── 系统主档读面(C1 收口):系统选项来自主档,不再自由文本 ─────────
+const svcSystems = ref<string[]>([])
+/** 主档不可达时不判「未注册」(避免全员误报),选项退化为行取值并集 */
+const svcLoaded = ref(false)
+const registeredSystems = computed<Set<string>>(() => new Set(svcSystems.value))
+/** 深链预填/组头「+ 登记」/编辑行可能带来主档外的系统 — 并入选项 */
+const systemExtra = ref('')
+const systemChoices = computed<Array<{ value: string; registered: boolean }>>(() => {
+  const pool = [
+    ...svcSystems.value,
+    ...rows.value.map((r) => r.system).filter(Boolean),
+  ]
+  if (systemExtra.value) pool.push(systemExtra.value)
+  const reg = registeredSystems.value
+  // 主档不可达时不标「未注册」(svcLoaded 门,与组头徽章同口径)
+  return [...new Set(pool)].sort()
+    .map((value) => ({ value, registered: !svcLoaded.value || reg.has(value) }))
+})
+
 function accountFieldsFromRow(row: AuthSession): Array<{ key: string; value: string }> {
   const src = row.accountFields
   if (!src || typeof src !== 'object') return []
@@ -691,6 +725,8 @@ function accountFieldsToObject(): Record<string, string> {
 function openCreate(system = '', envId = '') {
   editingId.value = null
   accountFields.value = []
+  // 预填系统可能不在主档(深链/未注册存量)→ 并入选项,保证回显不落空
+  systemExtra.value = system
   // 高级区:无实体键预填时保持收起
   advancedOpen.value = false
   resetForm({
@@ -716,6 +752,8 @@ async function makeDefault(row: AuthSession) {
 function openEdit(row: AuthSession) {
   editingId.value = row.id
   accountFields.value = accountFieldsFromRow(row)
+  // 编辑行的系统可能是主档外存量 — 并入选项(锁定态回显不落空)
+  systemExtra.value = row.system
   // 编辑态:高级项有非缺省值时自动展开,一眼看到全部存量
   advancedOpen.value = Boolean(
     accountFields.value.length
@@ -942,10 +980,16 @@ onMounted(async () => {
     : (typeof q.newSlot === 'string' ? q.newSlot : '')
   const qEnv = typeof q.envId === 'string' ? q.envId : ''
   if (qSystem || qEnv) openCreate(qSystem, qEnv)
-  // 环境选项给表单下拉
+  // 环境选项给表单下拉;系统选项自主档(svcLoaded 未达前不判「未注册」)
   listEnvironments()
     .then((rows) => { envs.value = rows.map((e) => ({ id: e.id, name: e.name })) })
     .catch(() => { /* 表单环境下拉退化为空 */ })
+  listServices()
+    .then((out) => {
+      svcSystems.value = [...new Set(out.services.map((s) => s.system).filter(Boolean))]
+      svcLoaded.value = true
+    })
+    .catch(() => { /* 主档不可达 — 系统选项退化为主档∪行并集,不判未注册 */ })
   try {
     await reloadList()
   } catch {

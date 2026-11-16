@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import * as api from '@/api/auth_sessions'
+import * as servicesApi from '@/api/services'
 
 const routeQuery: Record<string, string> = {}
 vi.mock('vue-router', async (orig) => ({
@@ -23,6 +24,10 @@ beforeEach(() => {
   for (const k of Object.keys(routeQuery)) delete routeQuery[k]
   vi.spyOn(api, 'list').mockResolvedValue({
     items: [], total: 0, page: 1, pageSize: 50, tokenTypeCounts: {},
+  })
+  // 主档为空(可达)→ 预填系统以「未注册」选项并入,回显不落空
+  vi.spyOn(servicesApi, 'listServices').mockResolvedValue({
+    services: [], unregistered: [], plateReachable: true,
   })
 })
 
