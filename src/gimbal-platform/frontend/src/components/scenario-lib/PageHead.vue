@@ -13,7 +13,7 @@
     </span>
     <div class="slib-head-text">
       <div class="slib-title-row">
-        <h2 class="slib-title">{{ title }}</h2>
+        <h2 class="slib-title" :data-testid="titleTestId">{{ title }}</h2>
         <QTip v-if="subtitle" :text="subtitle" />
         <span v-if="count" class="slib-count">{{ count }}</span>
       </div>
@@ -33,6 +33,8 @@ import QTip from '@/components/scenario-lib/QTip.vue'
 defineProps<{
   icon: SlibIconName
   title: string
+  /** 标题挂点(详情页把对象名当标题时,给 E2E/测试一个稳定锚) */
+  titleTestId?: string
   /** 页面说明文字:圆圈问号悬浮展示,不常驻 */
   subtitle?: string
   /** 常驻状态行(统计 / 视角等随数据变化的信息),原副标位置 */

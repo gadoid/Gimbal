@@ -4,24 +4,28 @@
      服务)+ 槽位状态(成员凭证清单)+ 项目执行配置(项目变体;读 =
      成员,写 = 项目管理员)+ 生效预览。公共项目:配置页签 =
      原 /carry-config 的「全局默认」(Admin+ 可写;公共项目不可 PATCH,
-     无默认环境/槽位状态/执行配置节)。 -->
+     无默认环境/槽位状态/执行配置节)。
+     2026-11-16 重塑:各节落分区卡(节头 + QTip 说明);槽位状态 chips
+     令牌化(夜间同色);项目执行配置表 → slib-table,行内四输入新建收
+     进 Dialog,删除走 confirmAction;原生 select(默认环境/预览/服务键)
+     保留 —— 高频快路径。 -->
 <template>
   <div class="panel" data-testid="prj-config-panel">
     <!-- ① 默认环境(普通项目):链路 项目默认 > 个人偏好 > 默认环境 -->
-    <section v-if="!isPublic">
+    <section v-if="!isPublic" class="cfg-section">
       <h2>默认环境</h2>
       <p class="hint">
         项目内容执行时的环境兜底(环境链:本次指定 &gt; 方案 &gt; <b>项目默认</b> &gt; 我的偏好 &gt; 默认环境)。
       </p>
       <div class="row">
-        <select v-model="envId" data-testid="prj-config-env" :disabled="!canManage">
+        <select v-model="envId" class="field-select" data-testid="prj-config-env" :disabled="!canManage">
           <option value="">(未设置)</option>
           <option v-for="e in envs" :key="e.id" :value="String(e.id)">
             {{ e.name }}<template v-if="e.is_default"> · 默认</template>
           </option>
         </select>
         <button
-          v-if="canManage" type="button" class="btn primary"
+          v-if="canManage" type="button" class="save-btn"
           data-testid="prj-config-env-save" @click="saveEnv"
         >保存默认环境</button>
       </div>
@@ -29,7 +33,7 @@
     </section>
 
     <!-- ② carry 默认值:普通项目 = 项目层;公共项目 = 全局默认(原 /carry-config) -->
-    <section>
+    <section class="cfg-section">
       <h2>{{ isPublic ? '全局默认(公共项目层)' : '项目层 carry 默认值' }}</h2>
       <p class="hint">
         {{ isPublic
@@ -45,25 +49,25 @@
     </section>
 
     <!-- ③ 按服务编辑(项目层,普通项目):键选择 + ServiceBindingEditor -->
-    <section v-if="!isPublic">
+    <section v-if="!isPublic" class="cfg-section">
       <h2>项目层 carry · 按服务</h2>
       <p class="hint">选服务 / 别名键编辑本项目的绑定值(键内继承:别名键 &gt; 基础服务 &gt; 默认值)。</p>
       <div class="row">
-        <select v-model="serviceKey" data-testid="prj-config-svc">
+        <select v-model="serviceKey" class="field-select" data-testid="prj-config-svc">
           <option value="" disabled>选择服务键…</option>
           <option v-for="k in serviceKeys" :key="k" :value="k">{{ k }}</option>
         </select>
         <input
-          v-model="svcInput" class="svc-input" placeholder="或输入服务 / 别名键"
+          v-model="svcInput" class="field-input svc-input" placeholder="或输入服务 / 别名键"
           data-testid="prj-config-svc-input" @keyup.enter="applySvcInput"
         />
-        <button type="button" class="btn" data-testid="prj-config-svc-go" @click="applySvcInput">编辑</button>
+        <button type="button" class="ghost-btn" data-testid="prj-config-svc-go" @click="applySvcInput">编辑</button>
       </div>
       <ServiceBindingEditor v-if="activeSvc" :key="activeSvc" :service-key="activeSvc" :target="projectTarget" />
     </section>
 
     <!-- ④ 槽位状态 = 成员凭证清单(普通项目,只读不落库) -->
-    <section v-if="!isPublic">
+    <section v-if="!isPublic" class="cfg-section">
       <h2>槽位状态(成员凭证清单)</h2>
       <p class="hint">
         项目场景引用的槽位 × 成员绑定情况 —— 凭证跟人走,成员各自绑定后执行才不缺槽。
@@ -72,18 +76,18 @@
       <template v-else-if="slots.length">
         <div v-for="s in slots" :key="s.slot" class="slot-card" :data-testid="`prj-slot-${s.slot}`">
           <header>
-            <b>{{ s.slot }}</b>
+            <b class="mono slot-name">{{ s.slot }}</b>
             <span class="muted">{{ s.scenarios.length }} 个场景引用</span>
             <!-- S8:项目凭证已覆盖该槽 -->
             <span
-              v-if="s.projectBound" class="chip proj"
+              v-if="s.projectBound" class="slot-chip proj"
               :data-testid="`prj-slot-${s.slot}-proj`"
             >项目凭证 · 已登记</span>
           </header>
           <div class="chips">
             <span
               v-for="m in s.members" :key="m.userId"
-              class="chip" :class="m.bound ? 'ok' : 'miss'"
+              class="slot-chip" :class="m.bound ? 'ok' : 'miss'"
               :data-testid="`prj-slot-${s.slot}-${m.userId}`"
             >{{ m.displayName }}{{ m.bound ? ' · 已绑' : ' · 未绑' }}</span>
           </div>
@@ -95,31 +99,31 @@
     </section>
 
     <!-- ④·5 项目凭证(S8):项目管理员维护,成员只读不见明文 -->
-    <section v-if="!isPublic">
+    <section v-if="!isPublic" class="cfg-section">
       <h2>项目凭证</h2>
       <ProjectCredentialsPanel :project="project" />
     </section>
 
     <!-- ⑤ 生效预览(普通项目):选场景 → 逐值带来源 -->
-    <section v-if="!isPublic">
+    <section v-if="!isPublic" class="cfg-section">
       <h2>生效预览</h2>
       <p class="hint">选一个项目场景,预览本次执行将生效的环境 / 地址 / 槽位绑定 / carry(逐值带来源)。</p>
       <div class="row">
-        <select v-model="previewScenario" data-testid="prj-config-preview-scen">
+        <select v-model="previewScenario" class="field-select" data-testid="prj-config-preview-scen">
           <option value="" disabled>选择场景…</option>
           <option v-for="s in scenOptions" :key="s.id" :value="s.id">
             {{ s.name }}({{ s.id }})
           </option>
         </select>
         <button
-          type="button" class="btn primary" :disabled="!previewScenario"
+          type="button" class="save-btn" :disabled="!previewScenario"
           data-testid="prj-config-preview-go" @click="previewOpen = true"
         >预览</button>
       </div>
     </section>
 
     <!-- ⑥ carry 漂移(项目层,普通项目):S7.6 按层维护视图 -->
-    <section v-if="!isPublic">
+    <section v-if="!isPublic" class="cfg-section">
       <h2>carry 漂移(项目层)</h2>
       <p class="hint">
         本项目层绑定值 vs plate 字段面的三类 diff;勾选生成的值表批只作用于项目层(公共层/个人层互不影响)。
@@ -133,7 +137,7 @@
 
     <!-- ⑧ 项目执行配置(项目变体):读 = 成员,写 = 项目管理员;
          项目区 carry 链位 = 场景显式 > 显式个人 > 项目默认配置 > 项目层 -->
-    <section v-if="!isPublic" data-testid="prj-exec-configs">
+    <section v-if="!isPublic" class="cfg-section" data-testid="prj-exec-configs">
       <h2>项目执行配置</h2>
       <p class="hint">
         项目变体(按系统分组的 carry 覆盖)—— 项目内容执行的共用业务
@@ -141,44 +145,71 @@
         &gt; 项目层 &gt; 公共项目层。与成员的个人执行配置不冲突(显式个人
         配置压项目变体之上)。
       </p>
-      <table v-if="execCfgs.length" class="tbl">
-        <thead><tr><th>名称</th><th>覆盖</th><th style="width:5.625rem">默认</th>
-            <th v-if="canManage" style="width:9.375rem">操作</th></tr></thead>
-        <tbody>
-          <tr v-for="c in execCfgs" :key="c.id" :data-testid="`prj-ec-${c.id}`">
-            <td>{{ c.name }}</td>
-            <td class="mono muted">{{ carrySummary(c) }}</td>
-            <td>
-              <span v-if="c.isDefault" class="ok">默认</span>
-              <button v-else-if="canManage" type="button" class="btn sm"
-                :data-testid="`prj-ec-default-${c.id}`"
-                @click="setDefaultCfg(c)">设为默认</button>
-              <span v-else class="muted">—</span>
-            </td>
-            <td v-if="canManage">
-              <button type="button" class="btn sm danger"
-                :data-testid="`prj-ec-del-${c.id}`"
-                @click="delCfg(c)">删除</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else class="hint">暂无项目执行配置 —— 项目内容按 项目层/公共层 合成 carry。</p>
-      <div v-if="canManage" class="row">
-        <input v-model="newCfgName" placeholder="变体名(如 大促模式)"
-               data-testid="prj-ec-name" />
-        <input v-model="newCfgService" placeholder="目录服务名"
-               data-testid="prj-ec-service" />
-        <input v-model="newCfgField" placeholder="字段(如 $.pv)"
-               data-testid="prj-ec-field" />
-        <input v-model="newCfgValue" placeholder="值"
-               data-testid="prj-ec-value" />
-        <button type="button" class="btn sm primary" data-testid="prj-ec-add"
-                :disabled="creatingCfg || !newCfgName.trim()"
-                @click="addCfg">+ 新建(默认)</button>
+      <div v-if="execCfgs.length" class="lib-card">
+        <table class="slib-table">
+          <thead><tr><th>名称</th><th>覆盖</th><th style="width:5.625rem">默认</th>
+              <th v-if="canManage" style="width:5.625rem">操作</th></tr></thead>
+          <tbody>
+            <tr v-for="c in execCfgs" :key="c.id" :data-testid="`prj-ec-${c.id}`">
+              <td><span class="ec-name">{{ c.name }}</span></td>
+              <td><span class="mono muted">{{ carrySummary(c) }}</span></td>
+              <td>
+                <span v-if="c.isDefault" class="svc-flag green">默认</span>
+                <button v-else-if="canManage" type="button" class="link-btn"
+                  :data-testid="`prj-ec-default-${c.id}`"
+                  @click="setDefaultCfg(c)">设为默认</button>
+                <span v-else class="muted">—</span>
+              </td>
+              <td v-if="canManage">
+                <button type="button" class="rm-btn"
+                  :data-testid="`prj-ec-del-${c.id}`"
+                  @click="delCfg(c)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+      <p v-else class="hint">暂无项目执行配置 —— 项目内容按 项目层/公共层 合成 carry。</p>
+      <button v-if="canManage" type="button" class="ghost-btn"
+              data-testid="prj-ec-add-open" @click="cfgDialogOpen = true">+ 新建配置(默认)</button>
       <p v-if="cfgError" class="err" data-testid="prj-ec-err">{{ cfgError }}</p>
     </section>
+
+    <!-- 新建项目执行配置(首条覆盖:服务 + 字段 + 值,可空) -->
+    <Dialog :open="cfgDialogOpen" @update:open="cfgDialogOpen = $event">
+      <DialogContent class="max-w-[26.25rem]">
+        <DialogHeader>
+          <DialogTitle>新建项目执行配置</DialogTitle>
+        </DialogHeader>
+        <div class="flex flex-col gap-3">
+          <label class="field">
+            <span class="field-label">变体名<span class="req">*</span>(如 大促模式)</span>
+            <input v-model="newCfgName" class="field-input" data-testid="prj-ec-name" />
+          </label>
+          <label class="field">
+            <span class="field-label">目录服务名</span>
+            <input v-model="newCfgService" class="field-input" data-testid="prj-ec-service" placeholder="带覆盖字段时必填" />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="field">
+              <span class="field-label">字段(如 $.pv)</span>
+              <input v-model="newCfgField" class="field-input" data-testid="prj-ec-field" />
+            </label>
+            <label class="field">
+              <span class="field-label">值</span>
+              <input v-model="newCfgValue" class="field-input" data-testid="prj-ec-value" />
+            </label>
+          </div>
+          <p class="hint">新建即设为项目默认配置;后续可再切换默认。</p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="cfgDialogOpen = false">取消</Button>
+          <Button :disabled="creatingCfg || !newCfgName.trim()" data-testid="prj-ec-add" @click="addCfg">
+            {{ creatingCfg ? '创建中…' : '创建(默认)' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <EffectivePreviewDialog
       :open="previewOpen"
@@ -212,6 +243,9 @@ import { getBindings, type ScopeTarget } from '@/api/carry'
 import { listScenarios } from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
+import { confirmAction } from '@/utils/confirmAction'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import CarryDefaultsEditor from '@/components/carry/CarryDefaultsEditor.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import CarryDriftPanel from '@/components/carry/CarryDriftPanel.vue'
@@ -260,7 +294,7 @@ async function saveEnv(): Promise<void> {
     toast.success('默认环境已保存')
     emit('changed')
   } catch (e) {
-    envError.value = String((e as Error)?.message ?? e)
+    envError.value = String((e as Error).message ?? e)
   }
 }
 
@@ -288,6 +322,7 @@ const previewOpen = ref(false)
 
 // ── ⑧ 项目执行配置(项目变体;读=成员,写=项目管理员)─────────────
 const execCfgs = ref<ExecConfigRow[]>([])
+const cfgDialogOpen = ref(false)
 const newCfgName = ref('')
 const newCfgService = ref('')
 const newCfgField = ref('')
@@ -327,13 +362,14 @@ async function addCfg(): Promise<void> {
                         carryOverrides: field ? { [field]: newCfgValue.value } : {} }]
                    : [],
     })
+    cfgDialogOpen.value = false
     newCfgName.value = ''
     newCfgService.value = ''
     newCfgField.value = ''
     newCfgValue.value = ''
     await loadCfgs()
   } catch (e) {
-    cfgError.value = String((e as Error)?.message ?? e)
+    cfgError.value = String((e as Error).message ?? e)
   } finally {
     creatingCfg.value = false
   }
@@ -343,16 +379,24 @@ async function setDefaultCfg(c: ExecConfigRow): Promise<void> {
   cfgError.value = ''
   try {
     await setDefaultExecConfig(c.id)
+    toast.success(`「${c.name}」已设为项目默认配置`)
     await loadCfgs()
-  } catch (e) { cfgError.value = String((e as Error)?.message ?? e) }
+  } catch (e) { cfgError.value = String((e as Error).message ?? e) }
 }
 
 async function delCfg(c: ExecConfigRow): Promise<void> {
+  const ok = await confirmAction(
+    `删除项目执行配置「${c.name}」?项目内容将回落到 项目层/公共层 合成 carry。`,
+    '删除执行配置',
+    { danger: true, confirmButtonText: '删除' },
+  )
+  if (!ok) return
   cfgError.value = ''
   try {
     await deleteExecConfig(c.id)
+    toast.success(`已删除 ${c.name}`)
     await loadCfgs()
-  } catch (e) { cfgError.value = String((e as Error)?.message ?? e) }
+  } catch (e) { cfgError.value = String((e as Error).message ?? e) }
 }
 
 onMounted(async () => {
@@ -389,28 +433,113 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.panel { display: flex; flex-direction: column; gap: 1.4rem; }
-section { display: flex; flex-direction: column; gap: 0.45rem; }
-h2 { margin: 0; font-size: 0.95rem; color: #1e293b; }
-.hint { margin: 0; color: var(--color-text-secondary); font-size: 0.8rem; }
+.panel { display: flex; flex-direction: column; gap: 1rem; }
+/* 分区卡:各配置节独立成卡,节间呼吸与层级一眼可辨 */
+.cfg-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  padding: 0.875rem 1rem;
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.625rem;
+}
+.cfg-section > h2 { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--sl-ink); }
+.hint { margin: 0; color: var(--sl-ink-3); font-size: 0.75rem; }
 .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-select, .svc-input { padding: 0.375rem 0.5rem; border-radius: 0.5rem; border: 1px solid rgb(100 116 139 / 30%); background: transparent; font-size: 0.85rem; }
+
+.field-select, .field-input {
+  height: 2.125rem;
+  padding: 0 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--sl-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.5rem;
+  outline: none;
+}
+.field-select:focus, .field-input:focus { border-color: var(--sl-accent); }
+.field-select:disabled { opacity: 0.6; cursor: not-allowed; }
 .svc-input { max-width: 16.25rem; }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.35rem 0.9rem; background: var(--c-surface); cursor: pointer; font-size: 0.85rem; }
-.btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.err { color: var(--sl-bad); font-size: 0.8rem; margin: 0; }
-.muted { color: var(--color-text-tertiary); font-size: 0.78rem; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-.tbl th, .tbl td { text-align: left; padding: 0.3rem 0.5rem;
-                   border-bottom: 1px solid #eef2f7; }
+.save-btn {
+  height: 2.125rem;
+  padding: 0 0.875rem;
+  font-size: 0.78125rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--sl-accent);
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.save-btn:hover { background: #265fd4; }
+.save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ghost-btn {
+  align-self: flex-start;
+  height: 1.875rem;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sl-accent);
+  background: none;
+  border: 1px solid var(--sl-accent);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ghost-btn:hover { background: var(--sl-accent-soft); }
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.75rem;
+  color: var(--sl-accent);
+  cursor: pointer;
+}
+.link-btn:hover { text-decoration: underline; }
+.rm-btn {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--sl-bad);
+  background: none;
+  border: 1px solid var(--sv-bad-line, var(--sl-bad));
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+.rm-btn:hover { background: var(--sl-bad-soft); }
+.err { color: var(--sl-bad); font-size: 0.78125rem; margin: 0; }
+.muted { color: var(--sl-ink-3); }
 .mono { font-family: var(--font-mono, monospace); }
-.ok { color: #16a34a; font-size: 0.8rem; }
-.slot-card { border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
-.slot-card header { display: flex; align-items: baseline; gap: 0.6rem; }
-.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.chip { font-size: 0.75rem; padding: 0.125rem 0.625rem; border-radius: 62.4375rem; border: 1px solid var(--color-border-tertiary); }
-.chip.ok { background: rgb(34 197 94 / 8%); color: var(--sl-ok); border-color: rgb(34 197 94 / 35%); }
-.chip.miss { background: rgb(245 158 11 / 10%); color: var(--sl-warn); border-color: rgb(245 158 11 / 40%); }
-.chip.proj { background: rgb(37 99 235 / 8%); color: #1d4ed8; border-color: rgb(37 99 235 / 35%); }
+
+/* 槽位状态:成员绑定 chips(语义色全令牌化,夜间同色) */
+.slot-card {
+  border: 1px solid var(--sl-line);
+  border-radius: 0.5rem;
+  padding: 0.5625rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.slot-card header { display: flex; align-items: baseline; gap: 0.625rem; }
+.slot-name { font-size: 0.8125rem; color: var(--sl-ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.slot-chip {
+  font-size: 0.71875rem;
+  padding: 0.0625rem 0.5625rem;
+  border-radius: 62.4375rem;
+  border: 1px solid var(--sl-line);
+  background: var(--surface-raised);
+  color: var(--sl-ink-2);
+}
+.slot-chip.ok { background: var(--sl-ok-soft); color: var(--sl-ok); border-color: var(--sl-ok); }
+.slot-chip.miss { background: var(--sl-warn-soft); color: var(--sl-warn); border-color: var(--sl-warn); }
+.slot-chip.proj { background: var(--sl-accent-soft); color: var(--sl-accent); border-color: var(--sl-accent); }
+
+.ec-name { font-weight: 600; font-size: 0.8125rem; color: var(--sl-ink); }
+
+/* Dialog 内表单 */
+.field { display: flex; flex-direction: column; gap: 0.25rem; }
+.field-label { font-size: 0.78125rem; font-weight: 600; color: var(--sl-ink); }
+.req { color: var(--sl-bad); margin-left: 0.125rem; }
 </style>

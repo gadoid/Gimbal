@@ -16,11 +16,13 @@ export interface ProjectOut {
   /** M2b Q1:请求者能否在项目内新建 / 修改(项目管理员 ∨ 成员;项目用户只读 + 执行) */
   canWrite?: boolean
   defaultEnvironmentId?: number | null
-  /** 详情读面(S7.0):默认环境名 + 内容计数(列表端点不填) */
+  /** 读面(S7.0):默认环境名 + 内容计数 —— 列表端点批量补齐;
+   * pendingPromotions(待审批加入申请数)仅详情端点填 */
   defaultEnvironmentName?: string | null
   scenarioCount?: number
   suiteCount?: number
   taskCount?: number
+  pendingPromotions?: number
 }
 
 export interface ProjectMember {

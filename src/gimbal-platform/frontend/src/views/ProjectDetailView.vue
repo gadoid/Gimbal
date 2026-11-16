@@ -1,26 +1,39 @@
 <!-- ProjectDetailView.vue — M2a S7.1:项目详情(/projects/:id)。
-     页签:场景 / 用例集 / 集成任务 / 成员(canManage 才显)。
-     公共项目的场景/用例集页签 = 原「公共场景/公共用例集」页原样迁入
-     (visibility=public 兼容别名 = 公共项目);普通项目页签按
-     projectId 过滤,场景页签可「在本项目新建」(?projectId= 深链进
-     编排器,首次保存落库进项目)。成员页签 = ProjectMembersPanel。 -->
+     2026-11-16 重塑:页头落 PageHead(icon + 项目名 + meta 行),右侧
+     「编辑项目」(ProjectEditDialog 共享件)与 ⋯「删除项目」(Admin+,
+     公共项目后端保护不展示);页签走令牌色 + 加入申请 pending 徽标
+     (详情端点 pendingPromotions);场景/用例集/集成任务三表落
+     .lib-card + .slib-table(系统列 SystemChip)。公共项目的场景/
+     用例集页签 = 原公共页原样迁入;成员/配置/令牌页签委托子面板。 -->
 <template>
-  <section class="page">
+  <section class="slib">
     <p v-if="notFound" class="empty">项目不存在或无权访问。<router-link to="/projects">返回项目列表</router-link></p>
     <template v-else-if="project">
-      <header class="head">
-        <div class="row-title">
-          <h1 data-testid="prj-detail-name">{{ project.name }}</h1>
-          <span v-if="project.kind === 'public'" class="badge pub">公共</span>
-          <span v-else-if="project.myRole" class="badge" data-testid="prj-detail-role">
-            {{ roleLabel(project.myRole) }}
-          </span>
-        </div>
-        <p class="sub">{{ project.description }}</p>
-        <span v-if="project.defaultEnvironmentName" class="meta">
-          默认环境:{{ project.defaultEnvironmentName }}
-        </span>
-      </header>
+      <PageHead
+        icon="layers"
+        :title="project.name"
+        title-test-id="prj-detail-name"
+        subtitle="项目 = 场景 / 用例集 / 集成任务的内容分区;成员按角色读写,凭证跟人走。"
+        :meta="metaText"
+        :hint="project.description"
+      >
+        <template #right>
+          <!-- 编辑/删除只对普通项目(公共项目后端 409 保护,入口不展示) -->
+          <Button
+            v-if="project.canManage && !isPublic"
+            variant="outline" size="sm" data-testid="prj-edit"
+            @click="editOpen = true"
+          >编辑项目</Button>
+          <DropdownMenu v-if="auth.can('ops.write') && !isPublic">
+            <DropdownMenuTrigger class="more-btn" aria-label="项目操作" data-testid="prj-more">⋯</DropdownMenuTrigger>
+            <DropdownMenuContent align="end" class="sl-menu">
+              <DropdownMenuItem class="sl-menu-item danger" data-testid="prj-del" @click="removeProject">
+                删除项目
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </template>
+      </PageHead>
 
       <nav class="tabs" data-testid="prj-tabs">
         <button
@@ -39,86 +52,109 @@
       <SuitesPublic v-else-if="isPublic && tab === 'suites'" />
 
       <template v-else-if="tab === 'scenarios'">
-        <div class="toolbar">
+        <div class="slib-toolbar">
           <input
             v-model="scenQ"
-            class="search"
+            class="slib-search"
             placeholder="按名 / scenarioId 搜索"
             data-testid="prj-scen-q"
             @keyup.enter="loadScenarios(1)"
           />
-          <button v-if="canWrite" type="button" class="btn primary" data-testid="prj-scen-new"
+          <button v-if="canWrite" type="button" class="slib-create" data-testid="prj-scen-new"
                   @click="newScenarioInProject">在本项目新建场景</button>
         </div>
-        <table class="tbl" v-if="scenarios.length">
-          <thead><tr><th>场景名</th><th style="width:6.25rem">系统</th><th style="width:6.25rem">模块</th><th style="width:6.875rem">作者</th><th style="width:6.25rem">最后编辑</th></tr></thead>
-          <tbody>
-            <tr v-for="r in scenarios" :key="r.meta.scenarioId" class="row-link"
-                :data-testid="`prj-scen-${r.meta.scenarioId}`"
-                @click="openScenario(r.meta.scenarioId)">
-              <td>
-                <div class="sl-name">{{ r.meta.name || r.meta.scenarioId }}</div>
-                <div class="sl-sid">{{ r.meta.scenarioId }}</div>
-              </td>
-              <td><span class="muted">{{ r.meta.system.join(', ') || '—' }}</span></td>
-              <td><span class="muted">{{ r.meta.module || '未分类' }}</span></td>
-              <td><span class="muted">{{ r.meta.author || r.meta.owner || '—' }}</span></td>
-              <td><span class="muted">{{ formatTime(r.meta.updateTime) }}</span></td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else-if="scenLoaded" class="empty">本项目还没有场景<template v-if="canWrite"> —— 点右上「在本项目新建场景」开始</template>。</p>
+        <div v-if="!scenLoaded" class="empty">加载中…</div>
+        <div v-else-if="scenarios.length" class="lib-card">
+          <table class="slib-table">
+            <thead><tr><th>场景名</th><th style="width:8.75rem">系统</th><th style="width:6.25rem">模块</th><th style="width:6.875rem">作者</th><th style="width:6.875rem">最后编辑</th></tr></thead>
+            <tbody>
+              <tr v-for="r in scenarios" :key="r.meta.scenarioId" class="slib-row"
+                  :data-testid="`prj-scen-${r.meta.scenarioId}`"
+                  @click="openScenario(r.meta.scenarioId)">
+                <td>
+                  <div class="sl-name">{{ r.meta.name || r.meta.scenarioId }}</div>
+                  <div class="sl-sid">{{ r.meta.scenarioId }}</div>
+                </td>
+                <td>
+                  <div class="sys-cell">
+                    <template v-if="r.meta.system.length">
+                      <SystemChip v-for="s in r.meta.system.slice(0, 2)" :key="s" :sys="s" />
+                      <span v-if="r.meta.system.length > 2" class="muted">+{{ r.meta.system.length - 2 }}</span>
+                    </template>
+                    <span v-else class="muted">—</span>
+                  </div>
+                </td>
+                <td><span class="muted">{{ r.meta.module || '未分类' }}</span></td>
+                <td><span class="muted">{{ r.meta.author || r.meta.owner || '—' }}</span></td>
+                <td><span class="muted">{{ formatTime(r.meta.updateTime) }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="empty-cta">
+          <p>本项目还没有场景<template v-if="canWrite"> —— 点右上「在本项目新建场景」开始</template>。</p>
+        </div>
         <div class="pager" v-if="scenTotal > scenPageSize">
-          <button type="button" class="btn sm" :disabled="scenPage <= 1" @click="loadScenarios(scenPage - 1)">上一页</button>
+          <button type="button" class="pager-btn" :disabled="scenPage <= 1" @click="loadScenarios(scenPage - 1)">上一页</button>
           <span class="muted">{{ scenPage }} / {{ Math.ceil(scenTotal / scenPageSize) }}</span>
-          <button type="button" class="btn sm" :disabled="scenPage * scenPageSize >= scenTotal" @click="loadScenarios(scenPage + 1)">下一页</button>
+          <button type="button" class="pager-btn" :disabled="scenPage * scenPageSize >= scenTotal" @click="loadScenarios(scenPage + 1)">下一页</button>
         </div>
       </template>
 
       <template v-else-if="tab === 'suites'">
-        <div class="toolbar">
+        <div class="slib-toolbar">
           <input
             v-model="suiteQ"
-            class="search"
+            class="slib-search"
             placeholder="按名称搜索"
             data-testid="prj-suite-q"
             @keyup.enter="loadSuites()"
           />
-          <button v-if="canWrite" type="button" class="btn primary" data-testid="prj-suite-new"
+          <button v-if="canWrite" type="button" class="slib-create" data-testid="prj-suite-new"
                   @click="newSuiteInProject">在本项目新建用例集</button>
         </div>
-        <table class="tbl" v-if="suites.length">
-          <thead><tr><th>名称</th><th style="width:5rem">模式</th><th style="width:5.625rem">成员数</th><th style="width:6.875rem">最后编辑</th></tr></thead>
-          <tbody>
-            <tr v-for="s in suites" :key="s.suiteId" class="row-link"
-                :data-testid="`prj-suite-${s.suiteId}`" @click="openSuite(s)">
-              <td>
-                <div class="sl-name">{{ s.name }}<span v-if="s.isDraft" class="badge draft">草稿</span></div>
-                <div class="sl-sid muted">{{ s.description || '—' }}</div>
-              </td>
-              <td><span class="muted">{{ s.mode }}</span></td>
-              <td><span class="muted">{{ s.memberCount }}</span></td>
-              <td><span class="muted">{{ formatTime(s.updatedAt ?? undefined) }}</span></td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else-if="suiteLoaded" class="empty">本项目还没有用例集。</p>
+        <div v-if="!suiteLoaded" class="empty">加载中…</div>
+        <div v-else-if="suites.length" class="lib-card">
+          <table class="slib-table">
+            <thead><tr><th>名称</th><th style="width:6.25rem">模式</th><th style="width:5.625rem">成员数</th><th style="width:6.875rem">最后编辑</th></tr></thead>
+            <tbody>
+              <tr v-for="s in suites" :key="s.suiteId" class="slib-row"
+                  :data-testid="`prj-suite-${s.suiteId}`" @click="openSuite(s)">
+                <td>
+                  <div class="sl-name">{{ s.name }}<span v-if="s.isDraft" class="draft-chip">草稿</span></div>
+                  <div class="sl-sid">{{ s.description || '—' }}</div>
+                </td>
+                <td><span class="muted">{{ s.mode }}</span></td>
+                <td><span class="muted">{{ s.memberCount }}</span></td>
+                <td><span class="muted">{{ formatTime(s.updatedAt ?? undefined) }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="empty-cta">
+          <p>本项目还没有用例集。</p>
+        </div>
       </template>
 
       <template v-else-if="tab === 'tasks'">
-        <table class="tbl" v-if="tasks.length">
-          <thead><tr><th>名称</th><th style="width:8.125rem">调度</th><th style="width:6.875rem">引用</th><th style="width:5.625rem">状态</th></tr></thead>
-          <tbody>
-            <tr v-for="t in tasks" :key="t.id" class="row-link"
-                :data-testid="`prj-task-${t.id}`" @click="$router.push(`/integrations/${t.id}`)">
-              <td><div class="sl-name">{{ t.name }}</div></td>
-              <td><span class="muted">{{ t.cronText }}</span></td>
-              <td><span class="muted">{{ t.scenarioId ?? t.suiteId ?? '—' }}</span></td>
-              <td><span class="muted">{{ t.instance?.state ?? '—' }}</span></td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else-if="taskLoaded" class="empty">本项目还没有集成任务 —— 集成中心创建时选择项目内场景即可挂到本项目。</p>
+        <div v-if="!taskLoaded" class="empty">加载中…</div>
+        <div v-else-if="tasks.length" class="lib-card">
+          <table class="slib-table">
+            <thead><tr><th>名称</th><th style="width:9.375rem">调度</th><th>引用</th><th style="width:6.25rem">状态</th></tr></thead>
+            <tbody>
+              <tr v-for="t in tasks" :key="t.id" class="slib-row"
+                  :data-testid="`prj-task-${t.id}`" @click="$router.push(`/integrations/${t.id}`)">
+                <td><div class="sl-name">{{ t.name }}</div></td>
+                <td><span class="muted">{{ t.cronText }}</span></td>
+                <td><span class="muted">{{ t.scenarioId ?? t.suiteId ?? '—' }}</span></td>
+                <td><span class="svc-flag" :class="taskStateTone(t)">{{ taskStateLabel(t) }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="empty-cta">
+          <p>本项目还没有集成任务 —— 集成中心创建时选择项目内场景即可挂到本项目。</p>
+        </div>
       </template>
 
       <PromotionsPanel
@@ -141,6 +177,14 @@
         :project="project"
         @changed="refreshDetail"
       />
+
+      <!-- 编辑项目信息(与列表页 ⋯ 菜单共用件) -->
+      <ProjectEditDialog
+        :open="editOpen"
+        :project="project"
+        @update:open="editOpen = $event"
+        @saved="refreshDetail"
+      />
     </template>
   </section>
 </template>
@@ -148,16 +192,23 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getProject, type ProjectOut } from '@/api/projects'
+import { getProject, deleteProject, type ProjectOut } from '@/api/projects'
+import { useAuthStore } from '@/stores/auth'
 import { projectRoleLabel } from '@/utils/projectRole'
 import { listScenarios } from '@/api/scenario-composer'
 import type { ScenarioListItem } from '@/types/scenario-composer'
 import { listSuites, createSuite, type SuiteSummary } from '@/api/suites'
 import { listIntegrationTasks, type IntegrationTaskItem } from '@/api/integration'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
+import SystemChip from '@/components/SystemChip.vue'
+import ProjectEditDialog from '@/components/project/ProjectEditDialog.vue'
 import ProjectMembersPanel from '@/components/project/ProjectMembersPanel.vue'
 import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
 import PromotionsPanel from '@/components/project/PromotionsPanel.vue'
 import ProjectTokensPanel from '@/components/project/ProjectTokensPanel.vue'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { confirmAction } from '@/utils/confirmAction'
 import { shortDateTime } from '@/utils/datetime'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
@@ -167,10 +218,19 @@ const SuitesPublic = defineAsyncComponent(() => import('@/views/SuitesPublic.vue
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const formatTime = shortDateTime
 
 const project = ref<ProjectOut | null>(null)
 const notFound = ref(false)
+
+const metaText = computed(() => {
+  const p = project.value
+  if (!p) return undefined
+  if (p.kind === 'public') return `公共项目 · 全员可见 · ${p.scenarioCount ?? 0} 场景 / ${p.suiteCount ?? 0} 用例集`
+  const env = p.defaultEnvironmentName ? `默认环境 ${p.defaultEnvironmentName}` : '默认环境未设置'
+  return `${projectRoleLabel(p.myRole)} · ${env} · ${p.memberCount} 名成员`
+})
 
 const TABS = [
   { key: 'scenarios', label: '场景' },
@@ -195,7 +255,6 @@ const tab = computed<TabKey>(() => {
 const isPublic = computed(() => project.value?.kind === 'public')
 // M2b Q1:项目用户只读 + 执行 → 隐藏「在本项目新建」入口(后端仍是权威)
 const canWrite = computed(() => project.value?.canWrite !== false)
-const roleLabel = projectRoleLabel
 const visibleTabs = computed(() =>
   TABS.filter((t) => {
     if (t.key === 'members') return !!project.value?.canManage
@@ -208,7 +267,7 @@ function switchTab(key: TabKey): void {
   void router.replace({ query: { ...route.query, tab: key } })
 }
 
-/** 页签徽标计数(详情端点的内容计数;拉取前 = null 不显) */
+/** 页签徽标计数(详情端点的内容计数;加入申请 = pending 数;拉取前 = null 不显) */
 function tabCount(key: TabKey): number | null {
   const p = project.value
   if (!p) return null
@@ -216,12 +275,34 @@ function tabCount(key: TabKey): number | null {
   if (key === 'suites') return p.suiteCount ?? null
   if (key === 'tasks') return p.taskCount ?? null
   if (key === 'members') return p.memberCount ?? null
+  if (key === 'promotions') return p.pendingPromotions || null
   return null
 }
 
 async function refreshDetail(): Promise<void> {
   if (project.value) {
     try { project.value = await getProject(project.value.id) } catch { /* 保持旧值 */ }
+  }
+}
+
+// ── 编辑 / 删除(详情页头动作;公共项目不展示,后端同口径保护)────
+const editOpen = ref(false)
+
+async function removeProject(): Promise<void> {
+  const p = project.value
+  if (!p) return
+  const ok = await confirmAction(
+    `删除项目「${p.name}」?成员关系随项目消失;项目内有场景 / 用例集 / 集成任务时会被拒绝,须先清空或迁走。`,
+    '删除项目',
+    { danger: true, confirmButtonText: '删除' },
+  )
+  if (!ok) return
+  try {
+    await deleteProject(p.id)
+    toast.success(`项目已删除:${p.name}`)
+    await router.push('/projects')
+  } catch (e) {
+    showError('删除项目', undefined, (e as Error).message)
   }
 }
 
@@ -294,6 +375,21 @@ async function loadTasks(): Promise<void> {
   taskLoaded.value = true
 }
 
+/** 实例运行态 → 徽章(running 绿 / paused 琥珀 / 其余灰) */
+function taskStateTone(t: IntegrationTaskItem): string {
+  const s = t.instance?.state
+  if (s === 'running') return 'green'
+  if (s === 'paused') return 'amber'
+  return 'ink'
+}
+function taskStateLabel(t: IntegrationTaskItem): string {
+  const s = t.instance?.state
+  if (s === 'running') return '运行中'
+  if (s === 'paused') return '已暂停'
+  if (s === 'idle') return '空闲'
+  return '—'
+}
+
 // ── 装载:详情 + 当前页签数据(tab 切换按需拉) ──────────────────
 async function loadDetail(): Promise<void> {
   notFound.value = false
@@ -324,32 +420,54 @@ onMounted(loadDetail)
 </script>
 
 <style scoped>
-.page { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 0.9rem; }
-.head { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
-.head h1 { margin: 0; font-size: 1.2rem; }
-.row-title { display: flex; align-items: center; gap: 0.5rem; }
-.sub { color: var(--color-text-secondary); font-size: 0.85rem; flex: 1; margin: 0; }
-.meta { color: var(--color-text-tertiary); font-size: 0.78rem; }
-.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--color-border-tertiary); }
-.tab { border: none; background: none; padding: 0.45rem 0.9rem; cursor: pointer; font-size: 0.88rem; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }
-.tab.on { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
-.cnt { margin-left: 0.25rem; font-size: 0.72rem; color: var(--color-text-tertiary); }
-.toolbar { display: flex; gap: 0.5rem; align-items: center; }
-.search { padding: 0.375rem 0.625rem; font-size: 0.78125rem; border-radius: 0.5rem; border: 1px solid rgb(100 116 139 / 30%); background: transparent; color: inherit; max-width: 17.5rem; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; overflow: hidden; }
-.tbl th, .tbl td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #eef2f7; }
-.tbl th { background: var(--surface-raised); color: var(--color-text-secondary); font-weight: 500; }
-.row-link { cursor: pointer; }
-.row-link:hover td { background: var(--surface-raised); }
-.sl-name { font-weight: 500; }
-.sl-sid { color: var(--color-text-tertiary); font-size: 0.72rem; }
-.muted { color: var(--color-text-tertiary); }
-.badge { font-size: 0.7rem; padding: 0.0625rem 0.5rem; border-radius: 62.4375rem; background: var(--soft-neutral-bg); color: var(--color-text-strong); border: 1px solid var(--color-border-tertiary); }
-.badge.pub { background: rgb(37 99 235 / 8%); color: #2563eb; border-color: rgb(37 99 235 / 30%); }
-.badge.draft { margin-left: 0.375rem; }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
-.btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.btn.sm { padding: 0.15rem 0.5rem; font-size: 0.78rem; }
+/* ── 页签:下划线活跃态,令牌色(随日夜主题翻转)────────────────── */
+.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--sl-line); }
+.tab {
+  border: none;
+  background: none;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--sl-ink-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;   /* 压住容器底线,活跃态下划线不断层 */
+}
+.tab:hover { color: var(--sl-ink); }
+.tab.on { color: var(--sl-accent); border-bottom-color: var(--sl-accent); font-weight: 600; }
+.cnt {
+  margin-left: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--sl-ink-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.tab.on .cnt { color: var(--sl-accent); }
+
+/* 表格单元格辅助 */
+.sys-cell { display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
+.draft-chip {
+  margin-left: 0.375rem;
+  font-size: 0.65625rem;
+  font-weight: 600;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 62.4375rem;
+  background: var(--sl-warn-soft);
+  color: var(--sl-warn);
+}
+
+/* 分页(与旧版同构,令牌化) */
 .pager { display: flex; align-items: center; gap: 0.6rem; }
-.empty { color: var(--color-text-tertiary); }
+.pager-btn {
+  padding: 0.1875rem 0.625rem;
+  font-size: 0.78125rem;
+  color: var(--sl-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+.pager-btn:hover:not(:disabled) { border-color: var(--sl-accent); color: var(--sl-accent); }
+.pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.empty { color: var(--sl-ink-3); margin: 0; }
+.muted { color: var(--sl-ink-3); }
 </style>

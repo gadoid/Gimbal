@@ -5,7 +5,7 @@
  * Q1 项目用户:成员角色下拉含「项目用户」,改角色下发 role='user'。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ProjectTokensPanel from '@/components/project/ProjectTokensPanel.vue'
 import ProjectMembersPanel from '@/components/project/ProjectMembersPanel.vue'
@@ -13,6 +13,13 @@ import * as tokApi from '@/api/project_tokens'
 import * as projectsApi from '@/api/projects'
 import * as handoffApi from '@/api/handoff'
 import { useAuthStore } from '@/stores/auth'
+
+/** body 查询(签发表单经 ui/Dialog Portal 渲染进 body) */
+function q(sel: string): DOMWrapper<Element> {
+  const el = document.body.querySelector(sel)
+  if (!el) throw new Error(`body 里找不到 ${sel}`)
+  return new DOMWrapper(el)
+}
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -73,23 +80,25 @@ describe('Q2 项目令牌面板', () => {
       .mockResolvedValue({ id: 12, token: 'gtk_xyz', callbackSecret: null })
     const w = mount(ProjectTokensPanel, {
       props: { project: { id: 3 }, canManage: true },
+      attachTo: document.body,
       global: { stubs: { TokenSecretDialog: true } },
     })
     await flushPromises()
     expect(w.find('[data-testid="prj-tok-accept"]').exists()).toBe(false)
     await w.find('[data-testid="prj-tok-add"]').trigger('click')
     await flushPromises()
-    const form = w.find('[data-testid="prj-tok-form"]')
-    expect((form.find('[data-testid="prj-tok-holder"]').element as HTMLSelectElement).value).toBe('1')
-    await form.find('[data-testid="prj-tok-name"]').setValue('deploy')
-    const boxes = form.findAll('input[type="checkbox"]')
+    // 签发表单经 Portal 落 body(ui/Dialog)
+    expect((q('[data-testid="prj-tok-holder"]').element as HTMLSelectElement).value).toBe('1')
+    await q('[data-testid="prj-tok-name"]').setValue('deploy')
+    const boxes = q('[data-testid="prj-tok-form"]').findAll('input[type="checkbox"]')
     for (const b of boxes) await b.setValue(true)
-    await form.find('[data-testid="prj-tok-save"]').trigger('click')
+    await q('[data-testid="prj-tok-save"]').trigger('click')
     await flushPromises()
     expect(create).toHaveBeenCalledWith(3, expect.objectContaining({
       name: 'deploy', holderId: 1,
       scope: { aliases: ['fin-a'], authIds: [21] },
     }))
+    w.unmount()
   })
 })
 

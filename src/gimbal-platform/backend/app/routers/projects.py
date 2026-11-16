@@ -72,12 +72,13 @@ class ProjectOut(BaseModel):
     # M2b Q1:请求者能否在项目内新建 / 修改内容(项目管理员 ∨ 项目成员;
     # 项目用户只读 + 执行)—— 前端据此显隐写入口,后端仍是权威
     canWrite: bool = False
-    # S7.0 详情读面:默认环境名 + 各类内容计数(页签徽标数据源;
-    # 列表端点不填,保持 0)
+    # S7.0 读面:默认环境名 + 各类内容计数(页签徽标数据源)。
+    # 列表端点也批量补齐(项目卡片统计行;待审批计数仅详情端点填)
     defaultEnvironmentName: str | None = None
     scenarioCount: int = 0
     suiteCount: int = 0
     taskCount: int = 0
+    pendingPromotions: int = 0
 
 
 class MemberOut(BaseModel):
@@ -192,10 +193,11 @@ def _can_write(proj: Project, my_role: str | None) -> bool:
 
 async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
     """S7.0 详情读面:默认环境名 + 场景 / 用例集 / 集成模板计数
-    (集成只数模板行,软删不计)。"""
+    (集成只数模板行,软删不计)+ 待审批加入申请数(页签徽标)。"""
     from ..models.composer_scenario import ComposerScenario
     from ..models.environment import Environment
     from ..models.integration_task import IntegrationTask
+    from ..models.project_promotion import ProjectPromotion
     from ..models.suite import Suite
 
     async def _count(stmt) -> int:
@@ -216,6 +218,9 @@ async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
             IntegrationTask.project_id == proj.id,
             IntegrationTask.template_id.is_(None),
             IntegrationTask.removed_at.is_(None))),
+        "pendingPromotions": await _count(select(ProjectPromotion).where(
+            ProjectPromotion.project_id == proj.id,
+            ProjectPromotion.status == "pending")),
     }
 
 
@@ -276,7 +281,8 @@ async def project_slot_status(
 @router.get("", response_model=list[ProjectOut])
 async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
     """项目列表(S7.0 项目页数据源):公共项目(全员,置顶)+ 我所在的
-    项目;Admin+ 管理视图全量。"""
+    项目;Admin+ 管理视图全量。列表也批量补内容计数与默认环境名
+    (项目卡片统计行;group_by 批查,不做 N+1)。"""
     roles = {pid: role for pid, role in (await db.execute(
         select(ProjectMember.project_id, ProjectMember.role).where(
             ProjectMember.user_id == user.id))).all()}
@@ -290,13 +296,56 @@ async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
     counts = {pid: n for pid, n in (await db.execute(
         select(ProjectMember.project_id, func.count()).group_by(
             ProjectMember.project_id))).all()}
+
+    # 批量统计(可见项目集合一次 group_by;空集合跳过)
+    scenario_n: dict[int, int] = {}
+    suite_n: dict[int, int] = {}
+    task_n: dict[int, int] = {}
+    env_names: dict[int, str] = {}
+    if projs:
+        from ..models.composer_scenario import ComposerScenario
+        from ..models.environment import Environment
+        from ..models.integration_task import IntegrationTask
+        from ..models.suite import Suite
+
+        pids = [p.id for p in projs]
+
+        async def _group_n(stmt) -> dict[int, int]:
+            return {pid: n for pid, n in (await db.execute(stmt)).all()}
+
+        scenario_n = await _group_n(
+            select(ComposerScenario.project_id, func.count())
+            .where(ComposerScenario.project_id.in_(pids))
+            .group_by(ComposerScenario.project_id))
+        suite_n = await _group_n(
+            select(Suite.project_id, func.count())
+            .where(Suite.project_id.in_(pids))
+            .group_by(Suite.project_id))
+        task_n = await _group_n(
+            select(IntegrationTask.project_id, func.count())
+            .where(IntegrationTask.project_id.in_(pids),
+                   IntegrationTask.template_id.is_(None),
+                   IntegrationTask.removed_at.is_(None))
+            .group_by(IntegrationTask.project_id))
+        env_ids = {p.default_environment_id for p in projs
+                   if p.default_environment_id is not None}
+        if env_ids:
+            env_names = {eid: name for eid, name in (await db.execute(
+                select(Environment.id, Environment.name)
+                .where(Environment.id.in_(env_ids)))).all()}
+
     return [ProjectOut(
         id=p.id, name=p.name, kind=p.kind, description=p.description,
         memberCount=counts.get(p.id, 0),
         myRole=roles.get(p.id),
         defaultEnvironmentId=p.default_environment_id,
         canManage=_can_manage(user, p, roles.get(p.id)),
-        canWrite=_can_write(p, roles.get(p.id))) for p in projs]
+        canWrite=_can_write(p, roles.get(p.id)),
+        defaultEnvironmentName=env_names.get(p.default_environment_id)
+        if p.default_environment_id is not None else None,
+        scenarioCount=scenario_n.get(p.id, 0),
+        suiteCount=suite_n.get(p.id, 0),
+        taskCount=task_n.get(p.id, 0)) for p in projs]
 
 
 @router.get("/{project_id}", response_model=ProjectOut)

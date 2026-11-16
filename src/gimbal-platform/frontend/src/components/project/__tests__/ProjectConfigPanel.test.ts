@@ -5,7 +5,7 @@
  * 无默认环境与槽位状态节(公共项目不可 PATCH、slot-status 422)。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
@@ -15,6 +15,13 @@ import * as envApi from '@/api/environments'
 import * as scenApi from '@/api/scenario-composer'
 import * as credApi from '@/api/project_credentials'
 import * as execApi from '@/api/execConfigs'
+
+/** body 查询(新建配置表单经 ui/Dialog Portal 渲染进 body) */
+function q(sel: string): DOMWrapper<Element> {
+  const el = document.body.querySelector(sel)
+  if (!el) throw new Error(`body 里找不到 ${sel}`)
+  return new DOMWrapper(el)
+}
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -244,12 +251,14 @@ describe('ProjectConfigPanel — ⑧ 项目执行配置(项目变体)', () => {
     expect(list).toHaveBeenCalledWith(3)
     expect(w.get('[data-testid="prj-ec-11"]').text()).toContain('大促模式')
     expect(w.get('[data-testid="prj-ec-11"]').text()).toContain('fin:1')
-    // 新建:scope=project + projectId + isDefault
-    await w.get('[data-testid="prj-ec-name"]').setValue('新变体')
-    await w.get('[data-testid="prj-ec-service"]').setValue('fin')
-    await w.get('[data-testid="prj-ec-field"]').setValue('$.pv')
-    await w.get('[data-testid="prj-ec-value"]').setValue('v2')
-    await w.get('[data-testid="prj-ec-add"]').trigger('click')
+    // 新建:表单在 Dialog(2026-11-16 重塑)→ 先开弹窗,body 查询
+    await w.get('[data-testid="prj-ec-add-open"]').trigger('click')
+    await flushPromises()
+    await q('[data-testid="prj-ec-name"]').setValue('新变体')
+    await q('[data-testid="prj-ec-service"]').setValue('fin')
+    await q('[data-testid="prj-ec-field"]').setValue('$.pv')
+    await q('[data-testid="prj-ec-value"]').setValue('v2')
+    await q('[data-testid="prj-ec-add"]').trigger('click')
     await flushPromises()
     expect(create).toHaveBeenCalledWith({
       name: '新变体', scope: 'project', projectId: 3, isDefault: true,

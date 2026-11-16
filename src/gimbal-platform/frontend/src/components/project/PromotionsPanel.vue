@@ -1,98 +1,115 @@
 <!-- PromotionsPanel.vue — M2a S7.2 项目详情「加入申请」页签:
      项目管理员裁决(批准 = 逐项选 采纳原件值/保留项目层值,以批准那一刻
-     的原件内容复制;驳回须理由);申请人可撤回自己的 pending。 -->
+     的原件内容复制;驳回须理由);申请人可撤回自己的 pending。
+     2026-11-16 重塑:表格落 .slib-table + 状态徽章令牌化;裁决/驳回自绘
+     overlay → ui/Dialog;撤回走 confirmAction。 -->
 <template>
   <div class="panel" data-testid="prj-promotions">
-    <div v-if="loading" class="muted">加载中…</div>
-    <table v-else-if="items.length" class="tbl">
-      <thead>
-        <tr>
-          <th style="width:4.375rem">类型</th>
-          <th>来源</th>
-          <th style="width:5rem" class="c-center">冲突</th>
-          <th style="width:5.625rem">状态</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="p in items" :key="p.id" :data-testid="`promo-row-${p.id}`">
-          <td>{{ p.kind === 'scenario' ? '场景' : '用例集' }}</td>
-          <td>
-            <div class="src">{{ p.sourceId }}</div>
-            <div v-if="p.status === 'pending' && p.sourceChangedSinceApplication"
-                 class="changed">⚠ 原件在申请后有过修改 —— 批准将按当前内容复制</div>
-            <div v-if="p.status === 'rejected'" class="muted">理由:{{ p.note }}</div>
-          </td>
-          <td class="c-center">{{ p.conflicts.length || '—' }}</td>
-          <td><span class="badge" :class="p.status">{{ STATUS_LABEL[p.status] }}</span></td>
-          <td>
-            <template v-if="p.status === 'pending'">
-              <template v-if="canManage">
-                <button type="button" class="btn sm primary"
-                        :data-testid="`promo-approve-${p.id}`"
-                        @click="openApprove(p)">裁决…</button>
-                <button type="button" class="btn sm danger"
-                        :data-testid="`promo-reject-${p.id}`"
-                        @click="openReject(p)">驳回</button>
+    <p v-if="loading" class="muted">加载中…</p>
+    <div v-else-if="items.length" class="lib-card">
+      <table class="slib-table">
+        <thead>
+          <tr>
+            <th style="width:4.375rem">类型</th>
+            <th>来源</th>
+            <th style="width:5rem" class="c-center">冲突</th>
+            <th style="width:5.625rem">状态</th>
+            <th style="width:11.25rem">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in items" :key="p.id" :data-testid="`promo-row-${p.id}`">
+            <td><span class="kind-chip">{{ p.kind === 'scenario' ? '场景' : '用例集' }}</span></td>
+            <td>
+              <div class="src mono">{{ p.sourceId }}</div>
+              <div v-if="p.status === 'pending' && p.sourceChangedSinceApplication"
+                   class="changed">⚠ 原件在申请后有过修改 —— 批准将按当前内容复制</div>
+              <div v-if="p.status === 'rejected'" class="muted">理由:{{ p.note }}</div>
+            </td>
+            <td class="c-center"><span v-if="p.conflicts.length" class="mono conflict-n">{{ p.conflicts.length }}</span><span v-else class="muted">—</span></td>
+            <td><span class="status-badge" :class="p.status">{{ STATUS_LABEL[p.status] }}</span></td>
+            <td>
+              <template v-if="p.status === 'pending'">
+                <template v-if="canManage">
+                  <button type="button" class="act-btn primary"
+                          :data-testid="`promo-approve-${p.id}`"
+                          @click="openApprove(p)">裁决…</button>
+                  <button type="button" class="act-btn danger"
+                          :data-testid="`promo-reject-${p.id}`"
+                          @click="openReject(p)">驳回</button>
+                </template>
+                <button v-else-if="p.applicantId === auth.currentUser?.id"
+                        type="button" class="act-btn"
+                        :data-testid="`promo-withdraw-${p.id}`"
+                        @click="withdraw(p)">撤回</button>
+                <span v-else class="muted">待管理员审批</span>
               </template>
-              <button v-else-if="p.applicantId === auth.currentUser?.id"
-                      type="button" class="btn sm"
-                      :data-testid="`promo-withdraw-${p.id}`"
-                      @click="withdraw(p)">撤回</button>
-              <span v-else class="muted">待管理员审批</span>
-            </template>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <p v-else class="muted">暂无加入申请 —— 在私有场景 / 用例集的「⋯」菜单里发起「加入项目」。</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div v-else class="empty-cta">
+      <p>暂无加入申请 —— 在私有场景 / 用例集的「⋯」菜单里发起「加入项目」。</p>
+    </div>
 
     <!-- 裁决对话框:逐项选 采纳原件值(写入项目层)/ 保留项目层值 -->
-    <div v-if="approving" class="overlay" @click.self="approving = null">
-      <div class="dialog" data-testid="promo-approve-dialog">
-        <h3>裁决加入申请</h3>
-        <p class="muted">
+    <Dialog :open="approving !== null" @update:open="approving = $event ? approving : null">
+      <DialogContent class="max-w-[42.5rem]">
+        <DialogHeader>
+          <DialogTitle>裁决加入申请</DialogTitle>
+        </DialogHeader>
+        <p class="muted note">
           批准将以<b>当前原件内容</b>复制进项目;「采纳原件值」会把该路径写入项目层 carry。
         </p>
-        <table class="tbl">
-          <thead><tr><th>服务</th><th>路径</th><th>原件值</th><th>项目层</th><th style="width:9.375rem">裁决</th></tr></thead>
-          <tbody>
-            <tr v-for="c in approving.conflicts" :key="`${c.service}.${c.path}`">
-              <td>{{ c.service }}</td>
-              <td>{{ c.path }}</td>
-              <td>{{ c.sourceValue ?? '(未设)' }}</td>
-              <td>{{ c.projectValue ?? '(缺口)' }}</td>
-              <td>
-                <select v-model="decisions[`${c.service}.${c.path}`]">
-                  <option value="source">采纳原件值</option>
-                  <option value="project">保留项目层值</option>
-                </select>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <footer class="foot">
-          <button type="button" class="btn" @click="approving = null">取消</button>
-          <button type="button" class="btn primary" data-testid="promo-approve-confirm"
-                  :disabled="busy" @click="approve">批准并复制</button>
-        </footer>
-      </div>
-    </div>
+        <div class="lib-card conflict-card">
+          <table class="slib-table">
+            <thead><tr><th>服务</th><th>路径</th><th>原件值</th><th>项目层</th><th style="width:9.375rem">裁决</th></tr></thead>
+            <tbody>
+              <tr v-for="c in approving?.conflicts ?? []" :key="`${c.service}.${c.path}`">
+                <td><span class="mono">{{ c.service }}</span></td>
+                <td><span class="mono">{{ c.path }}</span></td>
+                <td><span class="muted">{{ c.sourceValue ?? '(未设)' }}</span></td>
+                <td><span class="muted">{{ c.projectValue ?? '(缺口)' }}</span></td>
+                <td>
+                  <select v-model="decisions[`${c.service}.${c.path}`]" class="field-select w-full">
+                    <option value="source">采纳原件值</option>
+                    <option value="project">保留项目层值</option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="approving = null">取消</Button>
+          <Button data-testid="promo-approve-confirm" :disabled="busy" @click="approve">
+            批准并复制
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- 驳回对话框 -->
-    <div v-if="rejecting" class="overlay" @click.self="rejecting = null">
-      <div class="dialog" data-testid="promo-reject-dialog">
-        <h3>驳回加入申请</h3>
-        <label class="field">理由(申请人可见)
-          <textarea v-model="rejectReason" rows="3" data-testid="promo-reject-reason" />
+    <Dialog :open="rejecting !== null" @update:open="rejecting = $event ? rejecting : null">
+      <DialogContent class="max-w-[26.25rem]">
+        <DialogHeader>
+          <DialogTitle>驳回加入申请</DialogTitle>
+        </DialogHeader>
+        <label class="field">
+          <span class="field-label">理由(申请人可见)<span class="req">*</span></span>
+          <textarea v-model="rejectReason" rows="3" class="field-area"
+                    data-testid="promo-reject-reason" />
         </label>
-        <footer class="foot">
-          <button type="button" class="btn" @click="rejecting = null">取消</button>
-          <button type="button" class="btn danger" data-testid="promo-reject-confirm"
-                  :disabled="busy || !rejectReason.trim()" @click="reject">驳回</button>
-        </footer>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" @click="rejecting = null">取消</Button>
+          <Button variant="destructive" data-testid="promo-reject-confirm"
+                  :disabled="busy || !rejectReason.trim()" @click="reject">
+            驳回
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -104,6 +121,9 @@ import {
 } from '@/api/project-promotions'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
+import { confirmAction } from '@/utils/confirmAction'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 const props = defineProps<{ projectId: number; canManage: boolean }>()
 const auth = useAuthStore()
@@ -158,8 +178,7 @@ async function approve(): Promise<void> {
     approving.value = null
     await load()
   } catch (e) {
-    toast.error(String((e as { response?: { data?: { detail?: { message?: string } } } })
-      ?.response?.data?.detail?.message ?? (e as Error).message ?? e))
+    toast.error(String((e as Error).message ?? e))
   } finally {
     busy.value = false
   }
@@ -186,6 +205,12 @@ async function reject(): Promise<void> {
 }
 
 async function withdraw(p: PromotionOut): Promise<void> {
+  const ok = await confirmAction(
+    `撤回「${p.sourceId}」的加入申请?`,
+    '撤回申请',
+    { confirmButtonText: '撤回' },
+  )
+  if (!ok) return
   busy.value = true
   try {
     await withdrawPromotion(p.id)
@@ -202,27 +227,77 @@ onMounted(load)
 </script>
 
 <style scoped>
-.panel { display: flex; flex-direction: column; gap: 0.5rem; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--c-surface); border: 1px solid var(--color-border-tertiary); border-radius: 0.5rem; overflow: hidden; }
-.tbl th, .tbl td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid #eef2f7; }
-.tbl th { background: var(--surface-raised); color: var(--color-text-secondary); font-weight: 500; }
+.panel { display: flex; flex-direction: column; gap: 0.625rem; }
+.muted { color: var(--sl-ink-3); font-size: 0.78125rem; }
+.mono { font-family: var(--font-mono, monospace); }
 .c-center { text-align: center !important; }
-.src { font-weight: 500; }
-.changed { color: var(--sl-warn); font-size: 0.74rem; }
-.muted { color: var(--color-text-tertiary); font-size: 0.8rem; }
-.badge { font-size: 0.72rem; padding: 0.125rem 0.5rem; border-radius: 62.4375rem; background: var(--soft-neutral-bg); color: var(--color-text-strong); }
-.badge.pending { background: rgb(245 158 11 / 12%); color: var(--sl-warn); }
-.badge.approved { background: rgb(34 197 94 / 12%); color: var(--sl-ok); }
-.badge.rejected { background: rgb(239 68 68 / 10%); color: var(--sl-bad); }
-.btn { border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; padding: 0.3rem 0.8rem; background: var(--c-surface); cursor: pointer; }
-.btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-.btn.danger { color: var(--sl-bad); border-color: #fca5a5; }
-.btn.sm { padding: 0.15rem 0.5rem; font-size: 0.78rem; }
-.btn:disabled { opacity: 0.5; }
-.overlay { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
-.dialog { background: var(--c-surface); border-radius: 0.625rem; width: min(42.5rem, 92vw); max-height: 84vh; overflow: auto; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
-.dialog h3 { margin: 0; font-size: 1rem; }
-.field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
-.field textarea { padding: 0.375rem 0.5rem; border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; }
-.foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+.src { font-weight: 600; font-size: 0.78125rem; color: var(--sl-ink); }
+.changed { color: var(--sl-warn); font-size: 0.71875rem; }
+.kind-chip {
+  font-size: 0.6875rem;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 62.4375rem;
+  background: var(--soft-neutral-bg);
+  color: var(--color-text-strong);
+  border: 1px solid var(--sl-line);
+}
+.conflict-n { font-weight: 700; color: var(--sl-warn); }
+
+.status-badge {
+  font-size: 0.71875rem;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 62.4375rem;
+  background: var(--soft-neutral-bg);
+  color: var(--sl-ink-2);
+}
+.status-badge.pending { background: var(--sl-warn-soft); color: var(--sl-warn); }
+.status-badge.approved { background: var(--sl-ok-soft); color: var(--sl-ok); }
+.status-badge.rejected { background: var(--sl-bad-soft); color: var(--sl-bad); }
+
+.act-btn {
+  height: 1.6875rem;
+  padding: 0 0.625rem;
+  margin-right: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--sl-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.act-btn:hover { border-color: var(--sl-accent); color: var(--sl-accent); }
+.act-btn.primary { color: var(--sl-accent); border-color: var(--sl-accent); }
+.act-btn.primary:hover { background: var(--sl-accent-soft); }
+.act-btn.danger { color: var(--sl-bad); border-color: var(--sv-bad-line, var(--sl-bad)); }
+.act-btn.danger:hover { background: var(--sl-bad-soft); }
+
+.note { margin: 0 0 0.375rem; }
+.conflict-card { --lib-card-max: 16.25rem; }
+
+.field { display: flex; flex-direction: column; gap: 0.25rem; }
+.field-label { font-size: 0.78125rem; font-weight: 600; color: var(--sl-ink); }
+.req { color: var(--sl-bad); margin-left: 0.125rem; }
+.field-select {
+  height: 2rem;
+  padding: 0 0.5rem;
+  font-size: 0.78125rem;
+  color: var(--sl-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.375rem;
+  outline: none;
+}
+.field-area {
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--sl-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.5rem;
+  outline: none;
+  resize: none;
+}
+.field-area:focus { border-color: var(--sl-accent); }
 </style>
