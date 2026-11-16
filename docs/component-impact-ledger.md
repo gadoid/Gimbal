@@ -4,10 +4,10 @@
 > 新底座对关联组件的影响点与已知变更,一组件一卡;Phase 2 按卡销账,
 > 销完在本文件勾记。口径变更以 redesign 文档为准,本文件不复述模型。
 >
-> **进度快照 2026-11-16**:C1 ✅(账户化 + system 主档选择 + 未注册徽章);
-> C2a ✅(含 system 主档选择落地);C2b ✅(条目装载节 + 预览条目化);
-> C4 ✅(ServiceAdmin 重做 + ServiceAliasDetail 条目化);C3a/C3b 未动。
-> 详见 `service-registry-progress.md`。
+> **进度快照 2026-11-16**:C1 ✅;C2a ✅;C2b ✅;C3a ✅(装载就绪链修复);
+> C3b ✅(三档键选择器 + env 覆盖开关 + 后端系统键面聚合);C4 ✅;
+> C5 观察项 ✅。**Phase 2 页面欠账全销**;剩余 P2-A 测试续期(52 文件)、
+> 导入映射重做、Phase 3 文案清账。详见 `service-registry-progress.md`。
 
 ## C1 凭证管理(Auths.vue / routers/auth_sessions.py)
 
@@ -59,17 +59,31 @@
 
 ### C3a 执行配置(ExecConfigsView.vue)
 
-**状态**: ⬜ 未开始(后端新链已就绪,前端就绪度仍按旧槽位判定)。
-- 就绪度面板换新链:条目装载(ref→账户)取代槽位绑定判定;地址就绪仍读 deployments
-- 「地址在服务注册」深链 → 新页锚点
+**状态**: ✅ 完成(装载就绪链修复 + 条目口径)。
+- 旧 `slotBound` 读账户行 slot/alias 字段 —— 账户化后恒 false(整面板
+  误报缺绑定);换**条目装载新链**:换用条目 → (主档 system, 条目 env,
+  ref) → 个人池账户命中(与后端 pick_bindings 同构;default ref 只认
+  is_default 账户)
+- 装载表:声明条目 / 换用条目(各带未登记标)/ **装载坐标列**(system ×
+  env · ref,建账户落点)/ 已装载·缺账户
+- 缺账户深链 /auths 预填直达改按 **(system, envId)**(旧 newSlot 退役)
+- 注册表定向检索面 = 声明条目 ∪ 换用条目;地址就绪仍读 deployments
 
 ### C3b carry 配置(ServiceBindingEditor.vue)
 
-**状态**: ⬜ 未开始(后端三档键域已就绪;写面未提供键选择器/env 覆盖开关)。
-- **入口迁居**:别名详情页 → 环境配置页的 (env, system) 配置分区
-- config_key 三档选择器(身份条目 / 服务 / 系统)——键域三级化的写面
-- env 覆盖开关(env_id 空 = 全环境基线)
-- 存量 238 行(服务键 fin-service)自动落「服务」档,零改值
+**状态**: ✅ 完成(三档键选择器 + env 覆盖开关;入口留条目/服务详情与
+项目配置页 —— 环境配置页未拆独立页,见 redesign §6.0 偏离 1)。
+- **三档键选择器**(项目配置页 ③):条目 / 服务 / 系统 optgroup 分组,
+  选项 = 条目注册表 ∪ 主档服务/系统 ∪ 存量绑定键(兜底组);键落在
+  哪一档在写面显式可选
+- **env 覆盖开关**(编辑器 svc-bar):空 = 全环境基线层,选定环境 =
+  覆盖层;读面(本键 + base 层)与写入同坐标,toast 标写入层
+- **后端系统键面聚合**(`/carry/bindings/{key}/fields`):纯系统名键 →
+  该系统全部服务面并集(服务名键不受同名系统影响);新增用例
+  `test_service_fields_system_key_aggregates_member_services`(待 PG
+  环境执行 —— 本机无 TEST_DATABASE_URL)
+- api/carry.ts:getBindingsFor/putBindings 增 envId 参
+- 存量 238 行(服务键 fin-service)自动落「服务」档,零改值 ✅
 
 ### C3c 环境管理(现内嵌 ServiceAdmin)
 
@@ -102,5 +116,5 @@ ServiceAliasDetail 已条目化(头部徽标 环境+ref / 概览补账户装载�
 
 ## 销账顺序建议
 
-C4 ✅ → C1 ✅ → C2(a/b)✅ → **C3a/C3b(配置,⬜ 下一步)**→ C3c 随 C4 ✅。
-C5 观察项随遇随销;P1-7 测试续期(52 文件)与上述页面改造并行推进,不阻塞。
+C1–C5 全部销账(2026-11-16)。后续:P2-A 测试续期(52 文件,最大工作量)
+→ 导入映射按 ref 重做 → Phase 3 文案清账。

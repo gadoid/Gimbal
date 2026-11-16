@@ -6,10 +6,10 @@
 
 ## 1. 一句话状态
 
-**Phase 1（底座）已闭环并通过全量测试基线；Phase 2（页面）完成凭证域账户化（含 system 主档选择）、
-服务注册主档重做、身份条目子页条目化（ServiceAliasDetail）、项目配置面板条目口径（C2b），
-剩余「ExecConfigs 就绪度（C3a）/ carry 写面三档键选择器（C3b）/ 导入映射 / 文案清账」未完成；
-生产环境已迁移并部署，登录后的场景试跑待凭据。**
+**Phase 1（底座）已闭环并通过全量测试基线；Phase 2（页面）欠账全销 —— 凭证域账户化（含 system 主档选择）、
+服务注册主档重做、身份条目子页条目化、项目配置条目口径、执行配置装载就绪新链（C3a）、
+carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）；
+剩余「P2-A 测试续期（52 文件）/ 导入映射 / Phase 3 文案清账」；生产环境已迁移并部署，登录后的场景试跑待凭据。**
 
 ## 2. 已完成
 
@@ -61,6 +61,9 @@ env 必填收紧 / 环境不符=missing / 双条目共享账户（同 binding_id
 | `views/Auths.vue`(C1 收口) | 表单 system 切**主档选择**（主档 ∪ 存量行 ∪ 预填值，主档外标「未注册」）；组头未注册系统徽章（深链服务注册）；主档不可达时不误标 |
 | `ProjectCredentialsPanel`(C2a 对称) | system 同切主档选择；prj-cred-system testid 保留 |
 | `ProjectConfigPanel` + `EffectivePreviewDialog`(C2b) | 槽位状态节 → **身份条目装载**（已装载/未装载、项目池·已覆盖）；预览装载表 条目/账户# 口径、缺装载提示同步；carry 节 hint 对齐三档键域 |
+| `ExecConfigsView`(C3a) | 装载就绪链修复（旧 slotBound 读已退役字段恒误报）→ 条目→ref→(system,env)账户；装载坐标列；缺账户深链按 (system,envId) 预填；绑定/服务面板条目口径 |
+| `api/carry.ts` + `ServiceBindingEditor` + `ProjectConfigPanel` ③(C3b) | bindings 读写增 envId；编辑器 env 覆盖开关（基线/覆盖层）；项目配置页三档键选择器（条目/服务/系统 optgroup + 存量兜底组） |
+| **后端 `/carry/bindings/{key}/fields`** | 纯系统名键 → 该系统全部服务面并集（服务名键不受同名系统影响）；新增用例待 PG 环境执行（本机无 TEST_DATABASE_URL，语法/导入已验） |
 | `CaseComposerCanvas` | F4 注入改条目口径（选中已登记条目即注入 `${auth.<条目名>}.token`，切未登记名清行）；`auths` 与 `registeredAliases` 同源一次拉取 |
 | `UsersCard` / `ImportScenarioDialog` | 快照导入账户形状（键 `username@system`）；挂认证下拉退役（后端 slot 兼容忽略） |
 | `ServiceAliasDetail` | **条目化重做**：头部徽标 槽位→环境+ref（`ref 默认`/`ref 用户名·x`）；概览补 系统/环境/账户装载行；地址就绪矩阵扩 实例登录口/版本线两列（主档查系统归属，未登记主档显「—」）；凭证 tab→账户装载（ref 语义+去凭证管理）；身份条目登记表单补 环境选择（实体键不可改）+ refMode/refUsername；列表补 环境/账户装载列；键合法性校验集合 = 主档 ∪ 目录（§2.2） |
@@ -100,7 +103,8 @@ accounts   2   18180789650(默认) / 18180789652
 | `3f526d2c` | P1-8 前端适配（账户化凭证面 + 条目选择器 + 主档 API） |
 | `619a754c` | 服务注册页重做（主档注册簿 + 对账 + 实例弹框） |
 | `1d780347` | 身份条目子页条目化（ServiceAliasDetail 概览/矩阵/账户装载 tab/登记表单 env+ref） |
-| 本次 | C1 收口（凭证 system 主档选择 + 未注册徽章）+ C2a 对称 + C2b（项目配置条目口径 + 预览条目化）+ 本文档 |
+| `ac683e17` | C1 收口（凭证 system 主档选择 + 未注册徽章）+ C2a 对称 + C2b（项目配置条目口径 + 预览条目化） |
+| 本次 | C3a 装载就绪新链（ExecConfigs）+ C3b（carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合）+ 本文档 |
 
 ## 4. 未完成 / 后续计划
 
@@ -126,9 +130,13 @@ accounts   2   18180789650(默认) / 18180789652
    若后续环境数/系统数增长，可再拆；**当前不建议拆**（服务注册页即 mapping 入口）。
 3. ~~**ProjectConfigPanel**：槽位状态/预览仍读旧槽位语义~~ ✅ 已切条目口径
    （装载节 + 预览条目化 + carry hint 三档键域；台账 C2b 销账）。
-4. **ExecConfigsView**：就绪度/绑定面板仍按旧槽位口径（台账 C3a）。
-5. **导入映射重做**：按 ref 语义重做导入面板的认证映射（当前挂认证下拉已退役）。
-6. **Phase 3 文案清账**：「槽位」字样全站退场（条目/身份/账户口径）；runbook / 概念地图同步。
+4. ~~**ExecConfigsView**：就绪度/绑定面板仍按旧槽位口径~~ ✅ C3a 销账
+   （装载就绪新链 + 装载坐标 + (system,envId) 预填深链）。
+5. ~~**carry 写面**：三档键选择器 + env 覆盖开关~~ ✅ C3b 销账
+   （含后端系统键面聚合；新增用例 `test_service_fields_system_key_aggregates_
+   member_services` 待 PG 环境执行 —— 本机无 TEST_DATABASE_URL）。
+6. **导入映射重做**：按 ref 语义重做导入面板的认证映射（当前挂认证下拉已退役）。
+7. **Phase 3 文案清账**：「槽位」字样全站退场（条目/身份/账户口径）；runbook / 概念地图同步。
 
 ### P2-C 验证收口
 

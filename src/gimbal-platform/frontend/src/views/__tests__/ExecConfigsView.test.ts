@@ -30,14 +30,32 @@ vi.mock('@/api/deployments', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   listAll: vi.fn().mockResolvedValue([]),
 }))
-// 绑定别名注册表状态 = 按名定向检索(2026-11-13 规模安全适配)
+// 绑定条目注册表状态 = 按名定向检索(2026-11-13 规模安全适配;
+// registry 新形状:envId/refMode 必备)。池内两条:声明条目 + 换用条目,
+// 组件按 q 精确命中各自的行。
 vi.mock('@/api/service-aliases', () => ({
   listAliases: vi.fn().mockResolvedValue({
-    items: [{
-      aliasName: 'fin-service.merchant-b', baseService: 'fin-service',
-      kind: 'plate', slot: 'merchant-b', createdAt: '', updatedAt: '',
-    }],
-    total: 1, page: 1, pageSize: 10,
+    items: [
+      { aliasName: 'fin-service.merchant-b', baseService: 'fin-service',
+        kind: 'plate', slot: 'fin-service.merchant-b', envId: 2,
+        refMode: 'username', refUsername: 'merchant-b',
+        display: '', createdAt: '', updatedAt: '' },
+      { aliasName: 'merchant-b', baseService: 'fin-service',
+        kind: 'plate', slot: 'merchant-b', envId: 2,
+        refMode: 'default', refUsername: null,
+        display: '', createdAt: '', updatedAt: '' },
+    ],
+    total: 2, page: 1, pageSize: 10,
+  }),
+}))
+// 主档(装载坐标:baseService → system)
+vi.mock('@/api/services', () => ({
+  listServices: vi.fn().mockResolvedValue({
+    services: [
+      { name: 'fin-service', system: 'fin-service', kind: 'plate', abbr: '',
+        description: '', inCatalog: true, createdAt: '', updatedAt: '' },
+    ],
+    unregistered: [], plateReachable: true,
   }),
 }))
 vi.mock('@/api/service-meta', () => ({
@@ -250,16 +268,20 @@ describe('ExecConfigsView', () => {
     w.unmount()
   })
 
-  it('③ 枢纽:地址就绪 + 槽位缺失预填深链 + 漂移拉取 + pickable 预览', async () => {
+  it('③ 枢纽:地址就绪 + 条目缺账户预填深链 + 漂移拉取 + pickable 预览', async () => {
     const w = await mountPage()
     // 地址就绪:fin-service 在所选环境(UAT=2)有部署行
     expect(w.get('[data-testid="ec-dep-fin-service"]').text())
       .toContain('http://uat-fin')
     expect(w.get('[data-testid="ec-dep-fin-service"]').text()).toContain('就绪')
-    // 槽位缺失:merchant-b 无池行 → 缺绑定 + /auths 预填直达
-    expect(w.get('[data-testid="ec-slot-miss-merchant-b"]').text()).toContain('缺绑定')
+    // 条目缺账户:merchant-b 条目在个人池无 (system, env) 命中 →
+    // 缺账户 + /auths 按装载坐标(system+envId)预填直达
+    expect(w.get('[data-testid="ec-slot-miss-merchant-b"]').text()).toContain('缺账户')
     expect(w.get('[data-testid="ec-goto-auth-merchant-b"]').attributes('href'))
-      .toBe('/auths?newSlot=merchant-b&system=fin-service')
+      .toBe('/auths?system=fin-service&envId=2')
+    // 装载坐标列(建账户的落点)
+    expect(w.get('[data-testid="ec-hub-bindings"]').text())
+      .toContain('fin-service × UAT · ref 默认')
     // 漂移读面随选择拉取
     expect(ec.execConfigDrift).toHaveBeenCalledWith(7)
     // 预览:打开 pickable dialog(execConfigId = 选定配置)
@@ -268,25 +290,43 @@ describe('ExecConfigsView', () => {
     w.unmount()
   })
 
-  it('③ 枢纽:槽位池内已绑定 → 显示就绪不出深链缺口', async () => {
+  it('③ 枢纽:条目 ref 命中个人池账户 → 已装载不出深链缺口', async () => {
     const { listAll } = await import('@/api/auth_sessions')
+    // merchant-b 条目 ref 默认 → (fin-service, UAT=2) 需默认账户
     vi.mocked(listAll).mockResolvedValue([
-      { alias: 'b-merchant-b', slot: 'merchant-b', system: 'fin-service' },
+      { id: 1, system: 'fin-service', envId: 2, username: 'merchant-b',
+        isDefault: true },
     ] as never)
     const w = await mountPage()
     expect(w.find('[data-testid="ec-slot-miss-merchant-b"]').exists()).toBe(false)
-    expect(w.text()).toContain('已绑定')
+    expect(w.text()).toContain('已装载')
     w.unmount()
   })
 
-  it('③ 枢纽:绑定别名的注册表状态按名定向检索(不再全量拉取)', async () => {
+  it('③ 枢纽:default ref 只认 is_default 账户(非默认行不算命中)', async () => {
+    const { listAll } = await import('@/api/auth_sessions')
+    // merchant-b 条目是 default ref → (fin-service, UAT=2) 需默认账户;
+    // 池里同坐标只有非默认行 → 仍缺账户
+    vi.mocked(listAll).mockResolvedValue([
+      { id: 1, system: 'fin-service', envId: 2, username: 'merchant-b',
+        isDefault: false },
+    ] as never)
+    const w = await mountPage()
+    expect(w.get('[data-testid="ec-slot-miss-merchant-b"]').text()).toContain('缺账户')
+    w.unmount()
+  })
+
+  it('③ 枢纽:绑定条目的注册表状态按名定向检索(不再全量拉取)', async () => {
     const aliasApi = await import('@/api/service-aliases')
     const w = await mountPage()
-    // q = 绑定别名精确名;不是 listAllAliases 全量
+    // q = 声明/换用条目精确名;不是 listAllAliases 全量
     expect(vi.mocked(aliasApi.listAliases)).toHaveBeenCalledWith({
       q: 'fin-service.merchant-b', page_size: 10,
     })
-    // 精确命中 → 声明槽位回显,无「未登记」flag
+    expect(vi.mocked(aliasApi.listAliases)).toHaveBeenCalledWith({
+      q: 'merchant-b', page_size: 10,
+    })
+    // 精确命中 → 无「未登记」flag
     expect(w.find('[data-testid="ec-goto-faces-fin-service.merchant-b"]').exists())
       .toBe(false)
     expect(w.get('[data-testid="ec-hub-bindings"]').text()).toContain('merchant-b')
@@ -303,7 +343,7 @@ describe('ExecConfigsView', () => {
     w.unmount()
   })
 
-  it('③ 未登记的绑定别名 → 去该服务子页身份面 tab 登记', async () => {
+  it('③ 未登记的绑定条目 → 去该服务子页身份条目 tab 登记', async () => {
     const aliasApi = await import('@/api/service-aliases')
     vi.mocked(aliasApi.listAliases).mockResolvedValue({
       items: [], total: 0, page: 1, pageSize: 10,

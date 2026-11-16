@@ -11,6 +11,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
 import * as projectsApi from '@/api/projects'
 import * as carryApi from '@/api/carry'
+import * as aliasApi from '@/api/service-aliases'
+import * as servicesApi from '@/api/services'
 import * as envApi from '@/api/environments'
 import * as scenApi from '@/api/scenario-composer'
 import * as credApi from '@/api/project_credentials'
@@ -47,6 +49,19 @@ beforeEach(() => {
   vi.spyOn(carryApi, 'getDefaults').mockResolvedValue({ '$.a': 'v' })
   vi.spyOn(carryApi, 'putDefaults').mockResolvedValue({})
   vi.spyOn(carryApi, 'getBindings').mockResolvedValue({ 'fin-service': { '$.a': '1' } })
+  // 三档键选择器选项面(registry C3b):条目注册表 + 主档
+  vi.spyOn(aliasApi, 'listAllAliases').mockResolvedValue([
+    { aliasName: 'fin-service-uat', baseService: 'fin-service', kind: 'plate',
+      slot: 'fin-service-uat', envId: 7, refMode: 'default', refUsername: null,
+      display: '', createdAt: '', updatedAt: '' },
+  ])
+  vi.spyOn(servicesApi, 'listServices').mockResolvedValue({
+    services: [
+      { name: 'fin-service', system: 'fin', kind: 'plate', abbr: '',
+        description: '', inCatalog: true, createdAt: '', updatedAt: '' },
+    ],
+    unregistered: [], plateReachable: true,
+  })
   vi.spyOn(carryApi, 'getDrift').mockResolvedValue({
     services: [{ service: 'fin-service', orphaned: ['$.old'], uncovered: [],
       renamedSuggestions: [] }],
@@ -142,6 +157,22 @@ describe('ProjectConfigPanel — 普通项目', () => {
     expect(document.body.querySelector('[data-testid="preview-dialog"]')).toBeTruthy()
     expect(document.body.textContent).toContain('项目默认')
     expect(document.body.textContent).toContain('服务注册')
+    w.unmount()
+  })
+
+  it('三档键选择器:条目/服务/系统分组,存量绑定键落兜底组(registry C3b)', async () => {
+    vi.spyOn(carryApi, 'getBindings').mockResolvedValue(
+      { 'fin-service': {}, 'legacy-alias-x': {} })
+    const w = mountPanel()
+    await flushPromises()
+    const groups = w.get('[data-testid="prj-config-svc"]').findAll('optgroup')
+    expect(groups.map((g) => g.attributes('label')))
+      .toEqual(['身份条目', '服务', '系统', '存量绑定键'])
+    expect(groups[0].text()).toContain('fin-service-uat')
+    expect(groups[1].text()).toContain('fin-service')
+    expect(groups[2].text()).toContain('fin')
+    // 主档已知键不入兜底组;三档外的存量键才落「存量绑定键」
+    expect(groups[3].text()).toContain('legacy-alias-x')
     w.unmount()
   })
 })

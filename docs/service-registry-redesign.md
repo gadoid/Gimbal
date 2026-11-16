@@ -238,7 +238,7 @@ tier 序(公共项目层 < 项目层)不变。
 | 阶段 | 状态 | 实际落地 |
 |---|---|---|
 | Phase 1 底座 | ✅ 完成 | 四表 + 解析链 + routers 全量切换 + alembic 0057(已在生产库执行);全量 1560 passed / 461 skipped,0 残余失败 |
-| Phase 2 页面 | 🟡 进行中 | 凭证页/项目凭证账户化 ✅(含 system 主档选择);服务注册页重做主档注册簿+对账+实例 ✅;身份条目子页 ServiceAliasDetail 条目化(徽标/概览/矩阵/账户装载 tab/登记表单 env+ref)✅;ProjectConfigPanel+生效预览条目口径(C2b)✅;ExecConfigs 就绪度(C3a)、carry 写面三档键选择器(C3b)、导入映射重做待办 |
+| Phase 2 页面 | ✅ 欠账全销 | 凭证页/项目凭证账户化(含 system 主档选择);服务注册页重做主档注册簿+对账+实例;身份条目子页条目化;ProjectConfigPanel+生效预览条目口径;ExecConfigs 装载就绪新链(C3a);carry 三档键选择器+env 覆盖开关+后端系统键面聚合(C3b,新用例待 PG 环境)。余:导入映射按 ref 重做(随 Phase 3) |
 | Phase 3 清账 | ⬜ 未开始 | 「槽位」文案与文档同步 |
 
 **实施中的偏离与决策**（记录以免后续误读）：

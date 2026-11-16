@@ -1,13 +1,14 @@
 <!-- ExecConfigsView.vue — 执行配置管理页(执行配置分层①/③,/exec-configs)。
      个人面·全员:一套默认 + 若干命名配置,每组配置按系统分组内联子配置
      (bindings + carryOverrides)。零凭证值零地址值 —— 凭证在凭证管理、
-     地址在服务注册(2026-11-13 起身份面与地址同页治理),这里只存引用键。
+     地址在服务注册,这里只存引用键。
      ③ 关联枢纽(§8):对既有配置面只做**关联** —— 存引用键 + 放深链,
      不搬数据、不代管维护面与权限门。页内四路关联:环境→地址就绪度+
-     深链服务注册(矩阵);绑定槽位→个人池就绪+未登记深链服务子页 /
-     缺失深链 /auths 预填直达(注册表状态按名定向检索,规模安全);
-     服务→逐系统子页(身份面注册表+说明)深链;carry 覆盖→内联展示
-     +漂移检查+层宿主深链;
+     深链服务注册(矩阵);绑定条目→个人池装载就绪(registry C3a 新链:
+     换用条目 → ref → (system, env) 账户;与后端 pick_bindings 同构)+
+     未登记深链服务子页 / 缺账户深链 /auths 按 (system, envId) 预填直达
+     (注册表状态按名定向检索,规模安全);服务→逐系统子页(身份条目
+     注册表+说明)深链;carry 覆盖→内联展示+漂移检查+层宿主深链;
      生效预览 pickable(选定配置即预览逐值带来源)。全部由现有读 API
      拼装 + 一个配置漂移读面,零新写面。
      形制与服务组其余页共用 .slib 基座(scenario-lib.css / service-area.css)。 -->
@@ -18,7 +19,7 @@
       title="配置"
       :count="loading ? '' : `${rows.length} 套配置`"
       :meta="mode === 'edit' && selected ? `当前配置 · ${selected.name}` : undefined"
-      subtitle="场景外部支撑的跨场景载体:在哪(环境)、以谁(槽位绑定)、带什么业务参数(carry 覆盖)。一套默认 + 若干命名变体;执行时选一套注入。凭证在「凭证管理」按槽位解析、地址随环境取部署表 —— 本页零凭证值零地址值。"
+      subtitle="场景外部支撑的跨场景载体:在哪(环境)、以谁(身份条目装载)、带什么业务参数(carry 覆盖)。一套默认 + 若干命名变体;执行时选一套注入。凭证在「凭证管理」按条目 ref 解析、地址随环境取部署表 —— 本页零凭证值零地址值。"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -48,8 +49,8 @@
             {{ mode === 'create' ? '新建配置' : `编辑:${form.name || selected?.name}` }}
           </span>
           <span class="svc-panel-desc">
-            子配置按被测系统分组:绑定 = 身份面(别名)→ 槽位,覆盖槽位解析的
-            配置层;carry 覆盖 = 该系统带的业务参数(删行 = 不覆盖、按层序
+            子配置按被测系统分组:绑定 = 声明条目 → 换用条目(覆盖条目解析的
+            配置层);carry 覆盖 = 该系统带的业务参数(删行 = 不覆盖、按层序
             合成;值留空 = 注入空串)
           </span>
         </div>
@@ -84,10 +85,10 @@
           <div v-for="(b, j) in s.binds" :key="`b${j}`" class="line-row">
             <label class="lb">绑定</label>
             <Input v-model="b.alias" class="flex-1"
-                   placeholder="身份面(别名全名)"
+                   placeholder="声明条目名(场景里引用的,如 fin-service.merchant-b)"
                    :data-testid="`ec-bind-${i}-${j}`" />
             <span class="lb">→</span>
-            <Input v-model="b.slot" class="flex-1" placeholder="槽位名"
+            <Input v-model="b.slot" class="flex-1" placeholder="换用条目名(池内实际取用的)"
                    :data-testid="`ec-slot-${i}-${j}`" />
             <button type="button" class="svc-link danger" :data-testid="`ec-bind-rm-${i}-${j}`"
                     @click="s.binds.splice(j, 1)">移除</button>
@@ -197,18 +198,19 @@
           </template>
         </div>
 
-        <!-- ② 绑定槽位 → 个人池就绪 + 缺失深链 /auths 预填直达 -->
+        <!-- ② 绑定条目 → 个人池装载就绪(ref→账户新链;C3a)+ 缺失深链
+             /auths 预填直达(system+envId = 条目装载坐标) -->
         <div class="svc-panel" data-testid="ec-hub-slots">
           <div class="svc-panel-head">
-            <span class="svc-panel-title">槽位绑定就绪</span>
-            <span class="svc-panel-desc">配置槽位 → 个人认证池同名槽;缺失点直达凭证管理</span>
+            <span class="svc-panel-title">身份条目装载就绪</span>
+            <span class="svc-panel-desc">换用条目按 ref 取个人池账户((系统, 环境) 坐标);缺失点直达凭证管理</span>
           </div>
           <p v-if="!hasBindings" class="hub-note">
-            未配置绑定 —— 注入按别名声明槽位解析(配置层不覆盖)。
+            未配置绑定 —— 注入按场景声明的条目解析(配置层不覆盖)。
           </p>
           <table v-else class="slib-table" data-testid="ec-hub-bindings">
             <thead>
-              <tr><th>身份面</th><th>配置槽位</th><th>声明槽位</th>
+              <tr><th>声明条目</th><th>换用条目</th><th>装载坐标</th>
                   <th style="width:5.625rem">个人池</th><th style="width:13.125rem">操作</th></tr>
             </thead>
             <tbody>
@@ -217,19 +219,23 @@
                   <td>
                     <span class="mono">{{ alias }}</span>
                     <span v-if="facesLoaded && !aliasExists(String(alias))"
-                          class="svc-flag red ml-1" title="别名注册表中不存在">✕ 未登记</span>
-                  </td>
-                  <td><span class="mono">{{ slot }}</span></td>
-                  <td><span class="mono">{{ declaredSlot(String(alias)) ?? '—' }}</span></td>
-                  <td>
-                    <span v-if="slotBound(String(slot))" class="svc-flag green">已绑定</span>
-                    <span v-else class="svc-flag red" :data-testid="`ec-slot-miss-${slot}`">缺绑定</span>
+                          class="svc-flag red ml-1" title="身份条目注册表中不存在">✕ 未登记</span>
                   </td>
                   <td>
-                    <!-- 未登记 → 该服务子页的身份面注册表(登记的家,
-                         2026-11-13 自矩阵页迁入);缺个人池凭证 → 凭证管理预填 -->
+                    <span class="mono">{{ slot }}</span>
+                    <span v-if="facesLoaded && !aliasExists(String(slot))"
+                          class="svc-flag red ml-1" title="换用条目未登记 — 取不到 ref 坐标">✕ 未登记</span>
+                  </td>
+                  <td><span class="mono">{{ coordOf(String(slot)) }}</span></td>
+                  <td>
+                    <span v-if="entryLoaded(String(slot))" class="svc-flag green">已装载</span>
+                    <span v-else class="svc-flag red" :data-testid="`ec-slot-miss-${slot}`">缺账户</span>
+                  </td>
+                  <td>
+                    <!-- 未登记 → 该服务子页的身份条目注册表(登记的家);
+                         缺个人池账户 → 凭证管理按 (system, env) 预填直达 -->
                     <router-link
-                      v-if="facesLoaded && !aliasExists(String(alias))"
+                      v-if="facesLoaded && (!aliasExists(String(alias)) || !aliasExists(String(slot)))"
                       :to="`/service-admin/${encodeURIComponent(s.service)}?tab=faces`"
                       class="svc-link warn-link"
                       :data-testid="`ec-goto-faces-${alias}`"
@@ -243,22 +249,22 @@
           </table>
         </div>
 
-        <!-- ③ 服务接入 → 逐系统子页(身份面注册表 + 说明;读面全员)-->
+        <!-- ③ 服务接入 → 逐系统子页(身份条目注册表 + 说明;读面全员)-->
         <div class="svc-panel" data-testid="ec-hub-svc">
           <div class="svc-panel-head">
             <span class="svc-panel-title">服务接入</span>
-            <span class="svc-panel-desc">身份面(别名)与凭证槽位声明在各服务子页登记;说明为服务级元数据</span>
+            <span class="svc-panel-desc">身份条目(条目名 → 服务 + 环境 + ref)在各服务子页登记;说明为服务级元数据</span>
             <span class="svc-panel-right">
               <router-link v-if="auth.can('ops.write')" to="/service-admin"
                 class="svc-link">地址在「服务注册」↗</router-link>
             </span>
           </div>
           <p v-if="!selected.systems.length" class="hub-note">
-            本配置还没有系统子配置 —— 身份面按系统在各自子页登记。
+            本配置还没有系统子配置 —— 身份条目按系统在各自子页登记。
           </p>
           <table v-else class="slib-table" data-testid="ec-hub-svcs">
             <thead>
-              <tr><th>系统</th><th>说明</th><th style="width:6.875rem" class="c-center">身份面</th></tr>
+              <tr><th>系统</th><th>说明</th><th style="width:6.875rem" class="c-center">身份条目</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in selected.systems" :key="`svc-${s.service}`"
@@ -269,7 +275,7 @@
                   <router-link
                     :to="`/service-admin/${encodeURIComponent(s.service)}?tab=faces`"
                     class="svc-link" :data-testid="`ec-goto-faces-${s.service}`"
-                  >身份面 ↗</router-link>
+                  >身份条目 ↗</router-link>
                 </td>
               </tr>
             </tbody>
@@ -340,8 +346,9 @@
 <script setup lang="ts">
 /** ExecConfigsView.vue — 执行配置管理页 + ③ 关联枢纽(设计方案 §4/§8)。
  * 列表(chip)/编辑(整体替换式 PATCH)/默认切换/复制/两步删除;错误内联。
- * 枢纽数据全部来自现有读面:部署表(listDeployments)/个人池(listAll)/
- * 别名注册表(listAllAliases)/场景 options + 一个配置漂移读面。
+ * 枢纽数据全部来自现有读面:部署表(listDeployments)/个人池账户(listAll)/
+ * 条目注册表定向检索(listAliases)/主档(listServices)/场景 options +
+ * 一个配置漂移读面。
  * 2026-11-12 形制对齐:旧 .page 壳迁到 .slib + PageHead + svc-panel 分段,
  * chip/表单/错误条复用 scenario-lib.css / service-area.css 构件。 */
 import { computed, onMounted, ref } from 'vue'
@@ -357,6 +364,7 @@ import { listEnvironments, type EnvironmentRow } from '@/api/environments'
 import { listDeployments, type Deployment } from '@/api/deployments'
 import { listAll as listAllAuths } from '@/api/auth_sessions'
 import { listAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import { listServices, type ServiceRow } from '@/api/services'
 import { listServiceMeta } from '@/api/service-meta'
 import { listScenarioOptions } from '@/api/scenario-composer'
 import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
@@ -391,26 +399,32 @@ const hasCarries = computed(() =>
 
 // ── ③ 枢纽数据(读面拼装;失败降级为空,不阻塞编辑面)────────────
 const deps = ref<Deployment[]>([])
-const authRows = ref<Array<{ alias: string; slot?: string | null;
-                            system?: string | null; envId?: number | null }>>([])
+/** 个人池账户(C3a 装载就绪链:账户化形状 system/envId/username/isDefault) */
+const authRows = ref<Array<{ system: string | null; envId: number | null;
+                            username?: string; isDefault?: boolean | null }>>([])
 const drift = ref<{ services: ExecConfigDriftService[]; plateReachable: boolean } | null>(null)
 const scenOptions = ref<Array<{ id: string; name: string }>>([])
 const previewOpen = ref(false)
+/** 主档(条目装载坐标:baseService → system) */
+const svcRows = ref<ServiceRow[]>([])
 
-// 绑定别名的注册表状态:按名精确检索(2026-11-13 规模安全 —— 注册表
-// 过 200 后全量 listAllAliases 截断会误报「未登记」;绑定别名个数有限,
-// 每个别名一次 q 检索 + 精确命中,永不全量)。
+// 绑定条目名的注册表状态:按名精确检索(规模安全 —— 注册表过 200 后
+// 全量拉取截断会误报「未登记」;绑定条目个数有限,每个名字一次 q 检索
+// + 精确命中,永不全量)。检索面 = 声明条目 ∪ 换用条目(两者都要坐标)。
 const faceMeta = ref<Record<string, ServiceAliasRow | null>>({})
 const facesLoaded = ref(false)
 async function loadFacesFor(c: ExecConfigRow): Promise<void> {
-  const names = [...new Set(c.systems.flatMap((s) => Object.keys(s.bindings)))]
+  const names = [...new Set(c.systems.flatMap((s) => [
+    ...Object.keys(s.bindings),
+    ...Object.values(s.bindings),
+  ]))]
   const out: Record<string, ServiceAliasRow | null> = {}
-  await Promise.all(names.map(async (alias) => {
+  await Promise.all(names.map(async (name) => {
     try {
-      const env = await listAliases({ q: alias, page_size: 10 })
-      out[alias] = env.items.find((a) => a.aliasName === alias) ?? null
+      const env = await listAliases({ q: name, page_size: 10 })
+      out[name] = env.items.find((a) => a.aliasName === name) ?? null
     } catch {
-      out[alias] = null
+      out[name] = null
     }
   }))
   faceMeta.value = out
@@ -432,21 +446,47 @@ function envName(id: number): string {
 function deployUrl(service: string): string | null {
   return deps.value.find((d) => d.baseService === service)?.baseUrl ?? null
 }
-function slotBound(slot: string): boolean {
-  return authRows.value.some((r) => (r.slot || r.alias) === slot)
-}
 function aliasExists(alias: string): boolean {
   return faceMeta.value[alias] != null
 }
-function declaredSlot(alias: string): string | null {
-  return faceMeta.value[alias]?.slot ?? null
+/** 条目 → 装载坐标系统归属(自主档 baseService → system) */
+function systemOfBase(base: string | undefined | null): string | null {
+  if (!base) return null
+  return svcRows.value.find((s) => s.name === base)?.system ?? null
+}
+/** 换用条目在个人池的装载判定(与后端 pick_bindings 的 ref 语义同构):
+ *  条目登记 + 主档有系统 + (system, env, ref) 池内命中。 */
+function entryLoaded(slot: string): boolean {
+  const ident = faceMeta.value[slot]
+  if (!ident || ident.envId == null) return false
+  const sys = systemOfBase(ident.baseService)
+  if (!sys) return false
+  return authRows.value.some((a) =>
+    a.system === sys && a.envId === ident.envId
+    && (ident.refMode === 'username'
+      ? a.username === ident.refUsername
+      : a.isDefault === true))
+}
+/** 装载坐标展示:系统 × 环境 · ref(建账户的落点) */
+function coordOf(slot: string): string {
+  const ident = faceMeta.value[slot]
+  if (!ident || ident.envId == null) return '—'
+  const sys = systemOfBase(ident.baseService)
+  const ref = ident.refMode === 'username'
+    ? `ref ${ident.refUsername ?? '?'}` : 'ref 默认'
+  return `${sys ?? '?'} × ${envName(ident.envId)} · ${ref}`
 }
 function driftOf(service: string): ExecConfigDriftService | undefined {
   return drift.value?.services.find((s) => s.service === service)
 }
-/** 缺失槽位 → /auths 预填直达(newSlot + system;§8 预填直达) */
-function authHref(slot: string, system: string): string {
-  const q = new URLSearchParams({ newSlot: slot, system })
+/** 缺账户 → /auths 预填直达(§8 预填直达;坐标 = 条目装载的
+ *  (system, envId),注册表缺席时回落子配置系统名) */
+function authHref(slot: string, fallbackService: string): string {
+  const ident = faceMeta.value[slot]
+  const system = systemOfBase(ident?.baseService) ?? fallbackService
+  const q = new URLSearchParams()
+  if (system) q.set('system', system)
+  if (ident?.envId != null) q.set('envId', String(ident.envId))
   return `/auths?${q.toString()}`
 }
 
@@ -629,6 +669,10 @@ onMounted(async () => {
     })
     .catch(() => { /* 说明拉不到 — 面板显「—」 */ })
   listAllAuths().then((r) => { authRows.value = r as never }).catch(() => {})
+  // 主档(装载坐标 system 归属;拉不到 → 坐标列显 ?,装载判定从严)
+  listServices()
+    .then((out) => { svcRows.value = out.services })
+    .catch(() => { svcRows.value = [] })
   listScenarioOptions({ page_size: 50, scope: 'mine' })
     .then((envelope) => {
       scenOptions.value = envelope.items.map((i) => ({

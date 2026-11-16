@@ -254,7 +254,12 @@ async def service_fields(service: str, user: MemberUser, db=DbSession):
     目录服务,先 ``derive_base`` 归一到 base 再过滤。裸声明键(目录内
     无此服务也无其 base)无面可言,返回空面且不标 degraded(空是确定
     结论,不是面不完整);目录本身不可得(services dim 失败 → 空集)时
-    无从归一,原样过滤 —— 退化为修复前行为,而不是全局面瘫痪。"""
+    无从归一,原样过滤 —— 退化为修复前行为,而不是全局面瘫痪。
+
+    三档键域的系统档(registry 重构 §1.7):键命中主档**系统名**(且自身
+    不是已登记服务名)→ 面并集 = 该系统全部服务的声明并集(系统级值
+    作用于系统内每个服务,面按并集给)。服务名键不受同名系统影响
+    (写到别家服务的键上取不到值,并集面只会制造死值)。"""
     from ..schemas.carry import CarryEndpointMini
     from ..services import service_names
     from ..services.adaptation_service import _plate_full_endpoint
@@ -264,43 +269,56 @@ async def service_fields(service: str, user: MemberUser, db=DbSession):
     base = await service_names.resolve_base_with_aliases(db, service)
     if base is None:
         base = service
-    try:
-        client_items = await _plate_list_endpoints_filtered(base)
-    except PlateUnavailableError as e:
-        raise _plate_502(e) from e
+    # 系统档:纯系统名(非服务名)→ 成员服务并集;否则本键单面
+    from ..models.service import Service as DBService
+
+    is_service_name = (await db.execute(
+        select(DBService.id).where(DBService.name == base))).scalar() is not None
+    face_keys: list[str] = [base]
+    if not is_service_name:
+        members = (await db.execute(
+            select(DBService.name).where(DBService.system == base)
+        )).scalars().all()
+        if members:
+            face_keys = sorted(members)
     faces: dict[str, CarryFieldFace] = {}
     degraded = False
-    for item in client_items:
+    for key in face_keys:
         try:
-            full = await _plate_full_endpoint(item["id"])
-        except PlateUnavailableError:
-            degraded = True
-            continue  # 降级:该端点面缺席,不阻塞其余
-        if full is None:
-            degraded = True
-            continue
-        # G6:贡献端点上下文(字段 → 服务内哪些接口声明了它)
-        ep_mini = CarryEndpointMini(
-            id=str(item.get("id") or ""),
-            name=str(item.get("name") or ""),
-            method=str(item.get("method") or ""),
-            path=str(item.get("path") or ""),
-        )
-        # 解析态 == 'carry' 投影(2026-09-05 目录化 §4):面基准 =
-        # entry.state 共识默认 —— 值表是环境级,不 join step 增量
-        # (场景覆盖是 step 级意图,不改值表候选宇宙)。投影走
-        # field_state_resolution 单一实现(与 carry_injection 同款,
-        # 含祖先吸收:整容器是绑定/注入单元)。
-        decls = ((full.get("request") or {}).get("declarations")) or []
-        for entry in carry_entries(decls):
-            path = str(entry.get("path") or "")
-            face = faces.setdefault(path, CarryFieldFace(
-                path=path,
-                type=str(entry.get("type") or "string"),
-                description=str(entry.get("description") or ""),
-            ))
-            if ep_mini not in face.endpoints:
-                face.endpoints.append(ep_mini)
+            client_items = await _plate_list_endpoints_filtered(key)
+        except PlateUnavailableError as e:
+            raise _plate_502(e) from e
+        for item in client_items:
+            try:
+                full = await _plate_full_endpoint(item["id"])
+            except PlateUnavailableError:
+                degraded = True
+                continue  # 降级:该端点面缺席,不阻塞其余
+            if full is None:
+                degraded = True
+                continue
+            # G6:贡献端点上下文(字段 → 服务内哪些接口声明了它)
+            ep_mini = CarryEndpointMini(
+                id=str(item.get("id") or ""),
+                name=str(item.get("name") or ""),
+                method=str(item.get("method") or ""),
+                path=str(item.get("path") or ""),
+            )
+            # 解析态 == 'carry' 投影(2026-09-05 目录化 §4):面基准 =
+            # entry.state 共识默认 —— 值表是环境级,不 join step 增量
+            # (场景覆盖是 step 级意图,不改值表候选宇宙)。投影走
+            # field_state_resolution 单一实现(与 carry_injection 同款,
+            # 含祖先吸收:整容器是绑定/注入单元)。
+            decls = ((full.get("request") or {}).get("declarations")) or []
+            for entry in carry_entries(decls):
+                path = str(entry.get("path") or "")
+                face = faces.setdefault(path, CarryFieldFace(
+                    path=path,
+                    type=str(entry.get("type") or "string"),
+                    description=str(entry.get("description") or ""),
+                ))
+                if ep_mini not in face.endpoints:
+                    face.endpoints.append(ep_mini)
     return ServiceFieldsOut(fields=sorted(faces.values(), key=lambda f: f.path),
                             degraded=degraded)
 

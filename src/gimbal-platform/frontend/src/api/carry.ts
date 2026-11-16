@@ -33,6 +33,18 @@ function scopeParams(target: ScopeTarget) {
     : { scope: target.scope } }
 }
 
+/** bindings 读写参数(scope + env 覆盖;registry §1.7:envId 缺省 =
+ *  全环境基线层,传值 = 该环境的覆盖层,读面命中行覆盖基线)。 */
+function bindingParams(target?: ScopeTarget, envId?: number) {
+  const params: Record<string, unknown> = {}
+  if (target && target.scope !== 'global') {
+    params.scope = target.scope
+    if (target.projectId != null) params.projectId = target.projectId
+  }
+  if (envId != null) params.envId = envId
+  return { params }
+}
+
 export async function getDefaults(
   target: ScopeTarget = { scope: 'global' },
 ): Promise<CarryValues> {
@@ -55,22 +67,23 @@ export async function getBindings(): Promise<Record<string, CarryValues>> {
   return data.bindings
 }
 
-/** 单层读(scope 参数形态,项目/个人配置页用;不带 scope 的并集读走 getBindings)。 */
+/** 单层读(scope 参数形态,项目/个人配置页用;不带 scope 的并集读走 getBindings;
+ *  envId = 环境覆盖读面(命中行覆盖基线)。 */
 export async function getBindingsFor(
-  service: string, target?: ScopeTarget,
+  service: string, target?: ScopeTarget, envId?: number,
 ): Promise<CarryValues> {
   const { data } = await http.get<{ bindings: CarryValues }>(
     `/carry/bindings/${encodeURIComponent(service)}`,
-    target ? scopeParams(target) : undefined)
+    bindingParams(target, envId))
   return data.bindings
 }
 
 export async function putBindings(
-  service: string, bindings: CarryValues, target?: ScopeTarget,
+  service: string, bindings: CarryValues, target?: ScopeTarget, envId?: number,
 ): Promise<CarryValues> {
   const { data } = await http.put<{ bindings: CarryValues }>(
     `/carry/bindings/${encodeURIComponent(service)}`,
-    { bindings }, target ? scopeParams(target) : undefined)
+    { bindings }, bindingParams(target, envId))
   return data.bindings
 }
 

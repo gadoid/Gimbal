@@ -84,6 +84,46 @@ async def test_service_fields_alias_key_normalizes_to_base(client, plate):
     assert r.json()["degraded"] is False
 
 
+async def test_service_fields_system_key_aggregates_member_services(
+        client, plate):
+    """三档键域系统档(registry §1.7):键 = 主档系统名(自身非服务名)
+    → 面并集 = 该系统全部服务的声明并集;服务名键不受同名系统影响
+    (并集面只会诱导写死值)。"""
+    from app.core import db as db_module
+    from app.models import Service
+
+    async with db_module.SessionLocal() as db:
+        db.add(Service(name="fin-service", system="fin", kind="plate"))
+        db.add(Service(name="fin-report", system="fin", kind="plate"))
+        await db.commit()
+    plate.services = [{"name": "fin-service"}, {"name": "fin-report"}]
+    plate.items = [
+        {"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
+         "service": "fin-service"},
+        {"id": "rep.ep1", "version": "1.0.0", "updated_at": None,
+         "service": "fin-report"},
+    ]
+    plate.fulls = {
+        "fin.ep1": {"request": {"declarations": [
+            {"path": "$.remark", "state": "carry", "type": "string",
+             "description": "备注"}]}},
+        "rep.ep1": {"request": {"declarations": [
+            {"path": "$.orgNo", "state": "carry", "type": "string",
+             "description": "机构号"}]}},
+    }
+    admin = await _admin(client)
+    # 系统键 fin → 成员服务面并集($.orgNo 来自 fin-report)
+    r = await client.get("/api/carry/bindings/fin/fields", headers=admin)
+    assert r.status_code == 200, r.text
+    assert [f["path"] for f in r.json()["fields"]] == ["$.orgNo", "$.remark"]
+    assert r.json()["degraded"] is False
+    # 服务名键照旧单面(即使存在同名系统也只看自己)
+    r = await client.get("/api/carry/bindings/fin-service/fields",
+                         headers=admin)
+    assert r.status_code == 200, r.text
+    assert [f["path"] for f in r.json()["fields"]] == ["$.remark"]
+
+
 async def test_service_fields_bare_key_returns_empty_face(client, plate):
     """裸声明键(目录内无此服务也无其 base):无面可言 —— 空面 +
     degraded=False(空是确定结论,不是面不完整)。"""

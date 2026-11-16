@@ -49,17 +49,30 @@
       />
     </section>
 
-    <!-- ③ 按服务编辑(项目层,普通项目):键选择 + ServiceBindingEditor -->
+    <!-- ③ 按键编辑(项目层,普通项目):三档键选择器(registry C3b
+         §1.7 键域三级化:条目名 > 服务名 > 系统名;系统级值作用于该系统
+         全部服务,面 = 成员服务并集)+ ServiceBindingEditor(env 覆盖开关) -->
     <section v-if="!isPublic" class="cfg-section">
-      <h2>项目层 carry · 按服务</h2>
-      <p class="hint">选服务 / 条目键编辑本项目的绑定值(键内继承:条目键 &gt; 服务键 &gt; 系统键 &gt; 默认值)。</p>
+      <h2>项目层 carry · 按键</h2>
+      <p class="hint">选条目 / 服务 / 系统键编辑本项目的绑定值(键内继承:条目键 &gt; 服务键 &gt; 系统键 &gt; 层默认;系统键作用于该系统全部服务)。</p>
       <div class="row">
         <select v-model="serviceKey" class="field-select" data-testid="prj-config-svc">
-          <option value="" disabled>选择服务键…</option>
-          <option v-for="k in serviceKeys" :key="k" :value="k">{{ k }}</option>
+          <option value="" disabled>选择配置键…</option>
+          <optgroup label="身份条目">
+            <option v-for="k in keyGroups.identity" :key="k" :value="k">{{ k }}</option>
+          </optgroup>
+          <optgroup label="服务">
+            <option v-for="k in keyGroups.service" :key="k" :value="k">{{ k }}</option>
+          </optgroup>
+          <optgroup label="系统">
+            <option v-for="k in keyGroups.system" :key="k" :value="k">{{ k }}</option>
+          </optgroup>
+          <optgroup v-if="keyGroups.legacy.length" label="存量绑定键">
+            <option v-for="k in keyGroups.legacy" :key="k" :value="k">{{ k }}</option>
+          </optgroup>
         </select>
         <input
-          v-model="svcInput" class="field-input svc-input" placeholder="或输入服务 / 别名键"
+          v-model="svcInput" class="field-input svc-input" placeholder="或输入条目 / 服务 / 系统键"
           data-testid="prj-config-svc-input" @keyup.enter="applySvcInput"
         />
         <button type="button" class="ghost-btn" data-testid="prj-config-svc-go" @click="applySvcInput">编辑</button>
@@ -242,6 +255,8 @@ import {
 } from '@/api/projects'
 import { listEnvironments, type EnvironmentRow } from '@/api/environments'
 import { getBindings, type ScopeTarget } from '@/api/carry'
+import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import { listServices, type ServiceRow } from '@/api/services'
 import { listScenarios } from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
@@ -300,11 +315,34 @@ async function saveEnv(): Promise<void> {
   }
 }
 
-// ── ③ 按服务编辑:键集 = 可见绑定并集的键 ─────────────────────────
-const serviceKeys = ref<string[]>([])
+// ── ③ 按键编辑:三档键选择器(registry C3b)──────────────────────
+// 选项面 = 条目注册表 ∪ 主档服务/系统 ∪ 存量绑定键;按档分组呈现,
+// 让「键落在哪一档」在写面显式可选(层内解析序:条目 > 服务 > 系统)。
+const aliasRows = ref<ServiceAliasRow[]>([])
+const svcRows = ref<ServiceRow[]>([])
+const boundKeys = ref<string[]>([])
 const serviceKey = ref('')
 const svcInput = ref('')
 const activeSvc = ref('')
+
+const keyGroups = computed<Record<'identity' | 'service' | 'system' | 'legacy', string[]>>(() => {
+  const identities = new Set(aliasRows.value.map((a) => a.aliasName))
+  const services = new Set(svcRows.value.map((s) => s.name))
+  const systems = new Set(svcRows.value.map((s) => s.system).filter(Boolean))
+  const identity: string[] = []
+  const service: string[] = []
+  const system: string[] = []
+  const legacy: string[] = []
+  for (const k of [...new Set([
+    ...boundKeys.value, ...identities, ...services, ...systems,
+  ])].sort()) {
+    if (identities.has(k)) identity.push(k)
+    else if (services.has(k)) service.push(k)
+    else if (systems.has(k)) system.push(k)
+    else legacy.push(k)
+  }
+  return { identity, service, system, legacy }
+})
 
 function applySvcInput(): void {
   const k = svcInput.value.trim()
@@ -412,8 +450,15 @@ onMounted(async () => {
         .then((r) => { slots.value = r.slots })
         .catch(() => { slots.value = [] }),
       getBindings()
-        .then((b) => { serviceKeys.value = Object.keys(b).sort() })
-        .catch(() => { serviceKeys.value = [] }),
+        .then((b) => { boundKeys.value = Object.keys(b).sort() })
+        .catch(() => { boundKeys.value = [] }),
+      // 三档键选择器的选项面(条目注册表 + 主档;失败降级存量键)
+      listAllAliases()
+        .then((rows) => { aliasRows.value = rows })
+        .catch(() => { aliasRows.value = [] }),
+      listServices()
+        .then((out) => { svcRows.value = out.services })
+        .catch(() => { svcRows.value = [] }),
       listScenarios({ projectId: props.project.id, page_size: 100 })
         .then((env) => {
           scenOptions.value = env.items.map((s) => ({
