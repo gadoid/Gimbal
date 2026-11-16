@@ -1244,7 +1244,9 @@ async def dispatch_target(
                     "数据集行的账号绑定不在令牌授权范围:" + "、".join(_out),
                     extra={"aliases": _out})
         for d, i, s, a in _row_refs:
-            row_bindings_cfg.setdefault(f"{d}:{i}", {})[s] = _hit[(s, a)].id
+            # PickedIdentity 的绑定标识是 account_id(P1 缺陷修复:旧读
+            # .id → 行级绑定留档路径自 P1 起必 AttributeError)
+            row_bindings_cfg.setdefault(f"{d}:{i}", {})[s] =                 _hit[(s, a)].account_id
 
     from . import execution_queue as _eq
     chain = chain_override or str(

@@ -7,17 +7,11 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.models import Deployment, Environment
-from app.models.auth_session import AuthSession
-from app.models.service_alias import ServiceAlias
+from app.models import (AuthAccount, Service, ServiceIdentity)
 from app.core.security import fernet_encrypt
 
 from .helpers import make_draft as _draft, register_and_login, wait_until as _wait
@@ -64,16 +58,19 @@ async def test_preview_shape_and_equality_with_dispatch(
     await _seed(client, h)
     uid = await _uid("s50a")
     async with db_module.SessionLocal() as s:
-        env = Environment(name="s50-dev", lines={})
+        env = Environment(name="s50-dev")
         s.add(env)
         await s.flush()
         env_id = env.id
-        s.add(ServiceAlias(alias_name="fin-alias", base_service="fin-svc",
-                           kind="external"))
-        binding = AuthSession(
-            owner_id=uid, alias="qa1", url="http://auth",
-            username_enc=fernet_encrypt("u"), password_enc=fernet_encrypt("p"),
-            slot="qa1", is_default=True,
+        # 条目(fin-alias 步骤键 / qa1 模板引用)+ 主档,均钉执行环境
+        s.add(Service(name="fin-svc", system="fin", kind="plate"))
+        s.add(ServiceIdentity(alias_name="fin-alias", base_service="fin-svc",
+                              env_id=env_id, ref_mode="default"))
+        s.add(ServiceIdentity(alias_name="qa1", base_service="fin-svc",
+                              env_id=env_id, ref_mode="default"))
+        binding = AuthAccount(
+            owner_id=uid, system="fin", env_id=env_id, username="u",
+            password_enc=fernet_encrypt("p"), is_default=True,
             account_fields={"orgNo": "1001"})
         s.add(binding)
         s.add(Deployment(base_service="fin-svc", env_id=env_id,
@@ -93,6 +90,7 @@ async def test_preview_shape_and_equality_with_dispatch(
                    "alias": "fin-alias"}
     assert out["auths"]["qa1"]["bindingId"] == binding_id
     assert out["auths"]["qa1"]["isDefault"] is True
+    assert out["auths"]["fin-alias"]["bindingId"] == binding_id  # 同池默认
     assert out["missingAuths"] == []
     assert out["carry"]["fin-alias"]["$.fee"] == {
         "value": "0.5", "source": f"project:1:alias"}
@@ -144,11 +142,12 @@ async def test_adhoc_addresses_env_aware(client, plate_mock: PlateMock):
     h = await register_and_login(client, "s50c", "pw123456")
     async with db_module.SessionLocal() as s:
         from app.models.project import Project
-        env = Environment(name="s50-adhoc", lines={}, is_default=True)
+        env = Environment(name="s50-adhoc", is_default=True)
         s.add(env)
         await s.flush()
-        s.add(ServiceAlias(alias_name="fin-alias", base_service="fin-svc",
-                           kind="external"))
+        s.add(Service(name="fin-svc", system="fin", kind="plate"))
+        s.add(ServiceIdentity(alias_name="fin-alias", base_service="fin-svc",
+                              env_id=env.id, ref_mode="default"))
         s.add(Deployment(base_service="fin-svc", env_id=env.id,
                          base_url="http://deploy"))
         await s.commit()

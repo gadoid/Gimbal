@@ -9,23 +9,41 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.models import Execution
 from app.models.composer_scenario import ComposerScenario
-from app.models.service_alias import ServiceAlias
+from app.models import Service, ServiceIdentity
 
 from .helpers import (make_draft as _draft, role_headers, seed_deployment,
                       wait_until as _wait)
 from .test_run_m1_capabilities import _patch_launch_capture, _run_payload
 from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
 from .test_scenario_visibility_and_copy import _member
+
+
+async def _s60_identity(alias_name: str, base: str) -> None:
+    """种身份条目(+主档/默认环境;S6 绑定校验同基础服务用)。"""
+    from sqlalchemy import select as _sel
+
+    from app.core import db as _dbm
+    from app.models import Environment, Service, ServiceIdentity
+    async with _dbm.SessionLocal() as s:
+        env = (await s.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.flush()
+            env = (await s.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        if (await s.execute(_sel(Service.id).where(
+                Service.name == base))).scalar_one_or_none() is None:
+            s.add(Service(name=base, system=base, kind="plate"))
+        s.add(ServiceIdentity(alias_name=alias_name, base_service=base,
+                              env_id=env, ref_mode="default"))
+        await s.commit()
+
 
 _STEP = {"kind": "step",
          "call": {"service": "fin-service", "method": "GET", "path": "/x"},
@@ -79,10 +97,8 @@ async def test_scheme_preview_overlay_reject_retired_fields(
         "overlay": {"serviceBindings": bad}})
     assert r.status_code == 422, r.text
     # 方案选不存在 / 跨基础服务的别名 → 422
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="crm-x", base_service="crm",
-                           kind="external"))
-        await s.commit()
+    await _s60_identity("fin-service-s60x", "fin-service")
+    await _s60_identity("crm-x", "crm")
     for alias, code in (("ghost", "binding_alias_unknown"),
                         ("crm-x", "binding_alias_mismatch")):
         r = await client.post(
@@ -133,15 +149,13 @@ async def test_alias_router_slimmed(client):
             "aliasName": "pay-s60", "kind": "external",
             "baseService": "pay", **extra})
         assert r.status_code == 422, (extra, r.text)
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="pay-s60", base_service="pay",
-                           kind="external"))
-        await s.commit()
+    await _s60_identity("pay-s60", "pay")
     r = await client.patch("/api/service-aliases/pay-s60", headers=adm,
                            json={"slot": "maker"})
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["slot"] == "maker"
+    # slot 兼容参数收下但忽略:出参 slot = 条目名(条目模型无槽)
+    assert out["slot"] == "pay-s60"
     assert not ({"baseUrl", "environmentId", "credentialAlias",
                  "ownerUserId"} & set(out))
     r = await client.patch("/api/service-aliases/pay-s60", headers=adm,
@@ -149,7 +163,7 @@ async def test_alias_router_slimmed(client):
     assert r.status_code == 422, r.text
     r = await client.patch("/api/service-aliases/pay-s60", headers=adm,
                            json={"slot": None})
-    assert r.status_code == 200 and r.json()["slot"] is None, r.text
+    assert r.status_code == 200 and r.json()["slot"] == "pay-s60", r.text
     # 部署冲突读面退役
     r = await client.get("/api/deployments/conflicts", headers=adm)
     assert r.status_code in (404, 405, 422), r.text

@@ -7,18 +7,24 @@ q 下推(命中子串/前缀)、精确过滤、分页切片。旧「全量裸数
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from tests.helpers import register_and_login
 
 
-async def _mk_auth(client, headers, alias: str, token_type: str = "Bearer"):
+async def _mk_auth(client, headers, name: str, token_type: str = "Bearer"):
+    from app.core import db as db_module
+    from app.models import Environment
+    from sqlalchemy import select as _sel
+    async with db_module.SessionLocal() as s:
+        env = (await s.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.commit()
+            env = (await s.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
     r = await client.post("/api/auths", headers=headers, json={
-        "alias": alias, "url": f"https://svc-{alias}.example.com",
-        "username": f"u_{alias}", "password": "pw123456",
+        "system": f"svc-{name}", "envId": env,
+        "username": f"u_{name}", "password": "pw123456",
         "token_type": token_type, "expires_in": 3600,
     })
     assert r.status_code == 201, r.text
@@ -38,11 +44,11 @@ async def test_auths_envelope_q_type_and_counts(client):
     # 全量类型计数(非当前页)— metaText 的服务端供给
     assert body["tokenTypeCounts"] == {"Bearer": 2, "Basic": 1}
 
-    # q 子串命中 alias/url
+    # q 子串命中 username/system
     r = await client.get("/api/auths", headers=h, params={"q": "qa"})
     assert r.json()["total"] == 2
     r = await client.get("/api/auths", headers=h, params={"q": "svc-basic1"})
-    assert r.json()["total"] == 1  # url 子串
+    assert r.json()["total"] == 1  # system 子串
 
     # token_type 精确 + 分页
     r = await client.get("/api/auths", headers=h,
@@ -174,6 +180,15 @@ async def test_batches_envelope_status_and_page(client, plate):
 async def test_service_aliases_envelope_q(client, plate):
     admin = await register_and_login(client, "m4alias", "pw123456")
     plate.services = [{"name": "fin-service"}]
+    from app.core import db as db_module
+    from app.models import Environment
+    async with db_module.SessionLocal() as s:
+        if (await s.execute(
+                __import__("sqlalchemy").select(Environment.id).where(
+                    Environment.is_default.is_(True)))
+                ).scalar_one_or_none() is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.commit()
     for alias in ("fin-service-uat", "fin-service-prod"):
         r = await client.post("/api/service-aliases", headers=admin,
                               json={"aliasName": alias})

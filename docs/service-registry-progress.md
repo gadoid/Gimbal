@@ -9,8 +9,10 @@
 **Phase 1（底座）已闭环并通过全量测试基线；Phase 2（页面）欠账全销 —— 凭证域账户化（含 system 主档选择）、
 服务注册主档重做、身份条目子页条目化、项目配置条目口径、执行配置装载就绪新链（C3a）、
 carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）；
-**P2-A 测试续期进行中：批次①–④（凭证/引用 + 执行解析 + 集成/令牌 + 配置/carry）29 文件 347 用例全绿，连带修出 8 个 P1 残留真缺陷**；
-剩余 P2-A 22 文件 / 导入映射 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
+**P2-A 测试续期完成：52 文件全处置（~44 文件 ~430 用例恢复全绿,32 条残余 skip 均有裁定存档）,
+连带修出 13 个 P1 残留真缺陷（反查恒空/条目 PATCH 500/预览 500/adhoc 必炸/编排链与预检告警缺 env/
+令牌复核 NameError/行级绑定两处等 —— 全是旧测试 skip 期从未被执行的死路径）**；
+剩余：导入映射按 ref 重做 / migrations 时代造形 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
 
 ## 2. 已完成
 
@@ -110,15 +112,15 @@ accounts   2   18180789650(默认) / 18180789652
 | 本次 | P2-A 批次② 执行解析域测试续期（8 文件 160 用例）+ 修 2 个 P1 残留缺陷（adhoc 组装必炸/编排链注入恒空） |
 | 本次 | P2-A 批次③ 集成/令牌域测试续期（7 文件 83 用例）+ 修 1 个 P1 残留缺陷（令牌范围复核 NameError + 分类语义） |
 | 本次 | P2-A 批次④ 配置/carry + 执行基建测试续期（7 文件 50 用例；2 个 0054 历史重放按空库不可重放记档跳过） |
+| 本次 | P2-A 批次⑤ 其余域收口（23 文件；~44 文件 ~430 用例恢复；修 5 个缺 env/死路径缺陷;残余 32 skip 两类裁定存档）—— P2-A 完成 |
 
 ## 4. 未完成 / 后续计划
 
-### P2-A 测试续期（优先级最高，工作量最大）· 批次①–④ 已完成（2026-11-16）
+### P2-A 测试续期 · **全部批次完成（2026-11-16，52 文件全处置）**
 
-批次① 凭证/引用域 **7 文件 54 用例** + 批次② 执行解析域 **8 文件 160 用例** +
-批次③ 集成/令牌域 **7 文件 83 用例** + 批次④ 配置/carry + 执行基建 **7 文件 50 用例**
-（另 2 个 0054 历史重放用例按「空库不可重放旧表增量」记档跳过）全绿，
-连带修出 **8 个 P1 残留真缺陷**（均因旧测试 skip 而从未被执行的路径）：
+批次①–④ 见前表；批次⑤ 其余域 **23 文件**（零触点摘印记直过 9 + 修复续期 10 +
+migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 用例**，
+连带修出 **13 个 P1 残留真缺陷**（均因旧测试 skip 而从未被执行的路径）：
 
 | 文件 | 用例 | 说明 |
 |---|---|---|
@@ -150,6 +152,10 @@ accounts   2   18180789650(默认) / 18180789652
 | `test_exec_config_migration.py` | 2+2skip | 0054 历史重放需 0053 时代库（记档跳过）；停读两用例续期 |
 | `test_run_m1_capabilities.py` | 4 | nRuns/parallel + 绑定注入（键 = 条目名）+ m2_hash 回填 |
 | `test_scenario_composer_plate_integration.py` | 13 | 解密 fail-fast/注入只进 run 副本/跨 owner 取用隔离（${_}→四件套） |
+| 批次⑤ 零触点 9 文件 | 85 | m2b_q1 / r5 / s8_leftovers / c2 / debug_console / m4 / p35 / plate_gimbal_contract / public_content（含静态令牌/r6 掩码/q2 项目令牌等小修） |
+| 批次⑤ 修复续期 10 文件 | ~55 | r6 / m2b_q2 / s60 / s70 / suites_validate / user_delete_cascade / grep_guard（白名单重扫 88 条）/ export_overlay / s50 / m2b_q3（行级绑定） |
+| `test_migrations.py` | 3+17skip | 逐版本/整链重放按「时代造形缺失」记档（空库面由 empty_db_bootstrap 覆盖）；恢复 = 独立工作项 `_create_retired_tables` |
+| 导入簇（pipeline+s75） | 21+13skip | 通用导入 21 用例直过；凭证→槽位映射 13 用例随「导入映射按 ref 重做」（P2-B.6）恢复 |
 
 **修出的 P1 残留缺陷**：
 
@@ -173,19 +179,31 @@ accounts   2   18180789650(默认) / 18180789652
 8. **令牌范围复核必炸**：`check_scope` 凭证支路误引未定义名 `rid` → NameError；
    且分类语义应为「池内有可取用账户但不在范围 = 未授权；池内无账户 = 跳过
    （执行期报缺）」（修：skip-无账户 + 未授权 False）。
+9. **编排预检恒拒发**：`graph_dispatch.missing_auth_aliases` 不传 env →
+   graph+项目凭证路径条目全数 missing（修：环境解析前置）。
+10. **套件 validate 恒 warn**：`suites.py` 预检解析不传 env → `auth_alias_unresolved`
+    恒报（修：同族环境解析前置）。
+11. **预检告警恒噪**：`run_precheck.builtin_auth_shadowed` 不传 env → 执行人自有
+    账户也全数 missing（修：同族）。
+12. **行级绑定留档必炸**：`run_dispatcher` 行账号列写 `PickedIdentity.id`
+    （实为 `account_id`）→ 数据集行绑定路径自 P1 起 AttributeError。
+13. **行级换绑模板落空**：`apply_row_bindings` 未把注入键覆写回引用位标签 →
+    users/`${slot.*}` 按绑定名落键，场景模板引用全部解不到。
 
 （另清 `helpers.seed_deployment` 的 `Environment(lines=)` 残留。）
 
 全量基线（批次①前）：**1553 passed / 490 skipped / 0 failed**（PG 本地 15432，16m13s）；
-批次②后：**1731 passed / 315 skipped / 0 failed**（18m01s）。
+批次②后：**1731 passed / 315 skipped / 0 failed**（18m01s）；批次④后：**1863 / 183 / 0**
+（21m39s）；批次⑤后收口基线见 §2.5 尾。
 
-#### 剩余 22 文件分批
+#### 残余 skip 的两类裁定（32+ 条,均有档可查）
 
-- 批次③ 集成/令牌：`test_integration_s0/w0a/w0b/w1` / `test_integration_consent_fixes` /
-  `test_token_runner` / `test_access_tokens` …
-- 批次④ 配置/carry：`test_exec_config_chain` / `test_exec_config_migration` /
-  `test_authz_s40_carry_scope` / `test_authz_s21_env_chain` …
-- 批次⑤ 其余：`test_migrations` / `test_user_delete_cascade` / `test_debug_console` …
+- **时代重放（19 条）**：`test_migrations` 17 + `test_exec_config_migration` 2 ——
+  baseline(create_all 当前模型)随 0057 退役旧表后,空库不可重放触碰旧表的历史增量;
+  空库产品面 = upgrade baseline + stamp head(决策 8)。恢复 = 独立工作项
+  （预建退役表时代形态 `_create_retired_tables`）。
+- **导入映射重做（13 条)**：pipeline 7 + s75 6 —— 随 P2-B.6「导入映射按 ref
+  语义重做」落地时按新语义恢复。
 
 ### P2-B 页面收尾
 

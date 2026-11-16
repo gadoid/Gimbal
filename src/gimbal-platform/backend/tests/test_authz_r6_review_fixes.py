@@ -14,11 +14,6 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import asyncio
 import json
 
@@ -26,7 +21,6 @@ import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
-from app.models.auth_session import AuthSession
 
 from .helpers import make_draft, register_and_login
 from .test_authz_s8_project_credentials import _mk_project, _uid
@@ -40,9 +34,18 @@ class TestProjectCredentialPasswordFloor:
     async def test_create_and_patch_min_length(self, client):
         h_a = await register_and_login(client, "r6_ca", "pw123456")
         pid = await _mk_project("r6-cred", members={"r6_ca": "admin"})
+        from app.models import Environment
+        from sqlalchemy import select as _sel
+        async with db_module.SessionLocal() as s:
+            env = (await s.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one_or_none()
+            if env is None:
+                s.add(Environment(name="测试", is_default=True))
+                await s.commit()
+                env = (await s.execute(_sel(Environment.id).where(
+                    Environment.is_default.is_(True)))).scalar_one()
         base = f"/api/projects/{pid}/credentials"
-        body = {"alias": "qa1", "url": "http://a", "username": "u1",
-                "system": "fin"}
+        body = {"system": "fin", "envId": env, "username": "u1"}
         r = await client.post(base, headers=h_a,
                               json={**body, "password": "p1234"})
         assert r.status_code == 422, r.text
@@ -65,13 +68,13 @@ class TestValueMaskingEndToEnd:
         secret = "ProjPw-Zx81Qv77"
         h = await register_and_login(client, "r6_mk", "pw123456")
         uid = await _uid("r6_mk")
-        # 个人槽位绑定:静态令牌(url 空 → password 兼作 token,免登录流)
+        # 四件套:条目 qa1 + 本人池静态令牌账户(不种实例行 →
+        # password 兼作 token,免登录流)
+        from .conftest import seed_identity_fixture
         async with db_module.SessionLocal() as db:
-            db.add(AuthSession(owner_id=uid, alias="qa1", slot="qa1",
-                               url="", system="fin-svc",
-                               username_enc=fernet_encrypt("u1"),
-                               password_enc=fernet_encrypt(secret),
-                               is_default=True))
+            await seed_identity_fixture(
+                db, alias="qa1", username="u1", password=secret,
+                service="fin-svc", owner_id=uid, login_url="")
             await db.commit()
         draft = make_draft("sc-r6-mask")
         # 死端口(127.0.0.1:9)直连地址:连接即刻拒绝 → 步骤失败,但

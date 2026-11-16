@@ -14,11 +14,6 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from httpx import AsyncClient
 
 from app.core import db as db_module
@@ -51,27 +46,40 @@ async def _inst(tpl_id: int, holder: int) -> IntegrationTask | None:
 
 # ── ① 静态令牌认证 ────────────────────────────────────────────────
 class TestStaticTokenAuth:
-    async def test_auth_session_without_login_url(self, client: AsyncClient):
-        """静态令牌方式:url 免填(区别于登录式),令牌本体直接施加。"""
-        h = await register_and_login(client, "c2_st")
-        r = await client.post("/api/auths", headers=h, json={
-            "alias": "platform", "username": "me",
-            "password": "gtk_static_token", "tokenType": "Bearer"})
-        assert r.status_code in (200, 201), r.text
-        assert r.json()["url"] == ""
+    async def test_static_token_account_without_instance(self, client: AsyncClient):
+        """静态令牌方式:无实例登录口(loginUrl 回显空、拨测明确报),
+        令牌本体 = 账户密码值,执行链照常解析。"""
+        from .conftest import seed_identity_fixture
+        from app.models import Environment
+        from sqlalchemy import select as _sel
 
-        # /test 不做登录拨测(无登录流程)
-        aid = r.json()["id"]
+        h = await register_and_login(client, "c2_st")
+        uid = await _uid("c2_st")
+        # 四件套但不种实例行(login_url 传空 → 无实例)
+        async with db_module.SessionLocal() as db:
+            await seed_identity_fixture(
+                db, alias="platform", username="me",
+                password="gtk_static_token", service="platform-svc",
+                owner_id=uid, login_url="")
+            env = (await db.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        r = await client.get("/api/auths", headers=h)
+        assert r.status_code == 200, r.text
+        item = r.json()["items"][0]
+        assert item["loginUrl"] == ""          # 无实例登录口
+        aid = item["id"]
+
+        # /test 拨测:实例缺席 = 配置缺失,明确报(不做登录流程)
         r = await client.post(f"/api/auths/{aid}/test", headers=h)
         assert r.status_code == 200, r.text
-        assert r.json()["ok"] is True
-        assert "无登录" in r.json()["message"]
+        assert r.json()["ok"] is False
+        assert "实例未配置登录口" in r.json()["message"]
 
         # 执行链照常解析(令牌本体 = password 值)
         from app.services.run_prepare import resolve_exec_auths
 
         out = await resolve_exec_auths(
-            db_module.SessionLocal, await _uid("c2_st"), ["platform"])
+            db_module.SessionLocal, uid, ["platform"], env_id=env)
         assert out and out[0].password == "gtk_static_token"
 
     async def test_inbound_bearer_personal_token_no_login(

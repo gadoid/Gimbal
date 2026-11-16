@@ -160,9 +160,20 @@ async def builtin_auth_shadowed(executor_id: int | None,
     users = _rp.built_in_user_aliases(scen_row.payload)
     if not users:
         return []                       # ② 不满足
-    # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混
+    # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混。
+    # 取用须带环境(env 必填收紧;与 materialize_graph 同族修复 ——
+    # 此前不传 env_id,执行人自有账户也全数 missing,告警恒噪)
+    from ..services.env_chain import NO_ENV, resolve_environment
+    env_id: int | None = None
+    try:
+        async with _dbm.SessionLocal() as _s:
+            _choice = await resolve_environment(_s, user_id=executor_id)
+        if _choice is not NO_ENV:
+            env_id = _choice.env_id
+    except Exception:  # noqa: BLE001 — 环境链失败按无环境口径告警
+        env_id = None
     resolved = await _rp.resolve_exec_auths(
-        _dbm.SessionLocal, executor_id, sorted(users))
+        _dbm.SessionLocal, executor_id, sorted(users), env_id=env_id)
     return sorted(set(users) - {a.alias for a in resolved})   # ③
 
 

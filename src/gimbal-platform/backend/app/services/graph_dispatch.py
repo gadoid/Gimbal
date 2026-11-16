@@ -154,8 +154,18 @@ async def missing_auth_aliases(
          for r in resolved])
     if not aliases:
         return []
+    # 取用须带环境(env 必填收紧;与 materialize_graph 同族修复 —— 此前
+    # 不传 env_id,条目在无环境分支下全数 missing,编排预检恒拒发)
+    from .env_chain import NO_ENV, resolve_environment
+    env_id: int | None = None
+    try:
+        choice = await resolve_environment(db, user_id=owner_id)
+        if choice is not NO_ENV:
+            env_id = choice.env_id
+    except Exception:  # noqa: BLE001 — 环境链失败按无环境口径报缺
+        env_id = None
     picked = await run_prepare.pick_bindings(
-        db, owner_id, aliases, cred_project_id=cred_project_id)
+        db, owner_id, aliases, env_id=env_id, cred_project_id=cred_project_id)
     return sorted(set(aliases) - {r.slot for r in picked})
 
 

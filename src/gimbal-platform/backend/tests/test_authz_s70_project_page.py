@@ -10,11 +10,6 @@ IA 修正(2026-11-09)的读面落点:项目成为一级入口 —— 公共项�
 """
 from __future__ import annotations
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import pytest
 from httpx import AsyncClient
 
@@ -304,28 +299,23 @@ class TestSlotStatus:
         r = await client.post("/api/scenarios?projectId=%d" % pid,
                               headers=h_m, json=draft)
         assert r.status_code in (200, 201), r.text
-        # 成员甲绑定槽位 fin(直接插 AuthSession;别名注册走 API 较重)
+        # 成员甲可解条目 fin(四件套直插;条目注册走 API 较重)
         from app.core import db as db_module
-        from app.models.auth_session import AuthSession
         from app.models.user import User
         from sqlalchemy import select as sa_select
 
-        from app.core.security import fernet_encrypt
+        from .conftest import seed_identity_fixture
 
         async with db_module.SessionLocal() as db:
             uid = (await db.execute(sa_select(User.id).where(
                 User.username == "s70_ss1"))).scalar_one()
-            db.add(AuthSession(
-                owner_id=uid, alias="fin", slot="fin", system="fin",
-                url="http://fin", username_enc=fernet_encrypt("u"),
-                password_enc=fernet_encrypt("p"), token_type="Bearer",
-                expires_in=7200))
-            await db.commit()
+            await seed_identity_fixture(
+                db, alias="fin", username="u", password="p",
+                service="fin", owner_id=uid)
         r = await client.get(f"/api/projects/{pid}/slot-status", headers=h_m)
         assert r.status_code == 200, r.text
         slots = r.json()["slots"]
-        # make_draft 步骤引用 fin → fin 槽位场景注入清单为空(无 auth
-        # 引用)时槽位集可能为空;断言形态而非具体槽名
+        # 断言形态而非具体槽名(条目装载矩阵形状契约)
         assert isinstance(slots, list)
         for it in slots:
             assert set(it) >= {"slot", "scenarios", "members"}

@@ -374,7 +374,13 @@ def apply_row_bindings(
     exec_auths: list["ResolvedAuth"], row: dict | None,
     resolved: dict[tuple[str, str], "ResolvedAuth"],
 ) -> list["ResolvedAuth"]:
-    """按行覆盖执行级凭证组:行账号列命中的槽换成该行的绑定,其余不变。"""
+    """按行覆盖执行级凭证组:行账号列命中的槽换成该行的绑定,其余不变。
+
+    注入键保持**引用位标签**不变(场景步骤 ``call.user``/``${auth.*}``/
+    ``${slot.*}`` 引用的是声明位;P1 缺陷修复 —— 此前未覆写 alias,
+    users/fields_by_slot 按绑定名落键,模板引用全部落空)。"""
+    import dataclasses as _dc
+
     refs = row_binding_refs(row)
     if not refs:
         return exec_auths
@@ -382,7 +388,7 @@ def apply_row_bindings(
     for slot, alias in refs.items():
         r = resolved.get((slot, alias))
         if r is not None:
-            out[slot] = r
+            out[slot] = _dc.replace(r, alias=slot)
     return list(out.values())
 
 

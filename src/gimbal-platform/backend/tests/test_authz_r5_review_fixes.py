@@ -14,11 +14,9 @@
 """
 from __future__ import annotations
 
-# P1-7:底座重构测试迁移待续(布景旧模型/API 形状),先 skip;续期按四件套范式恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
+import sqlalchemy as sa
 
-
+from app.core import db as db_module
 from .helpers import make_draft, register_and_login, role_headers
 from .inbound_fixtures import mk_token
 from .test_authz_s17_platform import _mk_public_tpl
@@ -73,32 +71,42 @@ class TestPlatformizeTransferTokenDenied:
 
 # ── 2.2 项目凭证:url 改动须重录密码 + Admin+ 不旁路 ──────────────
 
+async def _default_env_id() -> int:
+    from app.models import Environment
+    async with db_module.SessionLocal() as s:
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.commit()
+            env = (await s.execute(sa.select(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        return env
+
+
 class TestProjectCredentialUrlPasswordAndGate:
-    async def test_url_change_requires_password(self, client):
+    async def test_url_field_retired_password_patched(self, client):
+        """url 随账户化退役(登录口在实例):PATCH 带 url 静默忽略、不
+        改行;换密只发 password。旧「url_change_requires_password」闸
+        随字段退役(改密一处生效即新模型的同险消解)。"""
         h_a = await register_and_login(client, "r5_ca", "pw123456")
         pid = await _mk_project("r5-cred", members={"r5_ca": "admin"})
+        env = await _default_env_id()
         base = f"/api/projects/{pid}/credentials"
         r = await client.post(base, headers=h_a, json={
-            "alias": "qa1", "url": "http://real-auth", "username": "u1",
-            "password": "p1x2y3z", "system": "fin"})
+            "system": "fin", "envId": env, "username": "u1",
+            "password": "p1x2y3z"})
         assert r.status_code == 201, r.text
         cid = r.json()["id"]
-        # 单改 url → 422(拨测/执行会把存量密码发往新地址)
+        # 旧客户端发 url → 形状外字段忽略(200,账户坐标不动)
         r = await client.patch(f"{base}/{cid}", headers=h_a,
                                json={"url": "https://attacker.example/c"})
-        assert r.status_code == 422, r.text
-        assert r.json()["detail"]["code"] == "url_change_requires_password"
-        # 同值 url 不算改动(无密码可改其他字段)
-        r = await client.patch(f"{base}/{cid}", headers=h_a,
-                               json={"url": "http://real-auth",
-                                     "username": "u2"})
         assert r.status_code == 200, r.text
-        assert r.json()["url"] == "http://real-auth"
-        # url + password 一起 → 200
+        assert "url" not in r.json() and r.json()["system"] == "fin"
+        # 换密只发 password → 200
         r = await client.patch(f"{base}/{cid}", headers=h_a,
-                               json={"url": "http://new-auth",
-                                     "password": "p2x3y4z"})
-        assert r.status_code == 200 and r.json()["url"] == "http://new-auth"
+                               json={"password": "p2x3y4z"})
+        assert r.status_code == 200, r.text
 
     async def test_admin_plus_no_bypass(self, client):
         h_a = await register_and_login(client, "r5_ga", "pw123456")
@@ -106,19 +114,20 @@ class TestProjectCredentialUrlPasswordAndGate:
         h_ops = await role_headers(client, "r5_ops", role="admin")
         pid = await _mk_project("r5-gate", members={"r5_ga": "admin",
                                                     "r5_gm": "member"})
+        env = await _default_env_id()
         base = f"/api/projects/{pid}/credentials"
         r = await client.post(base, headers=h_a, json={
-            "alias": "qa1", "url": "http://a", "username": "u1",
-            "password": "p1x2y3z", "system": "fin"})
+            "system": "fin", "envId": env, "username": "u1",
+            "password": "p1x2y3z"})
         cid = r.json()["id"]
         # Admin+ 非成员:读面 404、写面 404、拨测 404(修前:可维护可
         # 导出 —— 与选用门「Admin+ 不旁路」自相矛盾)
         assert (await client.get(base, headers=h_ops)).status_code == 404
         assert (await client.post(base, headers=h_ops, json={
-            "alias": "x", "url": "http://b", "username": "u",
+            "system": "fin", "envId": env, "username": "u",
             "password": "p12345"})).status_code == 404
         assert (await client.patch(f"{base}/{cid}", headers=h_ops,
-                                   json={"url": "http://evil"}
+                                   json={"password": "evil-pw"}
                                    )).status_code == 404
         assert (await client.post(f"{base}/{cid}/test",
                                   headers=h_ops)).status_code == 404

@@ -1,16 +1,13 @@
 """authz M2a S7.5:导入时内置凭证(``config.users``)转槽位声明。
 
+_IMPORT_REDO = pytest.mark.skip(reason=(
+    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例按新语义恢复(其余通用导入用例照常运行)"))
 落库仍不含明文(P2);键不再静默丢弃 —— 新建别名缺省声明该服务唯一
 的内置标签、映射到声明了别的槽位的别名时改写步骤 ``call.user``、其余
 如实回报;落库结果回报「需要绑定的槽位 × 导入人绑定状态」。
 """
 from __future__ import annotations
 import pytest  # noqa: E402
-
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 
 from sqlalchemy import select
 
@@ -24,6 +21,11 @@ from .helpers import register_and_login
 from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
 from .test_scenario_import_pipeline import (
     _SCENARIO_ID, _bundle, _mock_faces, _stored_definition)
+
+_IMPORT_REDO = pytest.mark.skip(reason=(
+    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位"
+    "声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例"
+    "按新语义恢复(其余通用导入用例照常运行)"))
 
 
 def _bundle_with_users(*, svc: str = "fin-service-qa",
@@ -55,6 +57,7 @@ async def _bind(username: str, slot: str) -> None:
         await s.commit()
 
 
+@_IMPORT_REDO
 async def test_create_alias_declares_builtin_slot(client, plate_mock: PlateMock):
     """新建别名未显式给槽位 → 缺省声明该服务唯一的内置标签;未用到的
     内置键回报 dropped;明文不落库。"""
@@ -82,6 +85,7 @@ async def test_create_alias_declares_builtin_slot(client, plate_mock: PlateMock)
     assert defn["steps"][1]["call"]["user"] == "maker"
 
 
+@_IMPORT_REDO
 async def test_create_explicit_slot_wins(client, plate_mock: PlateMock):
     _mock_faces(plate_mock)
     h = await register_and_login(client, "admin0", "admin0pass123")
@@ -95,6 +99,7 @@ async def test_create_explicit_slot_wins(client, plate_mock: PlateMock):
             ServiceAlias.alias_name == "fin-service-qa"))).scalar_one() == "maker"
 
 
+@_IMPORT_REDO
 async def test_map_to_alias_with_other_slot_rewrites_call_user(
         client, plate_mock: PlateMock):
     """映射到已声明别的槽位的别名 → call.user 改写为本机槽位;绑定状态
@@ -121,6 +126,7 @@ async def test_map_to_alias_with_other_slot_rewrites_call_user(
     assert defn["steps"][1]["call"]["user"] == "fin-acct"
 
 
+@_IMPORT_REDO
 async def test_map_to_alias_without_slot_reports_undeclared(
         client, plate_mock: PlateMock):
     """别名未声明槽位 → 不能落地,如实回报(该步执行会报错);标签原样。"""
@@ -144,6 +150,7 @@ async def test_map_to_alias_without_slot_reports_undeclared(
     assert defn["steps"][1]["call"]["user"] == "maker"
 
 
+@_IMPORT_REDO
 async def test_templated_tag_not_rewritten(client, plate_mock: PlateMock):
     """标签被 ${auth.K} 模板引用 → 本就进注入清单,不改写(改写会换凭证)。"""
     _mock_faces(plate_mock)
@@ -165,6 +172,7 @@ async def test_templated_tag_not_rewritten(client, plate_mock: PlateMock):
     assert defn["steps"][0]["call"]["user"] == "qa1"
 
 
+@_IMPORT_REDO
 async def test_precheck_lists_builtin_users(client, plate_mock: PlateMock):
     _mock_faces(plate_mock)
     h = await register_and_login(client, "admin0", "admin0pass123")

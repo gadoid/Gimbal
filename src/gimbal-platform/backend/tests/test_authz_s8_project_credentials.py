@@ -74,17 +74,29 @@ async def _seed_registry_base(login_url: str = "http://proj-auth") -> int:
     from app.models import (Environment, Service, ServiceIdentity,
                             SystemEnvInstance)
     async with db_module.SessionLocal() as db:
-        db.add(Environment(name="测试", is_default=True))
-        await db.flush()
+        # 幂等布景(同测试多次 _seed_project_scenario 不撞唯一键)
         env = (await db.execute(sa.select(Environment.id).where(
-            Environment.is_default.is_(True)))).scalar_one()
-        db.add(Service(name="fin-svc", system="fin", kind="plate"))
-        db.add(SystemEnvInstance(system="fin", env_id=env,
-                                 login_url=login_url))
-        db.add(ServiceIdentity(alias_name="s8-alias", base_service="fin-svc",
-                               env_id=env, ref_mode="default"))
-        db.add(ServiceIdentity(alias_name="qa1", base_service="fin-svc",
-                               env_id=env, ref_mode="default"))
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            db.add(Environment(name="测试", is_default=True))
+            await db.flush()
+            env = (await db.execute(sa.select(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        if (await db.execute(sa.select(Service.id).where(
+                Service.name == "fin-svc"))).scalar_one_or_none() is None:
+            db.add(Service(name="fin-svc", system="fin", kind="plate"))
+        if (await db.execute(sa.select(SystemEnvInstance.id).where(
+                SystemEnvInstance.system == "fin",
+                SystemEnvInstance.env_id == env))).scalar_one_or_none() is None:
+            db.add(SystemEnvInstance(system="fin", env_id=env,
+                                     login_url=login_url))
+        for name in ("s8-alias", "qa1"):
+            if (await db.execute(sa.select(ServiceIdentity.id).where(
+                    ServiceIdentity.alias_name == name)
+                    )).scalar_one_or_none() is None:
+                db.add(ServiceIdentity(alias_name=name,
+                                       base_service="fin-svc", env_id=env,
+                                       ref_mode="default"))
         await db.commit()
         return env
 

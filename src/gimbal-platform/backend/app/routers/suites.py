@@ -1388,8 +1388,19 @@ async def validate_suite(
                        gd.unit_merged_bindings(graph_spec, r["unit"]))
                       for r in resolved])
             if aliases:
+                # 取用须带环境(env 必填收紧;与 materialize_graph 同族
+                # 修复 —— 此前不传 env_id,条目全数 missing,validate 恒 warn)
+                from ..services.env_chain import NO_ENV, resolve_environment
+                _env_id: int | None = None
+                try:
+                    _choice = await resolve_environment(db, user_id=user.id)
+                    if _choice is not NO_ENV:
+                        _env_id = _choice.env_id
+                except Exception:  # noqa: BLE001 — 预检不因环境链故障 500
+                    _env_id = None
                 got = await run_prepare.resolve_exec_auths(
-                    _sf, user.id, aliases, cred_project_id=cred_project_id)
+                    _sf, user.id, aliases, env_id=_env_id,
+                    cred_project_id=cred_project_id)
                 missing = set(aliases) - {a.alias for a in got}
                 if missing:
                     _via = ("项目凭证未登记,请项目管理员在项目配置页登记"

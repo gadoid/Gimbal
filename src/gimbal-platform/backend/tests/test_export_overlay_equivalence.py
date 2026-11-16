@@ -17,16 +17,11 @@ scan(steps)∪ 生效别名槽位 = {qa1, qa2},导出产物 users 同时含两�
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from sqlalchemy import select
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
-from app.models import AuthSession, User
+from app.models import AuthAccount, User
 from app.services import carry_store
 
 from .helpers import make_draft as _draft, wait_until as _wait
@@ -39,14 +34,30 @@ OVERLAY = {
 }
 
 
-async def _seed_overlay_alias() -> None:
-    """OVERLAY 选中的别名(同基础服务,声明槽位 qa1)。"""
-    from app.models.service_alias import ServiceAlias
+async def _seed_identity(alias: str, base: str = "fin-service") -> None:
+    """只种身份条目(+主档/默认环境;账户另种 —— 四件套见 _seed_owner_auth)。"""
+    from sqlalchemy import select as _sel
+
+    from app.models import Environment, Service, ServiceIdentity
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="fin-service-q1",
-                            base_service="fin-service", kind="external",
-                            slot="qa1"))
+        env = (await db.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            db.add(Environment(name="测试", is_default=True))
+            await db.flush()
+            env = (await db.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        if (await db.execute(_sel(Service.id).where(
+                Service.name == base))).scalar_one_or_none() is None:
+            db.add(Service(name=base, system=base, kind="plate"))
+        db.add(ServiceIdentity(alias_name=alias, base_service=base,
+                               env_id=env, ref_mode="default"))
         await db.commit()
+
+
+async def _seed_overlay_alias() -> None:
+    """OVERLAY 选中的条目(同基础服务;注入键 = 条目名)。"""
+    await _seed_identity("fin-service-q1")
 # meta 钉死 owner/createTime:两路 fill_plate_defaults 全 setdefault 无增量;
 # vars_map={} 显式带上 config.vars — _compose_scenario 恒定写回 vars(空 dict),
 # 缺省 draft 无 vars 键会让两路差一个键。
@@ -102,26 +113,24 @@ async def _seed(client, headers, draft: dict | None = None) -> None:
     assert r.status_code in (200, 201), r.text
 
 
-async def _seed_owner_auth(alias: str, *, bad: bool = False) -> None:
-    """给当前 owner(bob)ORM 直插一条 fernet 加密 AuthSession。
-
-    写法对齐 test_run_auth_resolution._seed_owner(fernet_encrypt +
-    db_module.SessionLocal);owner_id 从 User 表按 username 查真实 id,
-    不假设自增起点。``bad=True`` 插坏密文(fernet 解不开)。
-    """
+async def _seed_owner_auth(alias: str, *, bad: bool = False,
+                           default: bool = True) -> None:
+    """四件套:条目 alias + bob 池账户(username-ref;同 (system,env)
+    第二个起让出默认位)。``bad=True`` 腐化密码密文(fernet 解不开)。"""
+    from .conftest import seed_identity_fixture
     async with db_module.SessionLocal() as db:
         owner_id = (await db.execute(
             select(User.id).where(User.username == "bob"))).scalar_one()
-        db.add(AuthSession(
-            owner_id=owner_id,
-            alias=alias,
-            url=f"https://{alias}-auth/login",
-            username_enc=("gitleaks:not-a-fernet-token" if bad
-                          else fernet_encrypt(f"{alias}-user")),
-            password_enc=("gitleaks:not-a-fernet-token" if bad
-                          else fernet_encrypt(f"{alias}-pass")),
-        ))
-        await db.commit()
+        await seed_identity_fixture(
+            db, alias=alias, username=f"{alias}-user",
+            password=f"{alias}-pass", service="fin-service",
+            owner_id=owner_id, is_default=default)
+        if bad:
+            acc = (await db.execute(select(AuthAccount).where(
+                AuthAccount.owner_id == owner_id,
+                AuthAccount.username == f"{alias}-user"))).scalar_one()
+            acc.password_enc = "gitleaks:not-a-fernet-token"
+            await db.commit()
 
 
 async def test_preview_plate_without_overlay_no_credentials(
@@ -224,14 +233,14 @@ async def test_golden_equivalence_export_equals_baseline_case_json(
     await _seed(client, bob)
     await _seed_overlay_alias()
     await _seed_owner_auth("qa1")
-    await _seed_owner_auth("qa2")
+    await _seed_owner_auth("qa2", default=False)
 
     exported = (await client.post(
         "/api/scenarios/preview-plate", headers=bob,
         json={**_eq_draft(), "overlay": OVERLAY})).json()["converted"]
 
     # 并集:qa1(别名槽 + 模板)与 qa2(仅模板)都注入,凭证来自同一凭证池
-    assert set(exported["config"]["users"]) == {"qa1", "qa2"}
+    assert set(exported["config"]["users"]) == {"fin-service-q1", "qa1", "qa2"}
     assert exported["config"]["users"]["qa2"]["username"] == "qa2-user"
 
     cases: list[dict] = []
@@ -268,7 +277,7 @@ async def test_golden_equivalence_with_carry(
     await _seed(client, bob, draft=_eq_draft_with_carry())
     await _seed_overlay_alias()
     await _seed_owner_auth("qa1")
-    await _seed_owner_auth("qa2")
+    await _seed_owner_auth("qa2", default=False)
 
     exported = (await client.post(
         "/api/scenarios/preview-plate", headers=bob,
@@ -289,27 +298,23 @@ async def test_golden_equivalence_with_carry(
 
 async def test_overlay_alias_default_credential_injected(
         client, plate_mock: PlateMock):
-    """N1-4:别名表 credential_alias 默认凭证并入导出注入清单。
+    """N1-4:登记条目(步骤服务键)并入导出注入清单。
 
-    steps 模板未引用、overlay 未绑定,仅别名表给 fin-service 配了
-    默认凭证 qa9 → overlay 导出 users 含 qa9(与 dispatch 注入面
-    同源;此前导出手拼「扫描 ∪ 绑定」缺别名默认层 —— 执行能注而
-    导出漏注,黄金等价对这对输入不成立)。
+    steps 模板未引用 ${auth.*}、overlay 未绑定,仅 fin-service 是
+    登记条目 → overlay 导出 users 含该条目(取 bob 池默认账户;与
+    dispatch 注入面同源 —— 此前导出手拼「扫描 ∪ 绑定」缺条目默认层,
+    执行能注而导出漏注,黄金等价不成立)。
     """
-    from app.models.service_alias import ServiceAlias
-
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed(client, bob)
-    await _seed_owner_auth("qa9")
-    async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="fin-service", base_service="fin-service", slot="qa9"))
-        await db.commit()
+    await _seed_owner_auth("qa9")            # bob 池默认账户(qa9-user)
+    await _seed_identity("fin-service")      # 登记条目(步骤服务键)
 
     exported = (await client.post(
         "/api/scenarios/preview-plate", headers=bob,
         json={**_eq_draft(), "overlay": {"serviceBindings": {}}})
     ).json()["converted"]
     users = exported["config"].get("users") or {}
-    assert "qa9" in users, users          # 别名默认层并入清单
-    assert users["qa9"]["username"] == "qa9-user"
+    assert "fin-service" in users, users     # 登记条目并入注入清单
+    assert users["fin-service"]["username"] == "qa9-user"

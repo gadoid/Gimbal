@@ -10,17 +10,15 @@
 """
 from __future__ import annotations
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from types import SimpleNamespace
 
 import pytest
 from httpx import AsyncClient
 
-from tests.helpers import make_draft, register_and_login, role_headers
+from app.core import db as db_module
+from tests.helpers import (
+    make_draft, register_and_login, role_headers,
+)
 
 _GET_STEP = {
     "kind": "step", "description": "查单",
@@ -374,11 +372,17 @@ class TestPrecheckAlarm:
         await self._mk_private_with_users(client, h_owner, "al_ex4",
                                           owner_uname="al_ow4")
         h_exec = await role_headers(client, "al_ex4", role="user")
-        # 执行人自建同名别名 gitlab
-        r = await client.post("/api/auths", headers=h_exec, json={
-            "alias": "gitlab", "url": "https://git", "username": "u",
-            "password": "p", "token_type": "Bearer"})
-        assert r.status_code in (200, 201), r.text
+        # 执行人自有可解账户(条目 gitlab → 本人池)
+        from sqlalchemy import text as _txt
+
+        from .conftest import seed_identity_fixture
+        async with db_module.SessionLocal() as db:
+            uid = (await db.execute(_txt(
+                "SELECT id FROM users WHERE username = :u"),
+                {"u": "al_ex4"})).scalar()
+            await seed_identity_fixture(
+                db, alias="gitlab", username="u", password="p",
+                service="sc-w6-al-svc", owner_id=uid)
         out = await self._precheck(client, h_exec, "sc-w6-al")
         assert out["builtinAuthShadowed"] == []
 

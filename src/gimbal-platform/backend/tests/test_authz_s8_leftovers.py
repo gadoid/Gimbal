@@ -10,11 +10,6 @@
 """
 from __future__ import annotations
 
-# P1-7:底座重构测试迁移待续(布景旧模型/API 形状),先 skip;续期按四件套范式恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import json
 
 import sqlalchemy as sa
@@ -251,13 +246,14 @@ class TestPrecheckMissingAuths:
         # 个人池缺 + 项目池缺(成员 → projectMissingAuths 非空)
         out = (await client.post("/api/run/precheck", headers=h,
                                  json=[item])).json()[0]
-        assert out["missingAuths"] == ["qa1"]
-        assert out["projectMissingAuths"] == ["qa1"]
+        # 步骤服务键 s8-alias 是登记条目 → 与模板引用 qa1 一并列入
+        assert out["missingAuths"] == ["qa1", "s8-alias"]
+        assert out["projectMissingAuths"] == ["qa1", "s8-alias"]
         # 项目凭证补齐 → projectMissingAuths 空(提示可切项目凭证)
         await _mk_project_credential(pid)
         out = (await client.post("/api/run/precheck", headers=h,
                                  json=[item])).json()[0]
-        assert out["missingAuths"] == ["qa1"]
+        assert out["missingAuths"] == ["qa1", "s8-alias"]
         assert out["projectMissingAuths"] == []
         # 私有场景 → 不适用(None)
         await client.post("/api/scenarios", headers=h,
@@ -266,5 +262,5 @@ class TestPrecheckMissingAuths:
         priv_scheme = r.json()[0]["schemeId"]
         out = (await client.post("/api/run/precheck", headers=h, json=[
             {"scenarioId": "sc-l3-priv", "schemeId": priv_scheme}])).json()[0]
-        assert out["missingAuths"] == ["qa1"]
+        assert out["missingAuths"] == ["qa1", "s8-alias"]
         assert out["projectMissingAuths"] is None

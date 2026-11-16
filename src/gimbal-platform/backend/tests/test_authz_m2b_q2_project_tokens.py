@@ -14,16 +14,10 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
-from app.models.auth_session import AuthSession
 
 from .helpers import make_draft, register_and_login, role_headers
 from .test_authz_s8_project_credentials import (
@@ -138,12 +132,15 @@ class TestCalls:
         await client.post("/api/scenarios", headers=h_a,
                           json=make_draft("sc-q2-priv", steps=[_STEP]))
         # 负责人个人池也有 qa1(验证不被取用)
+        from app.core.security import fernet_encrypt as _fe
+        from app.models import AuthAccount, Environment
+        from sqlalchemy import select as _sel
         async with db_module.SessionLocal() as s:
-            s.add(AuthSession(
-                owner_id=await _uid("q2_ca"), alias="qa1", slot="qa1",
-                system="fin", url="http://personal-auth",
-                username_enc=fernet_encrypt("me"),
-                password_enc=fernet_encrypt("me"),
+            env = (await s.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+            s.add(AuthAccount(
+                owner_id=await _uid("q2_ca"), system="fin", env_id=env,
+                username="me", password_enc=_fe("me"),
                 account_fields={"orgNo": "ME"}, is_default=True))
             await s.commit()
         cid = await _mk_project_credential(pid)

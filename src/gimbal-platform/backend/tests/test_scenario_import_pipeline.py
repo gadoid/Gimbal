@@ -1,16 +1,13 @@
 """场景导入流水线(W3/W4,场景导入 v2.3 方案):precheck 析出 + 单事务落库。
 
+_IMPORT_REDO = pytest.mark.skip(reason=(
+    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例按新语义恢复(其余通用导入用例照常运行)"))
 覆盖:析出三分支(复用/映射/新建)、P5「有接管者才清除」不变量、
 敏感路径不进 carry、config.users 清空、URL 清除条件、ID 重铸、
 mapping_stale、authz W7 门(User 可导入 + create 需 alias.write)、
 体积门、格式判别。
 """
 from __future__ import annotations
-
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 
 import pytest
 from sqlalchemy import select
@@ -25,6 +22,12 @@ from app.services.scenario_store import definition_from_payload
 
 from .helpers import register_and_login
 from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
+
+
+_IMPORT_REDO = pytest.mark.skip(reason=(
+    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位"
+    "声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例"
+    "按新语义恢复(其余通用导入用例照常运行)"))
 
 _SCENARIO_ID = "sc-imp-1"
 
@@ -155,6 +158,7 @@ async def test_precheck_bad_bundle_422(client, plate_mock: PlateMock):
 # ── land ────────────────────────────────────────────────────────────
 
 
+@_IMPORT_REDO
 async def test_land_create_branch(client, plate_mock: PlateMock):
     _mock_faces(plate_mock)
     bob = await register_and_login(client, "admin0", "admin0pass123")
@@ -223,6 +227,7 @@ async def test_land_map_branch_never_deletes_uncovered(
         assert binds == {"$.remark": "压测-张三"}
 
 
+@_IMPORT_REDO
 async def test_land_url_cleared_only_with_base_url(
         client, plate_mock: PlateMock):
     """S6:本机部署表登记了该服务(其基础服务)的地址才清源 URL。"""
@@ -345,6 +350,7 @@ async def test_import_user_create_requires_alias_write(
         ).scalar_one_or_none() is None
 
 
+@_IMPORT_REDO
 async def test_import_admin_create_still_works(client, plate_mock: PlateMock):
     """Admin(原 member 级)有 alias.write:create 照旧建名(test_land_
     create_branch 钉的是首注 super_admin,这里钉显式 admin 角色)。"""
@@ -423,6 +429,7 @@ async def _remarks(sid: str) -> list:
     return out
 
 
+@_IMPORT_REDO
 async def test_inconsistent_values_never_taken_over__create(
         client, plate_mock: PlateMock):
     """取值不一致(A/B):create 也不接管 —— 四步骤 remark 全部原样,
@@ -477,6 +484,7 @@ async def test_inconsistent_values_never_taken_over__map_and_reuse(
                                        "raw-step"], decision
 
 
+@_IMPORT_REDO
 async def test_template_literal_mix_kept(client, plate_mock: PlateMock):
     """模板与字面值混用:不进接管集,模板与字面值都原样保留。"""
     _multi_faces(plate_mock)
@@ -497,6 +505,7 @@ async def test_template_literal_mix_kept(client, plate_mock: PlateMock):
                                               "ep2-business", "raw-step"]
 
 
+@_IMPORT_REDO
 async def test_consistent_values_cleared_only_from_own_carry_face(
         client, plate_mock: PlateMock):
     """正控:各步取值一致(A/A)才接管,且只清 carry 面上该清的步骤
@@ -646,6 +655,7 @@ async def test_read_bundle_small_stream_ok():
 # ── 落库竞态与复验(合入评估 §3)────────────────────────────────────
 
 
+@_IMPORT_REDO
 async def test_land_alias_name_race_409(client, plate_mock: PlateMock):
     """§3-1:别名主键冲突(同请求内两服务同名双建 / 预检后被人抢注)
     → 409 alias_name_taken(前端自愈链已挂该 code),事务回滚零残留。"""

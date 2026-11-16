@@ -8,11 +8,6 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import asyncio
 import json
 import pathlib
@@ -252,33 +247,27 @@ async def test_validate_in_flight(client, monkeypatch):
 
 async def test_validate_orchestration_auth_alias_not_degraded(client,
                                                               monkeypatch):
-    """N0 回归:编排成员方案选别名(S6:别名声明槽位 qa8)→ 预检不降级、
-    槽位解析可达。
+    """N0 回归:编排成员方案选条目(S6:注入键 = 条目名)→ 预检不降级、
+    取用可达。
 
     修复前:预检的凭证解析导入路径错误(from .run_dispatcher 在 routers/
     下解析不到 → ModuleNotFoundError)且传活会话(TypeError),两者都被
     兜底分支吞成 degraded=true「执行器编译链路不可用」;修复后别名按发起人
     正常解析(种子凭证 qa8 → 无 unresolved 警告、degraded=false)。
     """
-    from app.core.security import fernet_encrypt
-    from app.models.auth_session import AuthSession
     from app.models.user import User
 
     await register_and_login(client, "vg_boot", "vg_bootpass123")
     h = await register_and_login(client, "vg_o8", "vg_o8pass123")
     _patch_convert(monkeypatch)
-    # 种子凭证:vg_o8 名下 qa8(修复后可解析,无 auth_alias_unresolved)
+    # 四件套:条目 fin.order-qa8 + 发起人池账户(可解析,无 unresolved)
+    from .conftest import seed_identity_fixture
     async with db_module.SessionLocal() as s:
         uid = (await s.execute(sa.select(User.id).where(
             User.username == "vg_o8"))).scalar_one()
-        s.add(AuthSession(owner_id=uid, alias="qa8", url="http://auth:8",
-                          username_enc=fernet_encrypt("u8"),
-                          password_enc=fernet_encrypt("p8")))
-        from app.models.service_alias import ServiceAlias
-        s.add(ServiceAlias(alias_name="fin.order-qa8",
-                           base_service="fin.order", kind="external",
-                           slot="qa8"))
-        await s.commit()
+        await seed_identity_fixture(
+            s, alias="fin.order-qa8", username="u8", password="p8",
+            service="fin.order", owner_id=uid)
     # 成员方案选别名(场景已由 _mk_suite 创建)
     sid = await _mk_suite(client, h, "凭证集")
     r = await client.post("/api/scenarios/sc-va/run-schemes", headers=h, json={

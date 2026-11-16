@@ -10,16 +10,11 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
-from app.models.auth_session import AuthSession
+from app.models import AuthAccount, Environment
 
 from .helpers import make_draft, register_and_login, wait_until
 from .test_authz_s8_project_credentials import (
@@ -30,23 +25,33 @@ from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # n
 
 
 async def _seed_alias() -> None:
-    from app.models.service_alias import ServiceAlias
-    async with db_module.SessionLocal() as db:
-        if await db.get(ServiceAlias, "s8-alias") is None:
-            db.add(ServiceAlias(alias_name="s8-alias", base_service="fin-svc",
-                                kind="external", slot="qa1"))
-        await db.commit()
+    """注册底座(默认环境 + 主档 + 条目 s8-alias/qa1)—— 幂等。"""
+    from .test_authz_s8_project_credentials import _seed_registry_base
+    await _seed_registry_base()
 
 
 async def _binding(*, owner: int | None = None, project: int | None = None,
-                   alias: str, system: str, org: str,
+                   alias: str, system: str = "fin", org: str,
                    default: bool = False) -> int:
+    """行级绑定名 = 条目名:种条目 alias(username-ref)+ 池内账户。
+    返回账户 id(config_json.rowBindings 的绑定标识)。"""
+    from app.models import Service, ServiceIdentity
+    from sqlalchemy import select as _sel
     async with db_module.SessionLocal() as db:
-        a = AuthSession(
-            owner_id=owner, project_id=project, alias=alias, slot="qa1",
-            system=system, url=f"http://{alias}",
-            username_enc=fernet_encrypt(alias),
-            password_enc=fernet_encrypt("p"),
+        env = (await db.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one()
+        if (await db.execute(_sel(Service.id).where(
+                Service.name == "fin-svc"))).scalar_one_or_none() is None:
+            db.add(Service(name="fin-svc", system="fin", kind="plate"))
+        if (await db.execute(_sel(ServiceIdentity.id).where(
+                ServiceIdentity.alias_name == alias))
+                ).scalar_one_or_none() is None:
+            db.add(ServiceIdentity(alias_name=alias, base_service="fin-svc",
+                                   env_id=env, ref_mode="username",
+                                   ref_username=alias))
+        a = AuthAccount(
+            owner_id=owner, project_id=project, system="fin", env_id=env,
+            username=alias, password_enc=fernet_encrypt("p"),
             account_fields={"orgNo": org}, is_default=default)
         db.add(a)
         await db.commit()
@@ -99,9 +104,11 @@ class TestAccountColumns:
         ex_id = r.json()["executionId"]
         await wait_until(lambda: len(cases) >= 2)
         orgs = sorted(c["steps"][0]["request"]["body"]["org"] for c in cases)
-        urls = sorted(c["config"]["users"]["qa1"]["url"] for c in cases)
+        users = sorted(c["config"]["users"]["qa1"]["username"] for c in cases)
         assert orgs == ["A", "B"]
-        assert urls == ["http://acct-a", "http://acct-b"]
+        # 行级换绑 = 条目 acct-a/acct-b(注入标签 qa1 不变;登录口在
+        # 实例,url 不再随账户行走)
+        assert users == ["acct-a", "acct-b"]
         # 账号列不进 vars
         assert all("@slot.qa1" not in (c["config"].get("vars") or {})
                    for c in cases)

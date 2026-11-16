@@ -7,13 +7,9 @@ M2 起 FK 真生效:凭证池/常量/个人别名三张 NO ACTION 表必须由 P
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from httpx import AsyncClient
 
+from app.core import db as db_module
 from tests.helpers import register_and_login
 
 
@@ -21,9 +17,20 @@ async def test_delete_user_cascades_pool_constant_alias(client: AsyncClient):
     admin = await register_and_login(client, "cascade_admin", "adminpass123")
     target = await register_and_login(client, "cascade_bob", "bobpass123")
 
-    # 目标用户的三张 NO ACTION 表各来一条
+    # 目标用户的两张 NO ACTION 表各来一条(账户 + 常量;
+    # 个人别名随 authz M2a S6 退役,删号不涉及条目表)
+    from app.models import Environment
+    from sqlalchemy import select as _sel
+    async with db_module.SessionLocal() as s:
+        env = (await s.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.commit()
+            env = (await s.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
     r = await client.post("/api/auths", headers=target, json={
-        "alias": "bob-cred", "url": "http://x", "username": "u",
+        "system": "bob-svc", "envId": env, "username": "u",
         "password": "p", "token_type": "Bearer",
     })
     assert r.status_code in (200, 201), r.text
@@ -32,7 +39,6 @@ async def test_delete_user_cascades_pool_constant_alias(client: AsyncClient):
     })
     assert r.status_code in (200, 201), r.text
     # 个人别名随 authz M2a S6 退役(别名全部共享,删号不涉及别名表)
-    from app.core import db as db_module
     from app.models.user import User
     from sqlalchemy import select
     async with db_module.SessionLocal() as s:
@@ -45,11 +51,11 @@ async def test_delete_user_cascades_pool_constant_alias(client: AsyncClient):
     assert r.status_code == 204, r.text
 
     # 两张 NO ACTION 表已由端点显式清
-    from app.models.auth_session import AuthSession
+    from app.models.auth_account import AuthAccount
     from app.models.constant_entry import ConstantEntry
     async with db_module.SessionLocal() as s:
-        assert (await s.execute(select(AuthSession).where(
-            AuthSession.owner_id == bob_id))).first() is None
+        assert (await s.execute(select(AuthAccount).where(
+            AuthAccount.owner_id == bob_id))).first() is None
         assert (await s.execute(select(ConstantEntry).where(
             ConstantEntry.owner_id == bob_id))).first() is None
         # 用户本体没了
