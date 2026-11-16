@@ -36,7 +36,6 @@
               <Input v-bind="componentField" placeholder="请输入用户名" autocomplete="username" />
             </FormControl>
             <FormMessage />
-            <p class="dbg-raw-formmsg">RAW-FORMMSG</p>
           </FormItem>
         </FormField>
 
