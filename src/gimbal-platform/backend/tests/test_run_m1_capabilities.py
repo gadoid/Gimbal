@@ -1,7 +1,7 @@
 """M1 执行能力补齐测试(V1 executor 语义移植):
 
 * nRuns/parallel fan-out —— total = Σrows × nRuns,launch 调用次数一致
-* serviceBindings 绑定注入 —— authAlias 注入 users(固定 merge 语义,
+* serviceBindings 绑定注入 —— 绑定选条目注入 users(固定 merge 语义,
   场景内置 users 保留);prefix/mergePolicy 已随 RunRequest 收敛退役;
   env.baseUrl 补缺层已随执行环境退役(D2)
 
@@ -9,11 +9,6 @@ V3.2:执行 mock 从 gimbal HTTP /run 改为 ``gimbal_launcher.launch`` —
 capture 读落盘的 case.json(引擎子进程的真实输入)。
 """
 from __future__ import annotations
-
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 
 import asyncio
 import json
@@ -215,25 +210,21 @@ async def test_service_binding_auth_merge_keeps_built_in(
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """绑定选别名(S6:svc → svc-qa9,声明槽位 qa9)注入 users,场景
-    内置 users 保留(固定 merge)。"""
+    """绑定选条目(S6:svc → svc-qa9;注入键 = 条目名)注入 users,
+    场景内置 users 保留(固定 merge)。"""
     bob = await _member(client, "bob")
     await _seed_built_in_user(client, bob)
-    # S5 失败即中止:绑定 qa9 须在执行人池(dispatch 取用检查不走
-    # 下面的 fake resolve)
+    # S5 失败即中止:绑定条目须在执行人池可解(dispatch 取用检查不走
+    # 下面的 fake resolve)—— 四件套一次布景
     from app.core import db as _dbm
-    from app.core.security import fernet_encrypt as _fe
-    from app.models.auth_session import AuthSession as _AS
+    from .conftest import seed_identity_fixture
     from sqlalchemy import text as _txt
     async with _dbm.SessionLocal() as _s:
         _uid = (await _s.execute(_txt(
             "SELECT id FROM users WHERE username = 'bob'"))).scalar()
-        _s.add(_AS(owner_id=_uid, alias="qa9", url="http://auth9",
-                   username_enc=_fe("exec-user"), password_enc=_fe("p"),
-                   slot="qa9", is_default=True))
-        from app.models.service_alias import ServiceAlias as _SA
-        _s.add(_SA(alias_name="svc-qa9", base_service="svc",
-                   kind="external", slot="qa9"))
+        await seed_identity_fixture(
+            _s, alias="svc-qa9", username="exec-user", password="p",
+            service="svc", owner_id=_uid)
         await _s.commit()
 
     from app.services import run_dispatcher as rd
@@ -255,11 +246,11 @@ async def test_service_binding_auth_merge_keeps_built_in(
     assert r.status_code == 201, r.text
     await _wait(lambda: len(payloads) >= 1)
     users = (payloads[0].get("config") or {}).get("users") or {}
-    assert set(users.keys()) == {"qa1", "qa9"}
+    assert set(users.keys()) == {"qa1", "svc-qa9"}
     # 内置 qa1 原样保留
     assert users["qa1"]["url"] == "http://builtin"
-    # 所选 qa9 注入
-    assert users["qa9"]["username"] == "exec-user"
+    # 所选条目注入(键 = 条目名)
+    assert users["svc-qa9"]["username"] == "exec-user"
 
 
 async def test_dispatch_backfills_m2_hash(

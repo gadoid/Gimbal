@@ -15,11 +15,6 @@ the real Plate server isn't needed.  This locks in:
 """
 from __future__ import annotations
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import asyncio
 import json
 from typing import TYPE_CHECKING, Any
@@ -650,36 +645,23 @@ async def test_run_auth_decrypt_failure_fails_execution(
         client, headers, rows=[{"qty": 1}, {"qty": 2}], service="fin"
     )
 
-    r = await client.post(
-        "/api/auths",
-        headers=headers,
-        json={
-            "alias": "corrupt1",
-            "url": "http://auth.example/login",
-            "username": "u",
-            "password": "p",
-            "token_type": "bearer",
-        },
-    )
-    assert r.status_code == 201
-
-    # 腐化密文 → fernet_decrypt 抛 ValueError
+    # 四件套布景:条目 fin-c1(default-ref → 属主默认账户)
     import sqlalchemy as sa
 
     from app.core import db as db_module
-    from app.models import AuthSession
+    from app.models import AuthAccount, User
 
     async with db_module.SessionLocal() as s:
-        row = (
-            (
-                await s.execute(
-                    sa.select(AuthSession).where(AuthSession.alias == "corrupt1")
-                )
-            )
-            .scalars()
-            .one()
-        )
-        row.username_enc = "not-valid-fernet-ciphertext"
+        uid = (await s.execute(sa.select(User.id).where(
+            User.username == "alice"))).scalar_one()
+    await _identity("fin-c1", "fin")
+    acc_id = await _pool_account("alice", system="fin",
+                                 account_user="u", password="p")
+
+    # 腐化密码密文 → fernet_decrypt 抛 ValueError(username 是明文实体键)
+    async with db_module.SessionLocal() as s:
+        row = await s.get(AuthAccount, acc_id)
+        row.password_enc = "not-valid-fernet-ciphertext"
         await s.commit()
 
     from app.services import gimbal_launcher as gl
@@ -688,7 +670,6 @@ async def test_run_auth_decrypt_failure_fails_execution(
         raise AssertionError("解密失败后不得分发执行")
 
     monkeypatch.setattr(gl, "launch", _must_not_run)
-    await _alias_with_slot("fin-c1", "fin", "corrupt1")
 
     r = await client.post(
         "/api/runs",
@@ -709,14 +690,61 @@ async def test_run_auth_decrypt_failure_fails_execution(
     assert len(plate_mock.convert_calls) == 0
 
 
-async def _alias_with_slot(alias_name: str, base: str, slot: str) -> None:
-    """authz M2a S6:绑定只选别名 —— 种一个声明槽位的同基础服务别名。"""
+async def _identity(alias_name: str, base: str, *,
+                    login_url: str = "https://svc.internal") -> None:
+    """authz M2a S6:绑定只选条目 —— 种同基础服务身份条目(+主档/实例,
+    注入键 = 条目名;旧「声明槽位」随条目化退役)。"""
+    from sqlalchemy import select as _sel
+
     from app.core import db as db_module
-    from app.models.service_alias import ServiceAlias
+    from app.models import (Environment, Service, ServiceIdentity,
+                            SystemEnvInstance)
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name=alias_name, base_service=base,
-                           kind="external", slot=slot))
+        env = (await s.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.flush()
+            env = (await s.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        if (await s.execute(_sel(Service.id).where(
+                Service.name == base))).scalar_one_or_none() is None:
+            s.add(Service(name=base, system=base, kind="plate"))
+        if login_url and (await s.execute(_sel(SystemEnvInstance.id).where(
+                SystemEnvInstance.system == base,
+                SystemEnvInstance.env_id == env))).scalar_one_or_none() is None:
+            s.add(SystemEnvInstance(system=base, env_id=env,
+                                    login_url=login_url))
+        s.add(ServiceIdentity(alias_name=alias_name, base_service=base,
+                              env_id=env, ref_mode="default"))
         await s.commit()
+
+
+async def _pool_account(username: str, *, system: str, account_user: str,
+                        password: str, token_type: str = "bearer") -> int:
+    """执行人池账户(default-ref 条目的取用行;同 (system,env) 首行占
+    默认位)。返回账户 id。"""
+    from sqlalchemy import select as _sel, text as _txt
+
+    from app.core import db as db_module
+    from app.core.security import fernet_encrypt
+    from app.models import AuthAccount, Environment
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(_txt(
+            "SELECT id FROM users WHERE username = :u"),
+            {"u": username})).scalar_one()
+        env = (await s.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one()
+        have_default = (await s.execute(_sel(AuthAccount.id).where(
+            AuthAccount.owner_id == uid, AuthAccount.system == system,
+            AuthAccount.is_default.is_(True)))).scalar_one_or_none() is not None
+        acc = AuthAccount(
+            owner_id=uid, system=system, env_id=env, username=account_user,
+            password_enc=fernet_encrypt(password), token_type=token_type,
+            is_default=not have_default)
+        s.add(acc)
+        await s.commit()
+        return acc.id
 
 
 async def test_run_dispatch_records_failure_when_plate_down(
@@ -744,7 +772,7 @@ async def test_run_dispatch_records_failure_when_plate_down(
 async def test_run_injects_exec_auths_into_run_copy_only(
     client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """执行用认证注入(S6:绑定选别名 → 该别名声明槽位):解密注入只进 run 副本,
+    """执行用认证注入(S6:绑定选条目,注入键 = 条目名):解密注入只进 run 副本,
     convert 永不带明文。
 
     锁三条边界(#1 改造的安全契约 + V3.2 run 链路接线):
@@ -761,19 +789,11 @@ async def test_run_injects_exec_auths_into_run_copy_only(
     await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}],
                                           service="fin-service")
 
-    # 建一个执行用认证(fernet 加密存储,与 /api/auths 生产路径一致)
-    r = await client.post(
-        "/api/auths",
-        headers=headers,
-        json={
-            "alias": "qa1",
-            "url": "http://auth.example/login",
-            "username": "qa-user",
-            "password": "qa-pass",
-            "token_type": "bearer",
-        },
-    )
-    assert r.status_code == 201
+    # 布景:条目 fin-service-q1 + 属主池账户 + 实例登录口(四件套拆用)
+    await _identity("fin-service-q1", "fin-service",
+                    login_url="http://auth.example/login")
+    await _pool_account("alice", system="fin-service",
+                        account_user="qa-user", password="qa-pass")
 
     # 捕获 dispatcher → gimbal_launcher.launch 的入参(读落盘 case.json)
     from pathlib import Path
@@ -790,7 +810,6 @@ async def test_run_injects_exec_auths_into_run_copy_only(
                                total=1, passed=1)
 
     monkeypatch.setattr(gl, "launch", _capture_run)
-    await _alias_with_slot("fin-service-q1", "fin-service", "qa1")
 
     r = await client.post(
         "/api/runs",
@@ -809,13 +828,14 @@ async def test_run_injects_exec_auths_into_run_copy_only(
         await asyncio.sleep(0.05)
     assert len(run_payloads) == 1
 
-    # 1. convert 无明文(users 里没有 qa1 条目)
+    # 1. convert 无明文(users 里没有所选条目)
     conv_scenario = plate_mock.convert_calls[0]["scenario"]
-    assert "qa1" not in (conv_scenario.get("config", {}).get("users") or {})
+    assert "fin-service-q1" not in (
+        conv_scenario.get("config", {}).get("users") or {})
 
-    # 2. run 副本注入解密凭据(载体是 converted 产物:PlateMock 的 convert
-    #    回包 converted = {"kind": "platform_scenario", ...})
-    injected = run_payloads[0]["config"]["users"]["qa1"]
+    # 2. run 副本注入解密凭据(键 = 条目名;url = 实例登录口;载体是
+    #    converted 产物:PlateMock 的 convert 回包 platform_scenario 形)
+    injected = run_payloads[0]["config"]["users"]["fin-service-q1"]
     assert injected["username"] == "qa-user"
     assert injected["password"] == "qa-pass"
     assert injected["url"] == "http://auth.example/login"
@@ -838,7 +858,7 @@ async def test_run_injects_exec_auths_into_run_copy_only(
             .first()
         )
         assert ex is not None
-        assert ex.config_json["injectedAuths"] == ["qa1"]
+        assert ex.config_json["injectedAuths"] == ["fin-service-q1"]
         assert ex.config_json["serviceBindings"]["fin-service"] == {
             "alias": "fin-service-q1"}
         assert "auth" not in ex.config_json
@@ -848,11 +868,10 @@ async def test_run_injects_exec_auths_into_run_copy_only(
 async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """跨 owner 撞名 alias:只解发起人自己的凭证。
+    """跨 owner 取用隔离:条目共享,账户按发起人池取。
 
-    alias 唯一性是 owner 级(UniqueConstraint(owner_id, alias)),bob
-    可以建与 alice 同名的 "qa1"。若无 owner 过滤,
-    ``alias.in_(["qa1"])`` 会同时命中两行,注入谁的凭证取决于行序
+    条目是团队级共享声明;alice/bob 各池各有 default 账户。若无
+    owner 过滤,条目 → 账户解析会串池,注入谁的凭证取决于行序
     — 跨 owner 解错凭证的口子。锁:alice 发起 run,注入的必须是
     alice 的 username(且只有一行注入)。
     """
@@ -860,24 +879,14 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}],
                                           service="fin-service")
 
-    async def _create_auth(h: dict, username: str) -> None:
-        r = await client.post(
-            "/api/auths",
-            headers=h,
-            json={
-                "alias": "qa1",
-                "url": f"http://{username}-auth/login",
-                "username": f"{username}-user",
-                "password": f"{username}-pass",
-                "token_type": "bearer",
-            },
-        )
-        assert r.status_code == 201, r.text
-
-    await _create_auth(headers, "alice")
-    # bob 建同名 alias(owner 级唯一约束允许)
+    # 条目共享(团队级);alice/bob 各自池账户 —— 取用按发起人池隔离
+    await _identity("fin-service-q1", "fin-service",
+                    login_url="http://alice-auth/login")
+    await _pool_account("alice", system="fin-service",
+                        account_user="alice-user", password="alice-pass")
     bob_headers = await _register_and_login(client, username="bob")
-    await _create_auth(bob_headers, "bob")
+    await _pool_account("bob", system="fin-service",
+                        account_user="bob-user", password="bob-pass")
 
     from pathlib import Path
 
@@ -894,8 +903,7 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
 
     monkeypatch.setattr(gl, "launch", _capture_run)
 
-    # alice 发起运行,选声明撞名槽位 qa1 的别名
-    await _alias_with_slot("fin-service-q1", "fin-service", "qa1")
+    # alice 发起运行,绑定选共享条目(取用须只吃 alice 池)
     r = await client.post(
         "/api/runs",
         headers=headers,
@@ -914,7 +922,7 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     assert len(run_payloads) == 1
 
     users = run_payloads[0]["config"]["users"]
-    # 恰好一个 qa1 条目,且是 alice 的凭证 — bob 的同名行绝不能被解入
-    assert users["qa1"]["username"] == "alice-user"
-    assert users["qa1"]["password"] == "alice-pass"
-    assert users["qa1"]["url"] == "http://alice-auth/login"
+    # 恰好一个条目键,且取的是 alice 池的账户 — bob 的行绝不能被解入
+    assert users["fin-service-q1"]["username"] == "alice-user"
+    assert users["fin-service-q1"]["password"] == "alice-pass"
+    assert users["fin-service-q1"]["url"] == "http://alice-auth/login"

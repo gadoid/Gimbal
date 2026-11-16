@@ -8,16 +8,11 @@ API 分权。
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.models.project import Project, ProjectMember
-from app.models.service_alias import ServiceAlias
+from app.models import Service, ServiceIdentity
 from app.services import carry_store
 from .test_scenario_composer_plate_integration import (  # noqa: F401
     PlateMock, plate_mock)
@@ -48,10 +43,18 @@ async def test_tiers_public_then_personal(client, fresh_db):
     await register_and_login(client, "s40a", "pw123456")
     uid = await _uid("s40a")
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="fin-service", base_service="fin-service",
-                           kind="external"))
-        s.add(ServiceAlias(alias_name="fin-alias", base_service="fin-service",
-                           kind="external"))
+        from app.models import Environment
+        s.add(Environment(name="测试", is_default=True))
+        await s.flush()
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one()
+        s.add(Service(name="fin-service", system="fin-service", kind="plate"))
+        s.add(ServiceIdentity(alias_name="fin-service",
+                              base_service="fin-service", env_id=env,
+                              ref_mode="default"))
+        s.add(ServiceIdentity(alias_name="fin-alias",
+                              base_service="fin-service", env_id=env,
+                              ref_mode="default"))
         await s.flush()
         pub = await carry_store.public_scope(s)
         await carry_store.put_bindings(
@@ -74,10 +77,18 @@ async def test_tiers_project_zone_ignores_user_layer(client, fresh_db):
     await register_and_login(client, "s40b", "pw123456")
     uid = await _uid("s40b")
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="fin-service", base_service="fin-service",
-                           kind="external"))
-        s.add(ServiceAlias(alias_name="fin-alias", base_service="fin-service",
-                           kind="external"))
+        from app.models import Environment
+        s.add(Environment(name="测试", is_default=True))
+        await s.flush()
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one()
+        s.add(Service(name="fin-service", system="fin-service", kind="plate"))
+        s.add(ServiceIdentity(alias_name="fin-service",
+                              base_service="fin-service", env_id=env,
+                              ref_mode="default"))
+        s.add(ServiceIdentity(alias_name="fin-alias",
+                              base_service="fin-service", env_id=env,
+                              ref_mode="default"))
         await s.flush()
         pub = await carry_store.public_scope(s)
         proj = Project(name="s40-proj")
@@ -116,25 +127,27 @@ async def test_tiers_project_zone_ignores_user_layer(client, fresh_db):
 # ── ② ${slot.X.field} 派发前替换 ──────────────────────────────────
 
 async def test_slot_ref_substitution(client, plate_mock, monkeypatch):
-    """模板字面值里的 ${slot.X.Y} → 账号字段;未命中原样保留
+    """模板字面值里的 ${slot.<条目名>.Y} → 账户字段;未命中原样保留
     (fail-visible);carry 注入值同通道(carry 值在 run 副本里替换)。"""
     plate_mock.behaviour = "echo"
     h = await register_and_login(client, "s40slot", "pw123456")
     uid = await _uid("s40slot")
     async with db_module.SessionLocal() as s:
         from app.core.security import fernet_encrypt
-        from app.models.auth_session import AuthSession
-        s.add(AuthSession(
-            owner_id=uid, alias="qa9", url="http://auth",
-            username_enc=fernet_encrypt("u"),
-            password_enc=fernet_encrypt("p"),
-            slot="qa9", is_default=True,
-            account_fields={"orgNo": "1001", "opId": "op-7"}))
+        from app.models import AuthAccount, Environment
+        from .conftest import seed_identity_fixture
+        await seed_identity_fixture(
+            s, alias="fin-service-q9", username="u", password="p",
+            service="fin-service", owner_id=uid)
+        # 账户字段供 ${slot.<条目名>.field}(键 = 条目名)
+        acc = (await s.execute(sa.select(AuthAccount).where(
+            AuthAccount.owner_id == uid))).scalar_one()
+        acc.account_fields = {"orgNo": "1001", "opId": "op-7"}
         pub = await carry_store.public_scope(s)
         # carry 值本身带 ${slot...}(字段不在锚点面 → 注入不发生,
         # 但若发生也走同一替换;字面值面用 steps 覆盖)
         await carry_store.put_bindings(
-            s, "fin-service", {"$.token": "org-${slot.qa9.orgNo}"},
+            s, "fin-service", {"$.token": "org-${slot.fin-service-q9.orgNo}"},
             updated_by_id=None, updated_by_name="t", scope=pub)
         await s.commit()
 
@@ -146,21 +159,17 @@ async def test_slot_ref_substitution(client, plate_mock, monkeypatch):
     draft = _draft("sc-s40-slot", steps=[{
         **_STEP,
         "request": {"kind": "request", "body": {
-            "op": "${slot.qa9.opId}", "no": "${slot.ghost.f}"}}}])
+            "op": "${slot.fin-service-q9.opId}",
+            "no": "${slot.ghost.f}"}}}])
     r = await client.post("/api/scenarios", headers=h, json=draft)
     assert r.status_code in (200, 201), r.text
-    # S6:绑定选别名 → 该别名声明槽位 qa9 进注入清单
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="fin-service-q9",
-                           base_service="fin-service", kind="external",
-                           slot="qa9"))
-        await s.commit()
+    # S6:绑定选条目 → 注入键 = 条目名(条目与账户已在上方四件套种好)
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-s40-slot", dataSetIds=[],
         serviceBindings={"fin-service": {"alias": "fin-service-q9"}}))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 1)
-    assert "qa9" in cases[0]["config"]["users"]   # 槽位凭证照常注入
+    assert "fin-service-q9" in cases[0]["config"]["users"]  # 条目账户照常注入
     b = cases[0]["steps"][0]["request"]["body"]
     assert b["op"] == "op-7"                       # 命中 → 字段值
     assert b["no"] == "${slot.ghost.f}"            # 未命中 → 原样保留

@@ -7,11 +7,6 @@
 """
 from __future__ import annotations
 
-# P1-7:底座重构测试迁移待续(布景旧模型),先 skip;env_chain 逻辑未变,续期换四件套布景恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import pytest
 import sqlalchemy as sa
 
@@ -21,7 +16,8 @@ from app.models import (
 )
 from app.models.composer_scenario import ComposerScenario
 from app.models.permission import UserPref
-from app.models.service_alias import ServiceAlias
+from app.models import Service as MService
+from app.models.service_identity import ServiceIdentity
 from app.services import env_chain, integration_runner, scheme_store
 from app.services import service_aliases
 from app.services.env_chain import (
@@ -41,7 +37,7 @@ _STEP = {"kind": "step",
 
 
 async def _env(s, name: str, *, is_default: bool = False) -> int:
-    env = Environment(name=name, description="", lines={},
+    env = Environment(name=name, description="",
                       is_default=is_default)
     s.add(env)
     await s.flush()
@@ -56,15 +52,36 @@ async def _seed_scenario(client, h, sid: str) -> None:
 
 async def _seed_addresses(env_name: str, *,
                           deploy_url: str | None) -> int:
-    """建环境 + 别名 + 该环境的部署行;返回环境 id。"""
+    """建环境 + 条目(env 钉该环境)+ 主档 + 该环境的部署行;返回环境 id。"""
     async with db_module.SessionLocal() as s:
         env_id = await _env(s, env_name)
-        s.add(ServiceAlias(alias_name=_ALIAS, base_service=_BASE))
+        if (await s.execute(sa.select(MService.id).where(
+                MService.name == _BASE))).scalar_one_or_none() is None:
+            s.add(MService(name=_BASE, system=_BASE, kind="plate"))
+        s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
+                              env_id=env_id, ref_mode="default"))
         if deploy_url:
             s.add(Deployment(base_service=_BASE, env_id=env_id,
                              base_url=deploy_url))
         await s.commit()
         return env_id
+
+
+async def _seed_pool_account(username: str, env_id: int,
+                             *, system: str = _BASE) -> None:
+    """执行人池账户(条目 default-ref 的取用行;S5 失败即中止)。"""
+    from app.core.security import fernet_encrypt
+    from app.models.auth_account import AuthAccount
+
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(sa.text(
+            "SELECT id FROM users WHERE username = :u"),
+            {"u": username})).scalar_one()
+        s.add(AuthAccount(owner_id=uid, system=system, env_id=env_id,
+                          username="s21-u",
+                          password_enc=fernet_encrypt("p"),
+                          is_default=True))
+        await s.commit()
 
 
 async def _last_config_json() -> dict:
@@ -148,6 +165,7 @@ async def test_dispatch_explicit_env_snapshot_and_address(
     h = await _member(client, "s21run")
     await _seed_scenario(client, h, "sc-s21-run")
     dev = await _seed_addresses("s21-run-dev", deploy_url="http://dep-dev")
+    await _seed_pool_account("s21run", dev)
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -160,12 +178,20 @@ async def test_dispatch_explicit_env_snapshot_and_address(
     assert cfg["environmentId"] == dev
     assert cfg["environmentSource"] == "explicit"
 
-    # 不带环境(无默认环境):无 ③,地址留缺口(引擎显式报错),快照键缺席
+    # 不带环境(无默认环境):无 ③,地址留缺口(引擎显式报错),快照键
+    # 缺席 —— 用未登记服务键的场景(env 收紧后,已登记条目无环境即
+    # S5 拒发,不再走「地址缺口」形态)
+    raw_step = {"kind": "step",
+                "call": {"service": "s21-ghost-svc", "method": "GET",
+                         "path": "/x"},
+                "request": {"kind": "request", "body": {}}, "strategy": []}
+    await client.post("/api/scenarios", headers=h,
+                      json=_draft("sc-s21-raw", steps=[raw_step]))
     r = await client.post("/api/runs", headers=h, json=_run_payload(
-        scenarioId="sc-s21-run", dataSetIds=[]))
+        scenarioId="sc-s21-raw", dataSetIds=[]))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 2)
-    assert _ALIAS not in cases[1]["config"]["services"]
+    assert "s21-ghost-svc" not in cases[1]["config"]["services"]
     cfg, _ = await _last_config_json()
     assert "environmentId" not in cfg
 
@@ -183,6 +209,7 @@ async def test_dispatch_scheme_env_resolved_server_side(
     h = await _member(client, "s21sch")
     await _seed_scenario(client, h, "sc-s21-sch")
     dev = await _seed_addresses("s21-sch-dev", deploy_url="http://dep-sch")
+    await _seed_pool_account("s21sch", dev)
     async with db_module.SessionLocal() as s:
         sch = await scheme_store.create_scheme(
             s, "sc-s21-sch", name="带环境", payload={"environmentId": dev})
@@ -263,7 +290,8 @@ async def test_template_env_ignores_preference_and_fingerprint_tracks(
         proj = Project(name="s21-fp-proj", default_environment_id=dev)
         s.add(proj)
         await s.flush()
-        s.add(ServiceAlias(alias_name=_ALIAS, base_service=_BASE))
+        s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
+                              env_id=dev, ref_mode="default"))
         dep = Deployment(base_service=_BASE, env_id=dev,
                          base_url="http://dep-fp")
         s.add(dep)

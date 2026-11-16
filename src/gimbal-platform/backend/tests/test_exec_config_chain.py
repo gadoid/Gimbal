@@ -1,26 +1,18 @@
-"""执行配置分层②:三链插位(环境链②/④ + 槽位取用覆盖 + carry 覆盖层)
-+ 入口排除守则。
+"""执行配置链(P1-7 续期;分层② 分批设计)—— env 位/装载映射/carry 覆盖。
 
-设计方案 §5:环境 = 本次 > [选定配置 │ 方案] > 项目默认 > [默认配置 │
-偏好] > 平台默认;绑定 = 仅显式选定配置换池取用(注入标签不变);
-carry = 场景显式 > 配置覆盖(项目区仅显式,决策 9)> 层序。守则:
-令牌/编排/临时调用不吃执行配置;跨人配置 404。
+registry 口径:配置绑定 = {服务/条目键: 换用条目名};注入标签 = 声明
+条目名(场景引用),取用换池内账户(slot_lookup_overrides 的 lookup 映射)。
 """
 from __future__ import annotations
-import pytest  # noqa: E402
-
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 
 import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
-from app.models import Deployment, Environment, ExecConfig
-from app.models.auth_session import AuthSession
-from app.models.service_alias import ServiceAlias
+from app.models import (
+    AuthAccount, Deployment, Environment, ExecConfig, Service,
+    ServiceIdentity,
+)
 from app.services import carry_store, env_chain
 from app.services.carry_injection import build_carry_context
 from app.services.env_chain import EnvChoice, resolve_environment
@@ -36,7 +28,7 @@ from .test_scenario_composer_plate_integration import (  # noqa: F401
 )
 
 _BASE = "fin-service"
-_ALIAS = "fin-dev"          # 引用基础服务的别名(声明槽位 qa1)
+_ALIAS = "fin-dev"          # 引用基础服务的条目(场景步骤 call.service)
 _STEP = {"kind": "step",
          "call": {"service": _ALIAS, "method": "GET", "path": "/x"},
          "request": {"kind": "request", "body": {}}, "strategy": []}
@@ -50,22 +42,72 @@ async def _uid(username: str) -> int:
 
 
 async def _env(s, name: str, *, is_default: bool = False) -> int:
-    env = Environment(name=name, description="", lines={},
+    env = Environment(name=name, description="",
                       is_default=is_default)
     s.add(env)
     await s.flush()
     return env.id
 
 
-async def _seed_scene(client, h, sid: str, *, slot: str = "qa1") -> None:
-    """别名(声明槽位)+ 场景(步骤引用别名)+ 默认平台环境。"""
+async def _default_env_id() -> int:
     async with db_module.SessionLocal() as s:
-        await _env(s, "ec-plain", is_default=True)
-        s.add(ServiceAlias(alias_name=_ALIAS, base_service=_BASE, slot=slot))
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is not None:
+            return env
+        s.add(Environment(name="ec-plain", is_default=True))
+        await s.commit()
+        return (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one()
+
+
+async def _seed_scene(client, h, sid: str, *, env_id: int | None = None) -> None:
+    """条目 fin-dev(钉给定环境,缺省 = 默认环境)+ 场景 + 主档。"""
+    env = env_id if env_id is not None else await _default_env_id()
+    async with db_module.SessionLocal() as s:
+        if (await s.execute(sa.select(Service.id).where(
+                Service.name == _BASE))).scalar_one_or_none() is None:
+            s.add(Service(name=_BASE, system=_BASE, kind="plate"))
+        s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
+                              env_id=env, ref_mode="default"))
         await s.commit()
     r = await client.post("/api/scenarios", headers=h,
                           json=_draft(sid, steps=[_STEP]))
     assert r.status_code in (200, 201), r.text
+
+
+async def _seed_entry(uid: int, name: str, username: str, *,
+                      env_id: int | None = None) -> int:
+    """条目 name(username-ref → 属主账户 username)+ 主档;返回账户 id。"""
+    env = env_id if env_id is not None else await _default_env_id()
+    async with db_module.SessionLocal() as s:
+        if (await s.execute(sa.select(Service.id).where(
+                Service.name == _BASE))).scalar_one_or_none() is None:
+            s.add(Service(name=_BASE, system=_BASE, kind="plate"))
+        s.add(ServiceIdentity(alias_name=name, base_service=_BASE,
+                              env_id=env, ref_mode="username",
+                              ref_username=username))
+        acc = AuthAccount(
+            owner_id=uid, system=_BASE, env_id=env, username=username,
+            password_enc=fernet_encrypt(f"pw-{username}"),
+            is_default=False)
+        s.add(acc)
+        await s.commit()
+        return acc.id
+
+
+async def _seed_default_account(uid: int, username: str, *,
+                                env_id: int | None = None) -> int:
+    """属主默认账户(default-ref 条目的取用行)。"""
+    env = env_id if env_id is not None else await _default_env_id()
+    async with db_module.SessionLocal() as s:
+        acc = AuthAccount(
+            owner_id=uid, system=_BASE, env_id=env, username=username,
+            password_enc=fernet_encrypt(f"pw-{username}"),
+            is_default=True)
+        s.add(acc)
+        await s.commit()
+        return acc.id
 
 
 async def _mk_config(
@@ -83,19 +125,6 @@ async def _mk_config(
         s.add(row)
         await s.commit()
         return row.id
-
-
-async def _seed_auth(uid: int, slot: str, username: str) -> int:
-    async with db_module.SessionLocal() as s:
-        a = AuthSession(
-            owner_id=uid, alias=f"b-{slot}", slot=slot, system=_BASE,
-            url=f"http://{slot}-auth",
-            username_enc=fernet_encrypt(username),
-            password_enc=fernet_encrypt(f"pw-{slot}"),
-            is_default=True)
-        s.add(a)
-        await s.commit()
-        return a.id
 
 
 async def _last_cfg() -> dict:
@@ -137,8 +166,7 @@ async def test_env_chain_exec_positions(client, fresh_db):
         assert await resolve_environment(
             s, exec_env=99999, scheme_env=sit) == EnvChoice(sit, "scheme")
         assert await resolve_environment(
-            s, default_exec_env=99999, user_id=uid) == \
-            EnvChoice(sit, "preference")
+            s, default_exec_env=99999, user_id=uid) == EnvChoice(sit, "preference")
         assert await resolve_environment(
             s, default_exec_env=dflt) == EnvChoice(dflt, "exec_config_default")
 
@@ -148,7 +176,8 @@ async def test_env_chain_exec_positions(client, fresh_db):
 async def test_load_choice_flatten_and_isolation(client, fresh_db):
     await register_and_login(client, "ec_a", "pw123456")
     await register_and_login(client, "ec_b", "pw123456")
-    a, b = await _uid("ec_a"), await _uid("ec_b")
+    a = await _uid("ec_a")
+    b = await _uid("ec_b")
     cid = await _mk_config(
         a, "商户B", bindings={_ALIAS: "merchant-b"},
         carry={"grade": "B", "nil": None})
@@ -197,9 +226,10 @@ async def test_carry_override_layer_beats_tiers(client, fresh_db):
     """配置覆盖层:压层序之上(公共层/个人层),null = 显式注入 null。"""
     await register_and_login(client, "ec_c", "pw123456")
     uid = await _uid("ec_c")
+    env = await _default_env_id()
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name=_ALIAS, base_service=_BASE,
-                           kind="external"))
+        s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
+                              env_id=env, ref_mode="default"))
         await s.flush()
         pub = await carry_store.public_scope(s)
         await carry_store.put_bindings(
@@ -216,28 +246,32 @@ async def test_carry_override_layer_beats_tiers(client, fresh_db):
     assert rows == {"$.a": "cfg", "$.keep": "pub", "$.null": None}
 
 
-# ── ④ 槽位取用覆盖:标签不变、池内换行 ────────────────────────────
+# ── ④ 取用换条目:标签不变、池内换行 ────────────────────────────────
 
 async def test_slot_lookup_overrides_and_resolve(client, fresh_db):
     await register_and_login(client, "ec_s", "pw123456")
     uid = await _uid("ec_s")
+    env = await _default_env_id()
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name=_ALIAS, base_service=_BASE, slot="qa1"))
+        if (await s.execute(sa.select(Service.id).where(
+                Service.name == _BASE))).scalar_one_or_none() is None:
+            s.add(Service(name=_BASE, system=_BASE, kind="plate"))
+        s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
+                              env_id=env, ref_mode="default"))
         await s.commit()
-    await _seed_auth(uid, "qa1", "default-u")
-    merchant_id = await _seed_auth(uid, "merchant-b", "merchant-u")
+    merchant_id = await _seed_entry(uid, "merchant-b", "merchant-u", env_id=env)
 
     from app.services.service_aliases import slot_lookup_overrides
     async with db_module.SessionLocal() as s:
         m = await slot_lookup_overrides(
             s, [_STEP], None, {_ALIAS: "merchant-b"})
-    assert m == {"qa1": "merchant-b"}   # 标签(声明槽)→ 取用槽
+    assert m == {_ALIAS: "merchant-b"}   # 声明条目(注入标签)→ 换用条目
 
     resolved = await resolve_exec_auths(
-        db_module.SessionLocal, uid, ["qa1"], slot_map=m)
+        db_module.SessionLocal, uid, [_ALIAS], env_id=env, slot_map=m)
     assert len(resolved) == 1
-    assert resolved[0].alias == "qa1"            # 注入标签不变(场景引用)
-    assert resolved[0].username == "merchant-u"  # 池内取用换行
+    assert resolved[0].alias == _ALIAS              # 注入标签不变(场景引用)
+    assert resolved[0].username == "merchant-u"     # 池内取用换行
     assert resolved[0].binding_id == merchant_id
 
 
@@ -248,14 +282,15 @@ async def test_dispatch_env_from_selected_config(
     plate_mock.behaviour = "echo"
     await register_and_login(client, "ec_r1", "pw123456")
     h = await register_and_login(client, "ec_r1", "pw123456")
-    await _seed_scene(client, h, "sc-ec-r1")
     uid = await _uid("ec_r1")
     async with db_module.SessionLocal() as s:
         uat = await _env(s, "ec-uat")
         s.add(Deployment(base_service=_BASE, env_id=uat,
                          base_url="http://uat-fin"))
         await s.commit()
-    await _seed_auth(uid, "qa1", "default-u")
+    # 条目/账户钉 uat(执行环境 = 选定配置的 env)
+    await _seed_scene(client, h, "sc-ec-r1", env_id=uat)
+    await _seed_default_account(uid, "default-u", env_id=uat)
     cid = await _mk_config(uid, "UAT套", env_id=uat)
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
@@ -277,21 +312,21 @@ async def test_dispatch_default_config_env_and_binding_injection(
     plate_mock.behaviour = "echo"
     await register_and_login(client, "ec_r2", "pw123456")
     h = await register_and_login(client, "ec_r2", "pw123456")
-    await _seed_scene(client, h, "sc-ec-r2")
     uid = await _uid("ec_r2")
     async with db_module.SessionLocal() as s:
-        sit = await _env(s, "ec-sit")
+        sit = await _env(s, "ec-sit", is_default=True)
         s.add(Deployment(base_service=_BASE, env_id=sit,
                          base_url="http://sit-fin"))
         await s.commit()
+    await _seed_scene(client, h, "sc-ec-r2", env_id=sit)
     default_id = await _mk_config(
         uid, "默认", is_default=True, env_id=sit, bindings={_ALIAS: "merchant-b"})
-    await _seed_auth(uid, "qa1", "default-u")
-    await _seed_auth(uid, "merchant-b", "merchant-u")
+    await _seed_default_account(uid, "default-u", env_id=sit)
+    await _seed_entry(uid, "merchant-b", "merchant-u", env_id=sit)
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
-    # 默认链:env 走默认配置(位④);绑定不吃(仍注入 qa1 的默认行)
+    # 默认链:env 走默认配置(位④);绑定不吃(仍取 fin-dev 默认账户)
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-ec-r2", dataSetIds=[]))
     assert r.status_code == 201, r.text
@@ -300,14 +335,14 @@ async def test_dispatch_default_config_env_and_binding_injection(
     assert (cfg["environmentId"], cfg["environmentSource"]) == \
         (sit, "exec_config_default")
     assert "execConfigId" not in cfg
-    assert cases[0]["config"]["users"]["qa1"]["username"] == "default-u"
+    assert cases[0]["config"]["users"][_ALIAS]["username"] == "default-u"
 
-    # 显式选定默认配置行本身:绑定生效(换 merchant-b 行,标签仍 qa1)
+    # 显式选定默认配置行本身:绑定生效(换 merchant-b 行,标签仍 fin-dev)
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-ec-r2", dataSetIds=[], execConfigId=default_id))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 2)
-    assert cases[1]["config"]["users"]["qa1"]["username"] == "merchant-u"
+    assert cases[1]["config"]["users"][_ALIAS]["username"] == "merchant-u"
     cfg = await _last_cfg()
     assert cfg["execConfigId"] == default_id
 
@@ -332,15 +367,16 @@ async def test_preview_sources_with_exec_config(client, plate_mock: PlateMock):
     plate_mock.behaviour = "echo"
     await register_and_login(client, "ec_pv", "pw123456")
     h = await register_and_login(client, "ec_pv", "pw123456")
-    await _seed_scene(client, h, "sc-ec-pv")
     uid = await _uid("ec_pv")
+    env = await _default_env_id()
     async with db_module.SessionLocal() as s:
         uat = await _env(s, "ec-pv-uat")
         await s.commit()
-    await _seed_auth(uid, "qa1", "default-u")
-    await _seed_auth(uid, "merchant-b", "merchant-u")
+    await _seed_scene(client, h, "sc-ec-pv", env_id=env)
+    await _seed_default_account(uid, "default-u", env_id=env)
+    await _seed_entry(uid, "merchant-b", "merchant-u", env_id=env)
     cid = await _mk_config(
-        uid, "预览套", env_id=uat, bindings={_ALIAS: "merchant-b"},
+        uid, "预览套", env_id=env, bindings={_ALIAS: "merchant-b"},
         carry={"grade": "B"})
     # 公共层放一个 carry 值,验证覆盖层压层序
     async with db_module.SessionLocal() as s:
@@ -355,10 +391,10 @@ async def test_preview_sources_with_exec_config(client, plate_mock: PlateMock):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["env"]["environmentSource"] == "exec_config"
-    # 槽位:键 = 声明槽 qa1,取用 = merchant-b 行,slotSource 明示偏离
-    assert body["auths"]["qa1"]["bindingId"] is not None
-    assert body["auths"]["qa1"]["slotSource"] == "exec_config"
-    assert body["auths"]["qa1"]["configuredSlot"] == "merchant-b"
+    # 取用:键 = 声明条目 fin-dev,取用 = merchant-b 账户,slotSource 明示偏离
+    assert body["auths"][_ALIAS]["bindingId"] is not None
+    assert body["auths"][_ALIAS]["slotSource"] == "exec_config"
+    assert body["auths"][_ALIAS]["configuredSlot"] == "merchant-b"
     # carry:覆盖值 source=exec_config(压公共层)
     assert body["carry"][_ALIAS]["grade"] == \
         {"value": "B", "source": "exec_config"}
@@ -369,7 +405,7 @@ async def test_preview_sources_with_exec_config(client, plate_mock: PlateMock):
     body = r.json()
     assert body["env"] is None or body["env"]["environmentSource"] not in \
         ("exec_config", "exec_config_default")
-    assert body["auths"]["qa1"].get("slotSource") is None
+    assert body["auths"][_ALIAS].get("slotSource") is None
 
 
 # ── ⑨ project scope(组级批次):维护门 + 项目区 carry 链位 ─────────
@@ -445,7 +481,8 @@ async def test_project_zone_carry_chain_with_project_config(
     await register_and_login(client, "ec_pc", "pw123456")
     h = await register_and_login(client, "ec_pc", "pw123456")
     uid = await _uid("ec_pc")
-    await _seed_scene(client, h, "sc-ec-pc")
+    env = await _default_env_id()
+    await _seed_scene(client, h, "sc-ec-pc", env_id=env)
     # 场景挂进普通项目(成员本人 = 管理员,便于建项目变体)
     pid = await _mk_project("ec-pc-proj", members={"ec_pc": "admin"})
     async with db_module.SessionLocal() as s:
@@ -462,8 +499,8 @@ async def test_project_zone_carry_chain_with_project_config(
             updated_by_id=None, updated_by_name="t",
             scope=("project", pid))
         await s.commit()
-    await _seed_auth(uid, "qa1", "default-u")
-    # 项目默认配置:覆盖 $.pv;个人显式配置:覆盖 $.mine
+    await _seed_default_account(uid, "default-u", env_id=env)
+    # 项目默认配置:覆盖 $.pv;个人显式配置:覆盖 $.mine + 绑定换条目
     await client.post("/api/exec-configs", headers=h, json={
         "name": "项目变体", "scope": "project", "projectId": pid,
         "isDefault": True,
@@ -472,7 +509,7 @@ async def test_project_zone_carry_chain_with_project_config(
     personal = await _mk_config(
         uid, "个人显式", bindings={_ALIAS: "merchant-b"},
         carry={"mine": "personal"})
-    await _seed_auth(uid, "merchant-b", "merchant-u")
+    await _seed_entry(uid, "merchant-b", "merchant-u", env_id=env)
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -498,16 +535,17 @@ async def test_project_zone_carry_chain_with_project_config(
 
 async def test_rerun_replays_terminal_values(
         client, plate_mock: PlateMock, monkeypatch):
-    """首发后改配置(换槽位绑定)→ 重跑仍按首发终值注入;新行再记同一
+    """首发后改配置(换取用条目)→ 重跑仍按首发终值注入;新行再记同一
     份终值(链式重跑不变量)。"""
     plate_mock.behaviour = "echo"
     await register_and_login(client, "ec_rr", "pw123456")
     h = await register_and_login(client, "ec_rr", "pw123456")
-    await _seed_scene(client, h, "sc-ec-rr")
     uid = await _uid("ec_rr")
-    await _seed_auth(uid, "qa1", "default-u")
-    await _seed_auth(uid, "merchant-b", "merchant-u")
-    await _seed_auth(uid, "auditor", "auditor-u")
+    env = await _default_env_id()
+    await _seed_scene(client, h, "sc-ec-rr", env_id=env)
+    await _seed_default_account(uid, "default-u", env_id=env)
+    await _seed_entry(uid, "merchant-b", "merchant-u", env_id=env)
+    await _seed_entry(uid, "auditor", "auditor-u", env_id=env)
     cid = await _mk_config(uid, "回放套", bindings={_ALIAS: "merchant-b"})
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
@@ -518,11 +556,11 @@ async def test_rerun_replays_terminal_values(
     ex_id = r.json()["executionId"
                      ] if "executionId" in r.json() else r.json()["execution_id"]
     await _wait(lambda: len(cases) >= 1)
-    assert cases[0]["config"]["users"]["qa1"]["username"] == "merchant-u"
+    assert cases[0]["config"]["users"][_ALIAS]["username"] == "merchant-u"
     cfg1 = await _last_cfg()
-    assert cfg1["execSlotMap"] == {"qa1": "merchant-b"}
+    assert cfg1["execSlotMap"] == {_ALIAS: "merchant-b"}
 
-    # 首发后改配置:绑定换 auditor 槽
+    # 首发后改配置:绑定换 auditor 条目
     r = await client.patch(f"/api/exec-configs/{cid}", headers=h, json={
         "systems": [{"service": _BASE, "bindings": {_ALIAS: "auditor"},
                      "carryOverrides": {}}]})
@@ -532,9 +570,9 @@ async def test_rerun_replays_terminal_values(
     r = await client.post(f"/api/executions/{ex_id}/rerun", headers=h)
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 2)
-    assert cases[1]["config"]["users"]["qa1"]["username"] == "merchant-u"
+    assert cases[1]["config"]["users"][_ALIAS]["username"] == "merchant-u"
     cfg2 = await _last_cfg()
-    assert cfg2["execSlotMap"] == {"qa1": "merchant-b"}
+    assert cfg2["execSlotMap"] == {_ALIAS: "merchant-b"}
     assert cfg2["execConfigId"] == cid
 
 

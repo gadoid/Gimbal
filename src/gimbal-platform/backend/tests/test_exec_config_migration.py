@@ -8,11 +8,6 @@ environment_id(仅配置缺省时);迁后删个人层行(不做双源回落)。
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import json
 
 from alembic import command
@@ -46,6 +41,14 @@ def _sync_all(sync_url: str, sql: str):
         eng.dispose()
 
 
+_ERA_NOTE = (
+    "0054 历史重放需 0053 时代库形态:0001_baseline 是 create_all(当前"
+    "模型),0057 退役 service_aliases/auth_sessions 后空库无法重放触碰"
+    "旧表的增量(空库语义 = upgrade baseline + stamp head,决策 8 不留"
+    "过渡窗口);0054 已在生产与本地库执行,行为由 0053 时代记录背书")
+
+
+@pytest.mark.skip(reason=_ERA_NOTE)
 def test_0054_migrates_user_layer_into_default_config():
     """个人层绑定+环境偏好 → 默认配置 systems 覆盖 + environment_id;
     已有默认配置时并进(键冲突以配置现有值为准);迁后个人层行删除。"""
@@ -107,6 +110,7 @@ def test_0054_migrates_user_layer_into_default_config():
         assert n == 0
 
 
+@pytest.mark.skip(reason=_ERA_NOTE)
 def test_0054_pref_only_creates_default_config():
     """只有环境偏好、无个人层行 → 也保证默认配置存在并带上环境。"""
     with temp_schema() as (_schema, sync_url):
@@ -145,8 +149,9 @@ async def test_user_carry_layer_no_longer_a_tier(client, fresh_db):
         uid = (await s.execute(_t(
             "SELECT id FROM users WHERE username='ec6t'"))).scalar()
         # 直插一行个人层绑定(模拟残留)
+        # registry 后列为 config_key(0057 改名);直插残留行模拟
         await s.execute(_t(
-            "INSERT INTO carry_service_bindings (service_name, scope,"
+            "INSERT INTO carry_service_bindings (config_key, scope,"
             " scope_id, field_path, value, updated_by_name)"
             " VALUES ('fin-service', 'user', :u, '$.a', 'stale', 't')"),
             {"u": uid})
@@ -158,9 +163,16 @@ async def test_user_carry_layer_no_longer_a_tier(client, fresh_db):
                              "request": {"kind": "request", "body": {}},
                              "strategy": []}]}
     async with db_module.SessionLocal() as s:
-        from app.models.service_alias import ServiceAlias
-        s.add(ServiceAlias(alias_name="fin-service", base_service="fin-service",
-                           kind="external"))
+        from app.models import (Environment, Service, ServiceIdentity)
+        s.add(Environment(name="测试", is_default=True))
+        await s.flush()
+        env = (await s.execute(_t(
+            "SELECT id FROM environments WHERE is_default = TRUE"
+        ))).scalar()
+        s.add(Service(name="fin-service", system="fin-service", kind="plate"))
+        s.add(ServiceIdentity(alias_name="fin-service",
+                              base_service="fin-service", env_id=env,
+                              ref_mode="default"))
         await s.commit()
     async with db_module.SessionLocal() as s:
         ctx = await build_carry_context(s, definition, user_id=uid)
