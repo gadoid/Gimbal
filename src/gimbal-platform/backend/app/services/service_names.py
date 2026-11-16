@@ -1,14 +1,18 @@
-"""服务名别名推导(spec §4.2)—— 前端 service-alias.ts deriveBase 的后端移植。
+"""服务名别名推导(spec §4.2;重构 2026-11-16 校验源扩主档)—— 前端
+service-alias.ts deriveBase 的后端移植。
 
-别名 = <目录服务名>-<后缀>;切分点固定在最后一个 "-",base 必须落在目录
-集合内才生效(裸声明不猜)。目录集合来自 plate services 列表;plate 不可达
-→ 空集 → 全部裸声明(该 step 跳过填充 + 黄警,不阻塞执行)。
+别名 = <目录服务名>-<后缀>;切分点固定在最后一个 "-",base 必须落在
+已知服务名集合内才生效(裸声明不猜)。
+
+已知集合(重构后两级):
+* plate 目录(:func:`catalog_service_names`,纯 plate 包装);
+* **服务主档**(:func:`known_service_names` = 目录 ∪ ``services``
+  注册簿)—— external 行不受 plate 可达性影响,主档是平台侧权威;
+  别名/条目校验、导入映射、重锚定等**平台侧校验一律用此单源**。
 """
 from __future__ import annotations
 
-import httpx
-
-from .plate_client import get_client
+from sqlalchemy import select as sa_select
 
 
 def derive_base(key: str, catalog_names: set[str]) -> str | None:
@@ -24,7 +28,7 @@ def derive_base(key: str, catalog_names: set[str]) -> str | None:
 
 
 async def catalog_service_names() -> set[str]:
-    """目录服务名集合(**全量**,b2-7 起经 plate_client 唯一访问件)。
+    """plate 目录服务名集合(**全量**,b2-7 起经 plate_client 唯一访问件)。
 
     六个消费方中:别名校验/导入映射/导入重锚定须全量;carry 按 D-M
     落地。**过滤不得下沉到本函数**(sut 过滤唯一出口在别名创建派生点,
@@ -37,23 +41,33 @@ async def catalog_service_names() -> set[str]:
             if e.get("name")}
 
 
-async def resolve_base_with_aliases(db, key: str) -> str | None:
-    """b2-9(D-M,归一 v1.0 §8.2 覆盖分支):carry 基名解析 —— **先查别名表
-    ``base_service``**(external 显式值/sut 已派生值),未登记的裸服务键
-    再走全量目录 ``derive_base``。
+async def known_service_names(db) -> set[str]:
+    """平台侧已知服务名 = plate 目录 ∪ 服务主档(重构 §2.2 校验单源)。
 
-    sut 行为不变约束(批0 基线 B10):sut 别名的 base_service 即创建时
-    derive_base 派生值,两路结果一致;外部别名不守 ``<服务名>-<后缀>``
-    规约,别名表优先是其唯一解析途径(运行时 derive_base 台账条目保留)。
+    plate 不可达 → 目录降级空集,主档行仍在(注册簿自足);主档登记
+    即权威 —— external 服务(不在 plate 目录)同样可作 base。
     """
-    from sqlalchemy import select as sa_select
+    from ..models.service import Service
 
-    from .service_aliases import ServiceAlias  # 延迟导入防环
+    registered = set((await db.execute(sa_select(Service.name))).scalars())
+    return registered | await catalog_service_names()
+
+
+async def resolve_base_with_aliases(db, key: str) -> str | None:
+    """基名解析(重构:身份条目优先):**先查条目表
+    ``service_identities.base_service``**(external 显式值/sut 已派生
+    值),未登记的裸服务键再走目录 ``derive_base``(目录 ∪ 主档)。
+
+    sut 行为不变约束(批0 基线 B10):sut 条目的 base_service 即创建时
+    derive_base 派生值,两路结果一致;外部条目不守 ``<服务名>-<后缀>``
+    规约,条目表优先是其唯一解析途径。
+    """
+    from ..models.service_identity import ServiceIdentity  # 延迟导入防环
 
     hit = (await db.execute(
-        sa_select(ServiceAlias.base_service)
-        .where(ServiceAlias.alias_name == key))).scalar_one_or_none()
+        sa_select(ServiceIdentity.base_service)
+        .where(ServiceIdentity.alias_name == key))).scalar_one_or_none()
     if hit:
         return hit
-    catalog = await catalog_service_names()
-    return derive_base(key, catalog) if catalog else None
+    names = await known_service_names(db)
+    return derive_base(key, names) if names else None

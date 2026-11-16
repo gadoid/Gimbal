@@ -42,37 +42,58 @@ async def visible_scopes(db, user) -> "list[tuple[str, int]]":
     return scopes
 
 
-async def get_bindings(db, service_name: str,
+async def get_bindings(db, config_key: str,
                        scope: "tuple[str, int] | None" = None,
+                       *, env_id: int | None = None,
                        ) -> dict[str, str | None]:
+    """键 → 生效绑定(注入读面):env 命中行覆盖全环境基线(§1.7
+    稀疏覆盖);``env_id`` 缺省 None = 只取基线(旧调用方语义)。"""
     scope = await _scoped(db, scope)
+    conds = [
+        CarryServiceBinding.config_key == config_key,
+        CarryServiceBinding.scope == scope[0],
+        CarryServiceBinding.scope_id == scope[1],
+    ]
+    if env_id is not None:
+        conds.append((CarryServiceBinding.env_id == env_id)
+                     | (CarryServiceBinding.env_id.is_(None)))
+    else:
+        conds.append(CarryServiceBinding.env_id.is_(None))
     rows = (await db.execute(
-        select(CarryServiceBinding).where(
-            CarryServiceBinding.service_name == service_name,
-            CarryServiceBinding.scope == scope[0],
-            CarryServiceBinding.scope_id == scope[1])
+        select(CarryServiceBinding).where(*conds)
+        # 基线行(env_id 空 → is_(None)=True)排前,env 命中行排后 —
+        # 后写覆盖基线(§1.7 稀疏覆盖的读侧合成)
+        .order_by(CarryServiceBinding.env_id.is_(None).desc())
     )).scalars().all()
-    return {r.field_path: r.value for r in rows}
+    out: dict[str, str | None] = {}
+    for r in rows:
+        out[r.field_path] = r.value  # env 命中行排后 → 覆盖基线
+    return out
 
 
 async def put_bindings(
     db,
-    service_name: str,
+    config_key: str,
     entries: dict[str, str | None],
     *,
     updated_by_id: int | None,
     updated_by_name: str,
     scope: "tuple[str, int] | None" = None,
+    env_id: int | None = None,
 ) -> None:
+    """整体替换(行集 diff):替换坐标 = (scope, config_key, env)。
+    ``env_id`` 缺省 None = 写全环境基线层。"""
     scope = await _scoped(db, scope)
     await db.execute(delete(CarryServiceBinding).where(
-        CarryServiceBinding.service_name == service_name,
+        CarryServiceBinding.config_key == config_key,
         CarryServiceBinding.scope == scope[0],
-        CarryServiceBinding.scope_id == scope[1]))
+        CarryServiceBinding.scope_id == scope[1],
+        CarryServiceBinding.env_id == env_id))
     for path, value in sorted(entries.items()):
         db.add(CarryServiceBinding(
-            service_name=service_name,
+            config_key=config_key,
             scope=scope[0], scope_id=scope[1],
+            env_id=env_id,
             field_path=path, value=value,
             updated_by_id=updated_by_id, updated_by_name=updated_by_name,
         ))
@@ -140,7 +161,7 @@ async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
     rows = (await db.execute(stmt)).scalars().all()
     bound_by_service: dict[str, set[str]] = {}
     for r in rows:
-        bound_by_service.setdefault(r.service_name, set()).add(r.field_path)
+        bound_by_service.setdefault(r.config_key, set()).add(r.field_path)
 
     # 面并集(按服务);plate_services = 目录服务全集(键归一的解析域)
     face_by_service: dict[str, set[str]] = {}

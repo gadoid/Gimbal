@@ -59,7 +59,7 @@ async def notify_public_carry_change(
                       CarryServiceBinding.field_path).where(
             CarryServiceBinding.scope == "project",
             CarryServiceBinding.scope_id != pub[1],
-            CarryServiceBinding.service_name == service,
+            CarryServiceBinding.config_key == service,
             CarryServiceBinding.field_path.in_(keys))
     hit: dict[int, set[str]] = {}
     for pid, path in (await db.execute(stmt)).all():

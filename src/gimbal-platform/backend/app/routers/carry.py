@@ -112,7 +112,7 @@ async def _resolve_scope(
 def _svc_map(rows) -> dict[str, dict[str, str | None]]:
     out: dict[str, dict[str, str | None]] = {}
     for r in rows:
-        out.setdefault(r.service_name, {})[r.field_path] = r.value
+        out.setdefault(r.config_key, {})[r.field_path] = r.value
     return out
 
 
@@ -173,8 +173,8 @@ async def list_bindings(user: CurrentUser, db=DbSession):
     return BindingsOut(
         bindings=merged,
         rows=[{"scope": r.scope, "scopeId": r.scope_id,
-               "serviceName": r.service_name, "fieldPath": r.field_path,
-               "value": r.value} for r in rows])
+               "serviceName": r.config_key, "fieldPath": r.field_path,
+               "value": r.value, "envId": r.env_id} for r in rows])
 
 
 @router.get("/bindings/{service}", response_model=ServiceBindingsOut)
@@ -182,10 +182,12 @@ async def get_bindings(
     service: str, user: CurrentUser, db=DbSession,
     scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+    env_id: Annotated[int | None, Query(alias="envId", ge=1)] = None,
 ):
+    """``envId`` = 环境覆盖读面(命中行覆盖基线;缺省 = 只读基线层)。"""
     sc = await _resolve_scope(db, user, scope, project_id, write=False)
     return ServiceBindingsOut(
-        bindings=await carry_store.get_bindings(db, service, sc),
+        bindings=await carry_store.get_bindings(db, service, sc, env_id=env_id),
         scope=sc[0], scopeId=sc[1])
 
 
@@ -194,14 +196,17 @@ async def put_bindings(
     service: str, user: CurrentUser, body: CarryMapIn, db=DbSession,
     scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+    env_id: Annotated[int | None, Query(alias="envId", ge=1)] = None,
 ):
+    """替换坐标 = (scope, config_key, env):``envId`` 缺省写全环境
+    基线层;传值写该环境的覆盖层。"""
     sc = await _resolve_scope(db, user, scope, project_id, write=True)
-    old = await carry_store.get_bindings(db, service, sc)
+    old = await carry_store.get_bindings(db, service, sc, env_id=env_id)
     await carry_store.put_bindings(
         db, service, body.bindings,
         updated_by_id=user.id,
         updated_by_name=user.display_name or user.username,
-        scope=sc,
+        scope=sc, env_id=env_id,
     )
     await db.commit()
     from ..services import audit as audit_svc
@@ -210,13 +215,14 @@ async def put_bindings(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,
         action="carry.write", resource_type="carry", resource_id=service,
-        detail={"service": service, "scope": sc[0], "scopeId": sc[1]},
+        detail={"service": service, "scope": sc[0], "scopeId": sc[1],
+                "envId": env_id},
     )
     # S7.6:公共层写 → 项目层同键遮蔽通知(非公共层内部直通)
     await _notify_shadow(db, sc, service, old, body.bindings or {},
                          user.display_name or user.username)
     return ServiceBindingsOut(
-        bindings=await carry_store.get_bindings(db, service, sc),
+        bindings=await carry_store.get_bindings(db, service, sc, env_id=env_id),
         scope=sc[0], scopeId=sc[1])
 
 

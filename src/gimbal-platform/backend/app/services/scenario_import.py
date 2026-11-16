@@ -499,7 +499,7 @@ async def analyze_services(db, definition: dict,
     # S4:导入分析按导入人的可见层(公共项目层 < 个人层)
     ctx = await build_carry_context(db, definition, ui_field_states={},
                                     user_id=user_id)
-    catalog = await service_names.catalog_service_names()
+    catalog = await service_names.known_service_names(db)
     alias_names = set((await db.execute(
         select(ServiceAlias.alias_name))).scalars().all())
 
@@ -657,7 +657,7 @@ async def land(
     # S4:导入分析按导入人的可见层(公共项目层 < 个人层)
     ctx = await build_carry_context(db, definition, ui_field_states={},
                                     user_id=user.id)
-    catalog = await service_names.catalog_service_names()
+    catalog = await service_names.known_service_names(db)
 
     # ── 本地重算(不信任预检快照;方案 §3.3)───────────────────────
     alias_names = set((await db.execute(

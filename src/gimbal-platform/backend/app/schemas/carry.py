@@ -21,12 +21,15 @@ class DefaultsOut(BaseModel):
 
 
 class BindingRowOut(BaseModel):
-    """S4 列表行级层标签(flat bindings 之外的可见层明细)。"""
+    """S4 列表行级层标签(flat bindings 之外的可见层明细)。
+    ``serviceName`` = config_key(键域三级:条目/服务/系统,字段名沿
+    旧兼容);``envId`` = 环境覆盖行(None = 全环境基线)。"""
     scope: str
     scopeId: int
     serviceName: str
     fieldPath: str
     value: str | None = None
+    envId: int | None = None
 
 
 class BindingsOut(BaseModel):

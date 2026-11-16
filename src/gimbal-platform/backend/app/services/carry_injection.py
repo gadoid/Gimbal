@@ -70,14 +70,19 @@ async def build_carry_context(
     user_id: int | None = None,
     bindings: dict | None = None,
     exec_overrides: dict[str, dict[str, str | None]] | None = None,
+    env_id: int | None = None,
 ) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
 
     authz M2a S4 作用域分层(D3 + 区模型收敛):tier 序 = 公共项目层 <
-    项目层,层内沿用键层级(别名键 > 基础服务键 > 层默认)。执行配置
-    分层⑥(决策 8):**个人层不再存在** —— 个人缺省 carry 的家是默认
-    执行配置(``exec_overrides`` 覆盖层),``user_id`` 参数仅为签名兼容,
-    不再构成 tier。
+    项目层;层内键域三级(重构 §1.7,**细到粗**):身份条目名 > 服务名 >
+    系统名 > 层默认 —— 系统级默认直接挂系统键,不必复制到每个服务。
+    执行配置分层⑥(决策 8):**个人层不再存在** —— 个人缺省 carry 的家
+    是默认执行配置(``exec_overrides`` 覆盖层),``user_id`` 参数仅为签名
+    兼容,不再构成 tier。
+
+    环境维度(§1.7 稀疏覆盖):``env_id`` = 本次执行环境;绑定值取
+    「环境命中行覆盖全环境基线」,缺省 None = 只取基线。
 
     分层②(执行配置):``exec_overrides``({目录服务: {字段: 值}})是
     配置覆盖层,合区位次 = **场景显式之下、层序之上**(值 null = 显式
@@ -125,8 +130,7 @@ async def build_carry_context(
                 if decls is not None else {}
             )
 
-    # ② 服务引用 → derive_base 解析 → 绑定值(None = 解析失败,整步跳过)
-    catalog = await service_names.catalog_service_names()
+    # ② 服务引用 → 条目表优先解析 → 绑定值(None = 解析失败,整步跳过)
     # S4:tier 序(公共项目层恒在 < 项目层);分层⑥:个人层已收编为默认
     # 执行配置(决策 8),user_id 不再构成 tier
     tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
@@ -143,28 +147,38 @@ async def build_carry_context(
         svc = _step_service(step)
         if isinstance(svc, str) and svc:
             raw_services.setdefault(svc, None)
+    # 系统键派生(三级键域的粗端):base → services.system 批量一次
+    from ..models.service import Service as DBService
     service_bindings: dict[str, dict[str, str | None] | None] = {}
-    _ = catalog  # b2-9(D-M):解析改经别名表优先(目录兜底在 helper 内)
+    resolved_bases = {
+        raw: await service_names.resolve_base_with_aliases(db, raw)
+        for raw in raw_services}
+    system_of: dict[str, str] = {}
+    bases_known = {b for b in resolved_bases.values() if b}
+    if bases_known:
+        system_of = dict((await db.execute(
+            select(DBService.name, DBService.system).where(
+                DBService.name.in_(bases_known)))).all())
     for raw in raw_services:
-        base = await service_names.resolve_base_with_aliases(db, raw)
+        base = resolved_bases[raw]
         if base is None:
             logger.warning(
-                "carry_injection: service {!r} 不在目录(裸声明)— 该 step "
-                "跳过 carry 填充", raw)
+                "carry_injection: service {!r} 不在已知服务集(裸声明)— 该 "
+                "step 跳过 carry 填充", raw)
             service_bindings[raw] = None
         else:
-            # S4:逐 tier 合并(后者覆盖前者);层内沿用别名键稀疏覆盖
-            # (服务画像方案 §4.1:精确别名键 > base 服务键 > 层默认 —
-            # 字段级 merge,别名行只覆盖它填的那几个字段)
-            # S6:别名键 = 服务键的生效别名(方案选 fin → fin-maker 即吃
-            # fin-maker 的别名键覆盖;同基础服务已由绑定校验保证)
+            # 层内三级键域(§1.7 细到粗,粗先 merge 细后覆盖,字段级):
+            # 系统键 < 服务键 < 条目键(alias_key = 方案选定的生效条目)
             alias_key = effective_alias(raw, bindings)
+            system_key = system_of.get(base) or None
             rows: dict[str, str | None] = {}
             for t in tiers:
-                rows_t = await carry_store.get_bindings(db, base, t)
-                if base != alias_key:
+                rows_t: dict[str, str | None] = {}
+                for key in (system_key, base, alias_key):
+                    if not key:
+                        continue
                     override = await carry_store.get_bindings(
-                        db, alias_key, t)
+                        db, key, t, env_id=env_id)
                     if override:
                         rows_t = {**rows_t, **override}
                 rows = {**rows, **rows_t}

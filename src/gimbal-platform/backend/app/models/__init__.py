@@ -37,6 +37,12 @@ from .project import Project, ProjectMember
 from .project_promotion import ProjectPromotion
 # 执行配置(执行配置分层①:场景外部支撑的跨场景载体,scope user|project)
 from .exec_config import ExecConfig
+# 服务注册重构(2026-11-16,docs/service-registry-redesign.md §1):
+# 主档(注册簿)/环境×系统实例/身份条目(别名迁居,env 显式化)/账户实体化
+from .service import Service
+from .system_env_instance import SystemEnvInstance
+from .service_identity import ServiceIdentity
+from .auth_account import AuthAccount
 
 __all__ = [
     "User",
@@ -72,6 +78,10 @@ __all__ = [
     "Deployment",
     "ServiceMeta",
     "ExecConfig",
+    "Service",
+    "SystemEnvInstance",
+    "ServiceIdentity",
+    "AuthAccount",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

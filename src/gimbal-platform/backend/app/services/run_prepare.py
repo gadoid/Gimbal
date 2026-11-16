@@ -50,8 +50,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.schema import AuthSession as RuntimeAuthSession  # noqa: E402
 
-from ..models.auth_session import AuthSession as DBAuthSession
+from ..models.auth_account import AuthAccount as DBAuthAccount
 from ..models.composer_data_set import ComposerDataSet
+from ..models.service import Service as DBService
+from ..models.service_identity import ServiceIdentity as DBIdentity
+from ..models.system_env_instance import SystemEnvInstance as DBInstance
 from . import plate_client, service_aliases
 from .run_semantics import INTEGRATION, PIN, record_category
 from .data_set_store import get_row as get_dataset_row
@@ -120,50 +123,128 @@ class MissingAuthAliases(RuntimeError):
         self.missing = list(missing)
 
 
-def _slot_tier(row: DBAuthSession, env_id: int | None) -> tuple:
-    """槽位绑定取用分层(S3):环境命中 > env 空且默认 > env 空 >
-    默认 > 首行(id 序)。存量行(每槽恰一行、env 空、默认)恒取
-    tier 1 —— 与旧按名解析逐行相同。"""
-    if env_id is not None and row.env_id == env_id:
-        tier = 0
-    elif row.env_id is None:
-        tier = 1 if row.is_default else 2
-    elif row.is_default:
-        tier = 3
-    else:
-        tier = 4
-    return (tier, row.id)
-
-
 def _pool_clause(owner_id: int | None, cred_project_id: int | None):
-    """S8 凭证池谓词:``cred_project_id`` 非空 = 项目池(项目凭证),
+    """账户池谓词(S8 口径沿用):``cred_project_id`` 非空 = 项目池,
     否则执行人个人池。两池互斥(CHECK 归属恰一)—— 不混取。"""
     if cred_project_id is not None:
-        return DBAuthSession.project_id == cred_project_id
-    return DBAuthSession.owner_id == owner_id
+        return DBAuthAccount.project_id == cred_project_id
+    return DBAuthAccount.owner_id == owner_id
+
+
+@dataclass(frozen=True, slots=True)
+class PickedIdentity:
+    """身份条目取用结果(轻量,不解密;消费方按 ``slot``(条目名)对账,
+    指纹/预览按 ``account_id`` 标识绑定)。"""
+
+    slot: str          # 条目名(引用键,${auth.X}/call.user=X 的 X)
+    account_id: int    # 命中账户(绑定标识)
+    env_id: int
+    system: str        # 条目系统(base_service → services.system 派生)
+    base_service: str
+
+
+async def _resolve_identities(
+    db: Any, owner_id: int | None, names: list[str], *,
+    env_id: int | None, cred_project_id: int | None = None,
+) -> tuple[dict[str, PickedIdentity], list[str], list[str]]:
+    """身份条目解析单源(重构 §4.1;不解密):条目名 → 取用账户 id。
+
+    链路:条目(``env 必填``)→ 服务主档(系统派生)→ 账户池(ref_mode
+    =username 精确取 / default 取 is_default 行)。返回 (命中, 缺失,
+    环境不符);缺失口径(**无回退分支**,决策 8):条目不存在 / 执行
+    无环境 / 服务不在主档 / ref 账户缺席;环境不符 = 条目在但 env ≠
+    执行 env —— 分类供预检/行级绑定告警区分。
+    """
+    if not names:
+        return {}, [], []
+    uniq = list(dict.fromkeys(names))
+    missing: set[str] = set()
+    env_bad: set[str] = set()
+    cand: dict[str, DBIdentity] = {}
+    if env_id is None:
+        # 环境显式化:无环境执行无从解析身份(预检期报「未指定环境」)
+        missing.update(uniq)
+    else:
+        idents = (await db.execute(select(DBIdentity).where(
+            DBIdentity.alias_name.in_(uniq)))).scalars().all()
+        for i in idents:
+            if i.env_id == env_id:
+                cand[i.alias_name] = i
+            else:
+                env_bad.add(i.alias_name)
+        missing.update(n for n in uniq if n not in cand)
+    if not cand:
+        return {}, sorted(missing), sorted(env_bad - missing)
+
+    # 条目系统派生:base_service → services.system(悬空条目 → missing)
+    svc_rows = (await db.execute(
+        select(DBService.name, DBService.system).where(
+            DBService.name.in_({i.base_service for i in cand.values()}))
+    )).all()
+    system_of = dict(svc_rows)
+
+    # 账户目标收集(ref)并批量取
+    want_user: set[tuple[str, str]] = set()
+    want_default: set[str] = set()
+    for i in cand.values():
+        sysname = system_of.get(i.base_service)
+        if not sysname:
+            continue
+        if i.ref_mode == "username" and i.ref_username:
+            want_user.add((sysname, i.ref_username))
+        else:
+            want_default.add(sysname)
+    acc_by_key: dict[tuple[str, str], DBAuthAccount] = {}
+    acc_default: dict[str, DBAuthAccount] = {}
+    if want_user or want_default:
+        conds: list[Any] = []
+        for sysname, username in want_user:
+            conds.append((DBAuthAccount.system == sysname)
+                         & (DBAuthAccount.username == username))
+        for sysname in want_default:
+            conds.append((DBAuthAccount.system == sysname)
+                         & DBAuthAccount.is_default.is_(True))
+        from sqlalchemy import or_
+        accs = (await db.execute(select(DBAuthAccount).where(
+            _pool_clause(owner_id, cred_project_id),
+            DBAuthAccount.env_id == env_id,
+            or_(*conds)))).scalars().all()
+        for a in accs:
+            acc_by_key.setdefault((a.system, a.username), a)
+            if a.is_default:
+                acc_default.setdefault(a.system, a)
+
+    picked: dict[str, PickedIdentity] = {}
+    for name, i in cand.items():
+        sysname = system_of.get(i.base_service)
+        if not sysname:
+            missing.add(name)
+            continue
+        acc = (acc_by_key.get((sysname, i.ref_username))
+               if i.ref_mode == "username" and i.ref_username
+               else acc_default.get(sysname))
+        if acc is None:
+            missing.add(name)
+            continue
+        picked[name] = PickedIdentity(
+            slot=name, account_id=acc.id, env_id=i.env_id,
+            system=sysname, base_service=i.base_service)
+    return picked, sorted(missing), sorted(env_bad - missing)
 
 
 async def pick_bindings(
     db: Any, owner_id: int | None, slots: list[str],
     *, env_id: int | None = None, cred_project_id: int | None = None,
-) -> list["DBAuthSession"]:
-    """S5 槽位取用单源(不解密):同槽多绑定按 :func:`_slot_tier` 分层
-    取一行。``resolve_exec_auths``(注入)与指纹/预览的绑定标识消费同一
-    份裁决 —— 取用口径结构上不可能漂移。
+) -> list[PickedIdentity]:
+    """条目取用单源(不解密;重构 §4.1):条目名 → :class:`PickedIdentity`。
+    ``resolve_exec_auths``(注入)与指纹/预览的绑定标识消费同一份裁决
+    —— 取用口径结构上不可能漂移。
 
-    S8:``cred_project_id`` 非空 → 从项目池取用(项目凭证),分层规则
-    不变;缺省 = ``owner_id`` 个人池(旧行为)。"""
-    if not slots:
-        return []
-    rows = (await db.execute(
-        select(DBAuthSession).where(
-            _pool_clause(owner_id, cred_project_id),
-            DBAuthSession.slot.in_(slots)))).scalars().all()
-    picked: dict[str, DBAuthSession] = {}
-    for a in rows:
-        cur = picked.get(a.slot)
-        if cur is None or _slot_tier(a, env_id) < _slot_tier(cur, env_id):
-            picked[a.slot] = a
+    S8:``cred_project_id`` 非空 → 从项目池取用(项目账户池),缺省 =
+    ``owner_id`` 个人池。``slots`` 语义 = 身份条目名(旧槽名口径,
+    规约延续)。"""
+    picked, _missing, _env_bad = await _resolve_identities(
+        db, owner_id, slots, env_id=env_id, cred_project_id=cred_project_id)
     return sorted(picked.values(), key=lambda r: r.slot)
 
 
@@ -191,41 +272,39 @@ def strip_row_binding_columns(row: dict | None) -> dict:
 async def lookup_row_bindings(
     db: Any, owner_id: int | None, pairs: set[tuple[str, str]],
     *, env_id: int | None = None, cred_project_id: int | None = None,
-) -> tuple[dict[tuple[str, str], "DBAuthSession"], list[tuple[str, str]],
+) -> tuple[dict[tuple[str, str], PickedIdentity], list[tuple[str, str]],
            list[tuple[str, str]]]:
-    """(槽, 绑定名) → 池内绑定行(不解密)。返回 (命中表, 缺失, 环境不符)。
-
-    绑定名在池内唯一(个人面 (owner, alias) / 项目面 (project, alias));
-    命中行的槽须与列声明的槽一致,否则按缺失算(防把 A 槽的账号塞进
-    B 槽)。绑定有环境且 ≠ 本次环境 → 环境不符。"""
+    """(引用位, 绑定名) → 池内取用结果(不解密)。返回 (命中, 缺失,
+    环境不符);绑定名 = 身份条目名。行级覆盖语义 = 该行把引用位换成
+    指定身份(条目模型无槽,不再做同名性校验 —— 跨身份覆盖是行级
+    数据的本意);条目环境 ≠ 本次环境 → 环境不符。"""
     if not pairs:
         return {}, [], []
-    names = {a for _s, a in pairs}
-    rows = (await db.execute(select(DBAuthSession).where(
-        _pool_clause(owner_id, cred_project_id),
-        DBAuthSession.alias.in_(names)))).scalars().all()
-    by_alias = {r.alias: r for r in rows}
-    hit: dict[tuple[str, str], DBAuthSession] = {}
+    names = list({a for _s, a in pairs})
+    picked, miss_names, env_names = await _resolve_identities(
+        db, owner_id, names, env_id=env_id, cred_project_id=cred_project_id)
+    miss_set, env_set = set(miss_names), set(env_names)
+    hit: dict[tuple[str, str], PickedIdentity] = {}
     missing: list[tuple[str, str]] = []
     env_bad: list[tuple[str, str]] = []
     for slot, alias in sorted(pairs):
-        r = by_alias.get(alias)
-        if r is None or r.slot != slot:
-            missing.append((slot, alias))
-        elif r.env_id is not None and env_id is not None \
-                and r.env_id != env_id:
+        p = picked.get(alias)
+        if p is not None:
+            hit[(slot, alias)] = p
+        elif alias in env_set:
             env_bad.append((slot, alias))
         else:
-            hit[(slot, alias)] = r
+            missing.append((slot, alias))
     return hit, missing, env_bad
 
 
 async def resolve_row_bindings(
     db_factory: Any, owner_id: int | None, pairs: set[tuple[str, str]],
     *, env_id: int | None = None, cred_project_id: int | None = None,
-) -> dict[tuple[str, str], "ResolvedAuth"]:
-    """行级覆盖绑定解密(执行内每个 (槽, 绑定名) 只解密一次)。缺失 /
-    环境不符的已在派发 fail-fast 拦下 —— 这里只解析命中项。"""
+) -> dict[tuple[str, str], ResolvedAuth]:
+    """行级覆盖绑定解密(执行内每个 (引用位, 绑定名) 只解密一次)。
+    缺失/环境不符的已在派发 fail-fast 拦下 —— 这里只解析命中项;
+    url 取实例登录口(缺席 = '' 走静态令牌路径)。"""
     if not pairs:
         return {}
     from ..core.security import fernet_decrypt
@@ -234,11 +313,40 @@ async def resolve_row_bindings(
         hit, _m, _e = await lookup_row_bindings(
             session, owner_id, pairs, env_id=env_id,
             cred_project_id=cred_project_id)
-    out: dict[tuple[str, str], ResolvedAuth] = {}
-    for key, a in hit.items():
+        if not hit:
+            return {}
+        resolved = await _materialize_identities(session, hit)
+    return resolved
+
+
+async def _materialize_identities(
+    db: Any, hit: dict[Any, PickedIdentity],
+) -> dict[Any, ResolvedAuth]:
+    """取用结果 → 解密值对象(共用:执行级 resolve_exec_auths 与行级
+    resolve_row_bindings)。键原样保留(执行级 = 条目名,行级 = (引用位,
+    绑定名));注入键(ResolvedAuth.alias)由调用方在 dataclasses.replace
+    里覆写。"""
+    from ..core.security import fernet_decrypt
+
+    acc_ids = {p.account_id for p in hit.values()}
+    accs = {a.id: a for a in (await db.execute(
+        select(DBAuthAccount).where(DBAuthAccount.id.in_(acc_ids))
+    )).scalars().all()}
+    systems = {p.system for p in hit.values()}
+    inst_urls: dict[tuple[str, int], str] = {}
+    if systems:
+        inst_urls = {(sys_, eid): url for sys_, eid, url in (await db.execute(
+            select(DBInstance.system, DBInstance.env_id,
+                   DBInstance.login_url).where(DBInstance.system.in_(systems))
+        )).all()}
+    out: dict[Any, ResolvedAuth] = {}
+    for key, p in hit.items():
+        a = accs.get(p.account_id)
+        if a is None:
+            continue
         try:
             runtime = RuntimeAuthSession(
-                url=a.url,
+                url=inst_urls.get((p.system, p.env_id), ""),
                 username=fernet_decrypt(a.username_enc),
                 password=fernet_decrypt(a.password_enc),
                 token_type=a.token_type,
@@ -246,10 +354,10 @@ async def resolve_row_bindings(
             )
         except ValueError as e:
             raise AuthResolveError(
-                f"auth binding '{a.alias}' decrypt failed: {e}") from e
+                f"auth binding '{p.slot}' decrypt failed: {e}") from e
         out[key] = dataclasses.replace(
-            ResolvedAuth.from_runtime(runtime, alias=a.slot,
-                                      account_fields=a.account_fields),
+            ResolvedAuth.from_runtime(
+                runtime, alias=p.slot, account_fields=a.account_fields),
             binding_id=a.id)
     return out
 
@@ -275,8 +383,8 @@ async def binding_ids_for(
     *, env_id: int | None = None, cred_project_id: int | None = None,
     slot_map: dict[str, str] | None = None,
 ) -> dict[str, int]:
-    """槽名 → 取用绑定 id(轻量,不解密;指纹/预览消费)。分层②:
-    ``slot_map`` 同 :func:`resolve_exec_auths`(键 = 声明槽位标签)。"""
+    """条目名 → 取用账户 id(轻量,不解密;指纹/预览消费)。分层②:
+    ``slot_map`` 同 :func:`resolve_exec_auths`(键 = 声明引用标签)。"""
     if not slots:
         return {}
     lookup = slot_map or {}
@@ -285,7 +393,7 @@ async def binding_ids_for(
             s, owner_id, list(dict.fromkeys(
                 lookup.get(x, x) for x in slots if lookup.get(x, x))),
             env_id=env_id, cred_project_id=cred_project_id)
-    by_slot = {r.slot: r.id for r in rows}
+    by_slot = {r.slot: r.account_id for r in rows}
     return {x: by_slot[lookup.get(x, x)]
             for x in dict.fromkeys(slots) if lookup.get(x, x) in by_slot}
 
@@ -295,78 +403,53 @@ async def resolve_exec_auths(
     *, env_id: int | None = None, cred_project_id: int | None = None,
     slot_map: dict[str, str] | None = None,
 ) -> list[ResolvedAuth]:
-    """Owner 级槽名 → ResolvedAuth(解密后的轻量值对象)。owner 过滤
-    防跨 owner 同名 slot 解错凭证。
+    """身份条目名 → ResolvedAuth(解密后的轻量值对象)。
 
-    S3 槽位绑定:按 ``slot`` 解析(注入键/模板名);同槽多绑定时按
-    :func:`_slot_tier` 分层取一行(``env_id`` = 本次执行环境,S2.1)。
-    存量行 slot=alias 恒一对一 → 行为与旧链逐行相同。
+    重构 §4.1(条目→ref→账户):``aliases`` = 身份条目名(场景
+    ``call.user``/``${auth.*}`` 引用键);取用经
+    :func:`_resolve_identities`(owner/项目池过滤防跨池解错),解密经
+    :func:`_materialize_identities`(url = 实例登录口,缺席 = '' 走
+    静态令牌路径 —— 配置缺失在预检期明确报,不回退业务地址)。
 
-    分层② ``slot_map``(声明槽位 → 池取用槽位):执行配置绑定的
-    「换池内命中」—— 取用按映射后的槽位,注入标签保持声明槽位
-    (场景 ``call.user``/``${auth.*}`` 引用不变)。
+    分层② ``slot_map``(声明引用 → 池内取用条目):执行配置绑定的
+    「换池内命中」—— 取用按映射后的条目,注入标签保持声明名
+    (场景引用不变)。
 
     * 解密失败 → 抛 :class:`AuthResolveError`(V1 严格语义:
       凭证路径 fail-fast,不静默降级)。
-    * alias 不属于该 owner 时解不到 → 告警后继续(与 V1 一致:
-      缺 alias 只是注入不到 users,该行 run 在 Gimbal 解析
+    * 条目解不到(不存在/无环境/悬空/无账户)→ 告警后继续(与 V1
+      一致:缺条目只是注入不到 users,该行 run 在 Gimbal 解析
       ``${auth.*}`` 时步骤级报错)。
-    * 明文只存在于返回的值对象上 — 绝不写回 ORM 行(此前
-      ``a.username = ...`` 会把明文挂到 session 里的 AuthSession
-      实例上,任何一次意外 commit 都会把明文持久化进库)。
+    * 明文只存在于返回的值对象上 — 绝不写回 ORM 行。
 
     **只收会话工厂**(N1-6):内部开独立短会话做快照读,与调用方的
-    长事务隔离 —— 传活会话是 N0 修掉的缺陷形态(AsyncSession 不可
-    调用,别名非空即 TypeError)。
-
-    S8:``cred_project_id`` 非空 → 解析项目凭证池(见 :func:`pick_bindings`)。
-
-    Phase 3 改造:内部先用平台侧标准 RuntimeAuthSession(物理迁移自 gimbal)
-    接收解密后的字段,然后通过 ``ResolvedAuth.from_runtime`` 转为兼容 shim。
-    这样下游 materialize_run_copy(_apply_users)不动,未来可直接消费
-    ``RuntimeAuthSession``。
+    长事务隔离。
     """
     if not aliases:
         return []
-    from ..core.security import fernet_decrypt
-
     lookup = slot_map or {}
-    pick_slots = list(dict.fromkeys(
+    pick_names = list(dict.fromkeys(
         lookup.get(a, a) for a in aliases if lookup.get(a, a)))
     resolved: list[ResolvedAuth] = []
+    missing_names: set[str] = set()
+    by_name: dict[str, "ResolvedAuth"] = {}
     async with db_factory() as session:
-        # S5:取用裁决单源(pick_bindings;同槽多绑定分层取一行;
-        # 分层②:按映射后的取用槽位挑行)
-        rows = await pick_bindings(session, owner_id, pick_slots,
-                                   env_id=env_id,
-                                   cred_project_id=cred_project_id)
-        by_slot = {r.slot: r for r in rows}
+        picked, miss, env_bad = await _resolve_identities(
+            session, owner_id, pick_names,
+            env_id=env_id, cred_project_id=cred_project_id)
+        missing_names.update(miss + env_bad)
+        if picked:
+            by_name = await _materialize_identities(session, picked)
     for label in dict.fromkeys(aliases):
-        a = by_slot.get(lookup.get(label, label))
-        if a is None:
+        r = by_name.get(lookup.get(label, label))
+        if r is None:
             continue
-        try:
-            runtime = RuntimeAuthSession(
-                url=a.url,
-                username=fernet_decrypt(a.username_enc),
-                password=fernet_decrypt(a.password_enc),
-                token_type=a.token_type,
-                expires_in=a.expires_in,
-            )
-            # frozen dataclass:用 replace 补绑定标识(S5);分层②:
-            # 标签 = 声明槽位(场景引用),取用行可能是覆盖槽位
-            resolved.append(dataclasses.replace(
-                ResolvedAuth.from_runtime(
-                    runtime, alias=label, account_fields=a.account_fields),
-                binding_id=a.id))
-        except ValueError as e:
-            raise AuthResolveError(
-                f"auth slot '{label}' decrypt failed: {e}"
-            ) from e
-    missing = set(aliases) - {a.alias for a in resolved}
-    if missing:
+        # 分层②:注入标签 = 声明引用名(场景侧),取用行是覆盖条目
+        resolved.append(dataclasses.replace(r, alias=label))
+    if missing_names:
         logger.warning(
-            "run_prepare: exec auth aliases not found: {}", sorted(missing)
+            "run_prepare: exec auth identities not found: {}",
+            sorted(missing_names),
         )
     return resolved
 
