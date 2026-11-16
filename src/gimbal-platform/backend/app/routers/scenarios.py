@@ -185,7 +185,7 @@ async def _materialized_executable(
     # overlay 下产物 ≡ 基线单行 case.json,逐字段相等。
     if overlay is not None:
         # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
-        # exec_auth_aliases 唯一实现(模板扫描 ∪ 生效别名声明槽位)在
+        # exec_auth_aliases 唯一实现(模板扫描 ∪ 步骤服务条目)在
         # prepare_exec 内消费绑定(S6:绑定 = 服务键 → 别名)。
         service_bindings = {k: b.model_dump(by_alias=True)
                             for k, b in overlay.service_bindings.items()}

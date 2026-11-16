@@ -57,24 +57,9 @@ from app.core import db as db_module  # noqa: E402
 from app.core.db import Base  # noqa: E402
 from app.main import create_app  # noqa: E402
 
-# ── P1-7 迁移期垫片:旧模块名/包属性 → 新模型 ───────────────────────
-# 待迁移测试文件(stamped skip)的顶层 import 须可收集;垫片只保收集。
-import sys as _sys
-import types as _types
-
-from app.models.auth_account import AuthAccount as _AuthAccount
-from app.models.service_identity import ServiceIdentity as _ServiceIdentity
-
-for _old, _attr, _new in (
-    ("app.models.service_alias", "ServiceAlias", _ServiceIdentity),
-    ("app.models.auth_session", "AuthSession", _AuthAccount),
-    ("app.models.service_meta", "ServiceMeta", type("ServiceMeta", (), {})),
-):
-    if _old not in _sys.modules:
-        _m = _types.ModuleType(_old)
-        setattr(_m, _attr, _new)
-        _sys.modules[_old] = _m
-    setattr(models, _attr, _new)  # 包属性路径(from app.models import X)
+# P1-7 迁移期垫片(旧模块名 service_alias/auth_session/service_meta →
+# 新模型)已随 Phase 3 文案清账删除 —— 全部消费方已切 ServiceIdentity/
+# AuthAccount 直连导入;如再被引用即 ImportError,不做静默兜底。
 logger = logging.getLogger(__name__)
 
 

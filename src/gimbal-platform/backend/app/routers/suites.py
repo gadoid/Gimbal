@@ -846,7 +846,7 @@ async def _run_orchestration(
         if _missing:
             raise HTTPException(status_code=409, detail={
                 "code": "auth_aliases_missing",
-                "message": ("以下凭证槽位项目凭证未登记,请项目管理员在"
+                "message": ("以下身份条目项目凭证未登记,请项目管理员在"
                             "项目配置页登记,或改用个人凭证:"
                             + "、".join(_missing)),
                 "aliases": _missing, "credentialSource": "project"})

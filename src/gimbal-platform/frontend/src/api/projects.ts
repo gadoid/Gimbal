@@ -59,7 +59,7 @@ export function patchProject(id: number, body: {
   return http.patch<ProjectOut>(`/projects/${id}`, body).then((r) => r.data)
 }
 
-/** S7.3 槽位状态 = 成员凭证清单(只读不落库):项目场景引用的槽位 ×
+/** S7.3 装载状态 = 成员凭证清单(只读不落库):项目场景引用的条目 ×
  * 成员已绑/未绑(门 = 项目成员;公共项目 422)。 */
 export interface SlotStatusMember {
   userId: number

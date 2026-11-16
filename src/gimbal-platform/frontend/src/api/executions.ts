@@ -42,7 +42,7 @@ export interface Execution {
     scenarioId?: string
     dataSetIds?: string[]
     envId?: string
-    /** 实际注入清单(模板扫描 ∪ 绑定别名声明的槽位)— 读侧据此展示认证列 */
+    /** 实际注入清单(模板扫描 ∪ 步骤服务的身份条目)— 读侧据此展示认证列 */
     injectedAuths?: string[]
     /** service → 绑定(authz M2a S6 起新执行 = {svc:{alias}};旧执行存量
      *  可能仍是 legacy {authAlias,url} — 展示按 JSON 原样渲染,两形状都容忍) */

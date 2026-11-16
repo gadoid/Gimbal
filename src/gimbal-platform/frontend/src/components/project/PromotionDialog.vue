@@ -58,7 +58,7 @@
             </table>
           </template>
           <p v-if="analysis.slots.length" class="muted">
-            引用槽位:{{ analysis.slots.join('、') }}(凭证跟人走,进项目后成员各自绑定)
+            引用条目:{{ analysis.slots.join('、') }}(凭证跟人走,进项目后成员各自装载)
           </p>
         </template>
       </template>

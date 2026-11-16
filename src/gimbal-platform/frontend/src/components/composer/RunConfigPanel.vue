@@ -55,7 +55,7 @@
             v-model="bindings[row.service].alias">
             <option value="">— 用服务键本身 —</option>
             <option v-for="c in candidatesOf(row.service)" :key="c.aliasName" :value="c.aliasName">
-              {{ c.slot ? `${c.aliasName}(槽位 ${c.slot})` : c.aliasName }}
+              {{ c.slot ? `${c.aliasName}(条目 ${c.slot})` : c.aliasName }}
             </option>
             <!-- 已删别名(M2a S6):disabled option 显示原别名 — 值不丢
                  (可见可存),不可再选,用户重选即恢复 -->
@@ -85,7 +85,7 @@
       <section v-if="projectId != null" class="run-section">
         <label class="run-label">凭证来源 <span class="muted small">(手动执行默认个人凭证,可切换项目凭证)</span></label>
         <select v-model="credentialSource" class="env-select" data-testid="credential-source">
-          <option value="personal">个人凭证(我的槽位绑定)</option>
+          <option value="personal">个人凭证(我的账户池)</option>
           <option value="project">项目凭证(项目管理员维护)</option>
         </select>
       </section>

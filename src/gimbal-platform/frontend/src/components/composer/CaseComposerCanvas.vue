@@ -522,14 +522,14 @@
     </div>
 
     <!-- 认证选择器(headers value 注入 ${auth.<alias>.<field>})。
-         步骤服务的别名声明了槽位时预填该槽凭证(配套方案 §1.1;M2a S6
-         起别名携带的是声明槽位 slot,凭证在凭证管理按槽归位) -->
+         步骤服务有身份条目时预填该条目凭证(配套方案 §1.1;registry
+         起别名携带条目名 slot 兼容键,账户在凭证管理按条目装载) -->
     <AuthSelectorModal
       v-if="authPickerOpen"
       v-model="authPickerOpen"
       :auths="auths"
       :preselect-alias="authPickerPreselect"
-      :origin-note="authPickerBound ? `${authPickerBound.aliasName} 的声明槽位 ${authPickerBound.slot}(可改选)` : null"
+      :origin-note="authPickerBound ? `${authPickerBound.aliasName} 的条目 ${authPickerBound.slot}(可改选)` : null"
       @select="onAuthPicked"
     />
     <!-- 变量选择器(headers value 注入 ${var.<name>},#3) -->
@@ -1841,9 +1841,9 @@ onMounted(() => {
     .catch(() => { /* 目录不可达 → 派生降级裸声明黄警,不阻塞编排 */ })
 })
 
-// ── 别名声明槽位(配套方案 §1.1 C3a;authz M2a S6 改 slot 口径)────
-// 步骤服务命中已声明槽位的别名/服务级默认行时,认证选择器预填该槽的凭证
-// (模板引用写槽位键,执行时按执行者本人池的同名槽解析)。拉取失败静默 —
+// ── 步骤服务 → 身份条目(配套方案 §1.1 C3a;registry 条目口径)────
+// 步骤服务命中身份条目时,认证选择器预填该条目的凭证
+// (模板引用写条目名,执行时按执行者本人池解析)。拉取失败静默 —
 // 预填只是辅助,不绑也能手工选。
 const aliasSlotMap = ref<Record<string, string>>({})
 /** F4(2026-09-23):注册表全量行 —— 下拉「已登记」来源 / headers 模板
@@ -1865,7 +1865,7 @@ onMounted(() => {
 
 interface BoundCredential { aliasName: string; slot: string }
 
-/** step 服务 → 声明槽位:精确别名键 → derive_base 到 base(服务级默认行)。
+/** step 服务 → 条目名:精确别名键 → derive_base 到 base(服务级默认行)。
  *  与运行时注入链同构(显式绑定 > 别名表 > 无)。 */
 function boundCredentialFor(step: StepView | null): BoundCredential | null {
   const raw = stepService(step)

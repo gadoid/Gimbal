@@ -10,8 +10,8 @@
   §7 存量兼容)。仅当配置**设了** envId 才占位 —— 空值不遮蔽。
 * **绑定**:仅**显式选定**的配置参与(「选定执行配置 > 方案遗留 >
   场景 authored > 池默认行」)—— 默认配置的绑定不自动生效,防成员
-  默认配置静默改写槽位。语义 = 换池内取用行,**注入标签(场景引用的
-  声明槽位)不变**(§5 注入表「改变池内命中哪条」)。
+  默认配置静默改写取用条目。语义 = 换池内取用行,**注入标签(场景引用的
+  声明条目)不变**(§5 注入表「改变池内命中哪条」)。
 * **carry**:私有区 = 选定或默认配置的覆盖;项目区 = 仅显式选定
   (决策 9「默认不吃、显式吃」)。覆盖键 = 目录服务名(base)。
 
@@ -48,7 +48,7 @@ class ExecConfigChoice:
     is_default: bool
     explicit: bool
     env_id: int | None = None
-    # 别名全名 → 槽位名(换池内取用;注入标签不变)
+    # 别名全名 → 条目名(换池内取用;注入标签不变)
     bindings: dict[str, str] = field(default_factory=dict)
     # 目录服务名 → {字段: 值|null=显式注入 null}
     carry_overrides: dict[str, dict[str, str | None]] = field(

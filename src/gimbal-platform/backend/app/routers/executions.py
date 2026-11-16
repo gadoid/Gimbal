@@ -899,7 +899,7 @@ async def rerun_execution(
             "dataSetSelection": ([] if _replay_params
                                  else cfg.get("dataSetSelection") or []),
             # S6:归档形态可能带退役的 url/authAlias —— 回放剥离(历史
-            # 数据不 422;地址/凭证改由环境快照与槽位绑定给出)
+            # 数据不 422;地址/凭证改由环境快照与条目装载给出)
             "serviceBindings": scrub_retired_bindings(
                 cfg.get("serviceBindings")),
             "injectionEntryIds": ([] if _replay_params

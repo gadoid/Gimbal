@@ -14,7 +14,12 @@ carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）�
 令牌复核 NameError/行级绑定两处等 —— 全是旧测试 skip 期从未被执行的死路径）**；
 **P2-B.6 导入映射按 ref 语义重做完成（`call.user`→条目名统一改写、回报 `authEntries`/`authRenames`
 + 登记坐标深链,13 条挂起用例按新语义恢复）**；
-剩余：Phase 3 文案清账;**migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 条时代重放用例恢复)**;生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
+**Phase 3 文案清账完成:「槽位」字样全站退场(前端用户可见文案 + 注释;
+server 链槽号/入站参数槽/看板 Root 槽为别概念保留)、ServiceAliasCard 死谓词
+重做、conftest P1-7 垫片删除、概念地图/运行手册核验零残留**;
+migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 条时代重放用例恢复);
+生产环境已迁移并部署，本地三服务已起（0057 已迁）。** 重构三阶段全部收口
+(P2-C 登录后冒烟仍待 admin 凭据)。
 
 ## 2. 已完成
 
@@ -237,7 +242,26 @@ skipif 判引擎可导入）本轮引擎可用全部跑过 —— 记档口径:�
    member_services` 待 PG 环境执行 —— 本机无 TEST_DATABASE_URL）。
 6. ~~**导入映射重做**：按 ref 语义重做导入面板的认证映射~~ ✅ P2-B.6 销账
    （详见下节；13 条挂起用例按新语义恢复）。
-7. **Phase 3 文案清账**：「槽位」字样全站退场（条目/身份/账户口径）；runbook / 概念地图同步。
+7. ~~**Phase 3 文案清账**~~ ✅ 完成（见下节）。
+
+### Phase 3 文案清账（2026-11-17，✅ 完成）
+
+* **前端**：用户可见文案 9 文件(`(槽位 X)`→`(条目 X)`、`个人凭证(我的
+  槽位绑定)`→`个人凭证(我的账户池)`、`凭证槽位未绑定`→`凭证条目未装载`、
+  `项目凭证缺失槽位`→`项目凭证缺失条目` 等);api 类型注释与组件注释同步;
+  **ServiceAliasCard 死谓词重做**(旧「未声明槽位」统计在条目口径下恒 0、
+  行 tag 与名重复 → S 档改「条目数 + 基础服务数」、行 tag 改 ref 概览);
+  测试断言同步(RunDialog.auths/SchemeRunConfigSection/ProjectConfigPanel/
+  ExecConfigsView)。
+* **后端**：用户可见串 3 处(suites/dispatcher 的项目凭证与个人池缺件提示、
+  data_set_store 的 undeclared_slot 422 文案)+ 凭证面注释 20+ 文件清扫;
+  **server 链槽号/入站参数槽位/看板 Root 槽为别概念,保留原文**。
+* **conftest P1-7 垫片删除**：旧模块名(service_alias/auth_session/
+  service_meta)→ 新模型映射块整体移除;唯一残余消费方 inbound_fixtures
+  切 ServiceIdentity 直连。再引用即 ImportError,不做静默兜底。
+* **文档**：概念地图/系统接入运行手册/http-api 核验「槽位/旧模型术语」
+  零残留(早前轮次已同步);三份 registry 文档中的「槽位」为迁移史记载,
+  保留。
 
 ### P2-B.6 导入映射按 ref 重做（2026-11-16，✅ 完成）
 
@@ -329,4 +353,4 @@ skipif 判引擎可导入）本轮引擎可用全部跑过 —— 记档口径:�
 | 导入「挂认证」退役 | 后端曾收 slot 但忽略 → 导入面挂认证静默失效 | ✅ P2-B.6 已按 ref 重做（call.user→条目名统一改写；slot/credentialAlias 键删除） |
 | deployments 与实例双 URL | `deployments` = API 地址；(system, env).login_url = 登录口，语义不同勿混 | 页面已分列展示与编辑 |
 | 条目改名 | 不做（引用键稳定是架构决策） | 改名 = 删旧建新 |
-| P1-7 垫片 | conftest 的旧模块名垫片是迁移期临时物 | P2-A 完成后删除 |
+| P1-7 垫片 | conftest 的旧模块名垫片是迁移期临时物 | ✅ Phase 3 已删除(inbound_fixtures 同批切直连) |

@@ -6,7 +6,7 @@
 
 **零凭证值、零地址值**(§4 薄束性质):凭证由池按 (system, env,
 slot) 解析、地址由部署表按 (目录服务, env) 解析,本表只存引用键
-—— 槽位是名字,跨区可移植(「商户B@UAT」私有区跑解析个人池、
+—— 条目名是名字,跨区可移植(「商户B@UAT」私有区跑解析个人池、
 项目里跑解析项目池,引用不用换)。
 
 scope 两型同构:``'user' | 'project'``(v1 只落 user,project 随
@@ -57,9 +57,9 @@ class ExecConfig(Base):
         Integer, ForeignKey("environments.id", ondelete="SET NULL"),
         nullable=True)
     # {"systems": [{"service": 目录服务名,
-    #               "bindings": {身份面(别名全名): 槽位名},
+    #               "bindings": {身份面(别名全名): 条目名},
     #               "carryOverrides": {字段: 值}}]}
-    # (bindings 覆盖槽位解析序的配置层;carryOverrides 值内联,
+    # (bindings 覆盖条目解析序的配置层;carryOverrides 值内联,
     #  null = 显式注入 JSON null,与 carry_store 语义同型)
     payload: Mapped[dict[str, Any]] = mapped_column(
         JsonVar, nullable=False, default=dict)

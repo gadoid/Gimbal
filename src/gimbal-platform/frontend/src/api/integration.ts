@@ -173,7 +173,7 @@ export async function fetchFunctionCards(
 
 // ── W1(个人侧方案 §2):创建前置预览 ────────────────────────────
 export interface ScenarioPreview {
-  /** 场景+方案所需凭证槽位(${auth.*} 扫描 ∪ 生效别名声明槽位;S6) */
+  /** 场景+方案所需身份条目(${auth.*} 扫描 ∪ 步骤服务条目;S6) */
   authAliases: string[]
   /** 当前用户「我的凭证」中缺失的别名(任一缺失即列) */
   missingCredentials: string[]

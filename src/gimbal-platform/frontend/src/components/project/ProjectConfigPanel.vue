@@ -351,7 +351,7 @@ function applySvcInput(): void {
 
 watch(serviceKey, (k) => { if (k) activeSvc.value = k })
 
-// ── ④ 槽位状态 ───────────────────────────────────────────────────
+// ── ④ 装载状态 ───────────────────────────────────────────────────
 const slots = ref<SlotStatusRow[]>([])
 const slotLoading = ref(true)
 
@@ -559,7 +559,7 @@ onMounted(async () => {
 .muted { color: var(--sl-ink-3); }
 .mono { font-family: var(--font-mono, monospace); }
 
-/* 槽位状态:成员绑定 chips(语义色全令牌化,夜间同色) */
+/* 装载状态:成员绑定 chips(语义色全令牌化,夜间同色) */
 .slot-card {
   border: 1px solid var(--sl-line);
   border-radius: 0.5rem;

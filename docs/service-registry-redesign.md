@@ -239,7 +239,7 @@ tier 序(公共项目层 < 项目层)不变。
 |---|---|---|
 | Phase 1 底座 | ✅ 完成 | 四表 + 解析链 + routers 全量切换 + alembic 0057(已在生产库执行);全量 1560 passed / 461 skipped,0 残余失败 |
 | Phase 2 页面 | ✅ 欠账全销 | 凭证页/项目凭证账户化(含 system 主档选择);服务注册页重做主档注册簿+对账+实例;身份条目子页条目化;ProjectConfigPanel+生效预览条目口径;ExecConfigs 装载就绪新链(C3a);carry 三档键选择器+env 覆盖开关+后端系统键面聚合(C3b,新用例待 PG 环境);导入映射按 ref 重做(P2-B.6:call.user→条目名统一改写,回报 authEntries/authRenames,13 用例恢复) |
-| Phase 3 清账 | ⬜ 未开始 | 「槽位」文案与文档同步(migrations 时代造形已另行落地,见 progress 文档;19 条重放用例恢复) |
+| Phase 3 清账 | ✅ 完成 | 「槽位」字样全站退场(server 槽号/入站参数槽/看板 Root 槽等别概念保留);conftest P1-7 垫片删除;概念地图/运行手册核验零残留(migrations 时代造形同日落地,19 条重放用例恢复) |
 
 **实施中的偏离与决策**（记录以免后续误读）：
 

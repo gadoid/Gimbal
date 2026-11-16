@@ -1,8 +1,8 @@
 /**
  * ProjectConfigPanel —— S7.3 项目配置页签。
- * 普通项目:默认环境编辑(canManage)/项目层 carry 编辑器/槽位状态/
+ * 普通项目:默认环境编辑(canManage)/项目层 carry 编辑器/装载状态/
  * 生效预览入口;公共项目:全局默认编辑器(原 /carry-config 落位),
- * 无默认环境与槽位状态节(公共项目不可 PATCH、slot-status 422)。
+ * 无默认环境与装载状态节(公共项目不可 PATCH、slot-status 422)。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
@@ -130,7 +130,7 @@ describe('ProjectConfigPanel — 普通项目', () => {
     w.unmount()
   })
 
-  it('槽位状态:成员已绑/未绑 chips 渲染', async () => {
+  it('装载状态:成员已绑/未绑 chips 渲染', async () => {
     const w = mountPanel()
     await flushPromises()
     expect(w.find('[data-testid="prj-slot-qa"]').exists()).toBe(true)
@@ -210,7 +210,7 @@ describe('ProjectConfigPanel — carry 漂移(S7.6)', () => {
 })
 
 describe('ProjectConfigPanel — 公共项目', () => {
-  it('只显全局默认编辑器;无默认环境/按服务/槽位/预览节', async () => {
+  it('只显全局默认编辑器;无默认环境/按服务/装载/预览节', async () => {
     const w = mountPanel(projPublic)
     await flushPromises()
     expect(w.find('[data-testid="prj-config-env"]').exists()).toBe(false)
@@ -220,15 +220,15 @@ describe('ProjectConfigPanel — 公共项目', () => {
     expect(w.find('[data-testid="prj-cfg-project-row-0"]').exists()).toBe(false)
     expect(w.find('[data-testid="prj-config-svc"]').exists()).toBe(false)
     expect(w.find('[data-testid="prj-config-preview-scen"]').exists()).toBe(false)
-    // 公共项目不拉槽位状态
+    // 公共项目不拉装载状态
     expect(projectsApi.getSlotStatus).not.toHaveBeenCalled()
     w.unmount()
   })
 })
 
 
-describe('ProjectConfigPanel — S8 项目凭证/槽位项目覆盖', () => {
-  it('项目凭证节渲染(管理员视图带用户名);槽位状态带「项目凭证 · 已登记」chip', async () => {
+describe('ProjectConfigPanel — S8 项目凭证/装载项目覆盖', () => {
+  it('项目凭证节渲染(管理员视图带用户名);装载状态带「项目凭证 · 已登记」chip', async () => {
     const w = mountPanel()
     await flushPromises()
     expect(w.find('[data-testid="project-credentials"]').exists()).toBe(true)

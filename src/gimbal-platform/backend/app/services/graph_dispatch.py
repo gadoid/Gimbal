@@ -237,7 +237,7 @@ async def materialize_graph(
 
     # 认证与绑定物化(graph 级一次)。N1-2:凭证清单与单场景链/预检
     # 同源 —— run_prepare.graph_auth_aliases **逐单元**走
-    # exec_auth_aliases(模板扫描 ${auth.*} ∪ 生效别名声明槽位(S6:图级
+    # exec_auth_aliases(模板扫描 ${auth.*} ∪ 步骤服务条目(S6:图级
     # +单元+方案合并后的绑定选别名即换槽))再并集。逐单元而非按服务
     # 压平:两个单元给同一服务选不同别名时压平会后写覆盖先写(评审
     # 2026-11-01 §2 回归)。选的别名须存在且同基础服务(S6)。

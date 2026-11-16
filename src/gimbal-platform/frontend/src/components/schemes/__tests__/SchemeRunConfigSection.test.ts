@@ -2,7 +2,7 @@
  * SchemeRunConfigSection — 运行配置区(authz M2a S6「别名瘦身」后口径)
  *
  * 绑定语义 = 「服务键 → 用哪个别名」({svc:{alias}}),URL/凭证字段退役:
- * - 别名 select 只列与服务键同基的注册表别名(槽位带在选项文案里)
+ * - 别名 select 只列与服务键同基的注册表别名(条目带在选项文案里)
  * - 选中 → update:serviceBindings 只落显式条目;清空 → 键移除
  * - binding-url 输入已退役,不再渲染
  * - 存量别名已删 → 行标红(binding-degraded-warn)+ disabled option 保值
@@ -113,7 +113,7 @@ describe('SchemeRunConfigSection', () => {
     expect(w.text()).toContain('该服务暂无同基别名')
   })
 
-  it('候选按同基过滤;槽位在选项文案带出', async () => {
+  it('候选按同基过滤;条目在选项文案带出', async () => {
     listAllAliasesMock.mockResolvedValue([
       aliasRow('svc-a', 'svc-a'),
       aliasRow('svc-a-uat', 'svc-a'),
@@ -128,7 +128,7 @@ describe('SchemeRunConfigSection', () => {
     const opts = sel.findAll('option').map((o) => o.text())
     expect(opts[0]).toContain('用服务键本身')
     expect(opts.some((t) => t === 'svc-a-uat')).toBe(true)
-    expect(opts.some((t) => t.includes('svc-a-maker(槽位 maker)'))).toBe(true)
+    expect(opts.some((t) => t.includes('svc-a-maker(条目 maker)'))).toBe(true)
     expect(opts.some((t) => t.includes('other'))).toBe(false)   // 跨基不列
   })
 

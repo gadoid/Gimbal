@@ -1,6 +1,6 @@
 /** 执行配置管理页测试(执行配置分层①/③) — API 全走 mock,载荷与
  * 交互流钉住:选中回填 / 新建(空行剔除+envId 置空)/ PATCH 保存 /
- * 默认切换 / 复制 / 两步删除 / 409 内联;③ 枢纽(地址/槽位就绪 + 漂移
+ * 默认切换 / 复制 / 两步删除 / 409 内联;③ 枢纽(地址/条目就绪 + 漂移
  * + 预览按钮)。 */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'

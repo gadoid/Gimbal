@@ -3,7 +3,7 @@
  *
  * 锁定(旧 URL/凭证绑定口径已退役,本文件按 {svc:{alias}} 语义重写):
  * - 绑定行 = 声明 ∪ 引用并集,一行一个别名 select(候选 = 与服务键同基
- *   的注册表别名;槽位在选项文案里带出,如 fin-maker(槽位 maker))
+ *   的注册表别名;条目在选项文案里带出,如 fin-maker(条目 maker))
  * - 无同基候选 → 静默说明代替下拉(用服务键本身),不再有 URL 输入
  * - confirm 携带 serviceBindings = {svc:{alias}}(空绑定条目剔除)
  * - 选中的别名已从注册表删除 → 行标红警示(degraded),不阻塞运行
@@ -17,7 +17,7 @@ import type { SchemeV2 } from '@/api/scenario-composer'
 import type { ServiceAliasRow } from '@/api/service-aliases'
 
 /** 注册表 mock(listAllAliases;RunConfigPanel 挂载自取)。fin 家族两个
- *  候选(一个带槽位)、order 一个候选、bare 无候选。 */
+ *  候选(一个带条目)、order 一个候选、bare 无候选。 */
 const listAllAliasesMock = vi.hoisted(() => vi.fn())
 vi.mock('@/api/service-aliases', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/api/service-aliases')>()
@@ -61,7 +61,7 @@ function mountDlg(props: Partial<typeof BASE_PROPS> & {
 }
 
 describe('别名候选按同基渲染(M2a S6)', () => {
-  it('select 只列与服务键同基的别名;槽位在选项文案带出;无候选 → 静默说明代替下拉', async () => {
+  it('select 只列与服务键同基的别名;条目在选项文案带出;无候选 → 静默说明代替下拉', async () => {
     seedAliases([
       aliasRow('fin', 'fin'),
       aliasRow('fin-maker', 'fin', 'maker'),
@@ -75,11 +75,11 @@ describe('别名候选按同基渲染(M2a S6)', () => {
     expect(selects).toHaveLength(2)                     // fin + order;bare 无候选 → 无 select
     const finOpts = selects[0].findAll('option').map((o) => o.text())
     expect(finOpts[0]).toContain('用服务键本身')
-    expect(finOpts).toContain('fin-maker(槽位 maker)')
+    expect(finOpts).toContain('fin-maker(条目 maker)')
     expect(finOpts.some((t) => t === 'fin-uat')).toBe(true)
     expect(finOpts.some((t) => t.includes('order-ro'))).toBe(false)   // 跨基不列
     const orderOpts = selects[1].findAll('option').map((o) => o.text())
-    expect(orderOpts.some((t) => t.includes('order-ro(槽位 ro)'))).toBe(true)
+    expect(orderOpts.some((t) => t.includes('order-ro(条目 ro)'))).toBe(true)
     // bare:静默说明行,没有 select
     expect(w.text()).toContain('该服务暂无同基别名')
   })

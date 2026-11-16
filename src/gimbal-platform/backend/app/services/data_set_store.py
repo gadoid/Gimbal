@@ -70,8 +70,8 @@ def _validate_rows(scenario_payload: dict | None, rows: list[dict],
                          if k[len(ROW_BINDING_PREFIX):] not in known)
         if unknown:
             raise ValueError(
-                f"undeclared_slot: {', '.join(unknown)} — 账号列的槽位未被"
-                "场景引用(${auth.<槽>} / 别名声明槽位)")
+                f"undeclared_slot: {', '.join(unknown)} — 账号列的条目未被"
+                "场景引用(${auth.<条目>} / 步骤服务条目)")
         non_str = sorted({k for row in rows for k in slot_cols
                           if row.get(k) is not None
                           and not isinstance(row.get(k), str)})
@@ -82,8 +82,8 @@ def _validate_rows(scenario_payload: dict | None, rows: list[dict],
 
 
 def _injection_slots(scenario_payload: dict | None) -> set[str]:
-    """场景引用的注入槽名(静态扫描:``${auth.<槽>}`` / ``${slot.<槽>.…}``
-    + 别名声明槽位)—— 与派发注入清单同源的保存期近似(不查库的部分)。"""
+    """场景引用的注入条目名(静态扫描:``${auth.<条目>}`` / ``${slot.<条目>.…}``
+    + 步骤服务条目)—— 与派发注入清单同源的保存期近似(不查库的部分)。"""
     from .auth_ref_scan import scan_auth_aliases
     from .scenario_store import definition_from_payload
 
@@ -98,7 +98,7 @@ def _injection_slots(scenario_payload: dict | None) -> set[str]:
 
 async def _known_slots(db: AsyncSession, scenario_payload: dict | None,
                        rows: list[dict]) -> set[str] | None:
-    """账号列校验用的槽集合 = 派发注入清单(模板扫描 ∪ 别名声明槽位,
+    """账号列校验用的条目集合 = 派发注入清单(模板扫描 ∪ 步骤服务条目,
     ``exec_auth_aliases_of_definition`` 同源)∪ 静态扫描。行无账号列时
     不查库(返回 None)。"""
     from .run_prepare import ROW_BINDING_PREFIX

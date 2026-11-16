@@ -14,7 +14,7 @@ from app.core.security import hash_password
 from app.models import Execution, User
 from app.models.access_token import AccessToken, AccessTokenScope
 from app.models.integration_task import IntegrationTask
-from app.models.service_alias import ServiceAlias
+from app.models.service_identity import ServiceIdentity
 from app.models.webhook_delivery import WebhookDelivery
 from app.services import access_token as at_svc
 
@@ -41,7 +41,7 @@ async def seed_alias(name: str = "agent-sys", *,
     不覆盖)。``env_id`` 等其余列经 ``over``。"""
     from .helpers import seed_deployment
 
-    row = ServiceAlias(alias_name=name, base_service=name)
+    row = ServiceIdentity(alias_name=name, base_service=name)
     for k, v in over.items():
         setattr(row, k, v)
     async with db_module.SessionLocal() as s:

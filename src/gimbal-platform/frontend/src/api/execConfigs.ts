@@ -7,11 +7,11 @@
  *
  * 零凭证值、零地址值(设计方案 §4):凭证由池按 (system, env, slot)
  * 解析、地址由部署表按 (目录服务, env) 解析 —— 这里只存引用键,
- * 槽位是名字,跨区可移植。
+ * 条目名是名字,跨区可移植。
  */
 import http from '@/api/http'
 
-/** 按系统的子配置:bindings = {身份面(别名全名): 槽位名} */
+/** 按系统的子配置:bindings = {身份面(别名全名): 条目名} */
 export interface SystemSubConfig {
   service: string
   bindings: Record<string, string>

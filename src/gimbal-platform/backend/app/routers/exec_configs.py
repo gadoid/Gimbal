@@ -10,7 +10,7 @@
   配置 > 项目层 > 公共项目层);env/bindings 字段在模型上保留但链路
   无位,暂不消费(§5 环境链/绑定链无项目配置位)。
 
-零凭证值零地址值(§4):载荷只存引用键 —— bindings(身份面→槽位)与
+零凭证值零地址值(§4):载荷只存引用键 —— bindings(身份面→条目)与
 carryOverrides(业务参数值内联,null=显式注入 JSON null,与 carry_store
 语义同型)。
 
@@ -37,7 +37,7 @@ router = APIRouter(prefix="/exec-configs", tags=["exec-configs"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-# 引用键长度对齐既有列口径:别名全名 String(128)、槽位名 String(64)、
+# 引用键长度对齐既有列口径:别名全名 String(128)、条目名 String(64)、
 # carry 字段 String(255);carry 值 Text(不限,业务参数)。
 _AliasName = Annotated[str, Field(min_length=1, max_length=128)]
 _SlotName = Annotated[str, Field(min_length=1, max_length=64)]
@@ -51,7 +51,7 @@ class SystemSubConfig(BaseModel):
                          description="目录服务名(分组键)")
     bindings: dict[_AliasName, _SlotName] = Field(
         default_factory=dict, max_length=64,
-        description="{身份面(别名全名): 槽位名} —— 覆盖槽位解析序的配置层")
+        description="{身份面(别名全名): 条目名} —— 覆盖条目解析序的配置层")
     carryOverrides: dict[_CarryField, str | None] = Field(
         default_factory=dict, max_length=64,
         description="{字段: 值} —— 该系统在此业务过程下带的参数;"

@@ -53,7 +53,7 @@
             凭证来源:
             <select v-model="credSource" data-testid="sub-cred-source">
               <option value="project">项目凭证(项目管理员维护,不可见明文)</option>
-              <option value="personal">个人凭证(我的槽位绑定)</option>
+              <option value="personal">个人凭证(我的账户池)</option>
             </select>
           </label>
         </div>

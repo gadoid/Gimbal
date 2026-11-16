@@ -2,7 +2,7 @@
  * api/runs.ts —— 运行读面 client(S7.3 起:生效预览)。
  *
  * 契约对齐后端 app/routers/runs.py POST /runs/preview(S5 落地):
- * 本次执行将生效的 地址/槽位绑定/carry 逐值带来源,不含明文凭证;
+ * 本次执行将生效的 地址/条目装载/carry 逐值带来源,不含明文凭证;
  * 读闸同预检(不可读场景 404,不泄露存在性)。环境链与执行同源:
  * 显式 > 方案 > 项目默认 > 个人偏好 > 默认环境。
  */
@@ -64,7 +64,7 @@ export interface PreviewAuth {
   isDefault: boolean
   /** authz M2a S8:取用池('personal' | 'project') */
   source?: string
-  /** 分层②:槽位被执行配置绑定换用时标 'exec_config'(键 = 声明槽位,
+  /** 分层②:条目被执行配置绑定换用时标 'exec_config'(键 = 声明条目,
    *  取用行 = configuredSlot;缺省 = 别名声明槽) */
   slotSource?: string
   configuredSlot?: string

@@ -295,7 +295,7 @@ async def delete_alias(db: AsyncSession, alias_name: str) -> None:
 
 def effective_alias(svc: str, bindings: dict | None) -> str:
     """服务键的生效别名(authz M2a S6:``serviceBindings`` = 服务键 →
-    别名):绑定选了别名取之,否则服务键自身 —— 槽位默认与 carry 别名键
+    别名):绑定选了别名取之,否则服务键自身 —— 条目默认与 carry 别名键
     的**唯一**换名口径(地址不经此:同基础服务校验保证部署地址一致)。"""
     b = (bindings or {}).get(svc)
     alias = b.get("alias") if isinstance(b, dict) else None
@@ -346,8 +346,8 @@ async def credential_alias_hits(
     db: AsyncSession, steps: list,
     bindings: dict[str, dict] | None = None,
 ) -> dict[str, str]:
-    """别名表凭证默认命中(raw 服务键 → 槽位;authz M2a S6:按服务键的
-    **生效别名**取槽位 —— 方案选了 ``fin → fin-maker`` 就吃 ``fin-maker``
+    """别名表凭证默认命中(raw 服务键 → 条目名;authz M2a S6:按服务键的
+    **生效别名**取条目 —— 方案选了 ``fin → fin-maker`` 就吃 ``fin-maker``
     声明的槽)。查表失败降级 {}(别名默认是增强,不是前置条件)。订阅
     内容指纹同消费本函数。"""
     from .run_materialize import referenced_services
@@ -376,7 +376,7 @@ async def exec_auth_aliases(
     ``${auth.<name>.*}`` 模板扫描(auth_ref_scan,definition steps
     **+ config.setup/teardown 条目**,webhook v4 §3.2 —— setup 引用的
     凭证此前既不进清单也不注入,令牌范围与运行时注入同时生效)
-    ∪ 别名声明槽位(``credential_alias_hits``,按绑定选中的生效别名)。
+    ∪ 步骤服务条目(``credential_alias_hits``,按绑定选中的生效别名)。
     去重保序。方案绑定 authAlias 一源随 S6 退役。
     """
     from .auth_ref_scan import scan_auth_aliases
@@ -432,13 +432,13 @@ async def slot_lookup_overrides(
     bindings: dict[str, dict] | None = None,
     alias_overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """执行配置绑定的取用换槽映射(分层②,§5 注入表):{声明槽位(注入
-    标签,场景引用) → 池取用槽位}。
+    """执行配置绑定的取用换条目映射(分层②,§5 注入表):{声明条目(注入
+    标签,场景引用) → 池取用条目}。
 
-    槽位解析序:别名声明(缺省)> 执行配置绑定(覆盖)> 池内同槽默认
+    条目解析序:别名(缺省)> 执行配置绑定(覆盖)> 池内默认账户
     行(最终账号)。覆盖只换**池内命中哪条** —— 注入标签(场景步骤
-    ``call.user``/``${auth.*}`` 引用的声明槽位)不变,场景零改动可跑。
-    ``${auth.X}`` 模板直引槽位的标签不受别名键覆盖影响(无别名关系)。
+    ``call.user``/``${auth.*}`` 引用的声明条目)不变,场景零改动可跑。
+    ``${auth.X}`` 模板直引条目的标签不受别名键覆盖影响(无别名关系)。
     """
     if not alias_overrides:
         return {}

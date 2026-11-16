@@ -328,7 +328,7 @@ async def _post_adhoc_run(
 async def preview_effective_config(
     principal: PrincipalIn, db: DbSession, body: dict,
 ) -> dict:
-    """S5 生效预览:本次执行将生效的 地址/槽位绑定/carry(逐值带来源,
+    """S5 生效预览:本次执行将生效的 地址/条目装载/carry(逐值带来源,
     不含明文凭证)。读闸同预检(can_read_scenario_row)。
 
     body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?/

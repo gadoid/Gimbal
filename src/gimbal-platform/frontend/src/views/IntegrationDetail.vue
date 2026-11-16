@@ -349,7 +349,7 @@ const banner = computed<{
       return {
         tone: 'amber', title: '已暂停 · 缺凭证',
         desc: viaProject
-          ? `项目凭证缺失槽位：${(i.missingCredentials ?? t.authAliases ?? []).join('、') || '—'}。由项目管理员在项目配置页登记后自动恢复。`
+          ? `项目凭证缺失条目：${(i.missingCredentials ?? t.authAliases ?? []).join('、') || '—'}。由项目管理员在项目配置页登记后自动恢复。`
           : `场景需要凭证而持有人凭证池缺失：${(i.missingCredentials ?? t.authAliases ?? []).join('、') || '—'}。到「凭证管理」配置后自动恢复。`,
         actions: [viaProject && projId
           ? { label: '去项目配置', primary: true, to: `/projects/${projId}?tab=config` }

@@ -144,7 +144,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
            绑定照常编辑(方案遗留链位),清空后回到指引态 -->
       <div v-if="!hasBindings" class="exec-pointer" data-testid="binding-pointer">
         <p class="hint">
-          绑定已改由「执行配置」承载:在那里按系统维护 身份面 → 槽位 与
+          绑定已改由「执行配置」承载:在那里按系统维护 身份面 → 条目 与
           carry 业务参数,执行时选定配置即注入。方案只管内容侧(数据/步段/强度)。
         </p>
         <a class="pointer-link" href="/exec-configs" data-testid="binding-pointer-link">去执行配置 ↗</a>
@@ -168,7 +168,7 @@ const previewEnvNames = computed<Record<number, string>>(() =>
             @change="setRowBinding(r.service, { alias: ($event.target as HTMLSelectElement).value })">
             <option value="">— 用服务键本身 —</option>
             <option v-for="c in candidatesOf(r.service)" :key="c.aliasName" :value="c.aliasName">
-              {{ c.slot ? `${c.aliasName}(槽位 ${c.slot})` : c.aliasName }}
+              {{ c.slot ? `${c.aliasName}(条目 ${c.slot})` : c.aliasName }}
             </option>
             <!-- 已删别名:disabled option 显示原别名 — 值不丢(可见可存),不可再选 -->
             <option v-if="degraded(r.service)" :value="serviceBindings[r.service]!.alias" disabled>

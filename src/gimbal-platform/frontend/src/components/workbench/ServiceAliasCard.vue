@@ -1,9 +1,9 @@
 <!-- ServiceAliasCard.vue — 工作台注册卡:服务注册(adminOnly,→ /service-admin;
      2026-11-13 身份面与各环境地址并为同一页,卡片随页更名)。
-     数据 = listAliases() 全集(与完整页同一端点,不另开口子);未声明槽位
-     判定与完整页同一条谓词 —— §7 第 6 条计数同源。
-     authz M2a S6:别名瘦身(环境归属/凭证别名退役)后,行 tag = 声明槽位。
-     三档密度(§4):S = 别名数 + 未声明槽数;M/L = 别名行 5/8。 -->
+     数据 = listAliases() 全集(与完整页同一端点,不另开口子)。
+     registry 重做口径:行 tag = 条目 ref(默认账户/指定用户名);
+     旧「未声明槽位」统计随槽概念退役(条目即注入键,恒有值)。
+     三档密度(§4):S = 条目数 + 基础服务数;M/L = 条目行 5/8。 -->
 <template>
   <div data-testid="wb-card-service-aliases" class="wcard">
     <header class="chead">
@@ -16,11 +16,11 @@
       <router-link to="/service-admin" class="manage-link">管理 →</router-link>
     </header>
 
-    <!-- S 档:只出结论(未声明槽位是这页真正要人盯的那件事) -->
+    <!-- S 档:只出结论(装载与实例坐标去完整页看) -->
     <div v-if="size === 'S'" class="s-body" :data-testid="wbT('s')">
       <div class="s-stats">
-        <p class="s-stat"><b>{{ rows.length }}</b>个别名</p>
-        <p class="s-stat" :class="{ 'st-warn': noSlotCount > 0 }"><b>{{ noSlotCount }}</b>未声明槽位</p>
+        <p class="s-stat"><b>{{ rows.length }}</b>个条目</p>
+        <p class="s-stat"><b>{{ baseCount }}</b>个基础服务</p>
       </div>
     </div>
 
@@ -35,18 +35,18 @@
           :data-testid="`wb-sa-row-${a.aliasName}`"
         >
           <span class="wrow-name mono" :title="a.aliasName">{{ a.aliasName }}</span>
-          <span class="wrow-tag" :class="a.slot ? '' : 'tag-warn'">
-            {{ a.slot || '无槽位' }}
+          <span class="wrow-tag">
+            {{ a.refMode === 'username' ? `用户名·${a.refUsername || '—'}` : '默认账户' }}
           </span>
           <span class="wrow-time mono">{{ a.baseService }}</span>
         </router-link>
         <p v-if="rows.length > visible.length" class="more-hint">
-          还有 {{ rows.length - visible.length }} 个别名 — 到完整页查看
+          还有 {{ rows.length - visible.length }} 个条目 — 到完整页查看
         </p>
       </div>
       <div v-else-if="error" class="card-empty"><p>{{ error }} — 稍后在完整页重试</p></div>
       <div v-else class="card-empty">
-        <p>还没有服务别名 — 登记一个就能给编排引用</p>
+        <p>还没有身份条目 — 登记一个就能给编排引用</p>
         <router-link to="/service-admin" class="cta">去登记 →</router-link>
       </div>
     </template>
@@ -65,8 +65,9 @@ const rows = ref<ServiceAliasRow[]>([])
 const loading = ref(true)
 const error = ref('')
 
-/** 与 ServiceAdmin.vue 表格同一谓词:没声明 slot 就是缺注入槽(M2a S6)。 */
-const noSlotCount = computed(() => rows.value.filter((a) => !a.slot).length)
+/** 基础服务数(条目 → base 去重;S 档结论位) */
+const baseCount = computed(() =>
+  new Set(rows.value.map((a) => a.baseService)).size)
 
 /** M = 5 行;L = 8 行 */
 const visible = computed(() =>
@@ -81,7 +82,7 @@ onMounted(async () => {
   try {
     rows.value = (await listAliases()).items
   } catch {
-    error.value = '服务别名清单加载失败'
+    error.value = '身份条目清单加载失败'
   } finally {
     loading.value = false
   }
@@ -89,9 +90,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 形制在基座;这里只给行列宽、紫色图标底与"要人盯"的琥珀上色。 */
+/* 形制在基座;这里只给行列宽、紫色图标底。 */
 .sa-row { grid-template-columns: minmax(0, 1fr) auto auto; }
 .ci-violet { color: #6d28d9; background: #f1ecfd; }
-.tag-warn { color: var(--sl-warn); background: var(--sl-warn-soft); }
-.st-warn b { color: var(--sl-warn); }
 </style>

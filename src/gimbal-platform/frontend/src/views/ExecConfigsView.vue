@@ -326,7 +326,7 @@
           <div class="svc-panel-head">
             <span class="svc-panel-title">生效预览</span>
             <span class="svc-panel-desc">
-              选定本配置 + 任一你的场景 → 预览将生效的 地址/槽位/carry(逐值带来源,与执行同源)
+              选定本配置 + 任一你的场景 → 预览将生效的 地址/条目装载/carry(逐值带来源,与执行同源)
             </span>
           </div>
           <Button variant="outline" size="sm" data-testid="ec-preview-open"

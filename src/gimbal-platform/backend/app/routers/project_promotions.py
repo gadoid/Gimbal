@@ -1,7 +1,7 @@
 """M2a S7.2 提升流程路由(加入项目 / 加入申请)。
 
 * ``POST /projects/{pid}/promotions/analyze`` — 析出分析(成员发起;
-  冲突清单 = 两区 carry 解析差;阻断项;槽位提示)。
+  冲突清单 = 两区 carry 解析差;阻断项;装载提示)。
 * ``POST /projects/{pid}/promotions`` — 无冲突立即复制;有冲突生成
   pending 申请 + 通知项目管理员。
 * ``GET /projects/{pid}/promotions`` — 项目管理员见全部,成员见自己。

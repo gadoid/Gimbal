@@ -4,7 +4,7 @@
 个人层(S4 tier 序),项目区吃 公共项目层 < 项目层(不吃个人层)。
 提升后个人层断供 → 凡「个人层 ∨ 项目层」绑定的路径,两区有效值不同
 即是冲突(项目层缺口 projectValue=None 同样要裁决:采纳原件值 = 补写
-项目层)。别名登记(S6 起团队共享)与槽位绑定(跟人走)只作提示面。
+项目层)。别名登记(S6 起团队共享)与账户装载(跟人走)只作提示面。
 
 无冲突 → 立即复制进项目(strip="always":项目成员可读,内置凭证与
 数据集敏感列不落副本 —— 与发布复制同口径);有冲突 → pending 申请,
@@ -180,7 +180,7 @@ async def _scenario_analysis(
 
 
 async def _referenced_slots(db: AsyncSession, payload: dict) -> list[str]:
-    """引用的槽位(提示面:凭证跟人走,成员各自绑定)。"""
+    """引用的条目(提示面:凭证跟人走,成员各自装载)。"""
     from .service_aliases import (credential_aliases_for,
                                   exec_auth_aliases_of_definition)
     names = await exec_auth_aliases_of_definition(

@@ -168,7 +168,7 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
   {
     id: 'service-aliases',
     title: '服务注册',
-    description: '身份面(别名)清单与未声明槽位提醒(admin+)',
+    description: '身份条目清单与 ref 概览(admin+;装载详情见完整页)',
     accent: 'blue',
     cap: 'ops.write',
     component: () => import('./ServiceAliasCard.vue'),

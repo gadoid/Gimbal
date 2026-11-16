@@ -74,7 +74,7 @@ class PrecheckResult(BaseModel):
     # webhook v4 §5.3:令牌范围缺项(按 §3.3 分类:未授权 / 已删除);
     # 令牌路径自动以当前令牌预检,JWT 可传 tokenId 预检自己可管理的令牌
     scope_missing: list[dict] = Field(default_factory=list, alias="scopeMissing")
-    # S8 收口:凭证槽位在执行人**个人池**未绑定(与派发 fail-fast 同源
+    # S8 收口:身份条目在执行人**个人池**未装载(与派发 fail-fast 同源
     # pick_bindings 取用差集;空 = 全部可取用)
     missing_auths: list[str] = Field(default_factory=list, alias="missingAuths")
     # 项目凭证池的缺槽清单(None = 不适用:场景不属普通项目 / 执行人非

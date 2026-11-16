@@ -391,7 +391,7 @@ async def _auth_aliases_of(
 ) -> list[str]:
     """注入清单 —— 两链唯一实现(service_aliases.exec_auth_aliases:
     ${auth.*} 模板扫描(含 config.setup/teardown,§3.2)∪ 生效别名声明
-    槽位(S6:方案绑定选别名即换槽);查表失败降级跳过)。
+    条目(S6:方案绑定选别名即换用);查表失败降级跳过)。
     此前集成为「绑定 ∪ 全 definition 正则扫描」且不含别名默认 ——
     与 dispatch 漂移,已收敛。"""
     from .service_aliases import exec_auth_aliases_of_definition
@@ -449,7 +449,7 @@ def consent_fingerprint_of(
         "base_urls": dict(alias_urls or {}),
         # 别名表凭证默认命中(member+ 可改全局层,与 base_url 同入指纹)
         "alias_creds": dict(alias_creds or {}),
-        # S5(D4):默认命中集合的取用槽位绑定 id(换绑不同账号 = 订阅
+        # S5(D4):默认命中集合的取用绑定 id(换绑不同账号 = 订阅
         # 者应知情;模板属主池口径,同模板同指纹不变量保持)
         "slot_bindings": dict(slot_bindings or {}),
     }
@@ -683,14 +683,14 @@ async def scenario_aliases(
     db, scen: ComposerScenario, scheme_id: str | None,
 ) -> list[str]:
     """场景+方案(可选)的注入清单(W1 创建前置预览用;与执行期
-    `_auth_aliases_of` 同口径:${auth.*} 扫描 ∪ 生效别名声明槽位)。"""
+    `_auth_aliases_of` 同口径:${auth.*} 扫描 ∪ 步骤服务条目)。"""
     _, _, bindings, _, _ = await _load_exec_shape(db, scheme_id, scen)
     return await _auth_aliases_of(db, scen.payload, bindings)
 
 
 async def auth_aliases_view(db, tpl: IntegrationTask) -> list[str]:
     """任务当前注入清单(W0b④;与执行期 `_auth_aliases_of` 同口径:
-    场景 ${auth.*} 扫描 ∪ 生效别名声明槽位)。场景缺失返回空。"""
+    场景 ${auth.*} 扫描 ∪ 步骤服务条目)。场景缺失返回空。"""
     scen = (await db.execute(select(ComposerScenario).where(
         ComposerScenario.scenario_id == tpl.scenario_id))).scalar() \
         if tpl.scenario_id else None

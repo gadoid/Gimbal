@@ -250,14 +250,14 @@ class DataSetDraft(BaseModel):
 
 # ─── runs ───────────────────────────────────────────────────────────
 # authz M2a S6:绑定里退役的两个字段(地址 = 环境 → 部署表;凭证 =
-# 槽位绑定)。带它们的请求 422,不静默丢弃 —— 调用方以为生效了更糟。
+# 条目绑定)。带它们的请求 422,不静默丢弃 —— 调用方以为生效了更糟。
 RETIRED_BINDING_FIELDS = ("url", "authAlias", "auth_alias")
 
 
 class ServiceBinding(BaseModel):
     """服务键 → 别名(authz M2a S6,consolidated §4.1「方案只做选择,
     不存值」):``{"alias": "fin-maker"}`` = 服务键 ``fin`` 用别名
-    ``fin-maker`` —— 槽位默认与 carry 别名键随之切换;地址只由环境
+    ``fin-maker`` —— 条目默认与 carry 别名键随之切换;地址只由环境
     决定(同基础服务校验在 ``service_aliases.validate_binding_aliases``)。
 
     ``url`` / ``authAlias`` 已退役 → 422 ``binding_field_retired``;
@@ -276,7 +276,7 @@ class ServiceBinding(BaseModel):
                 raise ValueError(
                     f"binding_field_retired: serviceBindings 不再接受 "
                     f"{', '.join(hit)}(地址由环境的部署地址给出,凭证由"
-                    "槽位绑定给出;绑定只能选择别名 alias)")
+                    "条目绑定给出;绑定只能选择别名 alias)")
         return data
 
 
@@ -474,14 +474,14 @@ class RunRequest(BaseModel):
     environment_id: int | None = Field(default=None, ge=1,
                                        alias="environmentId")
     # 执行配置分层②(设计方案 §5):显式选定执行配置 —— envId 占链位②
-    # (遮蔽方案存量)、槽位绑定换池取用、carry 覆盖区规则生效(项目区
+    # (遮蔽方案存量)、条目绑定换池取用、carry 覆盖区规则生效(项目区
     # 「默认不吃、显式吃」,决策 9)。缺省 None = 默认链(默认配置只占
     # env 链位④与私有区 carry;绑定不吃)。令牌/编排/临时调用携带 →
     # 409(不吃执行配置,同指纹不变量);不属本人 → 404。
     exec_config_id: int | None = Field(default=None, ge=1,
                                        alias="execConfigId")
     # authz M2a S8:凭证来源 —— 'personal'(缺省 None 同义)= 执行人个人
-    # 槽位绑定;'project' = 场景所属普通项目的项目凭证(须是项目成员;
+    # 条目装载;'project' = 场景所属普通项目的项目凭证(须是项目成员;
     # suite 编排暂不支持 → 409)。令牌调用禁止携带(_INBOUND_FORBIDDEN)。
     credential_source: Literal["personal", "project"] | None = Field(
         default=None, alias="credentialSource")

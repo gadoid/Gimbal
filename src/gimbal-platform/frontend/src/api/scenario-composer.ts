@@ -255,7 +255,7 @@ export interface RunRequest {
    *  case;缺省 = 不注入。引擎侧展开由后续任务接入。 */
   injectionEntryIds?: string[]
   /** service → {alias} 绑定(authz M2a S6):注入清单 = 模板扫描(steps 里
-   *  的 ${auth.*} 引用)∪ 绑定 alias 声明的槽位;地址由执行环境的部署表
+   *  的 ${auth.*} 引用)∪ 步骤服务的身份条目;地址由执行环境的部署表
    *  给出。旧 auths/injectCredentials/prefix/mergePolicy 与绑定
    *  authAlias/url 已退役(spec §6 / M2a S6) */
   serviceBindings?: Record<string, ServiceBinding>
@@ -268,11 +268,11 @@ export interface RunRequest {
   /** C5(P3-05):suite 编排执行 — 非空时走 graph 链(单元=平台场景);
    *  横切面 gates/checks(D-6 保留)与乘法在此声明 */
   graph?: GraphSpec
-  /** authz M2a S8:凭证来源 — 'personal'(缺省)= 个人槽位绑定;
+  /** authz M2a S8:凭证来源 — 'personal'(缺省)= 个人账户池;
    *  'project' = 场景所属普通项目的项目凭证(须是项目成员;suite
    *  编排与令牌调用不支持) */
   credentialSource?: 'personal' | 'project'
-  /** 执行配置分层②:显式选定的执行配置 —— envId 占环境链位②、槽位
+  /** 执行配置分层②:显式选定的执行配置 —— envId 占环境链位②、条目
    *  绑定换池取用、carry 覆盖(项目区「默认不吃、显式吃」)。缺省 =
    *  默认链(默认配置只占 env 位④与私有区 carry)。仅个人(JWT)手动
    *  场景执行;令牌/编排携带 → 409;不属本人 → 404 */
@@ -509,7 +509,7 @@ export interface PrecheckResult {
   /** authz W6:场景依赖属主内置凭证、而我名下没有同名别名的清单
    * (执行人 ≠ 属主时内置凭证当空 → 跑起来必在认证段失败);空 = 无告警 */
   builtinAuthShadowed?: string[]
-  /** S8 收口:凭证槽位在我个人池未绑定(派发 fail-fast 同源);空 = 齐备 */
+  /** S8 收口:身份条目在我个人池未装载(派发 fail-fast 同源);空 = 齐备 */
   missingAuths?: string[]
   /** 项目凭证池的缺槽清单(null = 不适用:非普通项目 / 非成员) */
   projectMissingAuths?: string[] | null

@@ -9,7 +9,7 @@
  *
  * authz M2a S6「别名瘦身」:绑定语义收敛为「服务键 → 用哪个别名」
  * ({svc:{alias}}),URL/凭证字段退役 —— 地址由执行环境的部署表给出,
- * 凭证槽位随所选别名声明。显式绑定 = 非空 alias;降级 = 选中别名已
+ * 身份条目随所选别名声明。显式绑定 = 非空 alias;降级 = 选中别名已
  * 从注册表删除。
  *
  * 失效判定的**死集**输入来自 useInjectableSurface.deadIds(唯一派生,
@@ -41,7 +41,7 @@ export function explicitBindingOf(
 }
 
 /** 装配显式绑定记录:空绑定条目不落(confirm 下发与另存快照共用;
- * 后端注入清单 = 模板扫描(steps 里 ${auth.*} 引用)∪ 绑定别名的槽位)。 */
+ * 后端注入清单 = 模板扫描(steps 里 ${auth.*} 引用)∪ 步骤服务的身份条目)。 */
 export function assembleExplicitBindings(
   bindings: Record<string, ServiceBinding>,
   serviceRows: ServiceRow[],

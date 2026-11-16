@@ -131,7 +131,7 @@
                     v-if="item.precheck.missingAuths?.length"
                     class="pc-warn"
                     data-testid="runner-missing-auths"
-                  >凭证槽位未绑定:{{ item.precheck.missingAuths.join('、') }}<template v-if="item.precheck.projectMissingAuths != null && !item.precheck.projectMissingAuths.length"> — 项目凭证已覆盖,发起前在右侧切「项目凭证」即可</template>;
+                  >凭证条目未装载:{{ item.precheck.missingAuths.join('、') }}<template v-if="item.precheck.projectMissingAuths != null && !item.precheck.projectMissingAuths.length"> — 项目凭证已覆盖,发起前在右侧切「项目凭证」即可</template>;
                   </span>
                 </template>
                 <template v-else>
@@ -213,7 +213,7 @@
                 {{ c.name }}{{ c.isDefault ? '(默认)' : '' }}
               </option>
             </select>
-            <QTip text="执行配置 = 这批执行共用的外部支撑:环境、槽位绑定、carry 覆盖。不选 = 默认链(你的默认配置自动生效:环境兜底 + 私有区 carry);显式选定一套才会带绑定换槽与项目区 carry 覆盖(执行人负责,预览可自证每个值的来路)。" />
+            <QTip text="执行配置 = 这批执行共用的外部支撑:环境、条目绑定、carry 覆盖。不选 = 默认链(你的默认配置自动生效:环境兜底 + 私有区 carry);显式选定一套才会带绑定换用条目与项目区 carry 覆盖(执行人负责,预览可自证每个值的来路)。" />
             <Button v-if="queue.length" variant="outline" size="sm" :disabled="launching"
               data-testid="runner-clear" @click="clearQueue">清空</Button>
             <Button size="sm" data-testid="runner-launch"

@@ -1143,7 +1143,7 @@ async def dispatch_target(
         )
     # 注入清单 —— 唯一实现(service_aliases.exec_auth_aliases:模板扫描
     # (steps + config.setup/teardown,webhook v4 §3.2)∪ 生效别名声明
-    # 槽位(S6:绑定选别名即换槽))。存档口径(§4.1 拍板):
+    # 条目(S6:绑定选别名即换用))。存档口径(§4.1 拍板):
     # config_json.serviceBindings 只记原始绑定,别名默认只体现于
     # injectedAuths 清单与实际注入的 users。
     auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
@@ -1161,15 +1161,15 @@ async def dispatch_target(
         if _g_missing:
             raise Conflict(
                 "auth_aliases_missing",
-                "以下凭证槽位项目凭证未登记,请项目管理员在项目配置页"
+                "以下身份条目项目凭证未登记,请项目管理员在项目配置页"
                 "登记,或改用个人凭证:" + "、".join(_g_missing),
                 extra={"aliases": _g_missing,
                        "credentialSource": "project"})
         auth_aliases = []      # 已按全图核对;锚点清单不再重复判
-    # S5 失败即中止:注入清单在执行人池解不到槽位 → 整单拒发(此前
+    # S5 失败即中止:注入清单在执行人池解不到账户 → 整单拒发(此前
     # 告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
     # 注入/预览同一份(pick_bindings)。分层②:显式选定配置的绑定把
-    # 取用槽位换掉(注入标签不变;仅显式选定参与,默认行不自动改槽)。
+    # 取用条目换掉(注入标签不变;仅显式选定参与,默认行不自动换用)。
     _slot_map: dict[str, str] = {}
     if _exec_replay is not None:
         _slot_map = dict(_exec_replay.get("slotMap") or {})
@@ -1190,10 +1190,10 @@ async def dispatch_target(
         if _missing:
             raise Conflict(
                 "auth_aliases_missing",
-                ("以下凭证槽位项目凭证未登记,请项目管理员在项目配置页"
+                ("以下身份条目项目凭证未登记,请项目管理员在项目配置页"
                  "登记,或改用个人凭证:"
                  if cred_project_id is not None else
-                 "以下凭证槽位在你名下未绑定,请先在认证管理登记或改绑:")
+                 "以下身份条目在你名下未装载,请先在凭证管理登记账户或换绑条目:")
                 + "、".join(_missing),
                 extra={"aliases": _missing,
                        "credentialSource": ("project"
@@ -1467,7 +1467,7 @@ async def dispatch_target(
                 "n_runs": req.n_runs,
                 "parallel": req.parallel,
                 "service_bindings": _bindings,
-                # 分层②:槽位取用覆盖(声明槽位 → 池取用槽位)与 carry
+                # 分层②:条目取用覆盖(声明条目 → 池取用条目)与 carry
                 # 覆盖随任务配方下发(纯值;worker 不回查配置行 —— 快照
                 # 语义与方案引用同款,配置后改不影响已派发执行)
                 "slot_map": _slot_map,
@@ -2176,7 +2176,7 @@ async def _fanout(
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
     # failed,所有行计入 failed 计数,不带着空/坏凭证打环境。
     try:
-        # 注入清单为空(无 ${auth.*} 扫描引用、无别名声明槽位)时
+        # 注入清单为空(无 ${auth.*} 扫描引用、无步骤服务条目)时
         # 直接跳过解析。
         exec_auths = (
             await resolve_exec_auths(
@@ -2242,7 +2242,7 @@ async def _fanout(
         # S6:绑定选别名 → carry 别名键随之切换
         bindings={k: b.model_dump(by_alias=True)
                   for k, b in (service_bindings or {}).items()},
-        # 分层②:显式选定配置的槽位覆盖与 carry 覆盖(纯值随配方)
+        # 分层②:显式选定配置的条目覆盖与 carry 覆盖(纯值随配方)
         slot_overrides=None, exec_carry_overrides=exec_carry_overrides,
         # 入站参数(设计 2026-11-13 决策 3):raw 保留字 → 跳过 carry
         skip_carry=skip_carry)
@@ -2465,7 +2465,7 @@ async def _fanout(
                                 case_path, halt_at=halt_at, n_runs=n_runs,
                                 debug=debug, on_event=_row_on_event,
                                 m2_info=m2_info)
-                            # B6:记下槽位——case-artifact 的引擎日志按它路由到
+                            # B6:记下 server 槽号——case-artifact 的引擎日志按它路由到
                             # server-engine[-N].log(多 worker 时不再 404)
                             state.server_slot = getattr(result, "server_slot", None)
                         else:

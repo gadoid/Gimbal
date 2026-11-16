@@ -88,7 +88,7 @@ class ResolvedAuth:
     password: str
     token_type: str
     expires_in: int
-    # S4:槽位账号级字段(${slot.X.field} 派发前替换的数据源)
+    # S4:条目账号级字段(${slot.X.field} 派发前替换的数据源)
     account_fields: dict = field(default_factory=dict)
     # S5:取用绑定元数据(指纹/预览的绑定标识;不改注入行为)
     binding_id: int | None = None
@@ -480,7 +480,7 @@ def zone_allows_direct(project_id: int | None) -> bool:
     """原 5(authz M2a S6):场景内的直连地址(``config.services``)与内置
     凭证(``config.users``)只在**私有区**生效;项目区 / 公共区(场景
     ``project_id`` 非空)一律不生效 —— 地址只来自环境部署表,凭证只来自
-    执行人的槽位绑定。执行 / 导出 / 预检 / 生效预览 / 令牌范围同口径。"""
+    执行人的账户装载。执行 / 导出 / 预检 / 生效预览 / 令牌范围同口径。"""
     return project_id is None
 
 
@@ -634,14 +634,14 @@ async def prepare_exec(
     compose → convert → materialize_run_copy 不变)。
 
     * 凭证清单:``service_aliases.exec_auth_aliases``(模板扫描 ∪
-      生效别名声明槽位)—— 算法单源,调用方不可自选;
+      步骤服务条目)—— 算法单源,调用方不可自选;
     * 凭证解析:``resolve_exec_auths``(owner 级;S8 ``cred_project_id``
       非空 = 项目凭证池);``strict`` 下缺别名
       抛 :class:`MissingAuthAliases`(集成链捕获 → 暂停实例),
       ``lenient`` 仅记录(执行期步骤级报错);``with_auth=False``
       供调用方在更早处已用同一函数做过 fail-fast 解析(单场景链的
       认证先行序),跳过重复解密;
-      分层②:``slot_overrides``({别名全名: 槽位},显式选定配置的
+      分层②:``slot_overrides``({别名全名: 条目名},显式选定配置的
       绑定)→ ``slot_lookup_overrides`` 换池取用,注入标签不变;
     * 别名地址:``base_urls_for``(③层数据源;查表失败降级空表);
       ``environment``(S2.1,``env_chain.EnvChoice``)= 派发时已解析的
@@ -675,8 +675,8 @@ async def prepare_exec(
             scenario_owner_id=scenario_owner_id, project_id=project_id),
         direct_addresses=zone_allows_direct(project_id))
 
-    # 分层②:显式选定配置的绑定 → {声明槽位: 池取用槽位}(换池内
-    # 命中哪条;注入标签不变)。解析失败不阻塞(缺槽由既有 fail-fast
+    # 分层②:显式选定配置的绑定 → {声明条目: 池取用条目}(换池内
+    # 命中哪条;注入标签不变)。解析失败不阻塞(缺条目由既有 fail-fast
     # 判定给出可读错误,覆盖层只是增强)。
     slot_map: dict[str, str] = {}
     if slot_overrides:
@@ -801,14 +801,14 @@ async def resolve_effective_config(
     slot_map: dict[str, str] | None = None,
     exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
 ) -> EffectiveConfig:
-    """组合环境/地址/槽位绑定/carry(预览与执行同源;见类注释)。
+    """组合环境/地址/条目装载/carry(预览与执行同源;见类注释)。
 
-    S8:``cred_project_id`` 非空 = 本次选用项目凭证 —— 槽位从项目池取用,
+    S8:``cred_project_id`` 非空 = 本次选用项目凭证 —— 条目从项目池取用,
     逐槽来源 ``source='project'``(缺省 ``'personal'``)。
 
-    分层②:``slot_map``({声明槽位: 池取用槽位},执行配置绑定)与
+    分层②:``slot_map``({声明条目: 池取用条目},执行配置绑定)与
     ``exec_carry_overrides``({目录服务: {字段: 值}},区规则已由调用方
-    裁)—— 预览逐值带来源:被覆盖槽位标 ``slotSource='exec_config'``,
+    裁)—— 预览逐值带来源:被覆盖条目标 ``slotSource='exec_config'``,
     carry 覆盖值标 ``source='exec_config'``(§5 守则「自证每个值的来路」)。"""
     from . import carry_store, service_aliases
     from .carry_injection import _step_service
@@ -835,8 +835,8 @@ async def resolve_effective_config(
             out["source"] = "deployment"
         services_out[svc] = out
 
-    # 槽位绑定:注入清单 + 取用(单源 pick_bindings);分层②:取用按
-    # 覆盖槽位,展示键 = 声明槽位(与执行注入标签同形)
+    # 条目装载:注入清单 + 取用(单源 pick_bindings);分层②:取用按
+    # 覆盖条目,展示键 = 声明条目(与执行注入标签同形)
     injection = await service_aliases.exec_auth_aliases_of_definition(
         db, definition, bindings or {})
     lookup = slot_map or {}
@@ -919,7 +919,7 @@ async def graph_auth_aliases(
     db_factory: Any, units: list[tuple[dict, dict]],
 ) -> list[str]:
     """Suite 编排的凭证清单:**逐单元**走 ``exec_auth_aliases``(模板
-    扫描 ∪ 生效别名声明槽位 —— 每单元用它自己合并后的绑定),再对
+    扫描 ∪ 步骤服务条目 —— 每单元用它自己合并后的绑定),再对
     结果取并集(去重保序)。
 
     N1-2 整改:此前 materialize_graph 只收 graph_req 单元级显式
@@ -1006,7 +1006,7 @@ def build_adhoc_payload(
       (Release 6.2 存储形态:call 只存 service / user / path_params);
     * ``config`` 留空:服务地址由装载链第③层别名 base_url 补、凭证由
       注入清单(别名默认层)落 ``config.users`` —— 请求体钉不了任何 URL;
-    * ``call.user`` = 别名声明槽位 ``slot``(执行器编译期:
+    * ``call.user`` = 条目名 ``slot``(执行器编译期:
       ``call.auth≠none`` 的步骤必须带 call.user,且标签须在 config.users
       —— 别名默认层正好注入该标签);别名未配凭证则省略,接口若需认证由
       执行器步骤级报错(方案 §五);
