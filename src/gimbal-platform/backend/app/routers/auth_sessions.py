@@ -1,18 +1,18 @@
-"""Auth-sessions API (Spec-2 §4.4 D).
+"""Auth API(重构 2026-11-16 账户实体化 §1.4;Spec-2 §4.4 D 沿革)。
 
 Endpoints:
-- GET    /api/auths                 list owner's credentials
-- POST   /api/auths                 create
-- GET    /api/auths/{id}            detail
-- PATCH  /api/auths/{id}            update (url/username/password/token_type/expires_in/system/env/accountFields/isDefault)
-- DELETE /api/auths/{id}            delete
-- POST   /api/auths/{id}/test       hit alias.url with username+password; parse token
+- GET    /api/auths                     list owner's accounts
+- POST   /api/auths                     create((pool,system,env,username) 唯一)
+- GET    /api/auths/{id}                detail(include_secrets 携明文)
+- PATCH  /api/auths/{id}                update(password/token_type/…;一处改密处处生效)
+- DELETE /api/auths/{id}                delete(ref 条目被本人场景引用则 409)
+- GET    /api/auths/{id}/references     引用反查(ref 条目 + 场景引用)
+- POST   /api/auths/{id}/test           拨测 = 实例 login_url + 账户凭据
 
-(fetch-token 端点已随 V1 executor 退役移除 —— 凭证解密注入由
-run_dispatcher 服务端完成,不再对外下发明文凭证。)
-
-All endpoints are owner-scoped — a user can never see another user's
-auth-sessions, even if they know the integer id.
+账户 = 登录信息实体:密码只存一份,身份条目按 ref 引用;登录口在
+system_env_instances(实例缺席 → 拨测明确报,不回退)。username 明文
+(进唯一键),password Fernet 密文。所有端点 owner-scoped —— 用户
+永远看不到他人的账户,即使知道整型 id。
 """
 from __future__ import annotations
 
@@ -27,14 +27,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..core.security import fernet_decrypt, fernet_encrypt
-from ..models import AuthSession
+from ..models import AuthAccount, SystemEnvInstance
 from ..schemas.auth_session import (
+    AuthAccountCreateIn,
+    AuthAccountOut,
+    AuthAccountPatchIn,
+    AuthAccountSecretsOut,
     AuthListOut,
     AuthReferencesOut,
-    AuthSessionCreateIn,
-    AuthSessionOut,
-    AuthSessionPatchIn,
-    AuthSessionSecretsOut,
     TestResult,
 )
 from ..services import auth_probe, auth_references, query_view_runner
@@ -60,32 +60,67 @@ def _safe_decrypt(encrypted: str) -> str:
         return "<无法解密：密钥已轮换，请重新编辑保存>"
 
 
-def _to_out(a: AuthSession) -> AuthSessionOut:
-    """Decrypt username for the response (password stays masked)."""
-    return AuthSessionOut(
+def _to_out(a: AuthAccount, *, login_url: str = "",
+            identity_count: int = 0, scenario_count: int = 0) -> AuthAccountOut:
+    """username 明文(账户实体键);password 恒掩码。"""
+    return AuthAccountOut(
         id=a.id,
-        alias=a.alias,
-        url=a.url,
-        username=_safe_decrypt(a.username_enc),
+        username=a.username,
+        system=a.system,
+        env_id=a.env_id,
         token_type=a.token_type,
         expires_in=a.expires_in,
-        system=a.system,
-        envId=a.env_id,
-        slot=a.slot,
-        isDefault=a.is_default,
-        accountFields=a.account_fields or {},
+        is_default=a.is_default,
+        account_fields=a.account_fields or {},
+        login_url=login_url,
+        identity_ref_count=identity_count,
+        scenario_ref_count=scenario_count,
         created_at=a.created_at,
         updated_at=a.updated_at,
     )
 
 
-async def _get_owned(session: AsyncSession, auth_id: int, owner_id: int) -> AuthSession:
-    a = await session.get(AuthSession, auth_id)
+async def _login_urls_of(
+    session: AsyncSession, accounts: list[AuthAccount],
+) -> dict[int, str]:
+    """账户行回显实例登录口((system, env) → login_url;缺席 = '')。"""
+    pairs = {(a.system, a.env_id) for a in accounts}
+    if not pairs:
+        return {}
+    rows = (await session.execute(
+        select(SystemEnvInstance.system, SystemEnvInstance.env_id,
+               SystemEnvInstance.login_url))).all()
+    by_pair = {(s, e): u for s, e, u in rows}
+    return {a.id: by_pair.get((a.system, a.env_id), "") for a in accounts}
+
+
+async def _get_owned(
+    session: AsyncSession, auth_id: int, owner_id: int,
+) -> AuthAccount:
+    a = await session.get(AuthAccount, auth_id)
     if a is None or a.owner_id != owner_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"auth not found: {auth_id}"
         )
     return a
+
+
+async def _revive(user_id: int) -> None:
+    """G7/Y2:新建/更新账户 = 补齐信号 → auth_failed/缺失凭证暂停的
+    集成实例恢复(失败不阻断)。"""
+    try:
+        from ..services import integration_runner as _ir
+        await _ir.revive_paused_instances(user_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _drop_credential_cache(user_id: int, account: AuthAccount,
+                           identities: list) -> None:
+    """§7.5:重存 = 认证页「手动刷新」→ 清 runner 缓存会话与 401 拉黑
+    (键 = 引用条目名 —— 查询视图的凭证解析按条目)。"""
+    for ident in identities:
+        query_view_runner.drop_credential(user_id, ident.alias_name)
 
 
 # ── list ────────────────────────────────────────────────────────
@@ -97,35 +132,30 @@ async def list_auths(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> AuthListOut:
-    """Page 信封 + 服务端过滤(M4,§6.3):``q``(alias/url 子串;
-    username 是 Fernet 密文,服务端不可检索 —— 如实收缩,不含 username)、
-    ``token_type`` 精确。双计数一次扫描服务全部行(配套方案 §1.2):
-    alias_ref_count = service_aliases 绑定数;scenario_ref_count =
-    模板 ∪ 方案绑定去重场景数(快照不进计数 — 面板里按 kind 展示)。
-
-    ``tokenTypeCounts`` 是**全量过滤集**(非当前页)的类型计数 —— 服务端
-    分页后前端拿不到全集,metaText「N Bearer · N 整段头」改由这里供给。
+    """Page 信封 + 服务端过滤(M4,§6.3):``q``(username/system 子串;
+    username 账户化后为明文,可检索)、``token_type`` 精确。双计数 =
+    ref 条目数 + 条目聚合场景数(auth_references.account_ref_counts)。
     """
-    base = select(AuthSession).where(AuthSession.owner_id == user.id)
+    base = select(AuthAccount).where(AuthAccount.owner_id == user.id)
     if q:
         base = base.where(or_(
-            AuthSession.alias.ilike(f"%{q}%"),
-            AuthSession.url.ilike(f"%{q}%"),
+            AuthAccount.username.ilike(f"%{q}%"),
+            AuthAccount.system.ilike(f"%{q}%"),
         ))
     if token_type:
-        base = base.where(AuthSession.token_type == token_type)
+        base = base.where(AuthAccount.token_type == token_type)
     total = (await session.execute(
         select(func.count()).select_from(base.subquery())
     )).scalar_one()
     tt_counts = dict((await session.execute(
-        select(AuthSession.token_type, func.count())
-        .where(AuthSession.owner_id == user.id)
-        .group_by(AuthSession.token_type)
+        select(AuthAccount.token_type, func.count())
+        .where(AuthAccount.owner_id == user.id)
+        .group_by(AuthAccount.token_type)
     )).all())
     rows = (
         (
             await session.execute(
-                base.order_by(AuthSession.alias.asc())
+                base.order_by(AuthAccount.system.asc(), AuthAccount.username.asc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )
@@ -133,12 +163,12 @@ async def list_auths(
         .scalars()
         .all()
     )
-    counts = await auth_references.counts(session)
+    counts = await auth_references.account_ref_counts(session, list(rows))
+    urls = await _login_urls_of(session, list(rows))
     items = [
-        _to_out(a).model_copy(update={
-            "alias_ref_count": counts.get(a.alias, {}).get("alias_count", 0),
-            "scenario_ref_count": counts.get(a.alias, {}).get("scenario_count", 0),
-        })
+        _to_out(a, login_url=urls.get(a.id, ""),
+                identity_count=counts.get(a.id, {}).get("identity_count", 0),
+                scenario_count=counts.get(a.id, {}).get("scenario_count", 0))
         for a in rows
     ]
     return AuthListOut(
@@ -148,49 +178,35 @@ async def list_auths(
 
 
 # ── create ──────────────────────────────────────────────────────
-@router.post("", response_model=AuthSessionOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AuthAccountOut, status_code=status.HTTP_201_CREATED)
 async def create_auth(
-    payload: AuthSessionCreateIn,
+    payload: AuthAccountCreateIn,
     user: CurrentUser,
     session: DbSession,
-) -> AuthSessionOut:
-    slot = payload.slot or payload.alias
-    # 应用层 (owner, alias) 名字唯一:引用面板/query_view 缓存/
-    # drop_credential 都按名工作,名字必须无歧义(DB 权威键是四元组)
-    dup = (await session.execute(select(AuthSession.id).where(
-        AuthSession.owner_id == user.id,
-        AuthSession.alias == payload.alias))).scalar_one_or_none()
-    if dup is not None:
+) -> AuthAccountOut:
+    from ..models.environment import Environment
+    if await session.get(Environment, payload.env_id) is None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"alias '{payload.alias}' already exists for this user")
-    if payload.env_id is not None:
-        from ..models.environment import Environment
-        if await session.get(Environment, payload.env_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "environment_not_found",
-                        "message": f"environment not found: "
-                                   f"{payload.env_id}"})
-    # 首个绑定即该槽默认(部分唯一索引钉死每槽至多一个默认)
-    has_default = (await session.execute(select(AuthSession.id).where(
-        AuthSession.owner_id == user.id,
-        AuthSession.slot == slot,
-        AuthSession.is_default.is_(True)))).scalar_one_or_none()
-    a = AuthSession(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "environment_not_found",
+                    "message": f"environment not found: {payload.env_id}"})
+    # 账户实体键四元组唯一(DB NULLS NOT DISTINCT 兜并发)
+    a = AuthAccount(
         owner_id=user.id,
-        alias=payload.alias,
-        url=payload.url,
-        username_enc=fernet_encrypt(payload.username),
+        system=payload.system,
+        env_id=payload.env_id,
+        username=payload.username,
         password_enc=fernet_encrypt(payload.password),
         token_type=payload.token_type,
         expires_in=payload.expires_in,
-        # S3 槽位绑定:槽名缺省 = 别名;env 不限;system 未认领 = ''
-        system=payload.system,
-        env_id=payload.env_id,
-        slot=slot,
         account_fields=payload.account_fields,
-        is_default=has_default is None,
+        # 未显式置默认时:该 (system, env) 首个账户即默认(部分唯一索引)
+        is_default=payload.is_default or (await session.execute(
+            select(AuthAccount.id).where(
+                AuthAccount.owner_id == user.id,
+                AuthAccount.system == payload.system,
+                AuthAccount.env_id == payload.env_id,
+                AuthAccount.is_default.is_(True)))).scalar_one_or_none() is None,
     )
     session.add(a)
     try:
@@ -199,34 +215,30 @@ async def create_auth(
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"slot '{slot}' already bound for this system/env",
+            detail=f"account '{payload.username}' already exists for "
+                   f"system '{payload.system}' in this environment",
         )
     await session.refresh(a)
-    # G7/Y2:新建凭证 = 补齐信号 → auth_failed/缺失凭证暂停的集成实例
-    # 恢复(与 update 同钩;失败不阻断)。
-    try:
-        from ..services import integration_runner as _ir
-        await _ir.revive_paused_instances(user.id)
-    except Exception:  # noqa: BLE001
-        pass
+    await _revive(user.id)
     return _to_out(a)
 
 
-@router.post("/{auth_id}/default", response_model=AuthSessionOut)
-async def set_default_binding(
+@router.post("/{auth_id}/default", response_model=AuthAccountOut)
+async def set_default_account(
     auth_id: Annotated[int, PathParam(ge=1)],
     user: CurrentUser,
     session: DbSession,
-) -> AuthSessionOut:
-    """置为该槽的默认绑定(S3):名字解析与环境未命中时的取用行;
-    同槽旧默认原子清除。"""
+) -> AuthAccountOut:
+    """置为该 (system, env) 的默认账户(ref_mode=default 条目的取用行);
+    同域旧默认原子清除。"""
     a = await _get_owned(session, auth_id, user.id)
     await session.execute(
-        update(AuthSession).where(
-            AuthSession.owner_id == user.id,
-            AuthSession.slot == a.slot,
-            AuthSession.id != a.id,
-            AuthSession.is_default.is_(True),
+        update(AuthAccount).where(
+            AuthAccount.owner_id == user.id,
+            AuthAccount.system == a.system,
+            AuthAccount.env_id == a.env_id,
+            AuthAccount.id != a.id,
+            AuthAccount.is_default.is_(True),
         ).values(is_default=False))
     a.is_default = True
     await session.commit()
@@ -235,20 +247,21 @@ async def set_default_binding(
 
 
 # ── detail ─────────────────────────────────────────────────────
-@router.get("/{auth_id}", response_model=AuthSessionSecretsOut | AuthSessionOut)
+@router.get("/{auth_id}", response_model=AuthAccountSecretsOut | AuthAccountOut)
 async def get_auth(
     auth_id: Annotated[int, PathParam(ge=1)],
     user: CurrentUser,
     session: DbSession,
     include_secrets: bool = False,
-) -> AuthSessionOut | AuthSessionSecretsOut:
+) -> AuthAccountOut | AuthAccountSecretsOut:
     a = await _get_owned(session, auth_id, user.id)
+    urls = await _login_urls_of(session, [a])
+    base = _to_out(a, login_url=urls.get(a.id, ""))
     if not include_secrets:
-        return _to_out(a)
+        return base
     # 严解密:密钥轮换后的旧密文不可恢复。快照拷贝会把返回值当真值写进
     # 场景导出产物,不能像列表 _safe_decrypt 那样降级为占位符 — 显式 422。
     try:
-        username = fernet_decrypt(a.username_enc)
         password = fernet_decrypt(a.password_enc)
     except ValueError as e:
         logger.warning("auth.get include_secrets: fernet decrypt failed: {}", e)
@@ -256,32 +269,23 @@ async def get_auth(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="加密凭据已损坏或密钥已轮换，请先在认证管理重新编辑保存",
         )
-    return AuthSessionSecretsOut(
-        id=a.id,
-        alias=a.alias,
-        url=a.url,
-        username=username,
-        password=password,
-        token_type=a.token_type,
-        expires_in=a.expires_in,
-        created_at=a.created_at,
-        updated_at=a.updated_at,
-    )
+    return AuthAccountSecretsOut(
+        **base.model_dump(by_alias=True, exclude={"password_masked"}),
+        password=password)
 
 
 # ── patch ──────────────────────────────────────────────────────
-@router.patch("/{auth_id}", response_model=AuthSessionOut)
+@router.patch("/{auth_id}", response_model=AuthAccountOut)
 async def patch_auth(
     auth_id: Annotated[int, PathParam(ge=1)],
-    payload: AuthSessionPatchIn,
+    payload: AuthAccountPatchIn,
     user: CurrentUser,
     session: DbSession,
-) -> AuthSessionOut:
+) -> AuthAccountOut:
     a = await _get_owned(session, auth_id, user.id)
-    # S3 槽位绑定:system/env/account_fields(env 显式 null = 清空,
-    # 与项目默认环境同款 fields_set 口径);is_default=true = 换默认
+    old = (a.system, a.env_id, a.is_default)
     if "system" in payload.model_fields_set:
-        a.system = payload.system or ""
+        a.system = payload.system
     if "env_id" in payload.model_fields_set:
         if payload.env_id is not None:
             from ..models.environment import Environment
@@ -291,24 +295,21 @@ async def patch_auth(
                     detail={"code": "environment_not_found",
                             "message": f"environment not found: "
                                        f"{payload.env_id}"})
-        a.env_id = payload.env_id
+        a.env_id = payload.env_id  # type: ignore[assignment]
     if payload.account_fields is not None:
         a.account_fields = payload.account_fields
     if payload.is_default:
-        # 置默认:同槽清旧默认(原子切换;部分唯一索引兜并发)
         await session.execute(
-            update(AuthSession).where(
-                AuthSession.owner_id == user.id,
-                AuthSession.slot == a.slot,
-                AuthSession.id != a.id,
-                AuthSession.is_default.is_(True),
+            update(AuthAccount).where(
+                AuthAccount.owner_id == user.id,
+                AuthAccount.system == a.system,
+                AuthAccount.env_id == a.env_id,
+                AuthAccount.id != a.id,
+                AuthAccount.is_default.is_(True),
             ).values(is_default=False))
         a.is_default = True
-    if payload.url is not None:
-        a.url = payload.url
-    if payload.username is not None:
-        a.username_enc = fernet_encrypt(payload.username)
     if payload.password is not None:
+        # 一处改密处处生效(决策 5):ref 该账户的全部条目下次执行生效
         a.password_enc = fernet_encrypt(payload.password)
     if payload.token_type is not None:
         a.token_type = payload.token_type
@@ -319,36 +320,31 @@ async def patch_auth(
     except IntegrityError:
         await session.rollback()
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="更新冲突"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="更新冲突:同系统同环境已存在同名账户",
         )
     await session.refresh(a)
-    # 查询凭证复活钩子(§7.5):重存 = 认证页"手动刷新"动作 → 清 runner
-    # 缓存会话与 401 拉黑,下次查询重装凭证冷启登录(§6.2 不自动重登不变)
-    query_view_runner.drop_credential(user.id, a.alias)
-    # G7/Y2 集成实例复活:凭证更新 → auth_failed 暂停的实例恢复调度
-    # (个人模式匹配持有人;平台模式由 operator/admin 改平台凭证触发)。
-    # 失败不阻断凭证更新(复活是增强,下拍调度前还有别的人口)。
-    try:
-        from ..services import integration_runner as _ir
-        await _ir.revive_paused_instances(user.id)
-    except Exception:  # noqa: BLE001
-        pass
+    _drop_credential_cache(
+        user.id, a,
+        await auth_references.identities_for_account(session, a))
+    await _revive(user.id)
+    _ = old
     return _to_out(a)
 
 
-# ── delete ─────────────────────────────────────────────────────
-@router.get("/{alias}/references", response_model=AuthReferencesOut)
+# ── references / delete ────────────────────────────────────────
+@router.get("/{auth_id}/references", response_model=AuthReferencesOut)
 async def get_references(
-    alias: Annotated[str, PathParam(min_length=1, max_length=64)],
+    auth_id: Annotated[int, PathParam(ge=1)],
     user: CurrentUser,
     session: DbSession,
 ) -> AuthReferencesOut:
-    """反查面板:谁在用这个凭证名(配套方案 §1.3)。四类引用,读时实时
-    扫(单一事实源,不建反向索引);计数照给、场景名按 can_read_scenario
-    过滤(public / owner / 引用;authz W3 起 admin 无旁路),剩余 = hidden_count(§1.4)。
-    名字命中 ≠ 对象引用 — 引用解析按执行者本人池,文案须如实。"""
+    """反查面板:谁在用这个账户(ref 条目清单 + 条目名聚合的场景引用)。
+    读时实时扫(单一事实源,不建反向索引);场景名按 can_read_scenario
+    过滤,剩余 = hidden_count。"""
+    a = await _get_owned(session, auth_id, user.id)
     return AuthReferencesOut.model_validate(
-        await auth_references.references(session, user=user, alias=alias))
+        await auth_references.references(session, user=user, account=a))
 
 
 @router.delete("/{auth_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -358,26 +354,28 @@ async def delete_auth(
     session: DbSession,
 ) -> None:
     a = await _get_owned(session, auth_id, user.id)
-    # 删除拦截(窄口径,方案 §1.4.3/§1.5 拍板):仅本人场景的模板/方案
-    # 绑定引用硬拦 — 这些下次运行会真失效;别名绑定、同名他场景、
-    # config.users 快照不阻断(名字引用,别人解析各自的同名凭证)。
-    blocking = await auth_references.blocking_refs(
-        session, user=user, alias=a.alias)
+    # 删除拦截(窄口径):ref 该账户的条目被本人场景模板引用 — 下次运行
+    # 会真失效;快照与他人场景不阻断(名字引用,别人解析各自的账户)。
+    blocking = await auth_references.blocking_refs(session, user=user, account=a)
     if blocking:
+        idents = await auth_references.identities_for_account(session, a)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": (
-                    f"凭证 {a.alias!r} 被 {len(blocking)} 个本人场景引用"
-                    "(模板/方案绑定),删除会让这些场景下次运行失效;"
+                    f"账户 {a.username!r} 被身份条目 "
+                    f"({'、'.join(i.alias_name for i in idents) or '—'}) "
+                    f"引用,而条目又被 {len(blocking)} 个本人场景引用"
+                    "(模板),删除会让这些场景下次运行失效;"
                     "请先在场景中移除引用后再删除"
                 ),
                 "ownScenarioIds": blocking,
             },
         )
+    idents = await auth_references.identities_for_account(session, a)
     await session.delete(a)
     await session.commit()
-    query_view_runner.drop_credential(user.id, a.alias)
+    _drop_credential_cache(user.id, a, idents)
 
 
 # ── test ───────────────────────────────────────────────────────
@@ -387,17 +385,23 @@ async def test_auth(
     user: CurrentUser,
     session: DbSession,
 ) -> TestResult:
-    """Dial the stored credential against ``url`` (probe service)."""
+    """拨测 = 实例登录口(system_env_instances.login_url)+ 账户凭据
+    (重构 §4.3:登录口缺席 = 配置缺失,明确报,不回退业务地址)。"""
     a = await _get_owned(session, auth_id, user.id)
-    if not a.url:
-        # authz C2:静态令牌方式无登录端点,不探测(令牌直接施加)
-        return TestResult(ok=True, message="静态令牌认证:无登录流程,不做拨测")
+    login_url = (await session.execute(
+        select(SystemEnvInstance.login_url).where(
+            SystemEnvInstance.system == a.system,
+            SystemEnvInstance.env_id == a.env_id))).scalar()
+    if not login_url:
+        return TestResult(
+            ok=False, message="实例未配置登录口 —— 请在环境配置页为"
+            f"「{a.system} × 环境#{a.env_id}」维护登录地址后再拨测")
     try:
-        username = fernet_decrypt(a.username_enc)
         password = fernet_decrypt(a.password_enc)
     except ValueError as e:
         logger.warning("auth.test: fernet decrypt failed: {}", e)
         return TestResult(ok=False, message="加密凭据已损坏，请重新录入")
 
-    ok, status_code, message = await auth_probe.probe(a.url, username, password)
+    ok, status_code, message = await auth_probe.probe(
+        login_url, a.username, password)
     return TestResult(ok=ok, status_code=status_code, message=message)

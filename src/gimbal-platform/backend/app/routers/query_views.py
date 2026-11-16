@@ -17,9 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import AuthSession
 from app.core.db import get_db
 from app.core.deps import CurrentUser
-from app.core.security import fernet_decrypt
-from app.models.auth_session import AuthSession as AuthSessionRow
 from app.services import query_view_runner
+from app.services.env_chain import resolve_environment
+from app.services.run_prepare import _materialize_identities, _resolve_identities
 
 router = APIRouter(prefix="/query-views", tags=["query-views"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -27,20 +27,24 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 def _loader(db: DbSession):
     """凭证装载闭包:runner 在凭证闸内按需调用(黑名单键在它之前
-    已降级 —— 绝不急切装载,保持"401 拉黑不打 DB"语义)。"""
+    已降级 —— 绝不急切装载,保持"401 拉黑不打 DB"语义)。
+
+    重构:``alias`` = 身份条目名 → 条目 ref → 账户(环境按查询者
+    环境链解析,默认环境兜底;解不到 = None,与旧缺行同语义)。"""
     async def load(owner_id: int, alias: str) -> AuthSession | None:
-        row = (await db.execute(
-            select(AuthSessionRow).where(
-                AuthSessionRow.owner_id == owner_id,
-                AuthSessionRow.alias == alias,
-            )
-        )).scalar_one_or_none()
-        if row is None:
+        env = await resolve_environment(db, user_id=owner_id)
+        picked, _miss, _bad = await _resolve_identities(
+            db, owner_id, [alias], env_id=env.env_id)
+        if not picked:
+            return None
+        resolved = await _materialize_identities(db, picked)
+        r = resolved.get(alias)
+        if r is None:
             return None
         return AuthSession(
-            url=row.url,
-            username=fernet_decrypt(row.username_enc),
-            password=fernet_decrypt(row.password_enc),
+            url=r.url,
+            username=r.username,
+            password=r.password,
         )
     return load
 

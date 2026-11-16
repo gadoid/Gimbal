@@ -1,5 +1,4 @@
 from .user import User
-from .auth_session import AuthSession
 from .constant_entry import ConstantEntry
 from .execution import (
     Execution, ExecutionRow, ExecutionSnapshot, ExecutionJob, ExecutionStep,
@@ -18,9 +17,6 @@ from .board_card import BoardCard
 from .environment import Environment
 # 部署表(M2a S2:地址第 ③ 层按 (基础服务, 环境) 取址)
 from .deployment import Deployment
-from .service_alias import ServiceAlias
-# 服务级元数据(服务注册页「说明」列的落库点;读全员/写 Admin+)
-from .service_meta import ServiceMeta
 # ⑤(2026-10-13)补注册:此前未进 __init__ —— 空库 baseline 的
 # create_all 看不到该表时由迁移用 sa.JSON 兜底建列,PG 上落下
 # json(模型口径 JsonVar=jsonb),SQLite 面看不出漂移。
@@ -46,7 +42,6 @@ from .auth_account import AuthAccount
 
 __all__ = [
     "User",
-    "AuthSession",
     "ConstantEntry",
     "Execution",
     "ExecutionRow",
@@ -76,7 +71,6 @@ __all__ = [
     "Project",
     "ProjectMember",
     "Deployment",
-    "ServiceMeta",
     "ExecConfig",
     "Service",
     "SystemEnvInstance",

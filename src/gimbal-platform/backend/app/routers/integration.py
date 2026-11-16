@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser, principal_or_user
-from ..models.auth_session import AuthSession
 from ..models.composer_scenario import ComposerScenario
 from ..models.integration_task import IntegrationTask
 from ..models.user import User
@@ -168,21 +167,22 @@ async def _missing_credentials(
     db: AsyncSession, aliases: list[str], holder_id: int | None,
     *, project_id: int | None = None,
 ) -> list[str]:
-    """持有人凭证池中缺失的别名全集(W0b④;S0② 后与执行期暂停判定
-    同口径:任一缺失即列)。S8:``project_id`` 非空 = 实例用项目凭证 →
-    按槽名查项目池(与执行期 pick_bindings 同口径)。"""
-    if not aliases:
-        return []
+    """持有人/项目池中未装载的身份条目全集(W0b④;与执行期暂停判定
+    同口径 —— 重构:条目→ref→账户,取用单源 pick_bindings;环境按
+    查看者环境链解析(默认环境兜底),无环境 = 全未装载,如实列)。
+    S8:``project_id`` 非空 = 实例用项目凭证 → 项目池。"""
+    if not aliases or (holder_id is None and project_id is None):
+        return [] if not aliases else list(aliases)
+    from ..services.env_chain import resolve_environment
+    from ..services.run_prepare import pick_bindings
+
+    env = await resolve_environment(db, user_id=holder_id)
     if project_id is not None:
-        have = set((await db.execute(select(AuthSession.slot).where(
-            AuthSession.project_id == project_id,
-            AuthSession.slot.in_(aliases)))).scalars().all())
-        return [a for a in aliases if a not in have]
-    if holder_id is None:
-        return []
-    have = set((await db.execute(select(AuthSession.alias).where(
-        AuthSession.owner_id == holder_id,
-        AuthSession.alias.in_(aliases)))).scalars().all())
+        picked = await pick_bindings(
+            db, None, aliases, env_id=env.env_id, cred_project_id=project_id)
+    else:
+        picked = await pick_bindings(db, holder_id, aliases, env_id=env.env_id)
+    have = {p.slot for p in picked}
     return [a for a in aliases if a not in have]
 
 

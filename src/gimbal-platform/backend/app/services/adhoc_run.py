@@ -17,7 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.environment import Environment
-from ..models.service_alias import ServiceAlias
+from ..models.service import Service
+from ..models.service_identity import ServiceIdentity
 from . import plate_client
 from .run_materialize import service_url_resolved
 from .run_prepare import build_adhoc_payload
@@ -154,17 +155,19 @@ def check_structure(steps: Any, release: Any) -> None:
 
 async def load_alias_rows(
     db: AsyncSession, names: list[str],
-) -> dict[str, ServiceAlias]:
+) -> dict[tuple[ServiceIdentity, str]]:
+    """条目行 + 主档 kind 元组(重构:kind 自服务主档)。"""
     if not names:
         return {}
-    rows = (await db.execute(select(ServiceAlias).where(
-        ServiceAlias.alias_name.in_(names)))).scalars().all()
-    return {r.alias_name: r for r in rows}
+    rows = (await db.execute(
+        select(ServiceIdentity, Service.kind).join(
+            Service, Service.name == ServiceIdentity.base_service).where(
+            ServiceIdentity.alias_name.in_(names)))).all()
+    return {r.alias_name: (r, kind or "plate") for r, kind in rows}
 
 
 def check_services(
-    steps: list[dict], rows: dict[str, ServiceAlias],
-    endpoint_services: dict[str, str],
+    steps: list[dict], rows: dict, endpoint_services: dict[str, str],
 ) -> None:
     """§四.3:别名存在、``kind=plate``、``base_service`` = 锚点在 plate 中
     **声明的服务**(别名不能拿来调别的服务的接口)→ 否则 422
@@ -184,18 +187,18 @@ def check_services(
         if (svc, ep) in seen or svc in bad_alias:
             continue
         seen.add((svc, ep))
-        row = rows.get(svc)
-        if row is None:
+        hit = rows.get(svc)
+        if hit is None:
             bad_alias.add(svc)
             offenders.append({"service": svc, "reason": "unknown"})
-        elif row.kind != "plate":
+        elif hit[1] != "plate":
             bad_alias.add(svc)
             offenders.append({"service": svc, "reason": "not_plate"})
-        elif row.base_service != endpoint_services.get(ep):
+        elif hit[0].base_service != endpoint_services.get(ep):
             offenders.append({"service": svc, "reason": "service_mismatch",
                               "endpoint": ep,
                               "endpointService": endpoint_services.get(ep),
-                              "baseService": row.base_service})
+                              "baseService": hit[0].base_service})
     if offenders:
         raise AdhocRejected(
             "adhoc_service_mismatch",

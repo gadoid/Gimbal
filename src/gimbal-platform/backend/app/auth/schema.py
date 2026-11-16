@@ -3,7 +3,7 @@
 物理迁移自 gimbal/schema/auth.py,与 gimbal 侧字段/方法签名完全一致。
 注意区别:
  -本类为 Pydantic 模型,platform 进程内存对象
- - app.models.auth_session.AuthSession 是 SQLAlchemy ORM 模型(数据库行)
+ - app.models.auth_account.AuthAccount 是 SQLAlchemy ORM 模型(数据库行)
  二者字段对齐(字段名 / 类型 / 默认值),但 ORM 那份额外有 id / owner_id。
 
 M2(B-5/W20):凭证六字段(url/username/password/expires_in/token_type/

@@ -21,10 +21,10 @@ from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..core.timeutil import iso_utc_z
 from ..models.access_token import AccessToken, AccessTokenScope
-from ..models.auth_session import AuthSession
+from ..models.auth_account import AuthAccount
 from ..models.integration_task import IntegrationTask
 from ..models.permission import AuditLog
-from ..models.service_alias import ServiceAlias
+from ..models.service_identity import ServiceIdentity
 from ..models.user import User
 from ..services import access_token as at
 from ._ownership import has_capability
@@ -271,21 +271,23 @@ async def scope_candidates(
     user: CurrentUser, db: DbSession,
     kind: Annotated[str, Query(max_length=16)] = "personal",
 ) -> dict:
-    """范围候选(§5.1):全部服务别名 + 本人凭证池。authz C1:平台
-    候选面(平台凭证池)随平台模式退役。"""
+    """范围候选(§5.1;重构:全部身份条目 + 本人账户池)。authz C1:
+    平台候选面随平台模式退役。"""
     if kind != at.PERSONAL_KIND:
         raise _bad("kind_invalid", "kind ∈ personal")
     holder = user.id
     aliases = (await db.execute(
-        select(ServiceAlias.alias_name).order_by(ServiceAlias.alias_name))
+        select(ServiceIdentity.alias_name).order_by(
+            ServiceIdentity.alias_name))
     ).scalars().all()
     auths: list[dict] = []
     if holder is not None:
         rows = (await db.execute(
-            select(AuthSession.id, AuthSession.alias).where(
-                AuthSession.owner_id == holder)
-            .order_by(AuthSession.alias))).all()
-        auths = [{"id": rid, "alias": alias} for rid, alias in rows]
+            select(AuthAccount.id, AuthAccount.username, AuthAccount.system)
+            .where(AuthAccount.owner_id == holder)
+            .order_by(AuthAccount.system, AuthAccount.id))).all()
+        auths = [{"id": rid, "username": username, "system": system}
+                 for rid, username, system in rows]
     return {"aliases": list(aliases), "auths": auths}
 
 
@@ -381,19 +383,19 @@ async def _validate_scope_candidates(
     子集判定会静默放行越权资源)。项目令牌(M2b Q2)的池 = 项目凭证。"""
     from ..services.run_prepare import _pool_clause
     if scope.aliases:
-        rows = (await db.execute(select(ServiceAlias.alias_name).where(
-            ServiceAlias.alias_name.in_(set(scope.aliases))))).scalars().all()
+        rows = (await db.execute(select(ServiceIdentity.alias_name).where(
+            ServiceIdentity.alias_name.in_(set(scope.aliases))))).scalars().all()
         unknown = sorted(set(scope.aliases) - set(rows))
         if unknown:
             raise _bad("scope_alias_unknown",
-                       "服务别名不存在: " + "、".join(unknown))
+                       "身份条目不存在: " + "、".join(unknown))
     if scope.authIds:
-        n = (await db.execute(select(func.count()).select_from(AuthSession)
+        n = (await db.execute(select(func.count()).select_from(AuthAccount)
             .where(_pool_clause(owner_id, project_id),
-                   AuthSession.id.in_(set(scope.authIds))))).scalar_one()
+                   AuthAccount.id.in_(set(scope.authIds))))).scalar_one()
         if n != len(set(scope.authIds)):
             raise _bad("scope_auth_unknown",
-                       "凭证不存在或不属于该令牌的凭证池")
+                       "账户不存在或不属于该令牌的凭证池")
 
 
 async def _write_scope(db: AsyncSession, tok: AccessToken, scope: ScopeIn) -> None:
@@ -422,13 +424,15 @@ async def token_detail(db: AsyncSession, tok: AccessToken) -> dict:
     """详情核心(个人 / 项目令牌共用;门由调用方把)。"""
     from ..services.run_prepare import _pool_clause
     scope_aliases, scope_auths = await at.load_scope(db, tok.id)
-    # 范围明细(名称化:凭证 id → 别名)
+    # 范围明细(名称化:账户 id → system/username)
     auth_rows: dict[int, str] = {}
     if scope_auths:
-        rows = (await db.execute(select(AuthSession.id, AuthSession.alias).where(
+        rows = (await db.execute(select(
+            AuthAccount.id, AuthAccount.system, AuthAccount.username).where(
             _pool_clause(tok.user_id, tok.project_id),
-            AuthSession.id.in_(scope_auths)))).all()
-        auth_rows = {rid: alias for rid, alias in rows}
+            AuthAccount.id.in_(scope_auths)))).all()
+        auth_rows = {rid: f"{system}/{uname}"
+                     for rid, system, uname in rows}
     # 注册任务逐个预检
     tpls = (await db.execute(select(IntegrationTask).where(
         IntegrationTask.template_id.is_(None),

@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from ..models.composer_scenario import ComposerScenario
-from ..models.service_alias import ServiceAlias
+from ..models.service_identity import ServiceIdentity
 from ..schemas.scenario_composer import ScenarioDraft
 from . import endpoint_anchoring, plate_client, scenario_store
 from .scenario_store import definition_from_payload
@@ -232,21 +232,23 @@ async def _slot_report(
       ``alias_slot_differs``(别名声明了别的槽位,未能自动改写);
     * ``droppedUsers``:内置凭证里没有任何步骤用到的键(仅丢明文)。
     """
-    from ..models.auth_session import AuthSession
+    from .env_chain import resolve_environment
+    from .run_prepare import pick_bindings
     from .service_aliases import exec_auth_aliases_of_definition
 
     needed = await exec_auth_aliases_of_definition(db, definition)
     bound: set[str] = set()
     if needed:
-        bound = set((await db.execute(select(AuthSession.slot).where(
-            AuthSession.owner_id == user_id,
-            AuthSession.slot.in_(needed)))).scalars().all())
+        env = await resolve_environment(db, user_id=user_id)
+        picked = await pick_bindings(
+            db, user_id, needed, env_id=env.env_id)
+        bound = {p.slot for p in picked}
     builtin_set = set(builtin)
     rename_targets = {to for _f, to in renames.values()}
     usage = _call_user_usage(definition.get("steps") or [])
     alias_slot = dict((await db.execute(select(
-        ServiceAlias.alias_name, ServiceAlias.slot).where(
-        ServiceAlias.alias_name.in_(sorted(usage))))).all()) if usage else {}
+        ServiceIdentity.alias_name, ServiceIdentity.alias_name).where(
+        ServiceIdentity.alias_name.in_(sorted(usage))))).all()) if usage else {}
     undeclared: dict[str, set[str]] = {}
     reasons: dict[str, str] = {}
     for svc, tags in usage.items():
@@ -501,7 +503,7 @@ async def analyze_services(db, definition: dict,
                                     user_id=user_id)
     catalog = await service_names.known_service_names(db)
     alias_names = set((await db.execute(
-        select(ServiceAlias.alias_name))).scalars().all())
+        select(ServiceIdentity.alias_name))).scalars().all())
 
     def _counts(plan: dict) -> dict:
         return {
@@ -551,16 +553,18 @@ async def analyze_services(db, definition: dict,
 
 async def auth_refs(db, definition: dict, owner_id: int) -> list[dict]:
     """认证引用栏数据(P7-③):${auth.*} tag × 导入人凭证池(有/无)。"""
-    from ..models import AuthSession
     from .auth_ref_scan import scan_auth_aliases
+    from .env_chain import resolve_environment
+    from .run_prepare import pick_bindings
 
     tags = scan_auth_aliases(definition.get("steps") or [])
     if not tags:
         return []
-    # S3 起注入按槽位解析(resolve_exec_auths 按 slot)—— 池命中同口径
-    pool = set((await db.execute(
-        select(AuthSession.slot).where(AuthSession.owner_id == owner_id)
-    )).scalars().all())
+    # 重构:注入按条目解析(resolve_exec_auths 条目→ref→账户)—— 池
+    # 命中同口径(导入人环境链,默认环境兜底)
+    env = await resolve_environment(db, user_id=owner_id)
+    picked = await pick_bindings(db, owner_id, tags, env_id=env.env_id)
+    pool = {p.slot for p in picked}
     return [{"tag": t, "inMyPool": t in pool} for t in tags]
 
 
@@ -570,16 +574,17 @@ async def builtin_users_preview(db, definition: dict,
     转为槽位声明。逐键给出使用它的服务(``call.user``)、是否被模板
     引用、导入人是否已有同名槽位绑定。最终落地(新建别名声明 / 改写为
     本机槽位 / 未落地)取决于映射决策,以落库结果为准。"""
-    from ..models import AuthSession
+    from .env_chain import resolve_environment
+    from .run_prepare import pick_bindings
 
     tags = _builtin_user_tags(definition)
     if not tags:
         return []
     usage = _call_user_usage(definition.get("steps") or [])
     templated = _template_tags(definition)
-    bound = set((await db.execute(select(AuthSession.slot).where(
-        AuthSession.owner_id == owner_id,
-        AuthSession.slot.in_(tags)))).scalars().all())
+    env = await resolve_environment(db, user_id=owner_id)
+    bound = {p.slot for p in await pick_bindings(
+        db, owner_id, tags, env_id=env.env_id)}
     return [{"tag": t,
              "services": sorted(s for s, ts in usage.items() if t in ts),
              "templated": t in templated,
@@ -661,7 +666,7 @@ async def land(
 
     # ── 本地重算(不信任预检快照;方案 §3.3)───────────────────────
     alias_names = set((await db.execute(
-        select(ServiceAlias.alias_name))).scalars().all())
+        select(ServiceIdentity.alias_name))).scalars().all())
 
     sid = definition.get("scenarioId") or ""
     if id_mode == "new":
@@ -697,8 +702,8 @@ async def land(
     # ── S7.5:内置凭证 → 槽位声明(纯计划;改写在 definition 改写段)──
     builtin = _builtin_user_tags(definition)
     alias_slot = dict((await db.execute(select(
-        ServiceAlias.alias_name, ServiceAlias.slot).where(
-        ServiceAlias.alias_name.in_(sorted(set(eff_key.values()) | set(
+        ServiceIdentity.alias_name, ServiceIdentity.alias_name).where(
+        ServiceIdentity.alias_name.in_(sorted(set(eff_key.values()) | set(
             _call_user_usage(raw_steps))))))).all())
     create_keys = {k for k, m in by_key.items() if m["decision"] == "create"}
     create_slot, renames = _slot_conversion(
@@ -779,7 +784,7 @@ async def land(
     # URL 与 carry 析出的映射决策是两件事)。S6:地址源 = 部署表
     from ..models.deployment import Deployment
     base_of = dict((await db.execute(select(
-        ServiceAlias.alias_name, ServiceAlias.base_service))).all())
+        ServiceIdentity.alias_name, ServiceIdentity.base_service))).all())
     deployed = set((await db.execute(
         select(Deployment.base_service).distinct())).scalars().all())
     for key in referenced_services(steps):

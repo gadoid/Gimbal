@@ -1,8 +1,9 @@
-"""服务别名路由(服务画像方案 §4.1;基础层)— 读全员 / 写 admin。
+"""服务别名路由(服务画像方案 §4.1;重构 2026-11-16 身份条目化)——
+读全员 / 写 admin。
 
-配置池语义同 carry(读开放、写收口):别名影响的是所有引用该服务的
-场景的执行解析,写面收在 admin。authz M2a S6:别名只登记「名字 → 基础
-服务 + 声明槽位」;地址在部署表(``/deployments``),个人别名退役。
+条目 = 「某环境某服务以什么身份登录」的引用声明(底座
+``service_identities``);``slot`` 输出 = 条目名(规约延续,旧客户端
+零适配),``kind`` 自服务主档。地址在部署表/实例表,个人别名早已退役。
 
 webhook v4:入站身份(访问令牌)不再挂别名 —— 见
 ``routers/access_tokens.py``;回调地址与签名密钥在令牌上。
@@ -34,10 +35,13 @@ class AliasOut(BaseModel):
 
     alias_name: str = Field(alias="aliasName")
     base_service: str = Field(alias="baseService")
-    # authz M2a S3/S6:别名声明槽位(唯一凭证口径)
+    # 重构:注入键 = 条目名(规约延续);kind 自服务主档
     slot: str | None = Field(default=None, alias="slot")
-    # 三态接入(P1.0):plate(受管) | external(第三方,无版本管理)
     kind: str = Field(default="plate", alias="kind")
+    env_id: int | None = Field(default=None, alias="envId")
+    ref_mode: str = Field(default="default", alias="refMode")
+    ref_username: str | None = Field(default=None, alias="refUsername")
+    display: str = Field(default="", alias="display")
     created_at: str | None = Field(default=None, alias="createdAt")
     updated_at: str | None = Field(default=None, alias="updatedAt")
 
@@ -47,31 +51,35 @@ class AliasListOut(PageOut[AliasOut]):
 
 
 class AliasCreate(BaseModel):
-    model_config = _CAMEL
-
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     alias_name: str = Field(min_length=1, max_length=128, alias="aliasName")
+    # 兼容参数(条目模型无槽;忽略)
     slot: str | None = Field(default=None, max_length=64, alias="slot")
-    # 三态接入(P1.0):plate 走目录派生强约束。b2-8/b2-10d(归一 v1.0
-    # §1.6):external 不派生 —— 必填显式 base_service(指向 plate 目录
-    # kind=integration 的服务;校验在 service 层)。
+    # plate 走派生强约束(目录 ∪ 主档);external 显式 base_service
+    # (指向主档第三方服务;校验在 service 层)。
     kind: Literal["plate", "external"] = "plate"
     base_service: str | None = Field(
         default=None, max_length=128, alias="baseService")
+    # 重构新维度:环境必填(缺省 = 平台默认环境兜底)+ 账户引用
+    env_id: int | None = Field(default=None, ge=1, alias="envId")
+    ref_mode: Literal["default", "username"] = "default"
+    ref_username: str = Field(default="", max_length=128, alias="refUsername")
+    display: str = Field(default="", max_length=128)
 
 
 class AliasPatch(BaseModel):
-    # S6:退役字段(baseUrl/environmentId/credentialAlias/ownerUserId)422,
-    # 不静默丢弃 —— 旧客户端以为改了地址更糟
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     slot: str | None = Field(default=None, max_length=64, alias="slot")
-    # b2-8:base_service 仅 external 可改(重指向 integration 系统)
     base_service: str | None = Field(
         default=None, max_length=128, alias="baseService")
-    # b2-8:kind 仅支持 external→plate(升级路径,§1.8)
     kind: Literal["plate", "external"] | None = None
+    ref_mode: Literal["default", "username"] | None = Field(
+        default=None, alias="refMode")
+    ref_username: str | None = Field(
+        default=None, max_length=128, alias="refUsername")
+    display: str | None = Field(default=None, max_length=128)
 
 
 @router.get("", response_model=AliasListOut)
@@ -82,7 +90,7 @@ async def list_aliases(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=200),
 ) -> AliasListOut:
-    """M4(§6.3):Page 信封 + ``q``(alias/base/slot 子串)下推。"""
+    """M4(§6.3):Page 信封 + ``q``(alias/base/display 子串)下推。"""
     items, total = await service_aliases.list_aliases(
         db, base=base, q=q, page=page, page_size=page_size)
     return AliasListOut(
@@ -92,12 +100,7 @@ async def list_aliases(
 
 
 class ServiceKindsOut(BaseModel):
-    """W11 三态分类读面(编排器徽标/保存告警数据源)。
-
-    plate = 受管(可钉修订);external = 第三方(无版本,不计入库
-    标准的分母);unknown = 未登记(保存告警口径:提示接入 plate 或
-    登记 external 别名;执行侧按 external 保守处理)。
-    """
+    """W11 三态分类读面(编排器徽标/保存告警数据源;kind 自主档)。"""
 
     model_config = _CAMEL
 
@@ -120,20 +123,19 @@ async def classify(
 async def create_alias(
     user: MemberUser, body: AliasCreate, db: DbSession,
 ) -> AliasOut:
-    """登记别名(Admin+;S6 起别名全部团队共享,个人别名退役)。"""
+    """登记身份条目(Admin+;条目全部团队共享)。"""
     try:
         created = await service_aliases.create_alias(
             db, alias_name=body.alias_name, slot=body.slot,
-            kind=body.kind, base_service=body.base_service)
+            kind=body.kind, base_service=body.base_service,
+            env_id=body.env_id, ref_mode=body.ref_mode,
+            ref_username=body.ref_username, display=body.display)
     except UnknownBaseService as e:
-        # 强约束(§4.1 拍板):裸声明不猜;plate 宕机期间不能登记
+        # 强约束:裸声明不猜;plate 不可达且主档未登记时不能登记
         # (kind=external 不受此约束 —— 第三方无目录概念)
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
-    except KeyError as e:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, str(e)) from e
     from ..services import audit as audit_svc
 
     await audit_svc.record(
@@ -149,15 +151,20 @@ async def create_alias(
 async def patch_alias(
     alias_name: str, user: MemberUser, body: AliasPatch, db: DbSession,
 ) -> AliasOut:
-    """改别名(Admin+)。``slot`` 显式给 null = 清除声明。"""
+    """改身份条目(Admin+):ref/display 可改;``slot`` 兼容参数(忽略)。"""
     try:
         patched = await service_aliases.patch_alias(
             db, alias_name,
-            slot=body.slot if "slot" in body.model_fields_set else ...,
+            slot=body.slot,
             base_service=(body.base_service if body.base_service is not None else ...),
-            kind=body.kind)
+            kind=body.kind,
+            ref_mode=body.ref_mode,
+            ref_username=body.ref_username,
+            display=body.display)
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
     from ..services import audit as audit_svc
 
     await audit_svc.record(
@@ -173,6 +180,8 @@ async def patch_alias(
 async def delete_alias(
     alias_name: str, user: MemberUser, db: DbSession
 ) -> None:
+    """删身份条目(Admin+):引用该条目名的场景模板下次运行将报缺 —
+    前端删除确认时按引用计数提示(auth_references.cached_scenario_refs)。"""
     await service_aliases.delete_alias(db, alias_name)
     from ..services import audit as audit_svc
 

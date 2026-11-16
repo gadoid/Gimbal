@@ -228,12 +228,15 @@ async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
 async def project_slot_status(
     user: CurrentUser, db: DbSession, project_id: int,
 ) -> dict:
-    """槽位状态 = 成员凭证清单(S7.3 项目配置页签,只读不落库):
-    项目场景引用的槽位 × 成员是否已绑定(任意绑定即算;不给任何账号
-    信息);S8 每槽另给 ``projectBound``(项目凭证已登记)。门 = 项目成员(仅普通项目 —— 公共项目内容走订阅,凭证是
-    订阅者自己的事,本端点 422)。"""
-    from ..models.auth_session import AuthSession
+    """身份条目装载状态(重构:槽位 → 条目;S7.3 项目配置页签,只读
+    不落库):项目场景引用的身份条目 × 成员是否已装载(条目 ref 能在
+    该成员池解析到账户即算;不给任何账号信息);S8 每条目另给
+    ``projectBound``(项目池已覆盖)。门 = 项目成员(仅普通项目 ——
+    公共项目内容走订阅,凭证是订阅者自己的事,本端点 422)。"""
+    from ..models.auth_account import AuthAccount
     from ..models.composer_scenario import ComposerScenario
+    from ..models.service import Service
+    from ..models.service_identity import ServiceIdentity
     from ..models.user import User
     from ..services.project_promotion import require_member
 
@@ -253,27 +256,62 @@ async def project_slot_status(
         .where(ProjectMember.project_id == project_id)
         .order_by(ProjectMember.user_id))).all()
     slots = sorted(slot_scenarios)
-    bound: set[tuple[int, str]] = set()
-    if slots and members:
-        rows = (await db.execute(
-            select(AuthSession.owner_id, AuthSession.slot).where(
-                AuthSession.owner_id.in_([m[0] for m in members]),
-                AuthSession.slot.in_(slots)))).all()
-        bound = set(rows)
-    # S8:项目凭证是否覆盖该槽(成员可切换为项目凭证执行)
+
+    # 条目装载判定(与 run_prepare._resolve_identities 的 ref 语义同构,
+    # 批量内存匹配:条目 → (system, env, ref) → 池内账户命中)
+    idents = {i.alias_name: i for i in (await db.execute(
+        select(ServiceIdentity).where(
+            ServiceIdentity.alias_name.in_(slots)))).scalars().all()} \
+        if slots else {}
+    system_of = dict((await db.execute(
+        select(Service.name, Service.system).where(
+            Service.name.in_({i.base_service for i in idents.values()}))
+    )).all()) if idents else {}
+
+    def _loaded(accounts: list) -> set[str]:
+        """池内账户 → 已装载条目名集合(ref 匹配)。"""
+        out: set[str] = set()
+        by_key: dict[tuple[str, int, str], AuthAccount] = {
+            (a.system, a.env_id, a.username): a for a in accounts}
+        default_hit: set[tuple[str, int]] = set()
+        for a in accounts:
+            if a.is_default:
+                default_hit.add((a.system, a.env_id))
+        for name, ident in idents.items():
+            sysname = system_of.get(ident.base_service)
+            if not sysname:
+                continue
+            if ident.ref_mode == "username":
+                if (sysname, ident.env_id, ident.ref_username) in by_key:
+                    out.add(name)
+            elif (sysname, ident.env_id) in default_hit:
+                out.add(name)
+        return out
+
+    member_ids = [m[0] for m in members]
+    bound: dict[int, set[str]] = {uid: set() for uid in member_ids}
+    if slots and member_ids:
+        accs = (await db.execute(
+            select(AuthAccount).where(
+                AuthAccount.owner_id.in_(member_ids)))).scalars().all()
+        by_owner: dict[int, list] = {}
+        for a in accs:
+            by_owner.setdefault(a.owner_id, []).append(a)
+        bound = {uid: _loaded(by_owner.get(uid, [])) for uid in member_ids}
+    # S8:项目池是否覆盖该条目(成员可切换为项目账户执行)
     project_bound: set[str] = set()
     if slots:
-        project_bound = set((await db.execute(
-            select(AuthSession.slot).where(
-                AuthSession.project_id == project_id,
-                AuthSession.slot.in_(slots)))).scalars().all())
+        proj_accs = (await db.execute(
+            select(AuthAccount).where(
+                AuthAccount.project_id == project_id))).scalars().all()
+        project_bound = _loaded(proj_accs)
     return {"slots": [{
         "slot": slot,
         "scenarios": sorted(slot_scenarios[slot]),
         "projectBound": slot in project_bound,
         "members": [{"userId": uid, "username": uname,
                      "displayName": disp or uname,
-                     "bound": (uid, slot) in bound}
+                     "bound": slot in bound.get(uid, set())}
                     for uid, uname, disp in members],
     } for slot in slots]}
 
@@ -458,13 +496,13 @@ async def delete_project(
                     "message": "项目内仍有内容(场景/套件/集成模板/报告"
                                "定义),需先清空或迁走再删除"})
     await _audit(db, user, "project.deleted", proj, {"name": proj.name})
-    # S8:项目凭证随项目删除(FK NO ACTION —— 显式删,凭证是项目的配置
+    # S8:项目账户随项目删除(FK NO ACTION —— 显式删,凭证是项目的配置
     # 不是内容,不进内容闸)
     from sqlalchemy import delete as _del
 
-    from ..models.auth_session import AuthSession
-    await db.execute(_del(AuthSession).where(
-        AuthSession.project_id == project_id))
+    from ..models.auth_account import AuthAccount
+    await db.execute(_del(AuthAccount).where(
+        AuthAccount.project_id == project_id))
     # M2b Q2:项目令牌随项目删除吊销(令牌行留档,终态只读)
     from .project_tokens import revoke_all_for_project
     await revoke_all_for_project(db, project_id)

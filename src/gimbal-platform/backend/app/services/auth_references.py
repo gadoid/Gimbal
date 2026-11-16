@@ -1,27 +1,19 @@
-"""凭证引用反查(配套方案 §1)— 三类引用,读时计算,不建反向索引。
+"""账户引用反查(重构 2026-11-16 账户实体化)— 读时计算,不建反向索引。
 
-引用语义(名字引用,运行时按**执行者本人**池解析 — 删我的凭证真正
-弄坏的只有「以我身份运行」的那些引用,快照类则根本不依赖池):
+引用语义:身份条目按 ref(username/default)引用账户,场景按**条目名**
+引用身份(``${auth.<条目名>.*}`` 模板 / ``config.users`` 快照键)。
+账户 → 条目 → 场景两层聚合:
 
-* ``template`` — steps 里的 ``${auth.<alias>.*}`` 模板。扫描单一实现
-  复用 ``auth_ref_scan.scan_auth_aliases``(注入清单同源,spec §5
-  「场景内容是单一事实源」);
-* ``alias`` — ``service_aliases.slot``(别名声明槽位,查表);
-* ``snapshot`` — ``definition.config.users`` 的同名键(快照自足,
-  非运行依赖 — 卫生信号:哪些场景揣着旧密码副本)。
+* ``template`` — steps 里的 ``${auth.<条目名>.*}`` 模板(扫描单一实现
+  复用 ``auth_ref_scan``,与注入清单同源);
+* ``snapshot`` — ``definition.config.users`` 的同名键(快照自足,非
+  运行依赖 — 卫生信号:哪些场景揣着旧密码副本)。
 
-方案引用(``serviceBindings[*].authAlias``)随 authz M2a S6 退役:
-方案只选别名,不再存凭证引用。
-
-删除拦截口径(方案 §1.4.3/§1.5 拍板):**硬 409 只对本人场景的
-template 引用**(它们会在下次运行时真正失效);别名绑定与
-同名他场景只在面板提示 — 名字命中 ≠ 对象引用,别人解析的是各自的
-同名凭证,阻断过度。
-
-可见性(§1.4):计数照给,场景名按 ``can_read_scenario`` 过滤
-(public / owner / 引用;authz W3 起 admin 无旁路),剩余计为 hidden — 只给数不泄露标题。
-实时扫是 O(场景数 × payload) 的全表扫描:内部平台量级可接受,
-面板点开才算;扛不住的那天扩 scenario_endpoint_refs 写路径,不另起表。
+删除拦截口径(沿用 §1.4.3/§1.5 拍板):**硬 409 只对本人场景的
+template 引用**(它们会在下次运行时真正失效);快照与他人场景只在
+面板提示。可见性:计数照给,场景名按 ``can_read_scenario`` 过滤,
+剩余计为 hidden。实时扫 O(场景数 × payload):内部平台量级可接受,
+面板点开才算;扛不住的那天扩写路径,不另起表。
 """
 from __future__ import annotations
 
@@ -30,8 +22,10 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..models.auth_account import AuthAccount
 from ..models.composer_scenario import ComposerScenario
-from ..models.service_alias import ServiceAlias
+from ..models.service import Service
+from ..models.service_identity import ServiceIdentity
 from .auth_ref_scan import scan_auth_aliases
 from .scenario_store import definition_from_payload
 
@@ -49,16 +43,15 @@ class ScenarioRef:
     owner_id: int
     visibility: str
     name: str
-    # S1.1:区维度(读面谓词 can_pure 按 project_id 判;影子期与
-    # visibility 同步翻转)
+    # S1.1:区维度(读面谓词 can_pure 按 project_id 判)
     project_id: int | None = None
     kinds: set[str] = field(default_factory=set)
 
 
 async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
-    """全场景一遍扫 → alias → 引用记录。所有调用方共享同一次扫描。
+    """全场景一遍扫 → 条目名 → 引用记录。所有调用方共享同一次扫描。
 
-    config.users 的键集合就是快照引用面(键名 = 凭证别名)。
+    config.users 的键集合就是快照引用面(键名 = 身份条目名)。
     """
     scenarios = (await db.execute(select(ComposerScenario))).scalars().all()
 
@@ -103,20 +96,65 @@ async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
     return by_alias
 
 
-async def alias_rows_for(db: AsyncSession, alias: str) -> list[ServiceAlias]:
-    return (await db.execute(
-        select(ServiceAlias).where(ServiceAlias.slot == alias)
-        .order_by(ServiceAlias.alias_name)
-    )).scalars().all()
+async def identities_for_account(
+    db: AsyncSession, account: AuthAccount,
+) -> list[ServiceIdentity]:
+    """ref 指向该账户的身份条目(条目不分池,匹配只看 system/env/ref
+    三元;与 run_prepare._resolve_identities 的 ref 解析同构)。"""
+    idents = (await db.execute(
+        select(ServiceIdentity, Service.system).join(
+            Service, Service.name == ServiceIdentity.base_service
+        ).where(
+            Service.system == account.system,
+            ServiceIdentity.env_id == account.env_id,
+        ))).all()
+    out: list[ServiceIdentity] = []
+    for ident, _svc in idents:
+        if ident.ref_mode == "username":
+            if ident.ref_username == account.username:
+                out.append(ident)
+        elif account.is_default:  # ref_mode=default:吃池内默认账户
+            out.append(ident)
+    return sorted(out, key=lambda i: i.alias_name)
+
+
+async def _identity_name_map(
+    db: AsyncSession, accounts: list[AuthAccount],
+) -> dict[int, list[ServiceIdentity]]:
+    """账户 id → ref 条目清单(列表页批量;一次查询全体条目+主档)。"""
+    if not accounts:
+        return {}
+    pairs = {(a.system, a.env_id) for a in accounts}
+    rows = (await db.execute(
+        select(ServiceIdentity, Service.system).join(
+            Service, Service.name == ServiceIdentity.base_service)
+    )).all()
+    by_key: dict[tuple[str, int], list] = {}
+    for ident, sysname in rows:
+        by_key.setdefault((sysname, ident.env_id), []).append(ident)
+    out: dict[int, list[ServiceIdentity]] = {}
+    for a in accounts:
+        matched = []
+        for ident in by_key.get((a.system, a.env_id), []):
+            if (ident.ref_mode == "username"
+                    and ident.ref_username == a.username):
+                matched.append(ident)
+            elif ident.ref_mode != "username" and a.is_default:
+                matched.append(ident)
+        out[a.id] = sorted(matched, key=lambda i: i.alias_name)
+    return out
 
 
 async def references(
-    db: AsyncSession, *, user, alias: str
+    db: AsyncSession, *, user, account: AuthAccount,
 ) -> dict:
-    """反查面板数据:别名绑定行 + 场景引用(可见名 + 不可见计数)。"""
+    """反查面板数据:ref 条目清单 + 场景引用(条目名聚合,可见名 +
+    不可见计数)。"""
     by_alias = await _scan_scenario_refs(db)
-    hits = by_alias.get(alias, [])
-    # S1.1:读面谓词单点 can_pure(表 B scenario.read + 项目上下文)
+    idents = await identities_for_account(db, account)
+    hits: list[ScenarioRef] = []
+    for ident in idents:
+        hits.extend(by_alias.get(ident.alias_name, []))
     from types import SimpleNamespace
 
     from ..routers._ownership import can_pure
@@ -128,11 +166,12 @@ async def references(
                            SimpleNamespace(owner_id=r.owner_id,
                                            project_id=r.project_id),
                            **_ctx)]
-    alias_rows = await alias_rows_for(db, alias)
     return {
-        "alias_refs": [
-            {"alias_name": a.alias_name, "base_service": a.base_service}
-            for a in alias_rows
+        "identity_refs": [
+            {"alias_name": i.alias_name, "base_service": i.base_service,
+             "env_id": i.env_id, "ref_mode": i.ref_mode,
+             "ref_username": i.ref_username or None}
+            for i in idents
         ],
         "scenario_refs": {
             "visible": [
@@ -145,23 +184,41 @@ async def references(
     }
 
 
-async def blocking_refs(db: AsyncSession, *, user, alias: str) -> list[str]:
-    """删除拦截(窄口径):本人场景的 template 引用 — 删除会让
-    这些场景下次运行真正失效。快照/别名绑定/他人场景不阻断。"""
+async def blocking_refs(
+    db: AsyncSession, *, user, account: AuthAccount,
+) -> list[str]:
+    """删除拦截(窄口径):ref 该账户的条目被本人场景 template 引用 —
+    删除会让这些场景下次运行真正失效。快照/他人场景不阻断。"""
     by_alias = await _scan_scenario_refs(db)
-    return sorted(
-        r.scenario_id for r in by_alias.get(alias, [])
-        if r.owner_id == user.id and (r.kinds & COUNTED_KINDS)
-    )
+    idents = await identities_for_account(db, account)
+    blocking: set[str] = set()
+    for ident in idents:
+        blocking.update(
+            r.scenario_id for r in by_alias.get(ident.alias_name, [])
+            if r.owner_id == user.id and (r.kinds & COUNTED_KINDS))
+    return sorted(blocking)
 
 
-# ── M5-5 计数增量化 ─────────────────────────────────────────────────
-# /api/auths 每次调用都全表扫全部场景 payload(_scan_scenario_refs,
-# 列表页最贵的隐藏成本)。缓存键 = 两表的 (count, max(updated_at)) 指纹:
-# 微型聚合查询换一次全 payload 扫描;任何 insert/update/delete 都会
-# 改变指纹(删除改变 count,更新改变 max)。反查面板 references() 保持
-# 实时扫(单一事实源,§1.4 的「不建反向索引」纪律不变 —— 这里只是缓存,
-# 不是索引)。
+async def account_ref_counts(
+    db: AsyncSession, accounts: list[AuthAccount],
+) -> dict[int, dict[str, int]]:
+    """列表页计数(一次扫描服务所有行):``{账户id: {条目数, 场景数}}``。
+    场景计数 = ref 条目的模板引用去重场景数(快照不进计数)。"""
+    by_alias = await _scan_scenario_refs(db)
+    ident_map = await _identity_name_map(db, accounts)
+    out: dict[int, dict[str, int]] = {}
+    for aid, idents in ident_map.items():
+        scen_ids = {
+            r.scenario_id
+            for i in idents
+            for r in by_alias.get(i.alias_name, [])
+            if r.kinds & COUNTED_KINDS}
+        out[aid] = {"identity_count": len(idents),
+                    "scenario_count": len(scen_ids)}
+    return out
+
+
+# ── M5-5 计数增量化(指纹缓存;反查面板 references() 保持实时扫)─────
 _counts_cache: dict = {"fingerprint": None, "value": None}
 
 
@@ -169,10 +226,10 @@ async def _counts_fingerprint(db: AsyncSession) -> tuple:
     scen = (await db.execute(select(
         func.count(), func.max(ComposerScenario.updated_at)
     ).select_from(ComposerScenario))).one()
-    aliases = (await db.execute(select(
-        func.count(), func.max(ServiceAlias.updated_at)
-    ).select_from(ServiceAlias))).one()
-    return (scen, aliases)
+    idents = (await db.execute(select(
+        func.count(), func.max(ServiceIdentity.updated_at)
+    ).select_from(ServiceIdentity))).one()
+    return (scen, idents)
 
 
 def reset_counts_cache_for_tests() -> None:
@@ -180,28 +237,16 @@ def reset_counts_cache_for_tests() -> None:
     _counts_cache["value"] = None
 
 
-async def counts(db: AsyncSession) -> dict[str, dict[str, int]]:
-    """列表页双计数(一次扫描服务所有行):``N 别名 / N 场景``。
-    场景计数 = 模板引用去重场景数(快照不进计数)。
-    结果按指纹缓存(M5-5)—— 指纹不变直接回缓存。"""
+async def cached_scenario_refs(db: AsyncSession) -> dict[str, int]:
+    """条目名 → 场景引用数(指纹缓存;账户计数经 account_ref_counts
+    组合,供轻量消费方)。"""
     fp = await _counts_fingerprint(db)
     if _counts_cache["value"] is not None and _counts_cache["fingerprint"] == fp:
         return _counts_cache["value"]
-    value = await _counts_uncached(db)
+    by_alias = await _scan_scenario_refs(db)
+    value = {
+        name: len({r.scenario_id for r in refs if r.kinds & COUNTED_KINDS})
+        for name, refs in by_alias.items()}
     _counts_cache["fingerprint"] = fp
     _counts_cache["value"] = value
     return value
-
-
-async def _counts_uncached(db: AsyncSession) -> dict[str, dict[str, int]]:
-    by_alias = await _scan_scenario_refs(db)
-    out: dict[str, dict[str, int]] = {}
-    alias_rows = (await db.execute(select(ServiceAlias))).scalars().all()
-    for a in alias_rows:
-        if a.slot:
-            out.setdefault(a.slot, {})["alias_count"] = \
-                out.get(a.slot, {}).get("alias_count", 0) + 1
-    for alias, refs in by_alias.items():
-        n = len({r.scenario_id for r in refs if r.kinds & COUNTED_KINDS})
-        out.setdefault(alias, {})["scenario_count"] = n
-    return out

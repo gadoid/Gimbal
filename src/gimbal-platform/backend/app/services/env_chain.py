@@ -23,7 +23,6 @@ from ..models.deployment import Deployment
 from ..models.environment import Environment
 from ..models.permission import UserPref
 from ..models.project import Project
-from ..models.service_alias import ServiceAlias
 
 # 个人偏好键(user_preferences 白名单同名;值 = 环境 id)
 PREF_KEY = "run.environment"
@@ -170,12 +169,14 @@ async def instance_lines(db: AsyncSession, env_id: int | None) -> dict[str, str]
 async def deployment_urls(
     db: AsyncSession, raw_names: list[str], env_id: int,
 ) -> dict[str, str]:
-    """服务键 → 该环境部署地址(命中才出现)。"""
+    """服务键 → 该环境部署地址(命中才出现;重构:基名解析切条目表)。"""
     if not raw_names:
         return {}
+    from ..models.service_identity import ServiceIdentity
+
     alias_base = dict((await db.execute(
-        select(ServiceAlias.alias_name, ServiceAlias.base_service).where(
-            ServiceAlias.alias_name.in_(raw_names)))).all())
+        select(ServiceIdentity.alias_name, ServiceIdentity.base_service).where(
+            ServiceIdentity.alias_name.in_(raw_names)))).all())
     base_of = {n: (alias_base.get(n) or n) for n in raw_names}
     rows = dict((await db.execute(
         select(Deployment.base_service, Deployment.base_url).where(

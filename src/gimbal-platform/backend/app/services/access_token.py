@@ -359,33 +359,44 @@ async def check_scope(
     for alias in sorted(set(used.aliases)):
         if alias in scope_aliases:
             continue
-        from ..models.service_alias import ServiceAlias
-        exists = await db.get(ServiceAlias, alias) is not None
+        from ..models.service_identity import ServiceIdentity
+        exists = (await db.execute(
+            select(ServiceIdentity.id).where(
+                ServiceIdentity.alias_name == alias))).scalar() is not None
         missing.append(ScopeMissing("alias", alias, not exists))
 
     if used.auths:
-        # used.auths 存凭证别名;范围存凭证 id —— 按属主池把两侧都归到
-        # id 面比对(同名不同 id 的重建不继承授权,§4.1)
-        from ..models.auth_session import AuthSession
-        # S3 槽位绑定:名字 = 槽名(存量 slot=alias,行为不变);
-        # 同槽多绑定取默认行(与环境无关的保守面)
+        # used.auths 存身份条目名;范围存账户 id —— 按属主池把条目解析
+        # 到账户面比对(重构:ref 匹配的保守面 —— 条目在池内可能取用的
+        # 账户,任一在范围内即覆盖;同名不同 id 的重建不继承授权,§4.1)
+        from ..models.auth_account import AuthAccount
+        from ..models.service import Service
+        from ..models.service_identity import ServiceIdentity
         from .run_prepare import _pool_clause
         pool = _pool_clause(
             owner_id, token.project_id if is_project_token(token) else None)
-        used_rows = (await db.execute(
-            select(AuthSession.id, AuthSession.slot).where(
-                pool,
-                AuthSession.slot.in_(set(used.auths)))
-            .order_by(AuthSession.is_default.desc(),
-                      AuthSession.env_id.is_(None).desc(),
-                      AuthSession.id)
+        idents = (await db.execute(
+            select(ServiceIdentity, Service.system).join(
+                Service, Service.name == ServiceIdentity.base_service).where(
+                ServiceIdentity.alias_name.in_(set(used.auths)))
         )).all()
-        by_name = {}
-        for rid, slot in used_rows:
-            by_name.setdefault(slot, rid)
+        pool_accounts = (await db.execute(
+            select(AuthAccount).where(pool))).scalars().all()
+        by_name: dict[str, set[int]] = {}
+        for ident, sysname in idents:
+            ids: set[int] = set()
+            for a in pool_accounts:
+                if a.system != sysname or a.env_id != ident.env_id:
+                    continue
+                if ident.ref_mode == "username":
+                    if a.username == ident.ref_username:
+                        ids.add(a.id)
+                elif a.is_default:
+                    ids.add(a.id)
+            by_name.setdefault(ident.alias_name, ids)
         for alias in sorted(set(used.auths)):
-            rid = by_name.get(alias)
-            if rid is not None and rid in scope_auths:
+            ids = by_name.get(alias, set())
+            if ids & scope_auths:
                 continue
             missing.append(ScopeMissing("auth", alias, rid is None))
     return missing or None

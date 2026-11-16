@@ -36,7 +36,7 @@ from ..core.security import hash_password
 from ._ownership import has_capability, roles_with
 from ..models.user import User
 from ..services import access_token as at_svc
-from ..models.auth_session import AuthSession
+from ..models.auth_account import AuthAccount
 from ..models.constant_entry import ConstantEntry
 from ..schemas.user import (
     UserCreateIn,
@@ -877,7 +877,7 @@ async def delete_user(
 
     # ── P1a 最小显式级联(NO ACTION 两表;个人别名随 S6 退役)──
     await db.execute(
-        sa_delete(AuthSession).where(AuthSession.owner_id == user_id))
+        sa_delete(AuthAccount).where(AuthAccount.owner_id == user_id))
     await db.execute(
         sa_delete(ConstantEntry).where(ConstantEntry.owner_id == user_id))
 

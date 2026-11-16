@@ -35,9 +35,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..models.access_token import AccessToken
-from ..models.auth_session import AuthSession
+from ..models.auth_account import AuthAccount
 from ..models.project import Project, ProjectMember
-from ..models.service_alias import ServiceAlias
+from ..models.service_identity import ServiceIdentity
 from ..models.user import User
 from ..services import access_token as at
 from ..services import audit as audit_svc
@@ -162,16 +162,17 @@ async def list_project_tokens(
 async def project_scope_candidates(
     user: CurrentUser, db: DbSession, project_id: int,
 ) -> dict:
+    """范围候选(重构:别名 → 身份条目;凭证 → 项目池账户)。"""
     proj = await _manage_gate(db, user, project_id)
-    aliases = (await db.execute(select(ServiceAlias.alias_name).order_by(
-        ServiceAlias.alias_name))).scalars().all()
+    aliases = (await db.execute(select(ServiceIdentity.alias_name).order_by(
+        ServiceIdentity.alias_name))).scalars().all()
     rows = (await db.execute(select(
-        AuthSession.id, AuthSession.alias, AuthSession.slot).where(
-            AuthSession.project_id == proj.id).order_by(
-                AuthSession.slot, AuthSession.id))).all()
+        AuthAccount.id, AuthAccount.username, AuthAccount.system).where(
+            AuthAccount.project_id == proj.id).order_by(
+                AuthAccount.system, AuthAccount.id))).all()
     return {"aliases": list(aliases),
-            "auths": [{"id": rid, "alias": alias, "slot": slot}
-                      for rid, alias, slot in rows]}
+            "auths": [{"id": rid, "username": username, "system": system}
+                      for rid, username, system in rows]}
 
 
 # ── 签发 ────────────────────────────────────────────────────────

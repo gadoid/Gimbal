@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..models.access_token import AccessToken
-from ..models.auth_session import AuthSession
+from ..models.auth_account import AuthAccount
 from ..models.composer_scenario import ComposerScenario
 from ..models.execution import Execution
 from ..models.integration_task import IntegrationTask
@@ -73,7 +73,7 @@ async def _stat_subscribed_integrations(db, user) -> int:
 
 async def _stat_auths(db, user) -> int:
     return int((await db.execute(select(func.count()).select_from(
-        AuthSession).where(AuthSession.owner_id == user.id))).scalar_one())
+        AuthAccount).where(AuthAccount.owner_id == user.id))).scalar_one())
 
 
 async def _stat_unread(db, user) -> int:
