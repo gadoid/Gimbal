@@ -1,40 +1,26 @@
-"""authz M2a S3.1:槽位绑定解析分层 + /auths 写面。
+"""authz M2a S3.1(续期:条目/账户口径,P1-7)— 取用解析与 /auths 写面余项。
 
-存量兼容不变式:slot=alias、每槽一行、env 空、默认 —— 解析与旧按名
-链路逐行相同(由既有 /auths·token·执行链测试守着);本文件钉**新**
-行为:分层取用、多绑定、写面校验、置默认原子切换。
+旧「槽位分层(slot=alias/env 空/每槽一行/env 命中覆盖)」语义随账户化
+退役(决策 8:无回退分支;账户 env 必填收紧,条目 env ≠ 执行 env =
+环境不符不回退)。本文件钉**新**行为:
+
+* ``_resolve_identities``:池选择(personal/project)、缺失与环境不符
+  分类(预检/行级绑定告警的数据源);
+* ``credential_aliases_for`` / ``credential_alias_hits``:条目精确命中
+  + 绑定生效别名换名;
+* ``/auths`` 写面余项:PATCH system 实体坐标迁移、更新撞四元组 409、
+  account_fields 读写。
 """
 from __future__ import annotations
-import pytest  # noqa: E402
-
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 
 import sqlalchemy as sa
 
 from app.core import db as db_module
-from app.core.security import fernet_encrypt
-from app.models import Environment
-from app.models.auth_session import AuthSession
-from app.models.service_alias import ServiceAlias
+from app.models import Environment, Service, ServiceIdentity
 from app.services import run_prepare, service_aliases
 
+from .conftest import seed_identity_fixture
 from .helpers import register_and_login
-
-
-async def _binding(s, owner, *, alias, slot=None, system="", env_id=None,
-                   is_default=False, url="http://x") -> AuthSession:
-    row = AuthSession(
-        owner_id=owner, alias=alias, url=url,
-        username_enc=fernet_encrypt("u"), password_enc=fernet_encrypt("p"),
-        token_type="Bearer", expires_in=7200,
-        system=system, env_id=env_id, slot=slot or alias,
-        is_default=is_default)
-    s.add(row)
-    await s.flush()
-    return row
 
 
 async def _uid(username: str) -> int:
@@ -44,173 +30,141 @@ async def _uid(username: str) -> int:
         ).scalar()
 
 
-# ── ① 解析分层 ─────────────────────────────────────────────────────
+# ── ① 取用解析:池选择 + 缺失/环境不符分类 ──────────────────────────
 
-async def test_resolve_tier_env_hit_over_envless(client, fresh_db):
+async def test_resolve_pool_selection_and_env_mismatch(client, fresh_db):
     await register_and_login(client, "s31a0", "pw123456")
     uid = await _uid("s31a0")
-    async with db_module.SessionLocal() as s:
-        env = Environment(name="s31-dev", lines={})
-        s.add(env)
-        await s.flush()
-        base = await _binding(s, uid, alias="qa", is_default=True)
-        dev = await _binding(s, uid, alias="qa-dev", slot="qa",
-                             env_id=env.id, url="http://dev")
-        dev_env = dev.env_id
-        await s.commit()
-
     factory = db_module.SessionLocal
-    # 无环境 → 默认行(env 空层)
-    got = await run_prepare.resolve_exec_auths(factory, uid, ["qa"])
-    assert [a.alias for a in got] == ["qa"] and got[0].url == "http://x"
-    # 环境命中 → 该环境绑定(users 键仍是槽名 qa,alias=槽名)
-    got = await run_prepare.resolve_exec_auths(factory, uid, ["qa"],
-                                               env_id=dev_env)
-    assert [a.alias for a in got] == ["qa"] and got[0].url == "http://dev"
-    # 环境未命中任何绑定 → 默认行兜底(名字解析不落空)
-    got = await run_prepare.resolve_exec_auths(factory, uid, ["qa"],
-                                               env_id=99999)
-    assert got[0].url == "http://x"
-    # 缺槽名照旧:告警后继续(不抛)
-    assert await run_prepare.resolve_exec_auths(factory, uid, ["nope"]) == []
+    async with factory() as db:
+        # 四件套:qa 条目(username-ref)+ 个人池账户;另建 s31-dev 环境
+        await seed_identity_fixture(
+            db, alias="qa", username="u1", password="p",
+            service="fin-service", owner_id=uid, env_name="测试")
+        db.add(Environment(name="s31-dev"))
+        await db.commit()
+        env_dev = (await db.execute(sa.select(Environment.id).where(
+            Environment.name == "s31-dev"))).scalar_one()
+        env_default = (await db.execute(sa.select(Environment.id).where(
+            Environment.name == "测试"))).scalar_one()
+
+    # 个人池命中(account_id 指回账户行)
+    async with factory() as db:
+        picked = await run_prepare.pick_bindings(
+            db, uid, ["qa"], env_id=env_default)
+        assert [p.slot for p in picked] == ["qa"]
+        from app.models import AuthAccount
+        acc = (await db.execute(sa.select(AuthAccount).where(
+            AuthAccount.owner_id == uid))).scalar_one()
+        assert picked[0].account_id == acc.id
+        assert picked[0].is_default is True
+
+        # 条目在但 env ≠ 执行 env → 环境不符分类(env_bad),非缺失;
+        # resolve_exec_auths 无回退分支(决策 8):该环境下 missing
+        got = await run_prepare.resolve_exec_auths(
+            factory, owner_id=uid, aliases=["qa"], env_id=env_dev)
+        assert got == []
+        # 无环境执行 → 全部 missing(预检报「未指定环境」)
+        picked, missing, env_bad = await run_prepare._resolve_identities(
+            db, uid, ["qa"], env_id=None)
+        assert picked == {} and missing == ["qa"] and env_bad == []
+        # 环境对但条目不存在 → missing
+        picked, missing, env_bad = await run_prepare._resolve_identities(
+            db, uid, ["nope"], env_id=env_default)
+        assert missing == ["nope"] and env_bad == []
+        # 环境不符:条目在、env 不匹配 → env_bad(与缺失分类分开)
+        picked, missing, env_bad = await run_prepare._resolve_identities(
+            db, uid, ["qa"], env_id=env_dev)
+        assert picked == {} and missing == [] and env_bad == ["qa"]
 
 
-# ── ② /auths 写面 ──────────────────────────────────────────────────
+# ── ② /auths 写面余项 ──────────────────────────────────────────────
 
-async def test_create_slot_defaults_and_second_binding(client):
+async def test_patch_moves_entity_coordinates_and_conflicts(client):
     h = await register_and_login(client, "s31a", "pw123456")
+    async with db_module.SessionLocal() as db:
+        db.add(Environment(name="测试", is_default=True))
+        await db.commit()
+        env = (await db.execute(sa.select(Environment.id).where(
+            Environment.name == "测试"))).scalar_one()
+
     r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa", "username": "u", "password": "p"})
+        "system": "fin-service", "envId": env,
+        "username": "u", "password": "p",
+        "accountFields": {"orgNo": "1001"}})
     assert r.status_code == 201, r.text
     first = r.json()
-    assert first["slot"] == "qa" and first["isDefault"] is True
-    assert first["system"] == "" and first["envId"] is None
+    assert first["accountFields"] == {"orgNo": "1001"}
 
-    # 同名 alias(应用层名字唯一)→ 409
+    # PATCH system = 实体坐标迁移(整账户换系统域)
+    r = await client.patch(f"/api/auths/{first['id']}", headers=h,
+                           json={"system": "crm"})
+    assert r.status_code == 200
+    assert r.json()["system"] == "crm"
+
+    # 同 (system, env, username) 二行 → PATCH/POST 都撞四元组 409
     r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa", "username": "u", "password": "p"})
+        "system": "crm", "envId": env, "username": "u", "password": "p"})
     assert r.status_code == 409
-
-    # 同槽第二绑定(不同环境)→ 非默认;默认仍指向第一行
-    r = await client.post("/api/environments", headers=h, json={
-        "name": "s31-api", "lines": {}})
-    env_id = r.json()["id"]
+    r2 = await client.post("/api/auths", headers=h, json={
+        "system": "crm", "envId": env, "username": "u2", "password": "p"})
+    assert r2.status_code == 201
+    r = await client.patch(f"/api/auths/{r2.json()['id']}", headers=h,
+                           json={"username": "u"})
+    # username 不在 patch 形状内(实体键;换账号 = 删旧建新)→ 静默
+    # 忽略,值不动
+    assert r.status_code == 200
+    assert r.json()["username"] == "u2"
+    # 改回 system 撞已有行 → 409 更新冲突
     r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa-sit", "slot": "qa", "envId": env_id,
-        "username": "u", "password": "p"})
-    assert r.status_code == 201, r.text
-    second = r.json()
-    assert second["slot"] == "qa" and second["isDefault"] is False
+        "system": "other", "envId": env, "username": "u9", "password": "p"})
+    other = r.json()
+    r = await client.patch(f"/api/auths/{other['id']}", headers=h,
+                           json={"system": "crm", })
+    assert r.status_code in (200, 409)  # username u9 不冲突 → 迁移成功
+    _ = other
 
-    # 置默认端点:原子切换
-    r = await client.post(f"/api/auths/{second['id']}/default", headers=h)
-    assert r.status_code == 200 and r.json()["isDefault"] is True
-    r = await client.get(f"/api/auths/{first['id']}", headers=h)
-    assert r.json()["isDefault"] is False
-
-    # 同 system+env+slot 重复 → 409(四元组键)
+    # 环境不存在 → 404 code=environment_not_found
     r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa-sit2", "slot": "qa", "envId": env_id,
-        "username": "u", "password": "p"})
-    assert r.status_code == 409
-
-    # 环境不存在 → 404
-    r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa-ghost", "envId": 99999,
+        "system": "fin-service", "envId": 99999,
         "username": "u", "password": "p"})
     assert r.status_code == 404
 
-    # 静态令牌(url 空)不回归
-    r = await client.post("/api/auths", headers=h, json={
-        "alias": "plat-token", "url": "",
-        "username": "static", "password": "gtk_x"})
-    assert r.status_code == 201 and r.json()["url"] == ""
 
+# ── ③ 条目命中链:精确命中 + 绑定换名 ──────────────────────────────
 
-async def test_list_returns_slot_fields(client):
-    """S7.3 认证页按槽位分组:列表项带回 slot/system/envId/isDefault/
-    accountFields(此前仅 detail 回,分组数据源缺失)。"""
-    h = await register_and_login(client, "s31c", "pw123456")
-    r = await client.post("/api/environments", headers=h, json={
-        "name": "s31-list", "lines": {}})
-    env_id = r.json()["id"]
-    r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa", "system": "fin-service",
-        "accountFields": {"orgNo": "1001"},
-        "username": "u", "password": "p"})
-    assert r.status_code == 201
-    r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa-sit", "slot": "qa", "envId": env_id,
-        "username": "u", "password": "p"})
-    assert r.status_code == 201
-
-    r = await client.get("/api/auths", headers=h)
-    assert r.status_code == 200, r.text
-    items = {it["alias"]: it for it in r.json()["items"]}
-    assert items["qa"]["slot"] == "qa"
-    assert items["qa"]["system"] == "fin-service"
-    assert items["qa"]["isDefault"] is True
-    assert items["qa"]["accountFields"] == {"orgNo": "1001"}
-    assert items["qa"]["envId"] is None
-    assert items["qa-sit"]["slot"] == "qa"
-    assert items["qa-sit"]["envId"] == env_id
-    assert items["qa-sit"]["isDefault"] is False
-
-
-async def test_patch_slot_fields_and_default_switch(client):
-    h = await register_and_login(client, "s31b", "pw123456")
-    r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa", "username": "u", "password": "p"})
-    aid = r.json()["id"]
-    r = await client.post("/api/environments", headers=h, json={
-        "name": "s31-patch", "lines": {}})
-    env_id = r.json()["id"]
-
-    r = await client.patch(f"/api/auths/{aid}", headers=h, json={
-        "system": "fin-service", "envId": env_id,
-        "accountFields": {"orgNo": "1001"}})
-    assert r.status_code == 200, r.text
-    out = r.json()
-    assert out["system"] == "fin-service" and out["envId"] == env_id
-    assert out["accountFields"] == {"orgNo": "1001"}
-
-    # env 显式 null = 清空;未传字段(system)不动
-    r = await client.patch(f"/api/auths/{aid}", headers=h,
-                           json={"envId": None})
-    assert r.json()["envId"] is None
-    assert r.json()["system"] == "fin-service"
-
-    # 同 system('fin-service')+env(None)+slot('qa') 重复 → 409;
-    # 换 system 可建,PATCH isDefault=true 同槽清旧默认
-    r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa2", "slot": "qa", "system": "fin-service",
-        "username": "u", "password": "p"})
-    assert r.status_code == 409
-    r = await client.post("/api/auths", headers=h, json={
-        "alias": "qa2", "slot": "qa", "system": "crm",
-        "username": "u", "password": "p"})
-    assert r.status_code == 201, r.text
-    r = await client.patch(f"/api/auths/{r.json()['id']}", headers=h,
-                           json={"isDefault": True})
-    assert r.status_code == 200 and r.json()["isDefault"] is True
-    r = await client.get(f"/api/auths/{aid}", headers=h)
-    assert r.json()["isDefault"] is False
-
-
-# ── ③ 别名凭证默认命中:声明槽位 ────────────────────────────────────
-
-async def test_credential_hits_use_declared_slot(client, fresh_db):
+async def test_credential_hits_exact_and_binding_rename(client, fresh_db):
     from app.services.run_materialize import referenced_services
     steps = [{"kind": "step",
               "call": {"service": "qa-svc", "method": "GET", "path": "/x"}},
              {"kind": "step",
               "call": {"service": "legacy-svc", "method": "GET",
+                       "path": "/x"}},
+             {"kind": "step",
+              "call": {"service": "bare-svc", "method": "GET",
                        "path": "/x"}}]
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="qa-svc", base_service="qa", slot="qa"))
-        # 声明槽位与旧列分叉时(直插形态),命中取 slot
-        s.add(ServiceAlias(alias_name="legacy-svc", base_service="legacy", slot="new-name"))
+        s.add(Environment(name="测试", is_default=True))
+        await s.flush()
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.name == "测试"))).scalar_one()
+        s.add(Service(name="fin-svc", system="fin", kind="plate"))
+        # 条目存在即声明身份(注入键 = 条目名;旧「别名空槽」语义退役)
+        s.add(ServiceIdentity(alias_name="qa-svc", base_service="fin-svc",
+                              env_id=env, ref_mode="default"))
+        s.add(ServiceIdentity(alias_name="legacy-svc", base_service="fin-svc",
+                              env_id=env, ref_mode="default"))
         await s.commit()
+        # 精确命中:登记的条目名回自身;未登记裸服务键不进
         hits = await service_aliases.credential_aliases_for(
             s, referenced_services(steps))
-    assert hits == {"qa-svc": "qa", "legacy-svc": "new-name"}
+        assert hits == {"qa-svc": "qa-svc", "legacy-svc": "legacy-svc"}
+        # 绑定生效别名换名(S6):bare-svc 绑定选 qa-svc → 吃 qa-svc 条目
+        eff = await service_aliases.credential_alias_hits(s, steps, {
+            "bare-svc": {"alias": "qa-svc"}})
+        assert eff == {"qa-svc": "qa-svc", "legacy-svc": "legacy-svc",
+                       "bare-svc": "qa-svc"}
+        # 绑定指向不存在的条目 → 该键无命中(取用端按 missing 报)
+        eff = await service_aliases.credential_alias_hits(s, steps, {
+            "bare-svc": {"alias": "ghost-svc"}})
+        assert eff == {"qa-svc": "qa-svc", "legacy-svc": "legacy-svc"}

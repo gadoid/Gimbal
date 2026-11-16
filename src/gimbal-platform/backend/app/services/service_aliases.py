@@ -44,6 +44,7 @@ def identity_out(row: ServiceIdentity, *, kind: str = "plate",
         "envId": row.env_id if env_id is None else env_id,
         "refMode": row.ref_mode,
         "refUsername": row.ref_username or None,
+        "display": row.display or "",
         "createdAt": row.created_at.isoformat() if row.created_at else None,
         "updatedAt": row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -244,7 +245,12 @@ async def patch_alias(
     主档对账)。
     """
     _ = slot
-    row = await db.get(ServiceIdentity, alias_name)
+    # alias_name 是业务键非主键(P1-7 收尾同款误用漏网:PK 是 int id,
+    # db.get(str) 在 asyncpg 下直接 DataError → PATCH 端点必 500)
+    row = (await db.execute(
+        select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == alias_name)
+    )).scalar_one_or_none()
     if row is None:
         raise KeyError(f"alias_not_found: {alias_name}")
     svc = (await db.execute(

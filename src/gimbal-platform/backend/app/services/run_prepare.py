@@ -141,6 +141,9 @@ class PickedIdentity:
     env_id: int
     system: str        # 条目系统(base_service → services.system 派生)
     base_service: str
+    # 命中账户是否默认位(预览 bindingId/isDefault 消费;P1 缺陷修复
+    # 补齐 —— 预览块曾读不存在的 r.id/r.is_default,该路径从未被执行)
+    is_default: bool = False
 
 
 async def _resolve_identities(
@@ -172,9 +175,13 @@ async def _resolve_identities(
                 cand[i.alias_name] = i
             else:
                 env_bad.add(i.alias_name)
-        missing.update(n for n in uniq if n not in cand)
+        # 缺失/环境不符互斥分类(P1 缺陷修复:此前环境不符名同时落
+        # missing,返回端 env_bad - missing 恒空 —— 「环境不符」分类
+        # 从未到达过消费方;预检/行级绑定告警据此区分文案)
+        missing.update(n for n in uniq
+                       if n not in cand and n not in env_bad)
     if not cand:
-        return {}, sorted(missing), sorted(env_bad - missing)
+        return {}, sorted(missing), sorted(env_bad)
 
     # 条目系统派生:base_service → services.system(悬空条目 → missing)
     svc_rows = (await db.execute(
@@ -228,8 +235,9 @@ async def _resolve_identities(
             continue
         picked[name] = PickedIdentity(
             slot=name, account_id=acc.id, env_id=i.env_id,
-            system=sysname, base_service=i.base_service)
-    return picked, sorted(missing), sorted(env_bad - missing)
+            system=sysname, base_service=i.base_service,
+            is_default=acc.is_default)
+    return picked, sorted(missing), sorted(env_bad)
 
 
 async def pick_bindings(
@@ -841,7 +849,7 @@ async def resolve_effective_config(
             if r is None:
                 continue
             auths_out[label] = {
-                "bindingId": r.id, "system": r.system,
+                "bindingId": r.account_id, "system": r.system,
                 "envId": r.env_id, "isDefault": r.is_default,
                 "source": src,
                 **({"slotSource": "exec_config",

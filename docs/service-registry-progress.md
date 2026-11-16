@@ -9,7 +9,8 @@
 **Phase 1（底座）已闭环并通过全量测试基线；Phase 2（页面）欠账全销 —— 凭证域账户化（含 system 主档选择）、
 服务注册主档重做、身份条目子页条目化、项目配置条目口径、执行配置装载就绪新链（C3a）、
 carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）；
-剩余「P2-A 测试续期（52 文件）/ 导入映射 / Phase 3 文案清账」；生产环境已迁移并部署，登录后的场景试跑待凭据。**
+**P2-A 测试续期进行中：批次① 凭证/引用域 7 文件 54 用例全绿，连带修出 5 个 P1 残留真缺陷**；
+剩余 P2-A 45 文件 / 导入映射 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
 
 ## 2. 已完成
 
@@ -105,17 +106,51 @@ accounts   2   18180789650(默认) / 18180789652
 | `1d780347` | 身份条目子页条目化（ServiceAliasDetail 概览/矩阵/账户装载 tab/登记表单 env+ref） |
 | `ac683e17` | C1 收口（凭证 system 主档选择 + 未注册徽章）+ C2a 对称 + C2b（项目配置条目口径 + 预览条目化） |
 | 本次 | C3a 装载就绪新链（ExecConfigs）+ C3b（carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合）+ 本文档 |
+| 本次 | P2-A 批次① 凭证/引用域测试续期（7 文件 54 用例）+ 修 5 个 P1 残留缺陷（反查恒空/条目 PATCH 500/display 漏吐/预览 500/分类死码）+ 本地 0057 迁移 |
 
 ## 4. 未完成 / 后续计划
 
-### P2-A 测试续期（优先级最高，工作量最大）
+### P2-A 测试续期（优先级最高，工作量最大）· 批次① 已完成（2026-11-16）
 
-52 个 P1-7 skip 文件按 `tests/conftest.py::seed_identity_fixture` 四件套范式逐文件恢复：
+批次① 凭证/引用域 **7 文件 54 用例全绿**，连带修出 **5 个 P1 残留真缺陷**（均因旧测试
+skip 而从未被执行的路径）：
 
-- 布景改造：环境 + 主档 + 账户 + 条目（一次布景，实例 upsert 幂等）；
-- 断言改造：旧 `AuthSession(alias,url)` → `AuthAccount(system,env,username,login_url)`；
-  `db.get(ServiceAlias, name)` → `select(ServiceIdentity).where(alias_name==name)`；
-- 建议按域分批：凭证/引用 → 执行解析 → 集成/令牌 → 配置/carry → 其余。
+| 文件 | 用例 | 说明 |
+|---|---|---|
+| `test_auth_sessions.py` | 19 | 账户生命周期重写（四元组唯一/首账户默认/拨测实例口/复活钩子按条目名） |
+| `test_auth_references.py` | 4 | 反查两层聚合（条目名模板/快照）；admin 反查他人账户改断言 404（owner-scoped） |
+| `test_service_aliases.py` | 9 | 条目登记强约束（目录∪主档）/carry 条目键/注入链（条目→ref→本人池）/分类桶 |
+| `test_service_meta.py` | 2 | 端点退役 → 主档 description 读写面等价覆盖 + 删除挂靠保护 |
+| `test_auth_session_composition.py` | 7 | 误伤停跳（M2 运行时类与重构无关），摘印记直过 |
+| `test_authz_s8_project_credentials.py` | 10 | 项目池账户全链（CRUD 分权/取用/预览/集成复活/条目装载状态） |
+| `test_authz_s31_slots.py` | 3 | 语义重钉：取用池选择 + 缺失/环境不符互斥分类 + 命中链 |
+
+**修出的 P1 残留缺陷**：
+
+1. **反查面板恒空**：`AuthReferencesOut` 等模型缺 `populate_by_name` →
+   `model_validate` 只认 camel 别名，服务层 snake 键整包被丢，`/auths/{id}/references`
+   恒返回空（修：四个模型补 `populate_by_name`）。
+2. **条目 PATCH 必 500**：`patch_alias` 用 `db.get(ServiceIdentity, alias_name)`
+   按主键（int id）误取业务键（P1-7 收尾同款漏网；修：select by alias_name）。
+3. **display 永不出参**：`identity_out` 漏吐 `display` 键（改成功但 API 永远回 ''）。
+4. **预览 auths 命中即 500**：`effective_config` 预览块读 `r.id`/`r.is_default`，
+   `PickedIdentity` 只有 `account_id` 且无 `is_default`（修：补字段 + 改读 account_id）。
+5. **「环境不符」分类死码**：`_resolve_identities` 环境不符名同时落 missing，
+   返回端 `env_bad - missing` 恒空（修：missing/env_bad 互斥；预检与行级绑定
+   告警文案的分类数据源恢复）。
+
+全量基线（批次①前）：**1553 passed / 490 skipped / 0 failed**（PG 本地 15432，16m13s）。
+
+#### 剩余 45 文件分批
+
+- 批次② 执行解析：`test_run_bindings_injection` / `test_run_params_inbound` /
+  `test_run_semantics` / `test_execution_refactor` / `test_adhoc_run` /
+  `test_graph_dispatch` / `test_query_view_runner` / `test_query_views_route` …
+- 批次③ 集成/令牌：`test_integration_s0/w0a/w0b/w1` / `test_integration_consent_fixes` /
+  `test_token_runner` / `test_access_tokens` …
+- 批次④ 配置/carry：`test_exec_config_chain` / `test_exec_config_migration` /
+  `test_authz_s40_carry_scope` / `test_authz_s21_env_chain` …
+- 批次⑤ 其余：`test_migrations` / `test_user_delete_cascade` / `test_debug_console` …
 
 ### P2-B 页面收尾
 

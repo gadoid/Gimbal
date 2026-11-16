@@ -49,6 +49,11 @@ class AuthListOut(PageOut[AuthAccountOut]):
 class IdentityRefItem(BaseModel):
     """反查面板 · 引用该账户的身份条目行。"""
 
+    # populate_by_name:references() 服务层产 snake 键,校验按字段名收,
+    # 序列化仍走 camel 别名(P1 缺陷修复:缺此项时 model_validate 只认
+    # 别名 → 整包被当未知键丢弃,反查面板恒空)
+    model_config = ConfigDict(populate_by_name=True)
+
     alias_name: str = Field(alias="aliasName")
     base_service: str = Field(alias="baseService")
     env_id: int = Field(alias="envId")
@@ -63,6 +68,8 @@ class ScenarioRefItem(BaseModel):
     本人场景的 template 才阻断,schemas 见 auth_references)。
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     scenario_id: str = Field(alias="scenarioId")
     name: str
     kinds: list[str]
@@ -70,6 +77,9 @@ class ScenarioRefItem(BaseModel):
 
 
 class ScenarioRefsOut(BaseModel):
+    # hidden_count 无别名,visible 嵌套条目按名收(populate 递归生效)
+    model_config = ConfigDict(populate_by_name=True)
+
     visible: list[ScenarioRefItem] = Field(default_factory=list)
     hidden_count: int = 0
 
@@ -77,6 +87,8 @@ class ScenarioRefsOut(BaseModel):
 class AuthReferencesOut(BaseModel):
     """GET /auths/{id}/references(账户引用反查):ref 条目清单 + 场景
     引用(经条目名聚合,实时扫,不建反向索引)。"""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     identity_refs: list[IdentityRefItem] = Field(default_factory=list,
                                                  alias="identityRefs")
