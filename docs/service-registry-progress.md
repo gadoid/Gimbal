@@ -9,8 +9,8 @@
 **Phase 1（底座）已闭环并通过全量测试基线；Phase 2（页面）欠账全销 —— 凭证域账户化（含 system 主档选择）、
 服务注册主档重做、身份条目子页条目化、项目配置条目口径、执行配置装载就绪新链（C3a）、
 carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）；
-**P2-A 测试续期进行中：批次① 凭证/引用域 7 文件 54 用例全绿，连带修出 5 个 P1 残留真缺陷**；
-剩余 P2-A 45 文件 / 导入映射 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
+**P2-A 测试续期进行中：批次①②（凭证/引用 + 执行解析）15 文件 214 用例全绿，连带修出 7 个 P1 残留真缺陷**；
+剩余 P2-A 37 文件 / 导入映射 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
 
 ## 2. 已完成
 
@@ -107,13 +107,14 @@ accounts   2   18180789650(默认) / 18180789652
 | `ac683e17` | C1 收口（凭证 system 主档选择 + 未注册徽章）+ C2a 对称 + C2b（项目配置条目口径 + 预览条目化） |
 | 本次 | C3a 装载就绪新链（ExecConfigs）+ C3b（carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合）+ 本文档 |
 | 本次 | P2-A 批次① 凭证/引用域测试续期（7 文件 54 用例）+ 修 5 个 P1 残留缺陷（反查恒空/条目 PATCH 500/display 漏吐/预览 500/分类死码）+ 本地 0057 迁移 |
+| 本次 | P2-A 批次② 执行解析域测试续期（8 文件 160 用例）+ 修 2 个 P1 残留缺陷（adhoc 组装必炸/编排链注入恒空） |
 
 ## 4. 未完成 / 后续计划
 
-### P2-A 测试续期（优先级最高，工作量最大）· 批次① 已完成（2026-11-16）
+### P2-A 测试续期（优先级最高，工作量最大）· 批次①② 已完成（2026-11-16）
 
-批次① 凭证/引用域 **7 文件 54 用例全绿**，连带修出 **5 个 P1 残留真缺陷**（均因旧测试
-skip 而从未被执行的路径）：
+批次① 凭证/引用域 **7 文件 54 用例** + 批次② 执行解析域 **8 文件 160 用例** 全绿，
+连带修出 **7 个 P1 残留真缺陷**（均因旧测试 skip 而从未被执行的路径）：
 
 | 文件 | 用例 | 说明 |
 |---|---|---|
@@ -124,6 +125,14 @@ skip 而从未被执行的路径）：
 | `test_auth_session_composition.py` | 7 | 误伤停跳（M2 运行时类与重构无关），摘印记直过 |
 | `test_authz_s8_project_credentials.py` | 10 | 项目池账户全链（CRUD 分权/取用/预览/集成复活/条目装载状态） |
 | `test_authz_s31_slots.py` | 3 | 语义重钉：取用池选择 + 缺失/环境不符互斥分类 + 命中链 |
+| `test_run_bindings_injection.py` | 6 | 绑定换用条目/模板扫描注入/退役字段 422/缺账户整单拒发 |
+| `test_run_semantics.py` | 13 | 纯函数直过；external 桶种子改主档 |
+| `test_run_params_inbound.py` | 34 | 入站参数全矩阵（布景换四件套+账户范围） |
+| `test_adhoc_run.py` | 30 | 临时调用全矩阵（版本线读实例行/call.user=条目名/凭证=属主账户池） |
+| `test_query_view_runner.py` | 36 | 印记误注进 docstring（从未真 skip），清理直过 |
+| `test_query_views_route.py` | 14 | 路由面（装载闭包按条目→账户解析） |
+| `test_execution_refactor.py` | 12 | 预检/详情（Environment lines= 残留清理） |
+| `test_graph_dispatch.py` | 15 | 编排链（绑定换用条目/模板扫描/逐单元条目；修注入恒空） |
 
 **修出的 P1 残留缺陷**：
 
@@ -138,14 +147,19 @@ skip 而从未被执行的路径）：
 5. **「环境不符」分类死码**：`_resolve_identities` 环境不符名同时落 missing，
    返回端 `env_bad - missing` 恒空（修：missing/env_bad 互斥；预检与行级绑定
    告警文案的分类数据源恢复）。
+6. **临时调用必炸**：`prepare_adhoc` 的 `credential_by_service` 对 (identity, kind)
+   元组取 `.slot` → 每次成功调用 AttributeError；且语义应为 call.user = 条目名
+   （修：`{n: n for n in rows}`）。
+7. **编排链注入恒空**：`graph_dispatch` 调 `resolve_exec_auths` 不传 `env_id` →
+   env 必填收紧后条目全数 missing，Suite/编排单元 users 恒空（修：逐单元环境
+   解析前置，取首单元环境位传入）。
+
+（另清 `helpers.seed_deployment` 的 `Environment(lines=)` 残留。）
 
 全量基线（批次①前）：**1553 passed / 490 skipped / 0 failed**（PG 本地 15432，16m13s）。
 
-#### 剩余 45 文件分批
+#### 剩余 37 文件分批
 
-- 批次② 执行解析：`test_run_bindings_injection` / `test_run_params_inbound` /
-  `test_run_semantics` / `test_execution_refactor` / `test_adhoc_run` /
-  `test_graph_dispatch` / `test_query_view_runner` / `test_query_views_route` …
 - 批次③ 集成/令牌：`test_integration_s0/w0a/w0b/w1` / `test_integration_consent_fixes` /
   `test_token_runner` / `test_access_tokens` …
 - 批次④ 配置/carry：`test_exec_config_chain` / `test_exec_config_migration` /

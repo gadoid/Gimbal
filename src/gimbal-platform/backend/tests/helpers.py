@@ -216,7 +216,7 @@ async def seed_deployment(db: Any, base_service: str, url: str,
         env_id = (await db.execute(select(Environment.id).where(
             Environment.is_default.is_(True)))).scalar()
         if env_id is None:
-            env = Environment(name="test-default", lines={}, is_default=True)
+            env = Environment(name="test-default", is_default=True)
             db.add(env)
             await db.flush()
             env_id = env.id

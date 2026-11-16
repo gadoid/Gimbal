@@ -12,11 +12,6 @@
 """
 from __future__ import annotations
 
-# P1-7:底座重构测试迁移待续(布景旧模型/API 形状),先 skip;续期按四件套范式恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import json as _json
 from pathlib import Path
 
@@ -132,10 +127,10 @@ async def ready(client, plate_mock) -> dict:
     await _seed_target()
     from .inbound_fixtures import mk_user
     await mk_user(USER, role="admin")
-    await _seed_user_auth(USER)
+    account_user = await _seed_user_auth(USER)
     await _mk_scenario(_payload())
     h = await _personal(client, USER, scope_aliases=(SVC,),
-                        cred_aliases=(CRED,))
+                        cred_usernames=(account_user,))
     _plate_ready(plate_mock)
     return h
 

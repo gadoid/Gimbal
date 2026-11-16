@@ -6,11 +6,6 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from app.services.run_semantics import anchored_systems, working_preview
 
 
@@ -135,13 +130,12 @@ async def test_assess_baseline_unreviewed(fresh_db) -> None:
 
 
 async def test_assess_baseline_external_bucket(fresh_db) -> None:
-    """external 服务不入基线、按桶单列(已登记 external 别名)。"""
+    """external 服务不入基线、按桶单列(主档登记 external)。"""
     from app.services.run_semantics import assess_baseline
     from app.core import db as db_module
-    from app.models.service_alias import ServiceAlias
+    from app.models import Service
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="pay-service",
-                           base_service="pay-service", kind="external"))
+        s.add(Service(name="pay-service", system="pay", kind="external"))
         await s.commit()
     async with db_module.SessionLocal() as s:
         out = await assess_baseline(

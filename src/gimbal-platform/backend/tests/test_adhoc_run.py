@@ -1,21 +1,21 @@
-"""P3 临时调用(设计 2026-11-02)—— §十三 测试矩阵 + 拆段对拍 + §九 只读加固。
+"""P3 临时调用(设计 2026-11-02;P1-7 续期)—— §十三 测试矩阵 + 拆段对拍 + §九 只读加固。
 
 * 身份:JWT/平台令牌 403 adhoc_personal_token_only(仅个人令牌);
   个人模式通过;steps 与 scenarioId 互斥 422 run_target_ambiguous;
 * 结构:call.method/path、headers、config、schemeId、runOptions、未知策略、
   步数越界、release 形状 → 422 adhoc_field_not_allowed(fields 列全);
   缺 endpoint → 422 adhoc_step_invalid;入站 M1 先拒 serviceBindings;
-* 别名:不存在 / external / base_service 与锚点在 plate 中声明的服务不符
-  (含「= 系统名但 ≠ 端点 service」)→ adhoc_service_mismatch;无 base_url
-  → adhoc_service_unresolved;锚点在 plate 中不存在 → 422 adhoc_invalid
-  (先于别名校验);取端点定义时 plate 不可达 → 503;
-* 版本:显式 release 生效;环境版本线 → 线内最新修订;无环境 / plate 无此线
-  → adhoc_version_unresolved;
+* 条目:不存在 / external(kind 自主档)/ base_service 与锚点在 plate 中
+  声明的服务不符(含「= 系统名但 ≠ 端点 service」)→ adhoc_service_mismatch;
+  无 base_url → adhoc_service_unresolved;锚点在 plate 中不存在 → 422
+  adhoc_invalid(先于条目校验);取端点定义时 plate 不可达 → 503;
+* 版本:显式 release 生效;环境版本线(实例行)→ 线内最新修订;无环境
+  实例线 / plate 无此线 → adhoc_version_unresolved;
 * 校验:plate convert 拒绝 → 422 adhoc_invalid 带逐字段 errors;plate 不可达
   503;均不建执行行;
 * 执行:单步端到端 —— kind='adhoc'、占位 id、快照为组装 payload(无
-  method/path、call.user = 别名 credential_alias、无 config.services)、
-  地址来自别名 base_url、凭证来自令牌属主凭证池、plate_pins 写入、outputs
+  method/path、call.user = 条目名、无 config.services)、地址来自部署表、
+  凭证来自令牌属主账户池(条目→ref→账户)、plate_pins 写入、outputs
   为 extract 结果、回调 kind=adhoc / scenarioId=null;
 * 展示:重跑 409 rerun_unsupported;按场景筛选不含占位 id;
 * 对拍:dispatch_run 与 dispatch_target 同请求下 fanout 实参 / config_json /
@@ -23,11 +23,6 @@
 * 只读加固:未知策略类型 → 只读检查不通过;四种已知策略不影响判定。
 """
 from __future__ import annotations
-
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 
 import asyncio
 import json
@@ -39,13 +34,12 @@ import sqlalchemy as sa
 
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
-from app.models import ActivityEvent, Execution
-from app.models.auth_session import AuthSession
-from app.models.environment import Environment
+from app.models import (
+    ActivityEvent, AuthAccount, Deployment, Environment, Execution, Service,
+    ServiceIdentity, SystemEnvInstance,
+)
 from app.models.execution import ExecutionSnapshot
 from app.models.permission import AuditLog
-from app.models.deployment import Deployment
-from app.models.service_alias import ServiceAlias
 from app.services import run_dispatcher as rd
 from app.services.gimbal_launcher import LaunchResult
 from app.services.run_dispatcher import STATUS_DONE, RunTarget
@@ -53,7 +47,6 @@ from app.services.run_dispatcher import STATUS_DONE, RunTarget
 from .helpers import make_draft as _draft, wait_until as _wait
 from .inbound_fixtures import (
     body_of, deliveries, mk_token,
-    seed_alias as _seed_alias,
 )
 from .test_access_tokens import (
     GET_STEP, _gtk, _register, _user_id,
@@ -69,7 +62,7 @@ plate_mock = _plate_it.plate_mock
 EP = "settle.order.query"
 SYSTEM = "settle"
 # 真实形态:锚点首段是系统名,端点声明的 service 与系统名**不同**
-# (仓库里 fin → fin-service、platform → platform-service),别名的
+# (仓库里 fin → fin-service、platform → platform-service),条目的
 # base_service 取后者。夹具若把 base_service 直接写成系统名,会掩盖
 # 「拿系统名比服务名」这类错误(实现评审 2026-11-02 §2)。
 SERVICE = "settle-service"
@@ -104,18 +97,18 @@ def _body(steps: list | None = None, **extra) -> dict:
 
 async def _personal(client, username: str, *,
                     scope_aliases: tuple[str, ...] = (),
-                    cred_aliases: tuple[str, ...] = ()) -> dict:
-    """直插 member + 个人令牌(范围 = 被调别名 ∪ 属主凭证)→ 请求头。
-    范围对象须先种好(FK);别名/凭证按各用例的种子取。"""
+                    cred_usernames: tuple[str, ...] = ()) -> dict:
+    """直插 member + 个人令牌(范围 = 被调条目 ∪ 属主账户)→ 请求头。
+    范围对象须先种好(FK);条目/账户按各用例的种子取。"""
     from .inbound_fixtures import mk_user
     await mk_user(username, role="admin")
     uid = await _user_id(username)
     auth_ids: list[int] = []
-    if cred_aliases:
+    if cred_usernames:
         async with db_module.SessionLocal() as s:
-            rows = (await s.execute(sa.select(AuthSession.id).where(
-                AuthSession.owner_id == uid,
-                AuthSession.alias.in_(cred_aliases)))).scalars().all()
+            rows = (await s.execute(sa.select(AuthAccount.id).where(
+                AuthAccount.owner_id == uid,
+                AuthAccount.username.in_(cred_usernames)))).scalars().all()
             auth_ids = list(rows)
     _, plain = await mk_token(user_id=uid,
                               scope_aliases=scope_aliases,
@@ -126,34 +119,44 @@ async def _personal(client, username: str, *,
 
 
 async def _seed_target(*, base_url: str | None = BASE_URL, kind: str = "plate",
-                       base_service: str = SERVICE, credential: str | None = CRED,
+                       base_service: str = SERVICE,
                        env_lines: dict | None = None) -> None:
-    """被调服务别名(默认 base_service = 端点声明的服务)+ 默认环境(声明
-    settle@2.1)+ 该环境的部署地址。authz M2a S6:别名不再挂环境、不带
-    地址 —— adhoc 的环境走环境链(偏好 > 默认环境),版本线取该环境
-    ``lines``,地址取该环境部署表。"""
+    """被调条目(默认 base_service = 端点声明的服务)+ 默认环境(实例
+    行声明 settle@2.1)+ 主档 + 该环境的部署地址。registry 重构:版本线
+    落 system_env_instances 实例行(环境表 lines 列退役)。"""
     lines = {SYSTEM: "2.1"} if env_lines is None else env_lines
     async with db_module.SessionLocal() as s:
-        env = Environment(name=f"env-{uuid.uuid4().hex[:6]}", lines=lines,
-                          is_default=True)
+        env = Environment(name=f"env-{uuid.uuid4().hex[:6]}", is_default=True)
         s.add(env)
         await s.flush()
-        s.add(ServiceAlias(
-            alias_name=SVC, base_service=base_service, kind=kind,
-            slot=credential))
+        s.add(Service(name=SERVICE, system=SYSTEM, kind=kind))
+        if base_service != SERVICE:
+            # mismatch 用例:条目 base 指到别的服务(主档补行,join 才命中)
+            s.add(Service(name=base_service, system=SYSTEM, kind="plate"))
+        s.add(ServiceIdentity(alias_name=SVC, base_service=base_service,
+                              env_id=env.id, ref_mode="default"))
+        for system, line in lines.items():
+            s.add(SystemEnvInstance(system=system, env_id=env.id,
+                                    line=str(line)))
         if base_url:
             s.add(Deployment(base_service=base_service, env_id=env.id,
                              base_url=base_url))
         await s.commit()
 
 
-async def _seed_user_auth(username: str, alias: str = CRED) -> None:
+async def _seed_user_auth(username: str) -> str:
+    """属主个人池账户(SYSTEM × 默认环境,条目 ref=default 的取用行)。
+    返回账户用户名(令牌范围用)。"""
     uid = await _user_id(username)
     async with db_module.SessionLocal() as s:
-        s.add(AuthSession(owner_id=uid, alias=alias, url="https://auth.local",
-                          username_enc=fernet_encrypt(f"{alias}-user"),
-                          password_enc=fernet_encrypt(f"{alias}-pass")))
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar()
+        account_user = f"{CRED}-user"
+        s.add(AuthAccount(
+            owner_id=uid, system=SYSTEM, env_id=env, username=account_user,
+            password_enc=fernet_encrypt(f"{CRED}-pass"), is_default=True))
         await s.commit()
+        return account_user
 
 
 def _plate_ready(plate_mock: PlateMock) -> None:
@@ -216,14 +219,14 @@ async def _post(client, headers: dict, body: dict):
 
 @pytest.fixture
 async def ready(client, plate_mock: PlateMock) -> dict:
-    """个人令牌 + 被调别名(含环境/凭证)+ plate 桩,返回请求头。
-    令牌范围覆盖 SVC 别名与属主凭证 qa-cred(§3.2 临时调用集合)。"""
+    """个人令牌 + 被调条目(含环境/实例线/部署地址)+ 属主账户 + plate 桩,
+    返回请求头。令牌范围覆盖 SVC 条目与属主账户(§3.2 临时调用集合)。"""
     await _seed_target()
     from .inbound_fixtures import mk_user
-    await mk_user("ad_user")          # 属主先建,凭证随后入池
-    await _seed_user_auth("ad_user")
+    await mk_user("ad_user")          # 属主先建,账户随后入池
+    account_user = await _seed_user_auth("ad_user")
     h = await _personal(client, "ad_user", scope_aliases=(SVC,),
-                        cred_aliases=(CRED,))
+                        cred_usernames=(account_user,))
     _plate_ready(plate_mock)
     return h
 
@@ -298,7 +301,7 @@ class TestStructure:
         assert r.status_code == 201, r.text
         snap = await _snapshot(r.json()["executionId"])
         assert snap["definition"]["steps"][0]["call"] == {
-            "service": SVC, "user": CRED,
+            "service": SVC, "user": SVC,   # call.user = 条目名(注入键)
             "path_params": {"orderNo": "PO1", "page": 2}}
 
     async def test_inbound_recipe_rejected_by_m1_first(self, ready, client):
@@ -310,7 +313,7 @@ class TestStructure:
         assert r.json()["detail"]["code"] == "inbound_field_not_allowed"
 
 
-# ── 别名 / 地址 / 版本 ──────────────────────────────────────────
+# ── 条目 / 地址 / 版本 ──────────────────────────────────────────
 
 
 class TestAliasAndVersion:
@@ -318,13 +321,13 @@ class TestAliasAndVersion:
     async def _personal_ready(client, plate_mock: PlateMock, username: str,
                                *, with_target: bool = False) -> dict:
         """个人令牌 + plate 桩(锚点 /full 可取)。``with_target`` 时先种
-        被调别名与凭证并把它们纳入令牌范围;否则空范围 —— 别名/凭证由
-        各用例按需种(v4:范围校验在 adhoc 结构校验之后,未种别名的
+        被调条目并把条目纳入令牌范围;否则空范围 —— 条目/账户由
+        各用例按需种(v4:范围校验在 adhoc 结构校验之后,未种条目的
         用例仍先吃到 adhoc_* 的 422)。"""
         if with_target:
             await _seed_target()
             return await _personal(client, username,
-                                   scope_aliases=(SVC,), cred_aliases=())
+                                   scope_aliases=(SVC,), cred_usernames=())
         _plate_ready(plate_mock)
         return await _personal(client, username)
 
@@ -362,7 +365,7 @@ class TestAliasAndVersion:
     async def test_unknown_endpoint_422_invalid_before_alias(
             self, client, plate_mock):
         """锚点在 plate 中不存在 → 422 adhoc_invalid(errors 形状同干跑
-        convert),先于别名校验、不建执行行。"""
+        convert),先于条目校验、不建执行行。"""
         h = await self._personal_ready(client, plate_mock, "ad_a5")
         await _seed_target()
         r = await _post(client, h, _body(
@@ -496,12 +499,12 @@ class TestExecution:
         assert ex.scenario_id == f"adhoc-{run_id}"
         assert ex.scenario_name == f"临时调用 · {SVC} · {EP}"
         assert ex.token_id is not None
-        assert (ex.config_json or {}).get("token", {}).get("kind") == "personal" 
+        assert (ex.config_json or {}).get("token", {}).get("kind") == "personal"
         assert ex.client_ref == "agent-1"
         assert ex.owner_id == await _user_id("ad_user")
         assert ex.config_json["scenarioId"] == f"adhoc-{run_id}"
-        assert ex.config_json["injectedAuths"] == [CRED]   # 别名默认层
-        # 快照 = 组装 payload:无 method/path、call.user、空 config
+        assert ex.config_json["injectedAuths"] == [SVC]   # 条目默认层
+        # 快照 = 组装 payload:无 method/path、call.user=条目名、空 config
         snap = await _snapshot(ex_id)
         d = snap["definition"]
         assert d["scenarioId"] == f"sc-adhoc-{run_id}"
@@ -510,20 +513,21 @@ class TestExecution:
         assert d["meta"]["system"] == [SYSTEM]
         st = d["steps"][0]
         assert st["endpoint"] == EP
-        assert st["call"] == {"service": SVC, "user": CRED}
+        assert st["call"] == {"service": SVC, "user": SVC}
         assert st["request"] == {"kind": "request", "body": {"orderNo": "PO1"}}
         assert st["strategy"][0]["kind"] == "extract"
 
         ex = await _wait_terminal(ex_id)
         assert ex.status == "done", ex.config_json
-        # 执行器拿到的 case.json:method 由 plate 投影、地址来自别名、凭证来自令牌属主凭证池
+        # 执行器拿到的 case.json:method 由 plate 投影、地址来自部署表、
+        # 凭证来自令牌属主账户池(条目→ref→账户)
         assert len(cases) == 1
         case = cases[0]
         assert case["steps"][0]["call"]["method"] == "GET"
         assert case["steps"][0]["call"]["path"] == "/orders/query"
-        assert case["steps"][0]["call"]["user"] == CRED
+        assert case["steps"][0]["call"]["user"] == SVC
         assert case["config"]["services"][SVC] == BASE_URL
-        assert case["config"]["users"][CRED]["username"] == f"{CRED}-user"
+        assert case["config"]["users"][SVC]["username"] == f"{CRED}-user"
         assert ex.plate_pins == {SYSTEM: "2.1#3"}
         assert ex.config_json["outputs"] == {"status": "SETTLED",
                                              "auth_token": "***"}

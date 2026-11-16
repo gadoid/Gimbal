@@ -242,10 +242,6 @@ async def materialize_graph(
         db_module.SessionLocal,
         [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
          for r in resolved])
-    exec_auths = (await run_prepare.resolve_exec_auths(
-        db_module.SessionLocal, owner_id, auth_aliases,
-        cred_project_id=cred_project_id)
-        if auth_aliases else [])
     # S2.1 环境链逐单元:显式位(配方快照 explicit,或图级
     # environmentId)整图生效;否则按单元 方案 > 单元场景项目默认 >
     # 个人偏好 > 默认环境 解析 —— 地址 ③ 层逐单元查(查表失败降级空表)
@@ -260,16 +256,28 @@ async def materialize_graph(
         except EnvironmentNotFound as e:
             raise GraphDispatchError(str(e)) from None
     unit_urls: dict[str, dict] = {}
+    first_env: EnvChoice | None = None
     for r in resolved:
         ref = r["unit"]["ref"]
         try:
             ue: EnvChoice = explicit or await resolve_environment(
                 db, scheme_env=r.get("scheme_env"),
                 project_id=r["scenario_row"].project_id, user_id=owner_id)
+            if first_env is None:
+                first_env = ue
             unit_urls[ref] = await service_aliases.base_urls_for(
                 db, _all_referenced_services([r]), env=ue)
         except Exception:  # noqa: BLE001
             unit_urls[ref] = {}
+    # 认证取用须带环境(env 必填收紧,§1.4:P1 缺陷修复 —— 此前不传
+    # env_id,条目在无环境分支下全数 missing,编排链 users 恒空)。
+    # exec_auths 为全单元共享:环境取首单元解析位(显式位整图生效时
+    # 即该位;跨单元异环境属边缘,按单元取用的细粒度留待真实需求)
+    exec_auths = (await run_prepare.resolve_exec_auths(
+        db_module.SessionLocal, owner_id, auth_aliases,
+        env_id=(first_env.env_id if first_env is not None else None),
+        cred_project_id=cred_project_id)
+        if auth_aliases else [])
 
     # N1-2:carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
     # 单元共用);单单元失败降 None 不阻塞。此前显式 None 是绕开空 dict

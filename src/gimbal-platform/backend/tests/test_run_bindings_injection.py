@@ -1,17 +1,11 @@
-"""serviceBindings 注入 + 模板扫描驱动注入清单(spec §5/§6)。
+"""serviceBindings 注入 + 模板扫描驱动注入清单(spec §5/§6;P1-7 续期)。
 
-capture 读 case.json(_patch_launch_capture),断言物化结果:绑定选别名
-(authz M2a S6:服务键 → 别名)→ 该别名声明的槽位进注入清单;steps 里的
-${auth.*} 引用即使无绑定也进注入清单;退役字段 url/authAlias 422。
-PlateMock 用 echo 行为(converted 带 steps)。
+capture 读 case.json(_patch_launch_capture),断言物化结果:绑定选条目
+(authz M2a S6:服务键 → 条目;条目名即注入键)→ 该条目进注入清单;
+steps 里的 ${auth.*} 引用即使无绑定也进注入清单;退役字段 url/authAlias
+422。PlateMock 用 echo 行为(converted 带 steps)。
 """
 from __future__ import annotations
-import pytest  # noqa: E402
-
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 
 import sqlalchemy as sa
 
@@ -30,22 +24,37 @@ _AUTH_STEP = {
 }
 
 
+async def _env_id() -> int:
+    from app.models import Environment
+    async with db_module.SessionLocal() as s:
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.commit()
+            env = (await s.execute(sa.select(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        return env
+
+
 async def _seed_pool_auth(username: str, alias: str = "qa1") -> None:
-    """S5 失败即中止:注入清单的槽位须在执行人池 —— 测试种一行。"""
-    from app.core import db as db_module
-    from app.core.security import fernet_encrypt
-    from app.models.auth_session import AuthSession as _AS
-    from sqlalchemy import select as _sel, text as _txt
+    """S5 失败即中止:注入清单的条目须在执行人池可解 —— 四件套种一条
+    (环境+主档+账户+条目;同 (system,env) 第二个起让出默认位)。"""
+    from app.models import AuthAccount
+    from .conftest import seed_identity_fixture
 
     async with db_module.SessionLocal() as s:
-        uid = (await s.execute(_txt(
+        uid = (await s.execute(sa.text(
             "SELECT id FROM users WHERE username = :u"),
             {"u": username})).scalar()
-        s.add(_AS(owner_id=uid, alias=alias, url="http://auth",
-                  username_enc=fernet_encrypt("u"),
-                  password_enc=fernet_encrypt("p"),
-                  slot=alias, is_default=True))
-        await s.commit()
+        have_default = (await s.execute(sa.select(AuthAccount.id).where(
+            AuthAccount.owner_id == uid,
+            AuthAccount.system == "fin-service",
+            AuthAccount.is_default.is_(True)))).scalar_one_or_none() is not None
+        await seed_identity_fixture(
+            s, alias=alias, username=f"{alias}-u", password="p",
+            service="fin-service", owner_id=uid, env_name="测试",
+            is_default=not have_default)
 
 
 async def _seed_scenario(client, headers) -> None:
@@ -61,27 +70,27 @@ async def _last_config_json() -> dict:
         return ex.config_json
 
 
-async def _seed_aliases(**slots: str | None) -> None:
-    """fin-service 基础服务下的别名(名 → 声明槽位)。"""
-    from app.models.service_alias import ServiceAlias
+async def _seed_identities(*names: str) -> None:
+    """fin-service 基础服务下的身份条目(名即注入键;条目模型无槽)。"""
+    from app.models import ServiceIdentity
+    env = await _env_id()
     async with db_module.SessionLocal() as s:
-        for name, slot in slots.items():
-            s.add(ServiceAlias(alias_name=name.replace("_", "-"),
-                               base_service="fin-service",
-                               kind="external", slot=slot))
+        for name in names:
+            s.add(ServiceIdentity(alias_name=name.replace("_", "-"),
+                                  base_service="fin-service",
+                                  env_id=env, ref_mode="default"))
         await s.commit()
 
 
-async def test_binding_alias_switches_slot(client, plate_mock: PlateMock,
-                                           monkeypatch):
-    """serviceBindings {fin-service: {alias: fin-service-maker}} → 该别名
-    声明的槽位进注入清单并注入 users;config_json 留痕原始绑定。"""
+async def test_binding_alias_switches_identity(client, plate_mock: PlateMock,
+                                               monkeypatch):
+    """serviceBindings {fin-service: {alias: fin-service-maker}} → 该条目
+    进注入清单并注入 users;config_json 留痕原始绑定。"""
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed_scenario(client, bob)
     await _seed_pool_auth("bob", "qa1")
-    await _seed_pool_auth("bob", "maker")
-    await _seed_aliases(fin_service=None, fin_service_maker="maker")
+    await _seed_pool_auth("bob", "fin-service-maker")  # 四件套连条目一起建
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -93,13 +102,13 @@ async def test_binding_alias_switches_slot(client, plate_mock: PlateMock,
     await _wait(lambda: len(cases) >= 1)
 
     users = cases[0]["config"].get("users") or {}
-    assert "qa1" in users and "maker" in users   # 扫描 ∪ 生效别名槽位
+    assert "qa1" in users and "fin-service-maker" in users   # 扫描 ∪ 绑定换用
 
     config_json = await _last_config_json()
     assert config_json["serviceBindings"] == {
         "fin-service": {"alias": "fin-service-maker"}}
-    assert config_json["injectedAuths"] == ["qa1", "maker"]
-    # 旧键退役(两种历史写法都兜住;实际键名以 :368-383 现码为准,删除后均过)
+    assert config_json["injectedAuths"] == ["qa1", "fin-service-maker"]
+    # 旧键退役(两种历史写法都兜住;实际键名以现码为准,删除后均过)
     for gone in ("prefix", "mergePolicy", "injectCredentials",
                  "execAuthAlias", "exec_auth_alias"):
         assert gone not in config_json
@@ -146,6 +155,7 @@ async def test_retired_binding_fields_422(client, plate_mock: PlateMock):
     """S6:绑定带 url / authAlias → 422 binding_field_retired(不静默丢弃)。"""
     bob = await _member(client, "retired")
     await _seed_scenario(client, bob)
+    await _seed_pool_auth("retired", "qa1")
     for bad in ({"url": "https://bound"}, {"authAlias": "qa1"},
                 {"alias": "fin-service", "url": "https://x"}):
         r = await client.post("/api/runs", headers=bob, json=_run_payload(
@@ -155,14 +165,17 @@ async def test_retired_binding_fields_422(client, plate_mock: PlateMock):
 
 
 async def test_binding_alias_validation(client, plate_mock: PlateMock):
-    """S6:选的别名不存在 / 不同基础服务 → 拒发(不借道改地址)。"""
-    from app.models.service_alias import ServiceAlias
+    """S6:选的条目不存在 / 不同基础服务 → 拒发(不借道改地址)。"""
+    from app.models import Service, ServiceIdentity
     bob = await _member(client, "badalias")
     await _seed_scenario(client, bob)
     await _seed_pool_auth("badalias", "qa1")
+    await _seed_identities("fin-service-maker")
+    env = await _env_id()
     async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="crm-x", base_service="crm",
-                           kind="external"))
+        s.add(Service(name="crm", system="crm", kind="plate"))
+        s.add(ServiceIdentity(alias_name="crm-x", base_service="crm",
+                              env_id=env, ref_mode="default"))
         await s.commit()
     r = await client.post("/api/runs", headers=bob, json=_run_payload(
         dataSetIds=[], serviceBindings={"fin-service": {"alias": "ghost"}}))
@@ -173,15 +186,17 @@ async def test_binding_alias_validation(client, plate_mock: PlateMock):
 
 
 async def test_missing_auth_slot_refuses_dispatch(client, plate_mock: PlateMock):
-    """S5 失败即中止:注入清单的槽位不在执行人池 → 整单 409
+    """S5 失败即中止:注入清单的条目在执行人池解不到账户 → 整单 409
     auth_aliases_missing(此前告警继续、执行期步骤级报错)。"""
     plate_mock.behaviour = "echo"
     bob = await _member(client, "missauth")
     await _seed_scenario(client, bob)
-    await _seed_aliases(fin_service_x="qa-none")
+    # 条目登记了,但执行人池无账户可解(不种四件套 —— default-ref 会吃
+    # 池内默认账户,故本用例连 qa1 一起缺)
+    await _seed_identities("fin-service-x")
     r = await client.post("/api/runs", headers=bob, json=_run_payload(
         dataSetIds=[],
         serviceBindings={"fin-service": {"alias": "fin-service-x"}}))
     assert r.status_code == 409, r.text
     assert "auth_aliases_missing" in r.text
-    assert "qa-none" in r.text
+    assert "fin-service-x" in r.text

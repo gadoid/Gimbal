@@ -2,9 +2,6 @@
 import httpx
 import pytest
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
 from app.services import query_view_runner as run
 from tests.helpers import register_and_login
 
@@ -83,7 +80,7 @@ async def test_bearer_without_alias_422(client, monkeypatch):
 
 
 async def test_bearer_credential_loader_path(client, monkeypatch):
-    """装载通路端到端:bearer 视图 + query_alias + 真实 auth_sessions 行。
+    """装载通路端到端:bearer 视图 + query_alias + 四件套布景(条目→ref→账户)。
 
     路由 _loader 是 async 闭包(异步 DB 会话)—— runner 凭证闸必须
     await 它(与 httpx.request seam 同款双形态判别)。登录与 SUT 打桩:
@@ -92,12 +89,13 @@ async def test_bearer_credential_loader_path(client, monkeypatch):
     idx = [dict(_IDX[0], auth="bearer")]
     _install_plate(monkeypatch, idx)
     h = await register_and_login(client)
-    seeded = await client.post("/api/auths", headers=h, json={
-        "alias": "qa", "url": "http://sut/auth",
-        "username": "u", "password": "p",
-        "token_type": "Bearer", "expires_in": 3600,
-    })
-    assert seeded.status_code == 201, seeded.text
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    from app.core import db as db_module
+    from .conftest import seed_identity_fixture
+    async with db_module.SessionLocal() as db:
+        await seed_identity_fixture(
+            db, alias="qa", username="u", password="p",
+            service="svc", owner_id=uid, login_url="http://sut/auth")
 
     def fake_auth(session, why):
         session.apply_token("tok-1", 3600)

@@ -6,11 +6,6 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 import asyncio
 import json
 
@@ -374,31 +369,27 @@ class TestGraphCompositionInline:
     async def test_scheme_auth_alias_binding_materializes(self, client,
                                                           monkeypatch):
         """N0 回归:单元绑定 → materialize_graph 正常执行(S6:绑定选
-        别名 fin.order → fin.order-qa9,该别名声明槽位 qa9)。
+        条目 fin.order → fin.order-qa9,注入键 = 条目名)。
 
         修复前:_resolve_exec_auths 收到活会话(db)→ ``AsyncSession``
-        不可调用,清单非空即 TypeError;修复后走会话工厂,种子凭证 qa9
-        注入单元 case 的 users。
+        不可调用,清单非空即 TypeError;修复后走会话工厂,种子账户注入
+        单元 case 的 users。
         """
         await register_and_login(client, "gi_b9", "gi_b9pass123")
         h = await register_and_login(client, "gi_o9", "gi_o9pass123")
         await self._mk_svc_scenario(client, h, "sc-gi-9")
         await self._fake_convert_patch(monkeypatch)
 
-        from app.core.security import fernet_encrypt
-        from app.models.auth_session import AuthSession
         from app.models.user import User
         from app.services import graph_dispatch, scheme_store
+        from .conftest import seed_identity_fixture
         async with db_module.SessionLocal() as s:
             uid = (await s.execute(sa.select(User.id).where(
                 User.username == "gi_o9"))).scalar_one()
-            s.add(AuthSession(owner_id=uid, alias="qa9", url="http://auth:9",
-                              username_enc=fernet_encrypt("u9"),
-                              password_enc=fernet_encrypt("p9")))
-            from app.models.service_alias import ServiceAlias
-            s.add(ServiceAlias(alias_name="fin.order-qa9",
-                               base_service="fin.order", kind="external",
-                               slot="qa9"))
+            # 四件套:条目 fin.order-qa9(username-ref → 属主池账户)
+            await seed_identity_fixture(
+                s, alias="fin.order-qa9", username="u9", password="p9",
+                service="fin.order", owner_id=uid)
             await scheme_store.ensure_default_scheme(s, "sc-gi-9")
             await s.commit()
         async with db_module.SessionLocal() as s:
@@ -410,7 +401,7 @@ class TestGraphCompositionInline:
             })
         unit = graph["units"][0]
         users = unit["scenario"]["config"].get("users") or {}
-        assert "qa9" in users        # 修复前到不了这行(先 TypeError)
+        assert "fin.order-qa9" in users   # 注入键 = 条目名;修复前到不了这行
 
     async def test_map_and_control_passthrough(self, client, monkeypatch):
         import pytest
@@ -580,16 +571,16 @@ class TestGraphN1Unification:
         assert r.status_code in (200, 201), r.text
         await self._fake_convert(monkeypatch)
 
-        from app.core.security import fernet_encrypt
-        from app.models.auth_session import AuthSession
         from app.models.user import User
         from app.services import graph_dispatch, scheme_store
+        from .conftest import seed_identity_fixture
         async with db_module.SessionLocal() as s:
             uid = (await s.execute(sa.select(User.id).where(
                 User.username == "gn_o7"))).scalar_one()
-            s.add(AuthSession(owner_id=uid, alias="qa7", url="http://auth:7",
-                              username_enc=fernet_encrypt("u7"),
-                              password_enc=fernet_encrypt("p7")))
+            # 四件套:条目 qa7(username-ref → 属主池账户)
+            await seed_identity_fixture(
+                s, alias="qa7", username="u7", password="p7",
+                service="fin.order", owner_id=uid)
             await scheme_store.ensure_default_scheme(s, "sc-gn-7")
             await s.commit()
         async with db_module.SessionLocal() as s:
@@ -663,22 +654,19 @@ class TestGraphN1Unification:
         assert r.status_code in (200, 201), r.text
         await self._fake_convert(monkeypatch)
 
-        from app.core.security import fernet_encrypt
-        from app.models.auth_session import AuthSession
         from app.models.user import User
         from app.services import graph_dispatch, scheme_store
+        from .conftest import seed_identity_fixture
         async with db_module.SessionLocal() as s:
             uid = (await s.execute(sa.select(User.id).where(
                 User.username == "gn_o9"))).scalar_one()
-            from app.models.service_alias import ServiceAlias
-            for alias in ("qa1", "qa2"):
-                s.add(AuthSession(
-                    owner_id=uid, alias=alias, url=f"http://auth:{alias}",
-                    username_enc=fernet_encrypt("u"),
-                    password_enc=fernet_encrypt("p")))
-                s.add(ServiceAlias(alias_name=f"fin.order-{alias}",
-                                   base_service="fin.order", kind="external",
-                                   slot=alias))
+            # 两套四件套(条目名区分;同 (system,env) 第二个让出默认位)
+            await seed_identity_fixture(
+                s, alias="fin.order-qa1", username="qa1-u", password="p",
+                service="fin.order", owner_id=uid)
+            await seed_identity_fixture(
+                s, alias="fin.order-qa2", username="qa2-u", password="p",
+                service="fin.order", owner_id=uid, is_default=False)
             await scheme_store.ensure_default_scheme(s, "sc-gn-9")
             await s.commit()
         async with db_module.SessionLocal() as s:
@@ -692,7 +680,8 @@ class TestGraphN1Unification:
                 ],
             })
         # graph 级解析一次、resolved_auths 全单元共享:两单元 users 都含
-        # qa1 与 qa2(压平实现下单元 a 只剩 qa2)
+        # 两条目名(压平实现下单元 a 只剩 fin.order-qa2)
         for u in graph["units"]:
             users = u["scenario"]["config"].get("users") or {}
-            assert {"qa1", "qa2"} <= set(users), (u["ref"], users)
+            assert {"fin.order-qa1", "fin.order-qa2"} <= set(users), (
+                u["ref"], users)

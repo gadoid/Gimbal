@@ -377,8 +377,10 @@ async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str,
                                         user_id=user_id)
     payload = build_adhoc_payload(
         steps, run_id=run_id, meta_plate=meta_plate,
-        credential_by_service={n: r.slot for n, r in rows.items()
-                               if r.slot},
+        # 条目名即注入键(call.user = 条目名,users 按名注入;P1 缺陷
+        # 修复:旧代码对 (identity, kind) 元组取 .slot → 每次成功调用
+        # 必 AttributeError,该路径自 P1 起未被任何测试执行过)
+        credential_by_service={n: n for n in rows},
         name=display_name(steps))
     await dry_run_convert(payload)
     return payload
