@@ -1,11 +1,10 @@
 """场景导入流水线(W3/W4,场景导入 v2.3 方案):precheck 析出 + 单事务落库。
 
-_IMPORT_REDO = pytest.mark.skip(reason=(
-    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例按新语义恢复(其余通用导入用例照常运行)"))
 覆盖:析出三分支(复用/映射/新建)、P5「有接管者才清除」不变量、
 敏感路径不进 carry、config.users 清空、URL 清除条件、ID 重铸、
 mapping_stale、authz W7 门(User 可导入 + create 需 alias.write)、
-体积门、格式判别。
+体积门、格式判别。P2-B.6 导入映射按 ref 语义重做后全量恢复:回报键
+``authEntries``/``authRenames``,建条目 env 落默认环境。
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ from sqlalchemy import select
 from app.core import db as db_module
 from app.models.composer_scenario import ComposerScenario
 from app.models.permission import AuditLog
-from app.models.service_alias import ServiceAlias
+from app.models.service_identity import ServiceIdentity
 from app.models.user import User
 from app.services import carry_store, scenario_import
 from app.services.scenario_store import definition_from_payload
@@ -23,13 +22,17 @@ from app.services.scenario_store import definition_from_payload
 from .helpers import register_and_login
 from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
 
-
-_IMPORT_REDO = pytest.mark.skip(reason=(
-    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位"
-    "声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例"
-    "按新语义恢复(其余通用导入用例照常运行)"))
-
 _SCENARIO_ID = "sc-imp-1"
+
+
+async def _seed_env() -> int:
+    """条目 env 必填:导入建条目前要有默认环境(create 分支前置)。"""
+    from app.models import Environment
+    async with db_module.SessionLocal() as s:
+        env = Environment(name="测试", is_default=True)
+        s.add(env)
+        await s.commit()
+        return env.id
 
 
 def _bundle(sid: str = _SCENARIO_ID, plate: dict | None = None) -> dict:
@@ -158,10 +161,10 @@ async def test_precheck_bad_bundle_422(client, plate_mock: PlateMock):
 # ── land ────────────────────────────────────────────────────────────
 
 
-@_IMPORT_REDO
 async def test_land_create_branch(client, plate_mock: PlateMock):
     _mock_faces(plate_mock)
     bob = await register_and_login(client, "admin0", "admin0pass123")
+    env_id = await _seed_env()
     r = await client.post("/api/scenarios/import", headers=bob, json={
         "bundle": _bundle(),
         "mappings": [{"serviceKey": "fin-service-qa",
@@ -170,14 +173,20 @@ async def test_land_create_branch(client, plate_mock: PlateMock):
     assert r.status_code == 201, r.text
     body = r.json()
     assert (body["scenarioId"], body["idMode"]) == (_SCENARIO_ID, "keep")
-    # S7.5:内置 qa1 经 ${auth.qa1.token} 模板进注入清单 → 需绑定槽位
-    assert body["slots"] == [
-        {"slot": "qa1", "bound": False, "fromBuiltin": True}]
+    # S7.5(ref 口径):qa1 经 ${auth.qa1.token} 模板进注入清单;新建条目
+    # fin-service-qa 本身即注入键(步骤引用服务 × 条目命中)
+    assert body["authEntries"] == [
+        {"entry": "qa1", "bound": False, "fromBuiltin": True,
+         "system": None, "envId": None},
+        {"entry": "fin-service-qa", "bound": False, "fromBuiltin": False,
+         "system": None, "envId": env_id}]
     assert body["undeclaredUsers"] == [] and body["droppedUsers"] == []
 
     async with db_module.SessionLocal() as db:
-        (await db.execute(select(ServiceAlias).where(
-            ServiceAlias.alias_name == "fin-service-qa"))).scalar_one()
+        ident = (await db.execute(select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "fin-service-qa"))).scalar_one()
+        assert (ident.ref_mode, ident.base_service, ident.env_id) == (
+            "default", "fin-service", env_id)
         # S6:别名团队共享(个人别名退役);carry 只写非敏感路径的文件值
         # (api_token 不落库,P7-②);S4:导入写的 carry 行落导入人个人层
         from app.models.user import User
@@ -227,15 +236,16 @@ async def test_land_map_branch_never_deletes_uncovered(
         assert binds == {"$.remark": "压测-张三"}
 
 
-@_IMPORT_REDO
 async def test_land_url_cleared_only_with_base_url(
         client, plate_mock: PlateMock):
     """S6:本机部署表登记了该服务(其基础服务)的地址才清源 URL。"""
     from .helpers import seed_deployment
     _mock_faces(plate_mock)
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="fin-service", base_service="fin-service"))
-        await seed_deployment(db, "fin-service", "https://local")
+        env_id = await seed_deployment(db, "fin-service", "https://local")
+        db.add(ServiceIdentity(alias_name="fin-service",
+                               base_service="fin-service", env_id=env_id,
+                               ref_mode="default"))
         await db.commit()
     bob = await register_and_login(client, "admin0", "admin0pass123")
     r = await client.post("/api/scenarios/import", headers=bob, json={
@@ -342,21 +352,21 @@ async def test_import_user_create_requires_alias_write(
     assert detail["code"] == "capability_forbidden"
     assert detail["capability"] == "alias.write"
     async with db_module.SessionLocal() as db:
-        assert (await db.execute(select(ServiceAlias).where(
-            ServiceAlias.alias_name == "fin-service-qa"))
+        assert (await db.execute(select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "fin-service-qa"))
         ).scalar_one_or_none() is None
         assert (await db.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == _SCENARIO_ID))
         ).scalar_one_or_none() is None
 
 
-@_IMPORT_REDO
 async def test_import_admin_create_still_works(client, plate_mock: PlateMock):
     """Admin(原 member 级)有 alias.write:create 照旧建名(test_land_
     create_branch 钉的是首注 super_admin,这里钉显式 admin 角色)。"""
     _mock_faces(plate_mock)
     from .helpers import role_headers
 
+    await _seed_env()
     h = await role_headers(client, "imp_admin7", role="admin")
     r = await client.post("/api/scenarios/import", headers=h, json={
         "bundle": _bundle(),
@@ -364,8 +374,8 @@ async def test_import_admin_create_still_works(client, plate_mock: PlateMock):
                       "decision": "create"}]})
     assert r.status_code == 201, r.text
     async with db_module.SessionLocal() as db:
-        assert (await db.execute(select(ServiceAlias).where(
-            ServiceAlias.alias_name == "fin-service-qa"))
+        assert (await db.execute(select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "fin-service-qa"))
         ).scalar_one() is not None
 
 
@@ -429,13 +439,13 @@ async def _remarks(sid: str) -> list:
     return out
 
 
-@_IMPORT_REDO
 async def test_inconsistent_values_never_taken_over__create(
         client, plate_mock: PlateMock):
     """取值不一致(A/B):create 也不接管 —— 四步骤 remark 全部原样,
     新别名零 carry 条目;预检把该路径列进 inconsistentPaths。"""
     _multi_faces(plate_mock)
     bob = await register_and_login(client, "admin0", "admin0pass123")
+    await _seed_env()
     r = await client.post("/api/scenarios/import/precheck", headers=bob,
                           json={"bundle": _multi_bundle()})
     by_key = {s["serviceKey"]: s for s in r.json()["services"]}
@@ -484,11 +494,11 @@ async def test_inconsistent_values_never_taken_over__map_and_reuse(
                                        "raw-step"], decision
 
 
-@_IMPORT_REDO
 async def test_template_literal_mix_kept(client, plate_mock: PlateMock):
     """模板与字面值混用:不进接管集,模板与字面值都原样保留。"""
     _multi_faces(plate_mock)
     bob = await register_and_login(client, "admin0", "admin0pass123")
+    await _seed_env()
     bundle = _multi_bundle(s1_remark="${vars.t}")
     r = await client.post("/api/scenarios/import/precheck", headers=bob,
                           json={"bundle": bundle})
@@ -505,13 +515,13 @@ async def test_template_literal_mix_kept(client, plate_mock: PlateMock):
                                               "ep2-business", "raw-step"]
 
 
-@_IMPORT_REDO
 async def test_consistent_values_cleared_only_from_own_carry_face(
         client, plate_mock: PlateMock):
     """正控:各步取值一致(A/A)才接管,且只清 carry 面上该清的步骤
     —— ep2 的 form remark 与无锚点步骤的 remark 不在面内,永不清。"""
     _multi_faces(plate_mock)
     bob = await register_and_login(client, "admin0", "admin0pass123")
+    await _seed_env()
     bundle = _multi_bundle(s1_remark="A")
     r = await client.post("/api/scenarios/import", headers=bob, json={
         "bundle": bundle,
@@ -655,12 +665,12 @@ async def test_read_bundle_small_stream_ok():
 # ── 落库竞态与复验(合入评估 §3)────────────────────────────────────
 
 
-@_IMPORT_REDO
 async def test_land_alias_name_race_409(client, plate_mock: PlateMock):
     """§3-1:别名主键冲突(同请求内两服务同名双建 / 预检后被人抢注)
     → 409 alias_name_taken(前端自愈链已挂该 code),事务回滚零残留。"""
     _mock_faces(plate_mock)
     bob = await register_and_login(client, "admin0", "admin0pass123")
+    await _seed_env()
     # land 对 alias_names 快照的占用检查挡不住「同一请求内」的两条同名
     # create 映射:首插未提交即撞主键,IntegrityError 须映射 409 而非 500
     r = await client.post("/api/scenarios/import", headers=bob, json={
@@ -678,8 +688,8 @@ async def test_land_alias_name_race_409(client, plate_mock: PlateMock):
         assert (await db.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == _SCENARIO_ID))
         ).scalar_one_or_none() is None
-        assert (await db.execute(select(ServiceAlias).where(
-            ServiceAlias.alias_name == "fin-service-qa"))
+        assert (await db.execute(select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "fin-service-qa"))
         ).scalar_one_or_none() is None
 
 

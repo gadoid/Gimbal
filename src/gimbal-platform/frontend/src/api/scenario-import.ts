@@ -27,36 +27,40 @@ export interface ImportAuthRef {
   inMyPool: boolean
 }
 
-/** S7.5 预检栏:文件内置凭证键(明文不落库,转为槽位声明)。 */
+/** S7.5 预检栏:文件内置凭证键(明文不落库,按条目口径落地)。 */
 export interface ImportBuiltinUser {
   tag: string
   /** 经 call.user 使用该键的服务键 */
   services: string[]
-  /** 被 ${auth.<tag>.*} 模板引用(本就进注入清单) */
+  /** 被 ${auth.<tag>.*} 模板引用(本就进注入清单,按同名条目装载) */
   templated: boolean
-  /** 导入人已有同名槽位绑定 */
+  /** 导入人同名条目已装载账户 */
   bound: boolean
 }
 
-/** S7.5 落库回报:需要绑定的槽位 × 导入人绑定状态(按落库形态重算)。 */
-export interface ImportSlotRow {
-  slot: string
+/** S7.5(ref 重做)落库回报:需要装载的身份条目 × 导入人装载状态
+ *  (按落库形态重算)。 */
+export interface ImportAuthEntry {
+  entry: string
   bound: boolean
   /** 源文件内置凭证转来(含改写目标) */
   fromBuiltin: boolean
+  /** 条目自主档派生的登记坐标(悬空条目为 null,深链退普通入口) */
+  system: string | null
+  envId: number | null
 }
 
 export interface ImportResult {
   scenarioId: string
   idMode: string
-  slots?: ImportSlotRow[]
-  /** 映射到声明了别的槽位的别名:步骤 call.user 已改写为本机槽位 */
-  slotRenames?: { service: string; from: string; to: string }[]
+  authEntries?: ImportAuthEntry[]
+  /** 映射/新建到条目:步骤 call.user 已改写为本机条目名 */
+  authRenames?: { service: string; from: string; to: string }[]
   /** call.user 标签不在注入清单 —— 该步执行会报错 */
   undeclaredUsers?: {
     tag: string
     services: string[]
-    reason: 'alias_no_slot' | 'alias_slot_differs'
+    reason: 'no_identity' | 'multi_user'
   }[]
   /** 没有任何步骤用到的内置凭证键(仅丢明文) */
   droppedUsers?: string[]
@@ -91,12 +95,12 @@ export interface ImportPrecheck {
   anchoring?: { anchored: ImportAnchorEntry[]; unresolved: ImportAnchorEntry[] }
 }
 
-/** 落库映射项(P7-⑥:无值覆盖字段 —— 敏感值无输入口)。 */
+/** 落库映射项(P7-⑥:无值覆盖字段 —— 敏感值无输入口;旧
+ *  credentialAlias/slot 键随挂认证下拉退役,ref 重做后不再发送)。 */
 export interface ImportMapping {
   serviceKey: string
   decision: 'reuse' | 'map' | 'create'
   createName?: string
-  credentialAlias?: string | null
 }
 
 export function importPrecheck(bundle: unknown): Promise<ImportPrecheck> {

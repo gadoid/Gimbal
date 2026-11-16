@@ -238,7 +238,7 @@ tier 序(公共项目层 < 项目层)不变。
 | 阶段 | 状态 | 实际落地 |
 |---|---|---|
 | Phase 1 底座 | ✅ 完成 | 四表 + 解析链 + routers 全量切换 + alembic 0057(已在生产库执行);全量 1560 passed / 461 skipped,0 残余失败 |
-| Phase 2 页面 | ✅ 欠账全销 | 凭证页/项目凭证账户化(含 system 主档选择);服务注册页重做主档注册簿+对账+实例;身份条目子页条目化;ProjectConfigPanel+生效预览条目口径;ExecConfigs 装载就绪新链(C3a);carry 三档键选择器+env 覆盖开关+后端系统键面聚合(C3b,新用例待 PG 环境)。余:导入映射按 ref 重做(随 Phase 3) |
+| Phase 2 页面 | ✅ 欠账全销 | 凭证页/项目凭证账户化(含 system 主档选择);服务注册页重做主档注册簿+对账+实例;身份条目子页条目化;ProjectConfigPanel+生效预览条目口径;ExecConfigs 装载就绪新链(C3a);carry 三档键选择器+env 覆盖开关+后端系统键面聚合(C3b,新用例待 PG 环境);导入映射按 ref 重做(P2-B.6:call.user→条目名统一改写,回报 authEntries/authRenames,13 用例恢复) |
 | Phase 3 清账 | ⬜ 未开始 | 「槽位」文案与文档同步 |
 
 **实施中的偏离与决策**（记录以免后续误读）：
@@ -252,8 +252,13 @@ tier 序(公共项目层 < 项目层)不变。
    等模型后，baseline 的 `create_all`（当前模型）不再产出旧表，而 0006/0021/
    0045 等历史增量仍引用它们 —— 空库顺序重放必然失败。fresh = 模型即形态；
    存量库（有 `alembic_version`）仍走完整增量链。
-3. **导入「挂认证」退役**：`scenario_import` 建条目时 `slot` 参数保留但忽略
-   （条目模型无槽）。前端导入面板的认证下拉已下线；按 ref 语义重做留待 Phase 2。
+3. **导入「挂认证」退役与重做（P2-B.6）**：`scenario_import` 建条目时旧
+   `slot`/`credentialAlias` 映射键退役（条目模型无槽，`create_alias_in_
+   transaction` 已删该参数）。重做语义：注入键 = 条目名 —— 服务的唯一
+   未被模板引用的 `call.user` 标签在导入时统一改写为生效条目名（映射到
+   已有条目或本次新建同样处理）；模板引用的标签按同名条目装载；多标签/
+   无条目如实回报（`no_identity`/`multi_user`）。落库回报
+   `authEntries`（含条目登记坐标 system/envId 供深链）+ `authRenames`。
 4. **deployments 保留**：`deployments`(服务×环境 → API 地址)与
    `system_env_instances`(系统×环境 → 登录口/版本线)**语义不同、并存**，
    服务注册页分列展示与编辑。

@@ -1,31 +1,24 @@
-"""authz M2a S7.5:导入时内置凭证(``config.users``)转槽位声明。
+"""authz M2a S7.5(ref 重做,P2-B.6):导入时内置凭证(``config.users``)
+→ 身份条目。
 
-_IMPORT_REDO = pytest.mark.skip(reason=(
-    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例按新语义恢复(其余通用导入用例照常运行)"))
-落库仍不含明文(P2);键不再静默丢弃 —— 新建别名缺省声明该服务唯一
-的内置标签、映射到声明了别的槽位的别名时改写步骤 ``call.user``、其余
-如实回报;落库结果回报「需要绑定的槽位 × 导入人绑定状态」。
+落库仍不含明文(P2);``call.user`` 标签按条目口径落地 —— 注入键 =
+条目名(无「声明槽位」):映射/新建到条目 E 的服务,其唯一未被模板引
+用的标签改写为 E;模板引用的标签按同名条目注入;多标签/无条目如实回
+报。落库回报「需要装载的身份条目 × 导入人装载状态」。
 """
 from __future__ import annotations
-import pytest  # noqa: E402
 
 from sqlalchemy import select
 
 from app.core import db as db_module
-from app.core.security import fernet_encrypt
-from app.models.auth_session import AuthSession
-from app.models.service_alias import ServiceAlias
+from app.models.service_identity import ServiceIdentity
 from app.models.user import User
 
+from .conftest import seed_identity_fixture
 from .helpers import register_and_login
 from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # noqa: F401
 from .test_scenario_import_pipeline import (
     _SCENARIO_ID, _bundle, _mock_faces, _stored_definition)
-
-_IMPORT_REDO = pytest.mark.skip(reason=(
-    "导入映射按 ref 语义重做(进度文档 P2-B.6,挂起中):内置凭证→槽位"
-    "声明/改写 call.user/槽位回报语义随条目化重设计;重做落地时本用例"
-    "按新语义恢复(其余通用导入用例照常运行)"))
 
 
 def _bundle_with_users(*, svc: str = "fin-service-qa",
@@ -47,118 +40,144 @@ async def _uid(username: str) -> int:
             User.username == username))).scalar_one()
 
 
-async def _bind(username: str, slot: str) -> None:
-    uid = await _uid(username)
+async def _seed_env() -> None:
+    """条目 env 必填:导入建条目/装载回报都要有默认环境。"""
+    from app.models import Environment
     async with db_module.SessionLocal() as s:
-        s.add(AuthSession(owner_id=uid, alias=slot, slot=slot,
-                          url="https://auth.local", is_default=True,
-                          username_enc=fernet_encrypt("u"),
-                          password_enc=fernet_encrypt("p")))
+        s.add(Environment(name="测试", is_default=True))
         await s.commit()
 
 
-@_IMPORT_REDO
-async def test_create_alias_declares_builtin_slot(client, plate_mock: PlateMock):
-    """新建别名未显式给槽位 → 缺省声明该服务唯一的内置标签;未用到的
-    内置键回报 dropped;明文不落库。"""
+async def _seed_entry(alias: str, *, username: str | None = None,
+                      owner_id: "int | None" = None) -> None:
+    """四件套布景:环境 + 主档 + 账户 + 身份条目。"""
+    async with db_module.SessionLocal() as s:
+        await seed_identity_fixture(
+            s, alias=alias, username=username or f"{alias}-acct",
+            password="pw123456", service="fin-service", owner_id=owner_id)
+
+
+async def test_create_rewrites_call_user_to_entry(
+        client, plate_mock: PlateMock):
+    """新建条目:服务唯一的内置标签改写为条目名(注入键 = 条目名);
+    未用到的内置键回报 dropped;明文不落库。"""
     _mock_faces(plate_mock)
     h = await register_and_login(client, "admin0", "admin0pass123")
+    await _seed_env()
     r = await client.post("/api/scenarios/import", headers=h, json={
         "bundle": _bundle_with_users(extra_users=("unused",)),
         "mappings": [{"serviceKey": "fin-service-qa", "decision": "create"}]})
     assert r.status_code == 201, r.text
     body = r.json()
     async with db_module.SessionLocal() as s:
-        alias = (await s.execute(select(ServiceAlias).where(
-            ServiceAlias.alias_name == "fin-service-qa"))).scalar_one()
-        assert alias.slot == "maker"
-    slots = {x["slot"]: x for x in body["slots"]}
-    # qa1 = 模板引用(${auth.qa1.token});maker = 新别名声明
-    assert set(slots) == {"qa1", "maker"}
-    assert slots["maker"] == {"slot": "maker", "bound": False,
-                              "fromBuiltin": True}
+        ident = (await s.execute(select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "fin-service-qa"))).scalar_one()
+        assert ident.ref_mode == "default"        # 导入建条目:ref=默认账户
+        assert ident.base_service == "fin-service"
+        env_id = ident.env_id
+    entries = {x["entry"]: x for x in body["authEntries"]}
+    # qa1 = 模板引用(${auth.qa1.token});fin-service-qa = 新建条目(改写目标)
+    assert set(entries) == {"qa1", "fin-service-qa"}
+    assert entries["qa1"] == {"entry": "qa1", "bound": False,
+                              "fromBuiltin": True, "system": None,
+                              "envId": None}
+    assert entries["fin-service-qa"] == {
+        "entry": "fin-service-qa", "bound": False, "fromBuiltin": True,
+        "system": None, "envId": env_id}
     assert body["undeclaredUsers"] == []
-    assert body["slotRenames"] == []
+    assert body["authRenames"] == [
+        {"service": "fin-service-qa", "from": "maker", "to": "fin-service-qa"}]
     assert body["droppedUsers"] == ["unused"]
     defn = await _stored_definition(_SCENARIO_ID)
     assert "users" not in (defn.get("config") or {})
-    assert defn["steps"][1]["call"]["user"] == "maker"
+    assert defn["steps"][1]["call"]["user"] == "fin-service-qa"
 
 
-@_IMPORT_REDO
-async def test_create_explicit_slot_wins(client, plate_mock: PlateMock):
-    _mock_faces(plate_mock)
-    h = await register_and_login(client, "admin0", "admin0pass123")
-    r = await client.post("/api/scenarios/import", headers=h, json={
-        "bundle": _bundle_with_users(),
-        "mappings": [{"serviceKey": "fin-service-qa", "decision": "create",
-                      "credentialAlias": "maker"}]})
-    assert r.status_code == 201, r.text
-    async with db_module.SessionLocal() as s:
-        assert (await s.execute(select(ServiceAlias.slot).where(
-            ServiceAlias.alias_name == "fin-service-qa"))).scalar_one() == "maker"
-
-
-@_IMPORT_REDO
-async def test_map_to_alias_with_other_slot_rewrites_call_user(
+async def test_create_multi_tag_reports_multi_user(
         client, plate_mock: PlateMock):
-    """映射到已声明别的槽位的别名 → call.user 改写为本机槽位;绑定状态
-    按导入人槽位绑定判。"""
+    """服务用到多个内置标签 → 无法收敛到单一条目,不改写、如实回报
+    (reason=multi_user);条目照建,模板引用不受影响。"""
     _mock_faces(plate_mock)
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="fin-service",
-                           base_service="fin-service", slot="fin-acct"))
-        await s.commit()
     h = await register_and_login(client, "admin0", "admin0pass123")
-    await _bind("admin0", "fin-acct")
+    await _seed_env()
+    b = _bundle()
+    b["steps"][0]["call"]["user"] = "maker"
+    b["steps"][0]["call"]["service"] = "fin-service-qa"
+    b["steps"][1]["call"]["user"] = "checker"
+    b["steps"][1]["call"]["service"] = "fin-service-qa"
+    b["config"]["users"] = {
+        "qa1": {"username": "a", "password": "b"},
+        "maker": {"username": "a", "password": "b"},
+        "checker": {"username": "a", "password": "b"}}
+    r = await client.post("/api/scenarios/import", headers=h,
+                          json={"bundle": b, "mappings": [
+        {"serviceKey": "fin-service-qa", "decision": "create"}]})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["authRenames"] == []
+    assert body["undeclaredUsers"] == [
+        {"tag": "checker", "services": ["fin-service-qa"],
+         "reason": "multi_user"},
+        {"tag": "maker", "services": ["fin-service-qa"],
+         "reason": "multi_user"}]
+    assert {x["entry"] for x in body["authEntries"]} == {
+        "qa1", "fin-service-qa"}
+    defn = await _stored_definition(_SCENARIO_ID)
+    assert defn["steps"][0]["call"]["user"] == "maker"
+    assert defn["steps"][1]["call"]["user"] == "checker"
+
+
+async def test_map_to_identity_rewrites_call_user(
+        client, plate_mock: PlateMock):
+    """映射到已有条目 → call.user 改写为条目名;装载状态按导入人
+    条目→ref→账户判;回报附登记坐标(system/envId,深链用)。"""
+    _mock_faces(plate_mock)
+    h = await register_and_login(client, "admin0", "admin0pass123")
+    await _seed_entry("fin-service", username="fin-acct",
+                      owner_id=await _uid("admin0"))
     r = await client.post("/api/scenarios/import", headers=h, json={
         "bundle": _bundle_with_users(svc="fin-service"),
         "mappings": [{"serviceKey": "fin-service", "decision": "map"}]})
     assert r.status_code == 201, r.text
     body = r.json()
-    assert body["slotRenames"] == [
-        {"service": "fin-service", "from": "maker", "to": "fin-acct"}]
-    slots = {x["slot"]: x for x in body["slots"]}
-    assert slots["fin-acct"] == {"slot": "fin-acct", "bound": True,
-                                 "fromBuiltin": True}
+    assert body["authRenames"] == [
+        {"service": "fin-service", "from": "maker", "to": "fin-service"}]
+    entries = {x["entry"]: x for x in body["authEntries"]}
+    assert entries["fin-service"]["bound"] is True
+    assert entries["fin-service"]["fromBuiltin"] is True
+    assert entries["fin-service"]["system"] == "fin-service"
+    assert entries["fin-service"]["envId"] is not None
     assert body["undeclaredUsers"] == []
     defn = await _stored_definition(_SCENARIO_ID)
-    assert defn["steps"][1]["call"]["user"] == "fin-acct"
+    assert defn["steps"][1]["call"]["user"] == "fin-service"
 
 
-@_IMPORT_REDO
-async def test_map_to_alias_without_slot_reports_undeclared(
+async def test_map_without_identity_reports_no_identity(
         client, plate_mock: PlateMock):
-    """别名未声明槽位 → 不能落地,如实回报(该步执行会报错);标签原样。"""
+    """服务在目录但没登记身份条目 → 不能改写,如实回报(该步执行会报
+    错);标签原样。"""
     _mock_faces(plate_mock)
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="fin-service",
-                           base_service="fin-service"))
-        await s.commit()
     await register_and_login(client, "admin0", "admin0pass123")
-    h = await register_and_login(client, "plain75", "pw123456")
-    r = await client.post("/api/scenarios/import", headers=h, json={
+    plain = await register_and_login(client, "plain75", "pw123456")
+    r = await client.post("/api/scenarios/import", headers=plain, json={
         "bundle": _bundle_with_users(svc="fin-service"),
         "mappings": [{"serviceKey": "fin-service", "decision": "map"}]})
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["undeclaredUsers"] == [{
         "tag": "maker", "services": ["fin-service"],
-        "reason": "alias_no_slot"}]
-    assert "maker" not in {x["slot"] for x in body["slots"]}
+        "reason": "no_identity"}]
+    assert "maker" not in {x["entry"] for x in body["authEntries"]}
     defn = await _stored_definition(_SCENARIO_ID)
     assert defn["steps"][1]["call"]["user"] == "maker"
 
 
-@_IMPORT_REDO
 async def test_templated_tag_not_rewritten(client, plate_mock: PlateMock):
     """标签被 ${auth.K} 模板引用 → 本就进注入清单,不改写(改写会换凭证)。"""
     _mock_faces(plate_mock)
-    async with db_module.SessionLocal() as s:
-        s.add(ServiceAlias(alias_name="fin-service",
-                           base_service="fin-service", slot="fin-acct"))
-        await s.commit()
     h = await register_and_login(client, "admin0", "admin0pass123")
+    await _seed_entry("fin-service", username="fin-acct",
+                      owner_id=await _uid("admin0"))
     b = _bundle()
     b["steps"][0]["call"]["user"] = "qa1"        # 同时被 ${auth.qa1.token} 引用
     r = await client.post("/api/scenarios/import", headers=h, json={
@@ -166,17 +185,17 @@ async def test_templated_tag_not_rewritten(client, plate_mock: PlateMock):
         "mappings": [{"serviceKey": "fin-service", "decision": "map"}]})
     assert r.status_code == 201, r.text
     body = r.json()
-    assert body["slotRenames"] == []
-    assert {"qa1", "fin-acct"} <= {x["slot"] for x in body["slots"]}
+    assert body["authRenames"] == []
+    assert {"qa1", "fin-service"} <= {x["entry"] for x in body["authEntries"]}
     defn = await _stored_definition(_SCENARIO_ID)
     assert defn["steps"][0]["call"]["user"] == "qa1"
 
 
-@_IMPORT_REDO
 async def test_precheck_lists_builtin_users(client, plate_mock: PlateMock):
     _mock_faces(plate_mock)
     h = await register_and_login(client, "admin0", "admin0pass123")
-    await _bind("admin0", "maker")
+    # 同名条目 maker + 导入人默认账户 → bound;qa1 无条目 → 未装载
+    await _seed_entry("maker", owner_id=await _uid("admin0"))
     r = await client.post("/api/scenarios/import/precheck", headers=h,
                           json={"bundle": _bundle_with_users()})
     assert r.status_code == 200, r.text

@@ -104,7 +104,7 @@ async def _default_env_id(db: AsyncSession) -> int:
 
 
 async def create_alias_in_transaction(
-    db: AsyncSession, *, alias_name: str, slot: str | None = None,
+    db: AsyncSession, *, alias_name: str,
     kind: str = "plate",
     base_service: str | None = None,
     catalog_names: "set[str] | None" = None,
@@ -121,10 +121,10 @@ async def create_alias_in_transaction(
     IntegrityError 在事务边界由调用方统一映射(如 ``alias_name_taken``)
     并回滚。返回**未 refresh** 的 row。
 
-    ``slot`` 参数仅为签名兼容(条目模型无槽;忽略);``catalog_names``
-    为调用方在事务外预取的 plate 目录集合(P7-④:plate 调用不进事务)。
+    ``catalog_names`` 为调用方在事务外预取的 plate 目录集合(P7-④:
+    plate 调用不进事务)。旧 ``slot`` 参数随挂认证下拉退役(P2-B.6,
+    条目模型无槽)。
     """
-    _ = slot  # 退役参数:注入键 = 条目名(规约延续)
     if env_id is None:
         env_id = await _default_env_id(db)
     if kind == "external":
@@ -173,7 +173,7 @@ async def create_alias_in_transaction(
 
 
 async def create_alias(
-    db: AsyncSession, *, alias_name: str, slot: str | None = None,
+    db: AsyncSession, *, alias_name: str,
     kind: str = "plate",
     base_service: str | None = None,
     env_id: int | None = None,
@@ -182,9 +182,10 @@ async def create_alias(
     display: str = "",
 ) -> dict:
     """提交包装器(W2/T2):条目路由用;导入流水线走
-    :func:`create_alias_in_transaction` 自管事务。"""
+    :func:`create_alias_in_transaction` 自管事务。旧 ``slot`` 参数随
+    P2-B.6 退役(条目模型无槽;路由层兼容字段在请求模式层忽略)。"""
     row = await create_alias_in_transaction(
-        db, alias_name=alias_name, slot=slot, kind=kind,
+        db, alias_name=alias_name, kind=kind,
         base_service=base_service, env_id=env_id,
         ref_mode=ref_mode, ref_username=ref_username, display=display)
     await db.commit()

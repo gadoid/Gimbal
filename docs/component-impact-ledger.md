@@ -6,8 +6,9 @@
 >
 > **进度快照 2026-11-16**:C1 ✅;C2a ✅;C2b ✅;C3a ✅(装载就绪链修复);
 > C3b ✅(三档键选择器 + env 覆盖开关 + 后端系统键面聚合);C4 ✅;
-> C5 观察项 ✅。**Phase 2 页面欠账全销**;剩余 P2-A 测试续期(52 文件)、
-> 导入映射重做、Phase 3 文案清账。详见 `service-registry-progress.md`。
+> C5 观察项 ✅。**Phase 2 页面欠账全销(含 P2-B.6 导入映射按 ref 重做)**;
+> P2-A 测试续期亦已完成(52 文件全处置)。剩余:migrations 时代造形、
+> Phase 3 文案清账。详见 `service-registry-progress.md`。
 
 ## C1 凭证管理(Auths.vue / routers/auth_sessions.py)
 
@@ -116,5 +117,5 @@ ServiceAliasDetail 已条目化(头部徽标 环境+ref / 概览补账户装载�
 
 ## 销账顺序建议
 
-C1–C5 全部销账(2026-11-16)。后续:P2-A 测试续期(52 文件,最大工作量)
-→ 导入映射按 ref 重做 → Phase 3 文案清账。
+C1–C5 全部销账(2026-11-16);P2-A 测试续期 + P2-B.6 导入映射按 ref 重做
+已完成。后续:migrations 时代造形 → Phase 3 文案清账。

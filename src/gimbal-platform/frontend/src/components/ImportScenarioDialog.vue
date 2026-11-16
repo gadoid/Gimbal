@@ -6,13 +6,14 @@
   * fatal(blocking):格式/convert/修订缺失 —— 只给「知道了」,修订缺失
     展示可用修订集引导改声明;
   * ID 冲突:勾选「分配新 ID」(预览 suggestedId,确认即回传,展示=最终);
-  * 服务映射行:复用/映射/新建可切换;新建可换名 + 挂自己的认证配置;
-    文案说清全局副作用(base_url/carry 平台全局生效);
+  * 服务映射行:复用/映射/新建可切换;新建可换名(ref/账户装载在服务
+    注册页配置,导入面不挂);文案说清全局副作用(base_url/carry 平台全局生效);
   * 认证引用栏(P7-③):${auth.*} × 你本人凭证池,只展示不阻塞;
-  * 内置凭证栏(authz M2a S7.5):文件 config.users 的键明文不落库,转为
-    槽位声明(新建别名缺省声明 / 映射到别的槽位时改写 call.user);
-  * 导入结果(S7.5):落库回报「需要绑定的槽位 × 我的绑定状态」+ 改写 /
-    未落地 / 丢弃清单,未绑槽位一键去「槽位绑定」新建;无可报即直接进场景;
+  * 内置凭证栏(authz M2a S7.5,ref 重做 P2-B.6):文件 config.users 的键
+    明文不落库 —— 模板键按同名身份条目装载,步骤键改写为所属服务的条目名;
+  * 导入结果(S7.5):落库回报「需要装载的身份条目 × 我的装载状态」+
+    改写 / 未落地 / 丢弃清单,未装载条目一键深链凭证登记(条目登记坐标
+    system+env);无可报即直接进场景;
   * 步骤锚定(#323):可执行形态反查 —— 已回填计数 + 未锚黄条(原因与
     carry 降级后果),只警示不阻塞(手写裸调用是合法形态);
   * 409 自愈:scenario_id_exists/alias_name_taken/mapping_stale → 自动
@@ -29,40 +30,40 @@
       </div>
 
       <div class="imp-body">
-        <!-- S7.5 导入结果:需要绑定的槽位 × 我的绑定状态 -->
+        <!-- S7.5(ref 重做)导入结果:需要装载的身份条目 × 我的装载状态 -->
         <div v-if="result" data-testid="import-result">
-          <p class="imp-ok">已导入 <code class="imp-id">{{ result.scenarioId }}</code> —— 内置凭证明文未落库,已转为槽位声明;执行时用你自己的槽位绑定。</p>
-          <div v-if="resultSlots.length" class="imp-section">
-            <p class="imp-sec-title">需要绑定的槽位</p>
+          <p class="imp-ok">已导入 <code class="imp-id">{{ result.scenarioId }}</code> —— 内置凭证明文未落库,步骤认证已落到本机身份条目;执行时按条目 ref 取你(或项目)登记的账户。</p>
+          <div v-if="resultEntries.length" class="imp-section">
+            <p class="imp-sec-title">需要装载的身份条目</p>
             <table class="imp-table">
-              <thead><tr><th>槽位</th><th>来源</th><th>我的绑定</th><th></th></tr></thead>
+              <thead><tr><th>条目</th><th>来源</th><th>账户装载</th><th></th></tr></thead>
               <tbody>
-                <tr v-for="s in resultSlots" :key="s.slot" :data-testid="`import-slot-${s.slot}`">
-                  <td class="mono">{{ s.slot }}</td>
+                <tr v-for="s in resultEntries" :key="s.entry" :data-testid="`import-entry-${s.entry}`">
+                  <td class="mono">{{ s.entry }}</td>
                   <td>{{ s.fromBuiltin ? '内置凭证转来' : '场景引用' }}</td>
                   <td>
-                    <span class="imp-chip" :class="{ 'imp-chip-miss': !s.bound }">{{ s.bound ? '已绑定' : '未绑定' }}</span>
+                    <span class="imp-chip" :class="{ 'imp-chip-miss': !s.bound }">{{ s.bound ? '已装载' : '未装载' }}</span>
                   </td>
                   <td>
-                    <button type="button" class="imp-link" :data-testid="`import-slot-go-${s.slot}`" @click="goBind(s.slot, s.bound)">{{ s.bound ? '查看' : '去绑定' }}</button>
+                    <button type="button" class="imp-link" :data-testid="`import-entry-go-${s.entry}`" @click="goBind(s)">{{ s.bound ? '查看' : '去登记' }}</button>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-if="result.slotRenames?.length" class="imp-warn" data-testid="import-slot-renames">
-            步骤认证已改为本机槽位:<template v-for="r in result.slotRenames" :key="r.service">{{ r.service }}:{{ r.from }} → {{ r.to }};</template>
+          <p v-if="result.authRenames?.length" class="imp-warn" data-testid="import-auth-renames">
+            步骤认证已落到本机身份条目:<template v-for="r in result.authRenames" :key="r.service">{{ r.service }}:{{ r.from }} → {{ r.to }};</template>
           </p>
           <div v-if="result.undeclaredUsers?.length" class="imp-warn" data-testid="import-undeclared">
             <p v-for="u in result.undeclaredUsers" :key="u.tag" class="imp-warn-line">
-              ⚠ 认证标签 <b class="mono">{{ u.tag }}</b>({{ u.services.join('、') }})未落地为槽位:{{ undeclaredReasonLabel(u.reason) }} —— 这些步骤执行时会报错。
+              ⚠ 认证标签 <b class="mono">{{ u.tag }}</b>({{ u.services.join('、') }})未落地为身份条目:{{ undeclaredReasonLabel(u.reason) }} —— 这些步骤执行时会报错。
             </p>
           </div>
           <p v-if="result.droppedUsers?.length" class="text-caption text-signal-muted" data-testid="import-dropped">
             未被任何步骤使用的内置凭证已丢弃:{{ result.droppedUsers.join('、') }}
           </p>
           <p class="text-caption text-signal-muted">
-            <button type="button" class="imp-link" data-testid="import-my-bindings" @click="goBind()">管理我的槽位绑定</button>
+            <button type="button" class="imp-link" data-testid="import-my-bindings" @click="goBind()">凭证管理</button>
           </p>
         </div>
 
@@ -167,16 +168,16 @@
             <p class="text-caption text-signal-muted">「没有」的引用执行时该步会报错——到凭证管理补配你自己的凭证。</p>
           </div>
 
-          <!-- 内置凭证 → 槽位声明(S7.5) -->
+          <!-- 内置凭证 → 身份条目(S7.5,ref 重做 P2-B.6) -->
           <div v-if="builtinUsers.length" class="imp-section" data-testid="import-builtin-users">
-            <p class="imp-sec-title">内置凭证 → 槽位声明</p>
+            <p class="imp-sec-title">内置凭证 → 身份条目</p>
             <div class="imp-chips">
-              <span v-for="u in builtinUsers" :key="u.tag" class="imp-chip" :class="{ 'imp-chip-miss': !u.bound }">
-                {{ u.tag }}<template v-if="u.services.length">({{ u.services.join('、') }})</template>:{{ u.bound ? '你已绑定该槽位' : '你未绑定该槽位' }}
+              <span v-for="u in builtinUsers" :key="u.tag" class="imp-chip" :class="{ 'imp-chip-miss': u.templated && !u.bound }">
+                {{ u.tag }}<template v-if="u.services.length">({{ u.services.join('、') }})</template>:{{ builtinUserLabel(u) }}
               </span>
             </div>
             <p class="text-caption text-signal-muted">
-              文件里的凭证明文不会导入;这些键转为槽位声明,执行时用你自己的槽位绑定。新建别名未选认证配置时自动声明该服务使用的槽位;映射到已声明别的槽位的别名时,步骤改用本机槽位。导入后列出最终需要绑定的槽位。
+              文件里的凭证明文不会导入。被 ${auth.*} 模板引用的键按本机同名身份条目装载;仅步骤使用的键在导入时改写为所属服务的身份条目名。导入后列出最终需要装载的条目。
             </p>
           </div>
         </template>
@@ -210,7 +211,8 @@ import { toast } from '@/utils/toast'
 import {
   importPrecheck, importScenario,
   type ImportPrecheck, type ImportServiceRow, type ImportMapping,
-  type ImportAnchorEntry, type ImportResult,
+  type ImportAnchorEntry, type ImportAuthEntry, type ImportResult,
+  type ImportBuiltinUser,
 } from '@/api/scenario-import'
 import { useAuthStore } from '@/stores/auth'
 
@@ -237,9 +239,9 @@ const rows = computed(() => precheck.value?.services || [])
 const createRows = computed(() => rows.value.filter((r) => decision(r) === 'create'))
 const workingDeclarations = computed(() => precheck.value?.workingDeclarations || [])
 const builtinUsers = computed(() => precheck.value?.builtinUsers || [])
-// 未绑在前(结果页的行动项优先)
-const resultSlots = computed(() =>
-  [...(result.value?.slots || [])].sort((a, b) => Number(a.bound) - Number(b.bound)))
+// 未装载在前(结果页的行动项优先)
+const resultEntries = computed(() =>
+  [...(result.value?.authEntries || [])].sort((a, b) => Number(a.bound) - Number(b.bound)))
 // 锚定判定只看 reason(#323 口径):not_in_revision 条目的 endpoint 是被拒
 // 候选的排查信息,不代表已锚;缺省键(旧负载/阻断路径)按空处理
 const anchorUnresolved = computed(
@@ -280,17 +282,27 @@ function suggestionLabel(s: string): string {
   return s === 'reuse' ? '复用(值一致)' : s === 'map' ? '映射(本机为准)' : '新建'
 }
 function undeclaredReasonLabel(r: string): string {
-  return r === 'alias_no_slot'
-    ? '所用服务的别名没有声明槽位(请管理员在服务管理里声明)'
-    : '所用服务的别名声明了别的槽位,且该服务用到多个账号,无法自动改写'
+  return r === 'no_identity'
+    ? '所用服务没有登记身份条目(请管理员在服务注册页登记)'
+    : '该服务用到多个账号,无法自动改写到单一身份条目'
+}
+function builtinUserLabel(u: ImportBuiltinUser): string {
+  if (u.templated) return u.bound ? '同名条目已装载' : '同名条目未装载'
+  return '将改写到所属服务的条目'
 }
 /** 结果视图有可报内容才停留;否则保持「导入即进场景」旧流程 */
 function hasReport(r: ImportResult): boolean {
-  return !!(r.slots?.length || r.slotRenames?.length
+  return !!(r.authEntries?.length || r.authRenames?.length
     || r.undeclaredUsers?.length || r.droppedUsers?.length)
 }
-function goBind(slot?: string, bound?: boolean): void {
-  const query = !slot ? {} : bound ? { q: slot } : { newSlot: slot }
+/** 已装载 → 检索定位;未装载 → 按条目登记坐标深链(条目自主档派生
+ *  system+env;悬空条目无坐标,退普通入口)。 */
+function goBind(e?: ImportAuthEntry): void {
+  const query = !e ? {}
+    : e.bound ? { q: e.entry }
+      : (e.system
+        ? { system: e.system, ...(e.envId != null ? { envId: String(e.envId) } : {}) }
+        : {})
   emit('close')
   void router?.push({ path: '/auths', query })
 }

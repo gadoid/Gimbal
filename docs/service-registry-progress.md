@@ -12,7 +12,9 @@ carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）�
 **P2-A 测试续期完成：52 文件全处置（~44 文件 ~430 用例恢复全绿,32 条残余 skip 均有裁定存档）,
 连带修出 13 个 P1 残留真缺陷（反查恒空/条目 PATCH 500/预览 500/adhoc 必炸/编排链与预检告警缺 env/
 令牌复核 NameError/行级绑定两处等 —— 全是旧测试 skip 期从未被执行的死路径）**；
-剩余：导入映射按 ref 重做 / migrations 时代造形 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
+**P2-B.6 导入映射按 ref 语义重做完成（`call.user`→条目名统一改写、回报 `authEntries`/`authRenames`
++ 登记坐标深链,13 条挂起用例按新语义恢复）**；
+剩余：migrations 时代造形 / Phase 3 文案清账；生产环境已迁移并部署，本地三服务已起（0057 已迁）。**
 
 ## 2. 已完成
 
@@ -113,6 +115,8 @@ accounts   2   18180789650(默认) / 18180789652
 | 本次 | P2-A 批次③ 集成/令牌域测试续期（7 文件 83 用例）+ 修 1 个 P1 残留缺陷（令牌范围复核 NameError + 分类语义） |
 | 本次 | P2-A 批次④ 配置/carry + 执行基建测试续期（7 文件 50 用例；2 个 0054 历史重放按空库不可重放记档跳过） |
 | 本次 | P2-A 批次⑤ 其余域收口（23 文件；~44 文件 ~430 用例恢复；修 5 个缺 env/死路径缺陷;残余 32 skip 两类裁定存档）—— P2-A 完成 |
+| `bfb75fd9` | docs(registry): P2-A 收口基线入档 — 2007 passed / 39 skipped / 0 failed |
+| 本次 | P2-B.6 导入映射按 ref 语义重做（call.user→条目名统一改写;authEntries/authRenames + 登记坐标;slot/credentialAlias 键退役;no_environment 422;13 用例恢复）—— 全量 2020/26/0 |
 
 ## 4. 未完成 / 后续计划
 
@@ -195,7 +199,9 @@ migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 �
 全量基线（批次①前）：**1553 passed / 490 skipped / 0 failed**（PG 本地 15432，16m13s）；
 批次②后：**1731 passed / 315 skipped / 0 failed**（18m01s）；批次④后：**1863 / 183 / 0**
 （21m39s）；**P2-A 收口基线（2026-11-16）：2007 passed / 39 skipped / 0 failed**（24m51s）——
-对照 P1-7 基线 1560/461，恢复 ~450 用例；39 条残余 = 本轮 32 条记档 + 7 条既有口径。
+对照 P1-7 基线 1560/461，恢复 ~450 用例；39 条残余 = 本轮 32 条记档 + 7 条既有口径；
+**P2-B.6 后（2026-11-17）：2020 passed / 26 skipped / 0 failed**（25m39s）——
+导入映射 13 条按新语义恢复，残余 26 = 时代重放 19 + 既有口径 7。
 
 #### 残余 skip 的两类裁定（32+ 条,均有档可查）
 
@@ -203,8 +209,8 @@ migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 �
   baseline(create_all 当前模型)随 0057 退役旧表后,空库不可重放触碰旧表的历史增量;
   空库产品面 = upgrade baseline + stamp head(决策 8)。恢复 = 独立工作项
   （预建退役表时代形态 `_create_retired_tables`）。
-- **导入映射重做（13 条)**：pipeline 7 + s75 6 —— 随 P2-B.6「导入映射按 ref
-  语义重做」落地时按新语义恢复。
+- **导入映射重做（13 条)**：pipeline 7 + s75 6 —— ✅ 已随 P2-B.6 落地恢复
+  （新语义见 §4「P2-B.6 导入映射按 ref 重做」）。
 
 ### P2-B 页面收尾
 
@@ -224,8 +230,48 @@ migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 �
 5. ~~**carry 写面**：三档键选择器 + env 覆盖开关~~ ✅ C3b 销账
    （含后端系统键面聚合；新增用例 `test_service_fields_system_key_aggregates_
    member_services` 待 PG 环境执行 —— 本机无 TEST_DATABASE_URL）。
-6. **导入映射重做**：按 ref 语义重做导入面板的认证映射（当前挂认证下拉已退役）。
+6. ~~**导入映射重做**：按 ref 语义重做导入面板的认证映射~~ ✅ P2-B.6 销账
+   （详见下节；13 条挂起用例按新语义恢复）。
 7. **Phase 3 文案清账**：「槽位」字样全站退场（条目/身份/账户口径）；runbook / 概念地图同步。
+
+### P2-B.6 导入映射按 ref 重做（2026-11-16，✅ 完成）
+
+**语义**（注入键 = 条目名，无「声明槽位」）：
+
+- **call.user 统一改写**：服务的**唯一未被模板引用**的 `call.user` 标签在
+  落库时改写为该服务的**生效条目名** —— 映射到已有条目与本次新建同样
+  处理（旧模型 create 走「别名声明槽位」、map 走「改写为声明槽位」两条
+  路，条目化后统一为一条）。标签已等于条目名时无需改写。
+- **模板引用的标签不改写**：`${auth.K.*}` 本就进注入清单，按同名条目
+  装载（改写反而换凭证）—— 规则与旧模型一致。
+- **如实回报**：多标签（无法收敛到单一条目）→ `undeclaredUsers`
+  reason=`multi_user`；服务无身份条目 → reason=`no_identity`（旧
+  `alias_slot_differs`/`alias_no_slot` 退役）。
+- **落库回报换键**：`slots`→`authEntries`（`slot`→`entry`，新增条目登记
+  坐标 `system`/`envId`，自主档派生、悬空条目为 null）、`slotRenames`→
+  `authRenames`；`builtinUsers`/`droppedUsers`/`undeclaredUsers` 键名不变。
+- **映射项旧键退役**：`slot`/`credentialAlias` 不再读取；
+  `create_alias_in_transaction` 删除 `slot` 兼容参数。导入建的条目
+  ref=默认账户、env 落平台默认环境。
+- **空环境库防护**：条目 env 必填收紧后，无默认环境的库上 create 会
+  500（`_default_env_id` ValueError）→ 映射为可读的 422 `no_environment`
+  （P2-A 期间 create 路径在 skip 期从未跑过新模型，本轮抓出）。
+
+**改动面**：
+
+| 文件 | 内容 |
+|---|---|
+| `app/services/scenario_import.py` | `_slot_conversion`→`_auth_rewrites`（create+map 统一改写）；`_slot_report`→`_auth_report`（新回报键+登记坐标）；create 循环去 slot 传参 + no_environment 映射 |
+| `app/routers/service_aliases.py` | 条目 create 路由停发 `slot`（服务层参数已删,继续传会 TypeError） |
+| `app/services/service_aliases.py` | `create_alias_in_transaction` 与提交包装器 `create_alias` 删 `slot` 参数；条目路由 create 停发（`AliasCreate`/`AliasPatch` 的请求层兼容字段保留,Phase 3 一并清扫） |
+| `tests/test_scenario_import_pipeline.py` | 7 用例恢复（回报断言切 authEntries；ServiceAlias→ServiceIdentity；create 前置播种默认环境） |
+| `tests/test_authz_s75_import_slots.py` | 6 用例按新语义重写（四件套播种；multi_user/no_identity 分支；登记坐标断言） |
+| `frontend/src/api/scenario-import.ts` | `ImportSlotRow`→`ImportAuthEntry`；`ImportMapping` 删 `credentialAlias` |
+| `frontend/src/components/ImportScenarioDialog.vue` | 结果区/预检区条目口径文案；「去登记」按条目坐标深链 `/auths?system=&envId=`（旧 `newSlot` 深链退役）；reason 文案两分支 |
+| `frontend/src/components/__tests__/ImportScenarioDialog.test.ts` | S7.5 describe 三用例切新键/新文案 |
+
+**验证**：导入两簇+aliases 回归 43 passed；后端全量 **2020 passed / 26 skipped /
+0 failed**（25m39s）；前端 vitest 全量 171 文件 1434 passed + vue-tsc + eslint 干净。
 
 ### P2-C 验证收口
 
@@ -240,7 +286,7 @@ migrations/import 按下述裁定记档）。**P2-A 共恢复 ~44 文件 ~430 �
 | 项 | 说明 | 建议 |
 |---|---|---|
 | `agent-sys` 无账户 | default 型条目 system=jira，jira 组无账户 → 运行 missing（预期留白） | 页面补录 jira 账户，或把条目 ref 改到已有系统 |
-| 导入「挂认证」退役 | 后端 `create_alias_in_transaction` 仍收 slot 但忽略 → 导入面挂认证曾静默失效 | 已在 UI 退役该下拉；Phase 2 按 ref 语义重做导入映射 |
+| 导入「挂认证」退役 | 后端曾收 slot 但忽略 → 导入面挂认证静默失效 | ✅ P2-B.6 已按 ref 重做（call.user→条目名统一改写；slot/credentialAlias 键删除） |
 | deployments 与实例双 URL | `deployments` = API 地址；(system, env).login_url = 登录口，语义不同勿混 | 页面已分列展示与编辑 |
 | 条目改名 | 不做（引用键稳定是架构决策） | 改名 = 删旧建新 |
 | P1-7 垫片 | conftest 的旧模块名垫片是迁移期临时物 | P2-A 完成后删除 |

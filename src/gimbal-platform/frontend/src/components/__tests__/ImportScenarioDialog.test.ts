@@ -239,8 +239,8 @@ describe('ImportScenarioDialog 状态机', () => {
   })
 })
 
-describe('ImportScenarioDialog S7.5 内置凭证 → 槽位声明', () => {
-  it('确认单列出内置凭证键(服务 + 我的绑定状态)', async () => {
+describe('ImportScenarioDialog S7.5 内置凭证 → 身份条目', () => {
+  it('确认单列出内置凭证键(服务 + 落地方式)', async () => {
     importPrecheck.mockResolvedValue(pre({
       builtinUsers: [
         { tag: 'maker', services: ['qa-svc'], templated: false, bound: false },
@@ -251,22 +251,22 @@ describe('ImportScenarioDialog S7.5 内置凭证 → 槽位声明', () => {
     await flushPromises()
     const sec = w.find('[data-testid="import-builtin-users"]')
     expect(sec.exists()).toBe(true)
-    expect(sec.text()).toContain('maker(qa-svc):你未绑定该槽位')
-    expect(sec.text()).toContain('qa1:你已绑定该槽位')
+    expect(sec.text()).toContain('maker(qa-svc):将改写到所属服务的条目')
+    expect(sec.text()).toContain('qa1:同名条目已装载')
     expect(sec.text()).toContain('明文不会导入')
     w.unmount()
   })
 
-  it('落库回报有槽位 → 停在结果视图;未绑在前,去绑定跳 /auths?newSlot=', async () => {
+  it('落库回报有条目 → 停在结果视图;未装载在前,去登记按坐标深链 /auths?system=&envId=', async () => {
     importPrecheck.mockResolvedValue(pre())
     importScenario.mockResolvedValue({
       scenarioId: 'sc-import-abc', idMode: 'new',
-      slots: [
-        { slot: 'qa1', bound: true, fromBuiltin: true },
-        { slot: 'fin-acct', bound: false, fromBuiltin: true },
+      authEntries: [
+        { entry: 'qa1', bound: true, fromBuiltin: true, system: 'fin', envId: 3 },
+        { entry: 'fin-acct', bound: false, fromBuiltin: true, system: 'fin', envId: 7 },
       ],
-      slotRenames: [{ service: 'fin-service', from: 'maker', to: 'fin-acct' }],
-      undeclaredUsers: [{ tag: 'chk', services: ['qa-svc'], reason: 'alias_no_slot' }],
+      authRenames: [{ service: 'fin-service', from: 'maker', to: 'fin-acct' }],
+      undeclaredUsers: [{ tag: 'chk', services: ['qa-svc'], reason: 'no_identity' }],
       droppedUsers: ['unused'],
     })
     const w = mountDialog('alias.write')
@@ -278,22 +278,22 @@ describe('ImportScenarioDialog S7.5 内置凭证 → 槽位声明', () => {
     const res = w.find('[data-testid="import-result"]')
     expect(res.exists()).toBe(true)
     const rows = res.findAll('tbody tr')
-    expect(rows[0].text()).toContain('fin-acct')          // 未绑在前
-    expect(rows[0].text()).toContain('未绑定')
-    expect(rows[1].text()).toContain('已绑定')
-    expect(w.find('[data-testid="import-slot-renames"]').text())
+    expect(rows[0].text()).toContain('fin-acct')          // 未装载在前
+    expect(rows[0].text()).toContain('未装载')
+    expect(rows[1].text()).toContain('已装载')
+    expect(w.find('[data-testid="import-auth-renames"]').text())
       .toContain('fin-service:maker → fin-acct')
     expect(w.find('[data-testid="import-undeclared"]').text())
-      .toContain('没有声明槽位')
+      .toContain('没有登记身份条目')
     expect(w.find('[data-testid="import-dropped"]').text()).toContain('unused')
     expect(w.find('[data-testid="import-confirm"]').exists()).toBe(false)
 
-    await w.find('[data-testid="import-slot-go-fin-acct"]').trigger('click')
+    await w.find('[data-testid="import-entry-go-fin-acct"]').trigger('click')
     expect(routerPush).toHaveBeenCalledWith(
-      { path: '/auths', query: { newSlot: 'fin-acct' } })
+      { path: '/auths', query: { system: 'fin', envId: '7' } })
     expect(w.emitted('close')).toBeTruthy()
 
-    await w.find('[data-testid="import-slot-go-qa1"]').trigger('click')
+    await w.find('[data-testid="import-entry-go-qa1"]').trigger('click')
     expect(routerPush).toHaveBeenLastCalledWith(
       { path: '/auths', query: { q: 'qa1' } })
 
@@ -306,7 +306,7 @@ describe('ImportScenarioDialog S7.5 内置凭证 → 槽位声明', () => {
     importPrecheck.mockResolvedValue(pre())
     importScenario.mockResolvedValue({
       scenarioId: 'sc-import-abc', idMode: 'new',
-      slots: [{ slot: 'qa1', bound: false, fromBuiltin: true }],
+      authEntries: [{ entry: 'qa1', bound: false, fromBuiltin: true, system: null, envId: null }],
     })
     const w = mountDialog('alias.write')
     await flushPromises()

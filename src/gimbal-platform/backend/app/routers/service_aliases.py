@@ -126,7 +126,7 @@ async def create_alias(
     """登记身份条目(Admin+;条目全部团队共享)。"""
     try:
         created = await service_aliases.create_alias(
-            db, alias_name=body.alias_name, slot=body.slot,
+            db, alias_name=body.alias_name,
             kind=body.kind, base_service=body.base_service,
             env_id=body.env_id, ref_mode=body.ref_mode,
             ref_username=body.ref_username, display=body.display)
