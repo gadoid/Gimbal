@@ -11,16 +11,9 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from sqlalchemy import select
 
 from app.core import db as db_module
-from app.core.security import fernet_encrypt
-from app.models.auth_session import AuthSession
 from app.models.composer_data_set import ComposerDataSet
 from app.models.composer_run_scheme import ComposerRunScheme
 from app.models.integration_task import IntegrationTask
@@ -131,7 +124,7 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
         "dataSetSelection": [{"datasetId": "ds-own"}]})
     await _insert_dataset("sc-s0v", "ds-foreign", [{"who": "victim"}])
     await _insert_scheme("sc-s0v", "rs-foreign", payload={
-        "serviceBindings": {"svc": {"authAlias": "ghost"}},
+        "serviceBindings": {"svc": {"alias": "ghost"}},
         "dataSetSelection": [{"datasetId": "ds-foreign"}]})
 
     r = await client.post("/api/integration/tasks", headers=h,
@@ -184,11 +177,12 @@ async def test_partial_missing_credential_pauses(client):
     tid = r.json()["id"]
 
     uid = await _user_id("s0_partial")
+    from .conftest import seed_identity_fixture
     async with db_module.SessionLocal() as db:
-        db.add(AuthSession(
-            owner_id=uid, alias="gitlab", url="http://127.0.0.1:1",
-            username_enc=fernet_encrypt("u"),
-            password_enc=fernet_encrypt("p")))
+        # 四件套:条目 gitlab + 本人池账户(jira 条目缺 → missing 只列 jira)
+        await seed_identity_fixture(
+            db, alias="gitlab", username="u", password="p",
+            service="svc", owner_id=uid)
         await db.commit()
 
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
@@ -210,13 +204,16 @@ async def test_resolve_exec_auths_stays_lenient_on_partial(client):
 
     h = await register_and_login(client, "s0_shared", "pw123456")
     uid = await _user_id("s0_shared")
+    from .conftest import seed_identity_fixture
+    from app.models import Environment
     async with db_module.SessionLocal() as db:
-        db.add(AuthSession(
-            owner_id=uid, alias="only-one", url="http://127.0.0.1:1",
-            username_enc=fernet_encrypt("u"),
-            password_enc=fernet_encrypt("p")))
-        await db.commit()
+        await seed_identity_fixture(
+            db, alias="only-one", username="u", password="p",
+            service="svc", owner_id=uid)
+        env_id = (await db.execute(select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar()
 
     resolved = await resolve_exec_auths(
-        db_module.SessionLocal, uid, ["only-one", "not-there"])
+        db_module.SessionLocal, uid, ["only-one", "not-there"],
+        env_id=env_id)
     assert [a.alias for a in resolved] == ["only-one"]

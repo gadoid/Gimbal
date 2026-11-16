@@ -13,17 +13,12 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from sqlalchemy import select
 
 from app.core import db as db_module
 from app.models.integration_task import IntegrationTask
 from app.models.permission import Notification
-from app.models.service_alias import ServiceAlias
+from app.models import Service
 from app.models.user import User
 from tests.helpers import make_draft, register_and_login
 from tests.test_scenario_composer_plate_integration import (  # noqa: F401
@@ -174,7 +169,7 @@ async def test_base_url_change_triggers_template_changed(client):
 
     from .helpers import seed_deployment
     async with db_module.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="svc", base_service="svc"))
+        db.add(Service(name="svc", system="svc", kind="plate"))
         await seed_deployment(db, "svc", "http://host-a")
         await db.commit()
 

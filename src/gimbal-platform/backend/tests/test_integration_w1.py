@@ -2,16 +2,9 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from sqlalchemy import select
 
 from app.core import db as db_module
-from app.core.security import fernet_encrypt
-from app.models.auth_session import AuthSession
 from app.models.user import User
 from tests.helpers import make_draft, register_and_login
 from tests.test_scenario_composer_plate_integration import (  # noqa: F401
@@ -43,14 +36,14 @@ async def test_scenario_preview(client):
     assert body["missingCredentials"] == ["gitlab"]
     assert body["workingPreview"] is False
 
-    # 补配凭证 → 缺失清空
+    # 补配凭证(四件套:条目 gitlab + 本人池账户)→ 缺失清空
+    from .conftest import seed_identity_fixture
     async with db_module.SessionLocal() as db:
         uid = (await db.execute(select(User).where(
             User.username == "w1_a"))).scalars().one().id
-        db.add(AuthSession(
-            owner_id=uid, alias="gitlab", url="http://127.0.0.1:1",
-            username_enc=fernet_encrypt("u"),
-            password_enc=fernet_encrypt("p")))
+        await seed_identity_fixture(
+            db, alias="gitlab", username="u", password="p",
+            service="svc", owner_id=uid)
         await db.commit()
     r = await client.get("/api/integration/scenario-preview", headers=u1,
                          params={"scenarioId": "sc-w1"})

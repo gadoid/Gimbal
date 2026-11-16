@@ -7,11 +7,6 @@ lease=now)`` 直调(测试直调路径,lease 跳过判定),暂停断言落库面
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
@@ -130,12 +125,17 @@ class TestPreRunChecks:
             "config": {},
             "steps": [dict(GET_STEP, call=dict(GET_STEP["call"],
                                                service="sx-alias"))]}}
+        from app.models import Environment, Service, ServiceIdentity
         from app.models.composer_scenario import ComposerScenario
-        from app.models.service_alias import ServiceAlias
         uid = await _uid("sx_owner")
         async with db_module.SessionLocal() as s:
-            s.add(ServiceAlias(alias_name="sx-alias", base_service="pay",
-                               kind="external"))
+            s.add(Environment(name="测试", is_default=True))
+            await s.flush()
+            env = (await s.execute(sa.select(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar()
+            s.add(Service(name="pay", system="pay", kind="plate"))
+            s.add(ServiceIdentity(alias_name="sx-alias", base_service="pay",
+                                  env_id=env, ref_mode="default"))
             from .helpers import seed_deployment
             await seed_deployment(s, "pay", "https://sx.local")
             s.add(ComposerScenario(scenario_id="sc-sx",

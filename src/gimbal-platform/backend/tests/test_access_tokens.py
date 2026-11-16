@@ -6,18 +6,12 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
-
 import sqlalchemy as sa
 from httpx import AsyncClient
 
 from app.core import db as db_module
 from app.models.access_token import AccessToken
-from app.models.auth_session import AuthSession
+from app.models import ServiceIdentity
 from app.models.permission import AuditLog
 from app.models.user import User
 from app.services import access_token as at_svc
@@ -76,17 +70,35 @@ async def _api_token(client: AsyncClient, h: dict, body: dict) -> dict:
 
 
 async def _add_credential(username: str, alias: str = "qa-cred") -> int:
-    from app.core.security import fernet_encrypt
+    """四件套:条目 alias(username-ref)+ 本人池账户;返回账户 id
+    (令牌范围 authIds 存账户 id)。"""
+    from .conftest import seed_identity_fixture
     async with db_module.SessionLocal() as s:
         uid = (await s.execute(sa.select(User.id).where(
             User.username == username))).scalar_one()
-        row = AuthSession(owner_id=uid, alias=alias, url="https://a.local",
-                          username_enc=fernet_encrypt("u"),
-                          password_enc=fernet_encrypt("p"),
-                          slot=alias, is_default=True)   # S3 槽位绑定
-        s.add(row)
+        return await seed_identity_fixture(
+            s, alias=alias, username=f"{alias}-u", password="p",
+            service="svc", owner_id=uid)
+
+
+async def _seed_alias_account(name: str, username: str, owner_id: int,
+                              *, base_url: str | None = None) -> int:
+    """seed_alias 之上的取用账户(条目服务键进注入清单 → S5 需池内
+    可解;条目 default-ref → 同名系统默认账户)。返回账户 id。"""
+    from app.core.security import fernet_encrypt
+    from app.models import AuthAccount, Service
+    from .helpers import seed_deployment
+    async with db_module.SessionLocal() as s:
+        env = (await s.execute(sa.text(
+            "SELECT id FROM environments WHERE is_default = TRUE"
+        ))).scalar()
+        s.add(Service(name=name, system=name, kind="plate"))
+        acc = AuthAccount(owner_id=owner_id, system=name, env_id=env,
+                          username=username,
+                          password_enc=fernet_encrypt("p"), is_default=True)
+        s.add(acc)
         await s.commit()
-        return row.id
+        return acc.id
 
 
 async def _exec_done(execution_id: int) -> None:
@@ -637,9 +649,10 @@ class TestRunScope:
         _, plain = await mk_token(user_id=await _user_id("rs2"),
                                   scope_aliases=["gone-test"])
         # 对象删除后范围行级联消失 → 缺项分类为「已删除」
-        from app.models.service_alias import ServiceAlias as _SA
         async with db_module.SessionLocal() as s:
-            await s.delete(await s.get(_SA, "gone-test"))
+            row = (await s.execute(sa.select(ServiceIdentity).where(
+                ServiceIdentity.alias_name == "gone-test"))).scalar_one()
+            await s.delete(row)
             await s.commit()
         r = await client.post("/api/runs", headers=_gtk(plain), json={
             "scenarioId": "sc-rs3"})
@@ -648,13 +661,17 @@ class TestRunScope:
             {"kind": "alias", "name": "gone-test", "deleted": True}]
 
     async def test_scope_ok_passes_and_audited(self, client, monkeypatch):
-        await seed_alias("ok-test", base_url="https://ok.local")
         h = await _register_role(client, "rs3", "admin")
+        await seed_alias("ok-test", base_url="https://ok.local")
+        acc = await _seed_alias_account("ok-test", "ok-u",
+                                        await _user_id("rs3"))
         draft = _draft("sc-rs4", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="ok-test"))])
         await client.post("/api/scenarios", headers=h, json=draft)
+        # 条目服务键进注入清单 → 范围须同时含条目与可取用账户
         tid, plain = await mk_token(user_id=await _user_id("rs3"),
-                                    scope_aliases=["ok-test"])
+                                    scope_aliases=["ok-test"],
+                                    scope_auths=[acc])
         from app.services import run_dispatcher as rd
         cap: list[int] = []
 
@@ -805,13 +822,16 @@ class TestInterfaceFace:
                                                            monkeypatch):
         """§7.2 最近调用:成功与被拒同列;吊销后的被拒归到该令牌;
         hash 未命中不出现在任何令牌下。"""
-        await seed_alias("rc-test", base_url="https://rc.local")
         h = await _register_role(client, "if5", "admin")
+        await seed_alias("rc-test", base_url="https://rc.local")
+        acc = await _seed_alias_account("rc-test", "rc-u",
+                                        await _user_id("if5"))
         draft = _draft("sc-rc1", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="rc-test"))])
         await client.post("/api/scenarios", headers=h, json=draft)
         tid, plain = await mk_token(user_id=await _user_id("if5"),
-                                    scope_aliases=["rc-test"])
+                                    scope_aliases=["rc-test"],
+                                    scope_auths=[acc])
         # ① 成功调用一次
         from app.services import run_dispatcher as rd
 
@@ -867,14 +887,18 @@ class TestInterfaceFace:
 
 class TestScopeObjects:
     async def test_alias_rename_cascades_scope(self, client):
-        """§4.1:别名改名级联到范围行(ON UPDATE CASCADE),授权随名走。"""
+        """§4.1:条目改名级联到范围行(ON UPDATE CASCADE),授权随名走。
+
+        (改名不是服务面操作 —— 引用键稳定是架构决策;此处钉 DB 级
+        FK 契约,重建同条目时授权语义的底座。)
+        """
         await seed_alias("ren-a", base_url="https://ren.local")
         h = await _register_role(client, "so1", "admin")
         tid, _ = await mk_token(user_id=await _user_id("so1"),
                                 scope_aliases=["ren-a"])
-        from app.models.service_alias import ServiceAlias as _SA
         async with db_module.SessionLocal() as s:
-            row = await s.get(_SA, "ren-a")
+            row = (await s.execute(sa.select(ServiceIdentity).where(
+                ServiceIdentity.alias_name == "ren-a"))).scalar_one()
             row.alias_name = "ren-b"
             await s.commit()
         r = await client.get(f"/api/access-tokens/{tid}", headers=h)
@@ -934,19 +958,34 @@ class TestRegisterScopeGate:
 
     async def test_patch_scheme_out_of_scope_422(self, client):
         """令牌 PATCH 换超范围方案 → 422(按将生效配方核对,§5.4 保存面)。"""
-        # S6:凭证由别名声明槽位给出 —— rg-in 声明 auth-in;同基础服务的
-        # rg-in-wide 声明 auth-out(方案选它即换成范围外凭证)
-        await seed_alias("rg-in", base_url="https://in.local", slot="auth-in")
+        # S6:注入键 = 条目名 —— 方案选 rg-in-wide 即换成范围外条目
+        # (ref=username 锁定 auth-out 账户,与 rg-in 的默认账户区分)
+        from app.core.security import fernet_encrypt
+        from app.models import AuthAccount, Service
+        await seed_alias("rg-in", base_url="https://in.local")
         await seed_alias("rg-in-wide", base_url=None, base_service="rg-in",
-                         slot="auth-out")
+                         ref_mode="username", ref_username="auth-out")
         h = await _register_role(client, "rg2", "admin")
-        await _add_credential("rg2", alias="auth-in")
-        await _add_credential("rg2", alias="auth-out")
+        uid_rg2 = await _user_id("rg2")
+        async with db_module.SessionLocal() as s:
+            env = (await s.execute(sa.text(
+                "SELECT id FROM environments WHERE is_default = TRUE"
+            ))).scalar()
+            s.add(Service(name="rg-in", system="rg-in", kind="plate"))
+            s.add(AuthAccount(owner_id=uid_rg2, system="rg-in", env_id=env,
+                              username="auth-in",
+                              password_enc=fernet_encrypt("p"),
+                              is_default=True))
+            s.add(AuthAccount(owner_id=uid_rg2, system="rg-in", env_id=env,
+                              username="auth-out",
+                              password_enc=fernet_encrypt("p"),
+                              is_default=False))
+            await s.commit()
         draft = _draft("sc-rg2", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="rg-in"))])
         await client.post("/api/scenarios", headers=h, json=draft)
-        # 方案 A:用服务键自身(槽位 auth-in);方案 B:选别名 rg-in-wide
-        # (槽位 auth-out)(body 是 RunScheme 平铺形状,serviceBindings 在顶层)
+        # 方案 A:注入 rg-in(默认账户);方案 B:绑定换用 rg-in-wide
+        # (ref 锁定 auth-out 账户)(body 是 RunScheme 平铺形状,serviceBindings 在顶层)
         r = await client.post("/api/scenarios/sc-rg2/run-schemes", headers=h,
                               json={"name": "ok", "serviceBindings": {}})
         assert r.status_code == 201, r.text
@@ -956,12 +995,13 @@ class TestRegisterScopeGate:
                                   "rg-in": {"alias": "rg-in-wide"}}})
         assert r.status_code == 201, r.text
         scheme_wide = r.json().get("schemeId") or r.json().get("id")
-        # 令牌范围:别名 rg-in + 凭证 auth-in(不含 auth-out)
+        # 令牌范围:条目 rg-in + 账户 auth-in(不含 auth-out 账户)
         uid = await _user_id("rg2")
         async with db_module.SessionLocal() as s:
-            auth_in = (await s.execute(sa.select(AuthSession.id).where(
-                AuthSession.owner_id == uid,
-                AuthSession.alias == "auth-in"))).scalar_one()
+            from app.models import AuthAccount
+            auth_in = (await s.execute(sa.select(AuthAccount.id).where(
+                AuthAccount.owner_id == uid,
+                AuthAccount.username == "auth-in"))).scalar_one()
         _, plain = await mk_token(user_id=uid, scope_aliases=["rg-in"],
                                   scope_auths=[auth_in])
         r = await client.post("/api/integration/tasks", headers=_gtk(plain),
@@ -971,14 +1011,15 @@ class TestRegisterScopeGate:
                                     "triggerCron": "0 3 * * *"})
         assert r.status_code == 201, r.text
         task_id = r.json()["id"]
-        # 换到超范围方案 → 422(缺项 = 凭证 auth-out 未授权)
+        # 换到超范围方案 → 422(缺项 = 条目 rg-in-wide 未授权;
+        # 其 ref 账户在池但不在范围 → deleted=False)
         r = await client.patch(f"/api/integration/tasks/{task_id}",
                                headers=_gtk(plain),
                                json={"schemeId": scheme_wide})
         assert r.status_code == 422, r.text
         detail = r.json()["detail"]
         assert detail["code"] == "resource_not_allowed"
-        assert {"kind": "auth", "name": "auth-out",
+        assert {"kind": "auth", "name": "rg-in-wide",
                 "deleted": False} in detail["missing"]
         # 换回范围内方案 → 200
         r = await client.patch(f"/api/integration/tasks/{task_id}",

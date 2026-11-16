@@ -21,11 +21,6 @@
 from __future__ import annotations
 import pytest  # noqa: E402
 
-# P1-7:底座重构(条目→ref→账户)测试迁移待续 —— 布景仍按旧凭证/别名模型,先 skip 保全会话;续期按 conftest.seed_identity_fixture 四件套范式逐文件恢复。
-import pytest  # noqa: E402 — P1-7 迁移期 skip 标记
-pytestmark = pytest.mark.skip(reason="P1-7 registry-rework: 待迁移到新底座")
-
-
 from sqlalchemy import select
 
 from app.core import db as db_module
@@ -268,16 +263,17 @@ async def test_subscribe_without_fingerprint_422(client, plate_mock):
 
 
 async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch):
-    """两链统一:别名声明槽位并入集成注入清单(exec_auth_aliases 唯一
-    实现);方案绑定选别名 → 换成该别名的槽位(authz M2a S6);缺默认
-    凭证按 S0② 暂停并列出;有凭证则注入物化(resolved_auths 非空)。"""
+    """两链统一:登记条目并入集成注入清单(exec_auth_aliases 唯一
+    实现);方案绑定选条目 → 注入键随之换(authz M2a S6;条目模型
+    无槽,键 = 条目名);缺可解账户按 S0② 暂停并列出;有账户则注入
+    物化(resolved_auths 非空)。"""
     from sqlalchemy import select as _sel
     from app.core import db as dbm
     from app.core.security import fernet_encrypt
-    from app.models.auth_session import AuthSession
+    from app.models import (AuthAccount, Environment, Service,
+                            ServiceIdentity)
     from app.models.composer_run_scheme import ComposerRunScheme
     from app.models.integration_task import IntegrationTask
-    from app.models.service_alias import ServiceAlias
     from app.models.user import User
     from app.services import integration_runner as ir
 
@@ -296,19 +292,25 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
                              json=_task_body("sc-cfa"))).json()["id"]
 
     async with dbm.SessionLocal() as db:
-        db.add(ServiceAlias(alias_name="svc2", base_service="svc2",
-                            slot="codfish"))
-        db.add(ServiceAlias(alias_name="svc2-other", base_service="svc2",
-                            slot="other"))
+        db.add(Environment(name="测试", is_default=True))
+        await db.flush()
+        env = (await db.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar()
+        # 条目即注入键(条目模型无槽):svc2 / svc2-other(default-ref)
+        db.add(Service(name="svc2", system="svc2", kind="plate"))
+        db.add(ServiceIdentity(alias_name="svc2", base_service="svc2",
+                               env_id=env, ref_mode="default"))
+        db.add(ServiceIdentity(alias_name="svc2-other", base_service="svc2",
+                               env_id=env, ref_mode="default"))
         await db.commit()
 
-    # 摘要面:别名默认并入注入清单
+    # 摘要面:步骤服务键是登记条目 → 并入注入清单
     sm = (await client.get(
         f"/api/integration/tasks/{tid}/subscription-summary",
         headers=u1)).json()
-    assert "codfish" in sm["authAliases"]
+    assert "svc2" in sm["authAliases"]
 
-    # 方案选别名:svc2 → svc2-other(声明槽位 other)替换默认槽
+    # 方案选条目:svc2 → svc2-other(注入键随之换)
     async with dbm.SessionLocal() as db:
         db.add(ComposerRunScheme(
             scheme_id="rs-cfa", scenario_id="sc-cfa-public", name="s",
@@ -320,9 +322,9 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
     sm = (await client.get(
         f"/api/integration/tasks/{tid}/subscription-summary",
         headers=u1)).json()
-    assert sm["authAliases"] == ["other"]
+    assert sm["authAliases"] == ["svc2-other"]
 
-    # 回默认方案;无 codfish 凭证 → run 暂停 missing_credential
+    # 回默认方案;svc2 条目无账户可解 → run 暂停 missing_credential
     await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
                        json={"schemeId": ""})
     await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
@@ -333,14 +335,15 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
         uid = (await db.execute(_sel(User).where(
             User.username == "cfa_a"))).scalars().one().id
     assert inst.paused_reason == "missing_credential"
-    assert "codfish" in (inst.last_error or "")
+    assert "svc2" in (inst.last_error or "")
 
-    # 补凭证 + 复活 → 物化收到注入(默认凭证进 resolved_auths)
+    # 补账户(default-ref 取用行)+ 复活 → 物化收到注入
     async with dbm.SessionLocal() as db:
-        db.add(AuthSession(
-            owner_id=uid, alias="codfish", url="http://127.0.0.1:1",
-            username_enc=fernet_encrypt("u"),
-            password_enc=fernet_encrypt("p")))
+        env = (await db.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar()
+        db.add(AuthAccount(
+            owner_id=uid, system="svc2", env_id=env, username="codfish",
+            password_enc=fernet_encrypt("p"), is_default=True))
         await db.commit()
     await ir.revive_paused_instances(user_id=uid)
     captured = {}

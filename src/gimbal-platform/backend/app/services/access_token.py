@@ -396,9 +396,16 @@ async def check_scope(
             by_name.setdefault(ident.alias_name, ids)
         for alias in sorted(set(used.auths)):
             ids = by_name.get(alias, set())
+            if not ids:
+                # 池内无该条目可取用的账户 —— 授权面无从谈起(范围只
+                # 覆盖存在的账户;缺账户由执行链 S5/集成 missing 报)
+                continue
             if ids & scope_auths:
                 continue
-            missing.append(ScopeMissing("auth", alias, rid is None))
+            # 有可取用账户但均不在范围 = 未授权(P1 缺陷修复:原码误引
+            # 未定义名 rid → 复核路径 NameError;auth 支路无「已删除」
+            # 分类 —— 账户删除即解析不出,走上句跳过)
+            missing.append(ScopeMissing("auth", alias, False))
     return missing or None
 
 
