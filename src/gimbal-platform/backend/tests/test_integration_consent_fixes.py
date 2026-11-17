@@ -76,6 +76,8 @@ def _task_body(sid: str, **over) -> dict:
 
 
 async def _mk_scenario(client, h, sid: str, plate: dict) -> None:
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("jira-svc")   # M3 §8.5:定时路径硬门地址落点
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=ANCHORED_STEPS,
                                           plate=plate, system=["jira"]))
@@ -277,6 +279,8 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
     from app.models.user import User
     from app.services import integration_runner as ir
 
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("svc2")   # M3 §8.5:定时路径硬门地址落点
     u1 = await register_and_login(client, "cfa_a", "pw123456")
     r = await client.post("/api/scenarios", headers=u1, json=make_draft(
         "sc-cfa", steps=[{
@@ -292,10 +296,13 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
                              json=_task_body("sc-cfa"))).json()["id"]
 
     async with dbm.SessionLocal() as db:
-        db.add(Environment(name="测试", is_default=True))
-        await db.flush()
         env = (await db.execute(_sel(Environment.id).where(
             Environment.is_default.is_(True)))).scalar()
+        if env is None:
+            db.add(Environment(name="测试", is_default=True))
+            await db.flush()
+            env = (await db.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar()
         # 条目即注入键(条目模型无槽):svc2 / svc2-other(default-ref)
         db.add(Service(name="svc2", system="svc2", kind="plate"))
         db.add(ServiceIdentity(alias_name="svc2", base_service="svc2",

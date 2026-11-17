@@ -674,11 +674,12 @@ async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
     plate_mock.lines = {"ep-carry-x": [{"line": "t", "revisions": 1, "latest": "t#1"}]}
     """契约声明了 $.customer_id(carry,body 无)→ 条目不再被 skip;
     plate 不可得声明面时该条目仍被 skip(降级从严)。"""
-    from .helpers import make_draft as _draft, wait_until as _wait
+    from .helpers import make_draft as _draft, wait_until as _wait, seed_service_runtime
     from .test_run_m1_capabilities import _patch_launch_capture
     from .test_scenario_visibility_and_copy import _member
 
     bob = await _member(client, "bob")
+    await seed_service_runtime("fin-svc")   # M3 §8.5:派发硬门地址落点
     # W5/A-2:预览判定改为「任一受管系统 working/未钉即预览」。锚点
     # ep-carry-x 的系统要判正式,必须在 meta.plate 钉定 —— 否则下面的
     # 悬空 409(正式执行)会按预览放行。PlateMock 的 /resolve 回原修订。
@@ -1030,11 +1031,12 @@ async def test_baseline_ledger_written_on_dispatch(
 ):
     """A-3/W7:入库台账随派发落库 —— 钉定+全评审 → eligible;未钉
     (working)→ block=working。台账三列(0020)+ plate_pins 同点写。"""
-    from .helpers import make_draft as _draft, wait_until as _wait
+    from .helpers import make_draft as _draft, wait_until as _wait, seed_service_runtime
     from .test_run_m1_capabilities import _patch_launch_capture
     from .test_scenario_visibility_and_copy import _member
 
     bob = await _member(client, "bob")
+    await seed_service_runtime("fin-service")   # M3 §8.5:派发硬门地址落点
     steps = [{"kind": "step", "endpoint": "fin.orders.get",
               "call": {"service": "fin-service", "method": "GET", "path": "/o"},
               "request": {"kind": "request", "body": {}}, "strategy": []}]

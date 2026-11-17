@@ -82,6 +82,20 @@ async def _seed_identities(*names: str) -> None:
         await s.commit()
 
 
+async def _seed_deployment() -> None:
+    """M3 §8.5:派发硬门要求地址落点 —— fin-service 在默认环境的部署行
+    (②③ 双缺 = address_missing 409;此前靠引擎缺口报错兜底)。"""
+    from app.models import Deployment
+    env = await _env_id()
+    async with db_module.SessionLocal() as s:
+        if (await s.execute(sa.select(Deployment.id).where(
+                Deployment.base_service == "fin-service",
+                Deployment.env_id == env))).scalar_one_or_none() is None:
+            s.add(Deployment(base_service="fin-service", env_id=env,
+                             base_url="https://fin.local"))
+            await s.commit()
+
+
 async def test_binding_alias_switches_identity(client, plate_mock: PlateMock,
                                                monkeypatch):
     """serviceBindings {fin-service: {alias: fin-service-maker}} → 该条目
@@ -91,6 +105,7 @@ async def test_binding_alias_switches_identity(client, plate_mock: PlateMock,
     await _seed_scenario(client, bob)
     await _seed_pool_auth("bob", "qa1")
     await _seed_pool_auth("bob", "fin-service-maker")  # 四件套连条目一起建
+    await _seed_deployment()
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -121,6 +136,7 @@ async def test_template_scan_without_binding_injects(client, plate_mock: PlateMo
     bob = await _member(client, "bob")
     await _seed_scenario(client, bob)
     await _seed_pool_auth("bob", "qa1")
+    await _seed_deployment()
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -138,6 +154,7 @@ async def test_legacy_payload_fields_silently_ignored(client, plate_mock: PlateM
     bob = await _member(client, "bob")
     await _seed_scenario(client, bob)
     await _seed_pool_auth("bob", "qa1")
+    await _seed_deployment()
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
@@ -187,16 +204,19 @@ async def test_binding_alias_validation(client, plate_mock: PlateMock):
 
 async def test_missing_auth_slot_refuses_dispatch(client, plate_mock: PlateMock):
     """S5 失败即中止:注入清单的条目在执行人池解不到账户 → 整单 409
-    auth_aliases_missing(此前告警继续、执行期步骤级报错)。"""
+    (M3 §8.5 起 code = account_missing,旧 auth_aliases_missing 随硬门
+    细分为 identity/account 两码;此前告警继续、执行期步骤级报错)。"""
     plate_mock.behaviour = "echo"
     bob = await _member(client, "missauth")
     await _seed_scenario(client, bob)
     # 条目登记了,但执行人池无账户可解(不种四件套 —— default-ref 会吃
-    # 池内默认账户,故本用例连 qa1 一起缺)
-    await _seed_identities("fin-service-x")
+    # 池内默认账户,故本用例连 qa1 一起缺;qa1 也种条目行,聚焦缺账户)
+    await _seed_identities("qa1", "fin-service-x")
     r = await client.post("/api/runs", headers=bob, json=_run_payload(
         dataSetIds=[],
         serviceBindings={"fin-service": {"alias": "fin-service-x"}}))
     assert r.status_code == 409, r.text
-    assert "auth_aliases_missing" in r.text
-    assert "fin-service-x" in r.text
+    det = r.json()["detail"]
+    assert det["code"] == "account_missing"
+    assert det["credentialSource"] == "personal"
+    assert "fin-service-x" in det["message"]

@@ -856,6 +856,7 @@ async def dispatch_run(
     token: "object | None" = None,
     trace: "dict | None" = None,
     exec_replay: dict | None = None,
+    env_replay: dict | None = None,
 ) -> RunResponse:
     """库中场景的派发入口 = 取场景 → :func:`dispatch_target`(P3 §六)。
 
@@ -863,7 +864,10 @@ async def dispatch_run(
     临时调用由路由层自行构造 :class:`RunTarget` 直接走第二段。
     ``exec_replay``(④ 分层):重跑传入的执行配置**终值**快照
     (slotMap/carryOverrides/execConfigId)—— 不回查配置行(§7:
-    配置后改不影响历史执行;env 已由快照 environmentId 显式位回放)。
+    配置后改不影响历史执行)。
+    ``env_replay``(§8.2 快照兼容):重跑传入首发环境快照
+    (``{environmentId, environmentSource}``)—— 直用不重解析;
+    缺键旧行传 None = 按新链正常解析。
 
     ``preloaded_scenario``: the runs router already loads the scenario
     row for the ownership check — pass it here to avoid querying
@@ -892,7 +896,7 @@ async def dispatch_run(
         RunTarget(scenario_id=scen.scenario_id,
                   payload=scen.payload or {}, kind="scenario"),
         chain_override=chain_override, token=token, trace=trace,
-        exec_replay=exec_replay)
+        exec_replay=exec_replay, env_replay=env_replay)
 
 
 async def dispatch_target(
@@ -906,6 +910,7 @@ async def dispatch_target(
     token: "object | None" = None,
     trace: "dict | None" = None,
     exec_replay: dict | None = None,
+    env_replay: dict | None = None,
 ) -> RunResponse:
     """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
     worker 认领驱动；本函数不再 spawn 进程内 fanout）。
@@ -971,7 +976,7 @@ async def dispatch_target(
     # 选定或默认行);令牌(同指纹不变量)/编排 graph(单元自治)/临时
     # 调用不吃 —— 显式携带而不可用即拒,不静默忽略(似生效未生效)。
     # ④ 分层:``exec_replay``(重跑)传入终值快照 —— 不回查配置行、
-    # 不走解析(§7:配置后改不影响历史执行;env 由快照显式位回放)。
+    # 不走解析(§7:配置后改不影响历史执行;env 回放见 ``env_replay``)。
     _req_exec_id = getattr(req, "exec_config_id", None)
     _exec_replay = exec_replay or None
     _exec_cfg = None
@@ -1008,14 +1013,28 @@ async def dispatch_target(
     # §8.2 标签解析链(2026-11-17 环境降级轮):**有效调用身份标签 >
     # 项目默认 > 平台默认**。显式注入(RunRequest/graph 的
     # environmentId)与方案/执行配置/偏好链位全部退役;多身份标签
-    # 不一致 → env_mixed 硬拦截(无逃生口)。有效身份 = 绑定 + 执行
-    # 配置换用(slot_map)后的取用集合。graph 单元自治:顶层不解析
-    # (快照记空),逐单元在 materialize_graph 内按各自身份集合解析;
-    # 重跑(replay)的快照标签在装配处回放。
-    from .env_chain import EnvMixed, resolve_execution_tag
+    # 不一致 → env_mixed 硬拦截(无逃生口)。三路分流:
+    # * rerun(``env_replay``)按首发快照回放,不重解析(P1-3 修复:
+    #   旧通道经 RunRequest.environmentId 传键,字段退役后被 pydantic
+    #   静默丢弃,「按快照回放」实际从未生效);
+    # * graph 单元自治:顶层不解析(快照记空),逐单元在
+    #   materialize_graph 内按各自身份集合解析(P1-2 修复:此前顶层
+    #   无条件解析,宿主标签恒非空,被 graph_dispatch 当重放快照钉
+    #   整图,逐单元解析不可达);
+    # * scenario/adhoc 现解析:有效身份 = 绑定 + 执行配置换用(slot_map)
+    #   后的取用集合;adhoc 无项目归属,身份自 payload 定义扫描
+    #   (call.user = 条目名,与 prepare_adhoc 校验链同口径 —— P1-1
+    #   修复:此前派发侧不填身份名,执行标签恒为平台默认,校验过的
+    #   地址/版本线与实际执行可能不是同一套)。
+    from .env_chain import EnvChoice, EnvMixed, NO_ENV, resolve_execution_tag
+    # 身份/项目坐标先集(rerun 回放也需要 project_id 供硬门地址/分区判定)
     _tag_names: list[str] = []
     _project_id: int | None = None
-    if target.kind == "scenario":
+    if target.kind == "adhoc":
+        from . import service_aliases as _sa
+        _tag_names = list(await _sa.exec_auth_aliases_of_definition(
+            db, definition_from_payload(scenario_payload), _bindings))
+    elif target.kind == "scenario":
         from sqlalchemy import select as _sel
         _project_id = (await db.execute(_sel(ComposerScenario.project_id).where(
             ComposerScenario.scenario_id == target.scenario_id))).scalar()
@@ -1027,12 +1046,17 @@ async def dispatch_target(
             _sm = await _slo(db, steps, _bindings, _exec_cfg.bindings)
             _tag_names = list(dict.fromkeys(
                 _sm.get(a, a) for a in _tag_names if _sm.get(a, a)))
-    try:
-        env_choice = await resolve_execution_tag(
-            db, identity_names=_tag_names, project_id=_project_id)
-    except EnvMixed as e:
-        raise Conflict("env_mixed", str(e),
-                       extra={"identities": e.entries}) from None
+    if env_replay is not None:
+        env_choice = EnvChoice.from_snapshot(env_replay) or NO_ENV
+    elif getattr(req, "graph", None) is not None:
+        env_choice = NO_ENV
+    else:
+        try:
+            env_choice = await resolve_execution_tag(
+                db, identity_names=_tag_names, project_id=_project_id)
+        except EnvMixed as e:
+            raise Conflict("env_mixed", str(e),
+                           extra={"identities": e.entries}) from None
 
     # 环境告警（§6.3）:本次标签的版本线 vs 场景钉定 → 写 config_json
     try:
@@ -1175,29 +1199,24 @@ async def dispatch_target(
         from .service_aliases import slot_lookup_overrides
         _slot_map = await slot_lookup_overrides(
             db, steps, _bindings, _exec_cfg.bindings)
-    if auth_aliases:
-        from .run_prepare import pick_bindings
-        _picked = await pick_bindings(
-            db, user_id, list(dict.fromkeys(
-                _slot_map.get(a, a) for a in auth_aliases
-                if _slot_map.get(a, a))),
-            cred_project_id=cred_project_id)
-        _picked_slots = {r.slot for r in _picked}
-        _missing = sorted(a for a in set(auth_aliases)
-                          if _slot_map.get(a, a) not in _picked_slots)
-        if _missing:
-            raise Conflict(
-                "auth_aliases_missing",
-                ("以下身份条目项目凭证未登记,请项目管理员在项目配置页"
-                 "登记,或改用个人凭证:"
-                 if cred_project_id is not None else
-                 "以下身份条目在你名下未装载,请先在凭证管理登记账户或换绑条目:")
-                + "、".join(_missing),
-                extra={"aliases": _missing,
-                       "credentialSource": ("project"
-                                            if cred_project_id is not None
-                                            else "personal")},
-            )
+    # M3 §8.5 预检硬门(2026-11-17):三路径统一 —— UI/JWT、access
+    # token 都经本漏斗;判定与 /run/precheck 共用一套分类(run_precheck
+    # 私有函数,「不开第二份」)。webhook 定时路径在 integration_runner
+    # 装载前接同一门。graph(逐单元物化)与 adhoc(check_addresses
+    # 专属链)不走此门。旧 auth_aliases_missing 缺失检查由门的
+    # identity_missing/account_missing 细分承接(码更准,文案承接)。
+    if target.kind == "scenario" and getattr(req, "graph", None) is None:
+        from ..routers.run_precheck import PrecheckGateError, precheck_hard_gate
+        try:
+            await precheck_hard_gate(
+                db, project_id=_project_id,
+                definition=definition_from_payload(scenario_payload),
+                user_id=user_id, bindings=_bindings,
+                auth_aliases=auth_aliases,
+                slot_map=_slot_map or None,
+                cred_project_id=cred_project_id, env=env_choice)
+        except PrecheckGateError as e:
+            raise Conflict(e.code, e.message, extra=e.detail) from None
 
     # M2b Q3 数据集按账号驱动:行账号列 ``@slot.<槽>`` = 本次凭证池里的
     # 绑定名。派发前扫全部选中行 fail-fast(缺失 / 环境不符整单拒发);

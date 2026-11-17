@@ -50,14 +50,18 @@ async def _seed_scenario(client, h, sid: str) -> None:
 
 async def _seed_addresses(env_name: str, *,
                           deploy_url: str | None) -> int:
-    """建环境 + 条目(标签钉该环境)+ 主档 + 该环境的部署行;返回环境 id。"""
+    """建环境 + 条目(标签钉该环境)+ 主档 + 该环境的部署行 + 实例
+    登录口(M3 §8.5 派发硬门 login_missing 口径);返回环境 id。"""
     async with db_module.SessionLocal() as s:
+        from app.models import SystemEnvInstance
         env_id = await _env(s, env_name)
         if (await s.execute(sa.select(MService.id).where(
                 MService.name == _BASE))).scalar_one_or_none() is None:
             s.add(MService(name=_BASE, system=_BASE, kind="plate"))
         s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
                               env_id=env_id, ref_mode="default"))
+        s.add(SystemEnvInstance(system=_BASE, env_id=env_id,
+                                login_url=f"http://login-{env_id}"))
         if deploy_url:
             s.add(Deployment(base_service=_BASE, env_id=env_id,
                              base_url=deploy_url))
@@ -190,8 +194,9 @@ async def test_dispatch_identity_tag_snapshot_and_address(
     assert cfg["environmentId"] == dev
     assert cfg["environmentSource"] == "identity"
 
-    # 不带身份的场景(未登记服务键):无标签 → 无 ③,地址留缺口
-    # (引擎显式报错),快照键缺席
+    # 不带身份的场景(未登记服务键):无标签 → 无 ③,地址留缺口 ——
+    # M3 §8.5 起为派发前硬拦(address_missing 409,错误时机从引擎步骤
+    # 级前移;旧行为 = 201 放行、执行期报错已退役)
     raw_step = {"kind": "step",
                 "call": {"service": "s21-ghost-svc", "method": "GET",
                          "path": "/x"},
@@ -200,17 +205,15 @@ async def test_dispatch_identity_tag_snapshot_and_address(
                       json=_draft("sc-s21-raw", steps=[raw_step]))
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-s21-raw", dataSetIds=[]))
-    assert r.status_code == 201, r.text
-    await _wait(lambda: len(cases) >= 2)
-    assert "s21-ghost-svc" not in cases[1]["config"]["services"]
-    cfg, _ = await _last_config_json()
-    assert "environmentId" not in cfg
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "address_missing"
+    assert r.json()["detail"]["services"] == ["s21-ghost-svc"]
 
     # 重跑按快照回放(第一次执行的标签)
     r = await client.post(f"/api/executions/{ex_id}/rerun", headers=h)
     assert r.status_code == 201, r.text
-    await _wait(lambda: len(cases) >= 3)
-    assert cases[2]["config"]["services"][_ALIAS] == "http://dep-dev"
+    await _wait(lambda: len(cases) >= 2)
+    assert cases[1]["config"]["services"][_ALIAS] == "http://dep-dev"
 
 
 async def test_dispatch_scheme_env_key_ignored(
@@ -246,10 +249,14 @@ async def _env_and_commit(name: str) -> int:
 
 async def test_dispatch_environment_id_ignored(client, plate_mock: PlateMock):
     """旧客户端多发 environmentId(含不存在的 id):静默忽略,不再 404
-    —— 标签一律自动解析(本场景无身份且无默认 → 无标签,201 照发)。"""
+    —— 标签一律自动解析(本场景无身份且无默认 → 无标签,201 照发)。
+    M3 §8.5:场景带 ② 声明地址过派发硬门(无标签 = 无 ③,直连生效)。"""
     plate_mock.behaviour = "echo"
     h = await _member(client, "s21miss")
-    await _seed_scenario(client, h, "sc-s21-miss")
+    draft = _draft("sc-s21-miss", steps=[_STEP])
+    draft["definition"]["config"] = {"services": {_ALIAS: "http://direct"}}
+    r = await client.post("/api/scenarios", headers=h, json=draft)
+    assert r.status_code in (200, 201), r.text
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-s21-miss", dataSetIds=[], environmentId=99999))
     assert r.status_code == 201, r.text

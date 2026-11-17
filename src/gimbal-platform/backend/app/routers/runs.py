@@ -283,12 +283,19 @@ async def _post_adhoc_run(
         scenario_id=run_prepare.adhoc_placeholder_id(run_id),
         payload=payload, kind="adhoc")
     # §7.1 追溯:临时调用地址全部经 ③(标签部署地址;§8.2 链 =
-    # 身份标签 > 平台默认);无内置认证、无范围外目标
+    # 身份标签 > 平台默认);无内置认证、无范围外目标。EnvMixed →
+    # 409(M3 §8.5;正常时序里 check_addresses 已先拦,此处兜底)。
     from ..services import env_chain as _ec, service_aliases as sa_svc
+    try:
+        _trace_env = await _ec.resolve_execution_tag(
+            db, identity_names=used.aliases)
+    except _ec.EnvMixed as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "env_mixed", "message": str(e),
+                    "identities": e.entries}) from None
     alias_urls = await sa_svc.base_urls_for(
-        db, used.aliases,
-        env=await _ec.resolve_execution_tag(
-            db, identity_names=used.aliases))
+        db, used.aliases, env=_trace_env)
     trace = {
         "resolvedServices": {
             svc: {"url": alias_urls.get(svc), "source": "alias", "alias": svc}

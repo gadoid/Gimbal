@@ -67,6 +67,7 @@ async def seed_identity_fixture(
     db, *, alias: str, username: str, password: str,
     service: str = "fin-service", system: str | None = None,
     env_name: str = "测试", login_url: str = "https://svc.internal",
+    base_url: str | None = "https://svc-deploy.internal",
     owner_id: "int | None" = None, project_id: "int | None" = None,
     is_default: bool = True, ref_mode: str = "username",
     account_fields: dict | None = None,
@@ -74,12 +75,16 @@ async def seed_identity_fixture(
 ) -> int:
     """四件套一键布景(重构 §4.1 测试范式):环境 + 主档 + 账户 + 身份
     条目。旧「单建 AuthSession 行」的测试布景在此收敛 —— 新解析链
-    (条目→ref→账户)要求四件齐全。返回账户 id。"""
+    (条目→ref→账户)要求四件齐全。返回账户 id。
+
+    M3 §8.5(2026-11-17)补第五件:部署行(``base_url``,幂等;传
+    ``base_url=None`` 跳过)—— 派发硬门要求地址落点,布景不再依赖
+    「引擎缺口报错」兜底。"""
     from sqlalchemy import select
 
     from app.core.security import fernet_encrypt
     from app.models import (
-        AuthAccount, Environment, Service, ServiceIdentity,
+        AuthAccount, Deployment, Environment, Service, ServiceIdentity,
         SystemEnvInstance,
     )
 
@@ -106,6 +111,15 @@ async def seed_identity_fixture(
         if have_inst is None:
             db.add(SystemEnvInstance(
                 system=system or service, env_id=env, login_url=login_url))
+    if base_url:
+        from sqlalchemy import select as _sel3
+
+        have_dep = (await db.execute(_sel3(Deployment.id).where(
+            Deployment.base_service == service,
+            Deployment.env_id == env))).scalar()
+        if have_dep is None:
+            db.add(Deployment(base_service=service, env_id=env,
+                              base_url=base_url))
     acc = AuthAccount(
         owner_id=owner_id, project_id=project_id,
         system=system or service, env_id=env, username=username,

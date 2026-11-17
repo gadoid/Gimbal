@@ -1036,11 +1036,14 @@ async def _resume_instance(db: AsyncSession, tpl: IntegrationTask,
 
 #: 「启动」放行的暂停原因(§3.3 恢复入口):manual/fail_streak 可直接
 #: 恢复;scope_denied(场景公开后)/ resource_not_allowed(缺项处置后)
-#: 条件由管理者满足后启动,下次运行再过复核闸。token_* 三类各有专属
-#: 路径,不由「启动」代偿。authz C1:token_owner_ineligible 随 W5/0036
-#: 退役(存量已由迁移恢复,不再产生)。
+#: 条件由管理者满足后启动,下次运行再过复核闸。M3 §8.5(2026-11-17):
+#: precheck_config = 定时路径预检硬门的标签/地址域暂停码 —— 修正
+#: 环境/地址/条目标签配置后人工恢复(凭证域命中沿用 missing_credential,
+#: 复活钩子自动恢复,不走本码)。token_* 三类各有专属路径,不由
+#: 「启动」代偿。authz C1:token_owner_ineligible 随 W5/0036 退役
+#: (存量已由迁移恢复,不再产生)。
 _RESUMABLE = ("manual", "fail_streak", "scope_denied",
-              "resource_not_allowed")
+              "resource_not_allowed", "precheck_config")
 
 
 @router.post("/tasks/{task_id}/subscription/pause")
@@ -1107,7 +1110,8 @@ async def resume_my_subscription(
         else:
             hint = ("该暂停(" + reason + ")不能由恢复操作解除:"
                     "template_changed/made_private 请重新订阅确认,"
-                    "missing_credential 请补配凭证")
+                    "missing_credential 请补配凭证,"
+                    "precheck_config 请先修正环境/地址/条目标签配置")
         raise _bad("resume_not_allowed", hint, 409)
     if inst.state == "paused":
         via = (reason if reason in ("fail_streak", "scope_denied",

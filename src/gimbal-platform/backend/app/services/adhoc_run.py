@@ -247,8 +247,14 @@ async def check_addresses(
     from . import env_chain, service_aliases as _sa
     from .run_materialize import service_url_resolved
 
-    _env = await env_chain.resolve_execution_tag(
-        db, identity_names=identity_names)
+    # M3 §8.5:EnvMixed 映射 409 env_mixed(此前裸冒 500 —— 路由 except
+    # 清单只认 AdhocRejected/PlateUnavailableError)
+    try:
+        _env = await env_chain.resolve_execution_tag(
+            db, identity_names=identity_names)
+    except env_chain.EnvMixed as e:
+        raise AdhocRejected("env_mixed", str(e), status=409,
+                            extra={"identities": e.entries}) from None
     alias_base_urls = await _sa.base_urls_for(db, list(services), env=_env)
     missing = [s for s in services if not service_url_resolved(
         s, declared={}, alias_base_urls=alias_base_urls)]
@@ -301,8 +307,13 @@ async def resolve_versions(
 
     systems = list(dict.fromkeys(
         _system_of(str(st["endpoint"]).strip()) for st in steps))
-    choice = await env_chain.resolve_execution_tag(
-        db, identity_names=identity_names)
+    # M3 §8.5:同 check_addresses,EnvMixed → 409(不裸冒 500)
+    try:
+        choice = await env_chain.resolve_execution_tag(
+            db, identity_names=identity_names)
+    except env_chain.EnvMixed as e:
+        raise AdhocRejected("env_mixed", str(e), status=409,
+                            extra={"identities": e.entries}) from None
     env = (await db.get(Environment, choice.env_id)
            if choice.env_id is not None else None)
     meta_plate: dict[str, str] = {}

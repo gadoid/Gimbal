@@ -48,9 +48,13 @@ def _task_body(sid: str, **over) -> dict:
     return body
 
 
-async def _mk_scenario(client, h, sid: str, steps: list) -> None:
-    r = await client.post("/api/scenarios", headers=h,
-                          json=make_draft(sid, steps=steps))
+async def _mk_scenario(client, h, sid: str, steps: list,
+                        *, declared: dict | None = None) -> None:
+    draft = make_draft(sid, steps=steps)
+    if declared is not None:
+        # M3 §8.5:派发/装载硬门要求地址落点 —— 无标签布景走 ② 声明直连
+        draft["definition"]["config"] = {"services": declared}
+    r = await client.post("/api/scenarios", headers=h, json=draft)
     assert r.status_code in (200, 201), r.text
 
 
@@ -115,8 +119,10 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
     from app.services import integration_runner as ir
 
     h = await register_and_login(client, "s0_runner", "pw123456")
-    await _mk_scenario(client, h, "sc-s0r", PLAIN_STEPS)
-    await _mk_scenario(client, h, "sc-s0v", PLAIN_STEPS)   # "他人"场景
+    _declared = {"svc": "http://s0-direct"}
+    await _mk_scenario(client, h, "sc-s0r", PLAIN_STEPS, declared=_declared)
+    await _mk_scenario(client, h, "sc-s0v", PLAIN_STEPS,
+                       declared=_declared)   # "他人"场景
     # sc-s0r 回退落点 = 场景创建时自动生成的默认方案(不另插,
     # uq_run_scheme_default 唯一)
     await _insert_dataset("sc-s0r", "ds-own", [{"who": "me"}])

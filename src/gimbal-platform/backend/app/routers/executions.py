@@ -907,8 +907,6 @@ async def rerun_execution(
             "runOptions": run_options,
             "schemeId": cfg.get("schemeId"),
             "schemeName": cfg.get("schemeName"),
-            # S2.1:按快照回放环境(作为本次显式位;旧行缺键 = 重新解析)
-            "environmentId": cfg.get("environmentId"),
             # S8:凭证来源按快照回放(重跑人须仍是项目成员,派发闸判)
             "credentialSource": cfg.get("credentialSource"),
             **({"params": _replay_params} if _replay_params else {}),
@@ -946,9 +944,16 @@ async def rerun_execution(
                 "slotMap": cfg.get("execSlotMap") or {},
                 "carryOverrides": cfg.get("execCarryOverrides") or None,
             }
+        # §8.2 快照兼容(P1-3 修复):S2.1 环境按首发快照回放 —— 经
+        # dispatch 的 env_replay 参数(旧通道经 RunRequest.environmentId
+        # 传键,字段随 §8.2 退役后被 pydantic 静默丢弃,回放从未生效);
+        # 旧行缺键 = None → 按新链正常解析。
+        _env_replay = ({"environmentId": cfg.get("environmentId"),
+                        "environmentSource": cfg.get("environmentSource")}
+                       if cfg.get("environmentId") is not None else None)
         return await run_dispatcher.dispatch_run(
             session, user_id=user.id, req=req, preloaded_scenario=scen,
-            exec_replay=_exec_replay,
+            exec_replay=_exec_replay, env_replay=_env_replay,
         )
     except NotFound as e:
         raise HTTPException(

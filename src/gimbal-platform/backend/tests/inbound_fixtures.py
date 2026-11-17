@@ -62,6 +62,19 @@ async def seed_alias(name: str = "agent-sys", *,
                 await s.flush()
                 env_id = env.id
             row.env_id = env_id
+        # M3 §8.5:主档行(system 派生)与实例登录口(login_missing 口径)
+        # —— 幂等补齐,调用方已有则不覆盖
+        from app.models import Service as _Svc, SystemEnvInstance
+        from sqlalchemy import select as _sel
+        if (await s.execute(_sel(_Svc.id).where(
+                _Svc.name == name))).scalar_one_or_none() is None:
+            s.add(_Svc(name=name, system=name, kind="plate"))
+        if (await s.execute(_sel(SystemEnvInstance.id).where(
+                SystemEnvInstance.system == name,
+                SystemEnvInstance.env_id == row.env_id))
+                ).scalar_one_or_none() is None:
+            s.add(SystemEnvInstance(system=name, env_id=row.env_id,
+                                    login_url=f"https://{name}.login.local"))
         s.add(row)
         if base_url:
             await seed_deployment(s, row.base_service, base_url)

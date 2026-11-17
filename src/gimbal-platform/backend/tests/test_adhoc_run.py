@@ -607,8 +607,11 @@ class TestDispatchSplitEquivalence:
     async def test_dispatch_run_equals_dispatch_target(self, client, monkeypatch):
         h = await _register(client, "ad_eq")
         uid = await _user_id("ad_eq")
-        await client.post("/api/scenarios", headers=h, json=_draft(
-            "sc-eq", steps=[GET_STEP]))
+        # M3 §8.5:对拍场景带 ② 声明地址过派发硬门(私有区直连生效;
+        # 对拍意图是配方等价,地址来源不影响)
+        _eq_draft = _draft("sc-eq", steps=[GET_STEP])
+        _eq_draft["definition"]["config"] = {"services": {"svc": "http://eq"}}
+        await client.post("/api/scenarios", headers=h, json=_eq_draft)
         cap = await _capture_fanout(monkeypatch)
         r = await client.post("/api/runs", headers=h, json={
             "scenarioId": "sc-eq", "clientRef": "a"})

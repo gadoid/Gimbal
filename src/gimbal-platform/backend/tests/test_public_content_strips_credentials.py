@@ -420,6 +420,8 @@ class TestForeignExecutionDesensitized:
     async def test_member_executor_gets_desensitized_shapes(
             self, client: AsyncClient, monkeypatch):
         """S7.4:非属主执行人经项目成员通道(W6:非属主 = 内置凭证当空)。"""
+        from .helpers import seed_service_runtime
+        await seed_service_runtime("svc")   # M3 §8.5:派发硬门地址落点
         h_owner = await role_headers(client, "ex_own")
         # 场景建在项目内(凭证源头保留),ex_ref 拉为成员
         await _project_scenario(client, h_owner, "ex_own", "ex_ref",
@@ -639,6 +641,8 @@ class TestFinalProductsNoAuthorCredentials:
             return launch_ok()
         monkeypatch.setattr(gl, "launch", _fake_launch)
 
+        from .helpers import seed_service_runtime
+        await seed_service_runtime("svc")   # M3 §8.5:派发硬门地址落点
         h_owner = await role_headers(client, "fp_sro")
         # S7.4:项目成员执行人(场景建在项目内,凭证源头保留)
         await role_headers(client, "fp_srr", role="user")  # 先注册再查 roster

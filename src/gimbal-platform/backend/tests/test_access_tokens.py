@@ -92,7 +92,10 @@ async def _seed_alias_account(name: str, username: str, owner_id: int,
         env = (await s.execute(sa.text(
             "SELECT id FROM environments WHERE is_default = TRUE"
         ))).scalar()
-        s.add(Service(name=name, system=name, kind="plate"))
+        # 主档行幂等(seed_alias 已补同款行;两处都建会撞 name 唯一键)
+        if (await s.execute(sa.select(Service.id).where(
+                Service.name == name))).scalar_one_or_none() is None:
+            s.add(Service(name=name, system=name, kind="plate"))
         acc = AuthAccount(owner_id=owner_id, system=name, env_id=env,
                           username=username,
                           password_enc=fernet_encrypt("p"), is_default=True)
@@ -971,7 +974,10 @@ class TestRegisterScopeGate:
             env = (await s.execute(sa.text(
                 "SELECT id FROM environments WHERE is_default = TRUE"
             ))).scalar()
-            s.add(Service(name="rg-in", system="rg-in", kind="plate"))
+            # 主档行幂等(seed_alias 已补同款行)
+            if (await s.execute(sa.select(Service.id).where(
+                    Service.name == "rg-in"))).scalar_one_or_none() is None:
+                s.add(Service(name="rg-in", system="rg-in", kind="plate"))
             s.add(AuthAccount(owner_id=uid_rg2, system="rg-in", env_id=env,
                               username="auth-in",
                               password_enc=fernet_encrypt("p"),

@@ -263,6 +263,8 @@ async def test_subscriber_run_strips_dataset_sensitive_columns(
     from app.services import run_prepare
 
     plate_mock.fulls.update(FULLS)
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("jira-svc")   # M3 §8.5:定时路径硬门地址落点
     h_own = await register_and_login(client, "c2_dso")
     draft = make_draft("sc-c2ds", steps=ANCHORED_STEPS,
                        plate={"jira": "1.0#1"}, system=["jira"])
@@ -325,6 +327,8 @@ async def test_subscriber_run_product_has_no_author_credentials(
 
     secret = "author-secret-sub-77"
     plate_mock.fulls.update(FULLS)
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("jira-svc")   # M3 §8.5:定时路径硬门地址落点
     h_own = await register_and_login(client, "c2_fpo")
     draft = make_draft("sc-c2fp", steps=ANCHORED_STEPS,
                        plate={"jira": "1.0#1"}, system=["jira"])

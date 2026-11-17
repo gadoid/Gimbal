@@ -80,9 +80,22 @@ async def _seed_entry(uid: int, name: str, username: str, *,
     """条目 name(username-ref → 属主账户 username)+ 主档;返回账户 id。"""
     env = env_id if env_id is not None else await _default_env_id()
     async with db_module.SessionLocal() as s:
+        from app.models import Deployment, SystemEnvInstance
         if (await s.execute(sa.select(Service.id).where(
                 Service.name == _BASE))).scalar_one_or_none() is None:
             s.add(Service(name=_BASE, system=_BASE, kind="plate"))
+        # M3 §8.5:实例登录口 + 部署行(派发硬门;幂等)
+        if (await s.execute(sa.select(SystemEnvInstance.id).where(
+                SystemEnvInstance.system == _BASE,
+                SystemEnvInstance.env_id == env))
+                ).scalar_one_or_none() is None:
+            s.add(SystemEnvInstance(system=_BASE, env_id=env,
+                                    login_url=f"https://{_BASE}.login"))
+        if (await s.execute(sa.select(Deployment.id).where(
+                Deployment.base_service == _BASE,
+                Deployment.env_id == env))).scalar_one_or_none() is None:
+            s.add(Deployment(base_service=_BASE, env_id=env,
+                             base_url=f"https://{_BASE}.dep"))
         s.add(ServiceIdentity(alias_name=name, base_service=_BASE,
                               env_id=env, ref_mode="username",
                               ref_username=username))

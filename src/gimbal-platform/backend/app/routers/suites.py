@@ -1291,7 +1291,7 @@ async def validate_suite(
             elif pc.unbound_services:
                 items.append(_vitem(
                     "warn", "unbound_services",
-                    f"「{_name_of(m.scenario_id, scen)}」服务未绑定 URL:{pc.unbound_services}(执行期报错)",
+                    f"「{_name_of(m.scenario_id, scen)}」服务未绑定 URL:{pc.unbound_services}(M3 起派发前预检将拦截)",
                     units=[m.scenario_id]))
             try:
                 fd, inj, _se, _sd = await run_dispatcher.compute_run_fanout(

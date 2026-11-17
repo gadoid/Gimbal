@@ -37,7 +37,11 @@ def _carry_step() -> dict:
 
 
 async def _seed_values() -> None:
-    """ORM 直插两张值表(updated_by 只是审计串,读侧无 owner 过滤)。"""
+    """ORM 直插两张值表(updated_by 只是审计串,读侧无 owner 过滤)。
+    M3 §8.5:补 fin-service 运行时布景(默认环境+主档+部署行)——
+    派发硬门要求地址落点。"""
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("fin-service")
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
             db, "fin-service", {"$.remark": "压测-张三"}, updated_by_id=None, updated_by_name="alice")
@@ -203,6 +207,8 @@ async def test_run_completes_when_carry_context_build_fails(
 async def test_run_step_field_states_overlay_flips_face(
     client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
 ) -> None:
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("fin-service")   # M3 §8.5:派发硬门地址落点
     """解析链在 dispatch 关键路径生效:同一端点两个 step ——
     无增量的读穿共识默认($.remark carry → 注入);
     显式覆盖受保护($.remark→form 不注入,$.trace→carry 注入)。
@@ -256,6 +262,8 @@ async def test_run_step_field_states_overlay_flips_face(
 async def test_run_carry_container_whole_literal_injection(
     client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
 ) -> None:
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("fin-service")   # M3 §8.5:派发硬门地址落点
     """深实例缩并(§2.4)后的注入形态:carry 容器整容器是注入单元 —
     值表绑 $.supplier 整体 JSON 字面量,物化为 list(type=array 宽松
     还原);模板子孙 path($.supplier.order_supplier_id)不单独注入,

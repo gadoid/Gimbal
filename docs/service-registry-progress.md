@@ -23,9 +23,13 @@ migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 
 （carry env 执行链透传 / 预检 envUnspecified / 漂移 testid / slot 入参清扫）、
 6 项合理适配 + 4 项措辞修正全量追认入 redesign（§5.2 实态改写 + §6.0 偏离 5–8）。**
 重构三阶段全部收口(P2-C 登录后冒烟仍待 admin 凭据)。
-**2026-11-17(晚) 环境降级轮启动**:stitch 原型交互审计牵出「环境」降级为
+**2026-11-17(晚) 环境降级轮**:stitch 原型交互审计牵出「环境」降级为
 轻量部署标签 —— 五项决策 + 词面口径定稿入 redesign §8(标签解析链/凭证规则/
-carry 去 env/预检硬门/显式通道退役;实施 M1–M6 未启动);同日将挂起用例
+carry 去 env/预检硬门/显式通道退役);**实施 M1(carry 去 env)→ M2(标签链
++ 凭证规则 + 链位退役)→ M3(预检硬门三路径统一)均已完成**,每批全量绿
+推进;M3 前置的派发侧一致性审计另修三个 P1(adhoc 派发标签错位/graph
+逐单元解析不可达/rerun 环境回放通道断裂,见 §「M3 前置」);后续 M4(前端
+契约)/M5(ServiceAdmin 原型重排)/M6(收尾)未启动;同日将挂起用例
 `test_service_fields_system_key_aggregates_member_services` 在 gimbal_test
 跑绿(test_carry_api 15 passed —— 「本机无 TEST_DATABASE_URL」记载已过时,
 库在且可用)。
@@ -486,6 +490,93 @@ webhook guide / PLATFORM_REQUIREMENTS / PLATFORM-SCENARIO-COMPOSER-API
   bindings+token+q3 84/s50 2/s60 7/exec_configs 6/c2 8 等;后端全量
   **2045 passed / 2 skipped / 0 failed**(48m53s;唯一失败 c2 签名残留
   修复后复验 8/8 绿)。
+
+### M3 前置:P1 三缺陷修复（2026-11-17，🟢 完成）
+
+M3 开工前的一致性审计(代码 vs §8 设计,重点核派发侧输入构造)实证三个
+P1(均为「链统一了,喂进链的参数/快照错位」),先行修复:
+
+1. **P1-1 adhoc 派发标签错位**:`dispatch_target` 只对 `kind=="scenario"`
+   填身份名 → adhoc 的执行标签恒为平台默认,而校验链
+   (`check_addresses`/`resolve_versions`)按身份标签解析 → 校验过的
+   地址/版本线与实际执行可能不是同一套。修:kind 分流,adhoc 自 payload
+   定义扫描身份(与 prepare_adhoc 同口径)。
+2. **P1-2 graph 逐单元解析不可达**:顶层 `env_choice` 无条件解析(宿主
+   场景)→ `env_snapshot` 恒非空 → `graph_dispatch` 把它当重放快照钉
+   整图,L261-265 逐单元解析在真实派发路径永不执行(与 dispatch 自身
+   注释及 §8.2「逐单元独立解析」直接冲突;无测试断言派发快照口径,
+   全量绿未暴露)。修:graph 顶层快照记空(NO_ENV),逐单元解析可达
+   (worker 侧 GraphDispatchError 既有优雅兜底)。
+3. **P1-3 rerun 环境回放通道断裂**:executions rerun 传
+   `environmentId` 进已退役的 RunRequest 字段(pydantic 静默丢弃),
+   三处注释宣称的「按快照回放」从未生效,重跑实为重新解析。修:
+   `dispatch_run/dispatch_target` 新增 `env_replay` 参数(镜像
+   exec_replay 模式),`EnvChoice.from_snapshot` 直用不重解析;旧行
+   缺键 = None → 按新链正常解析。
+- 测试:`tests/test_dispatch_tag_semantics.py` 3 用例钉死派发快照口径
+  (adhoc 标签=身份+case 地址同套/graph 三面空/rerun 默认位切换后仍回放);
+- 顺带清扫(审计 P3 批):RunRequest/导出 docstring 陈旧描述、dispatch_run
+  注释、executions rerun 死键删除。
+
+### M3 预检硬门（2026-11-17，🟢 完成）
+
+§8.5 决策 5 落地:三条派发路径(UI/JWT、access token、webhook 定时)
+统一预检硬门,错误时机从引擎步骤级前移到派发前 409。无数据库迁移。
+
+- **共用门函数**(`run_precheck.py`,唯一实现,遵守 dispatcher「不开
+  第二份」):七码常量 + `PrecheckGateError` +
+  `precheck_hard_gate(project_id, definition, user_id, bindings,
+  auth_aliases?, slot_map?, cred_project_id?, env?)` —— 标签一次解析
+  (env 传入即复用,派发侧不二解);分类私有函数 `_gate_classify_
+  identities`/`_gate_unbound_services` 与 `_precheck_one` 共享;
+  `auth_aliases` 可直传避免派发漏斗二扫;
+- **判定优先级**(钉死):env_mixed > **identity_missing**(悬空条目的
+  根因不是「标签不可解析」,错误码不给表象)> env_unspecified >
+  account_missing > account_ambiguous > login_missing > address_missing;
+  数据层注记:`service_identities.env_id` NOT NULL+FK(条目必有标签),
+  env_unspecified 在门内为防御位(现行为 = 悬空报 identity_missing,
+  测试钉住);
+- **login_missing 收窄到登录态面**(全量适配期的设计修正):引擎空
+  URL 走 PreToken(password 即 token)是**合法产品形态**(静态令牌
+  账户,r6 用例钉住)—— 无条件硬拦会误伤。判定收窄到引用登录态面的
+  身份:``${auth.X}`` 裸引/``${auth.X.token}``/``call.user=X``
+  (`auth_ref_scan.scan_token_faces` 新增);纯字段面
+  (``${auth.X.password}`` 等)不拦;
+- **派发漏斗**(scenario 路径):旧 `auth_aliases_missing` 缺失检查由
+  identity_missing/account_missing 细分承接(码更准、文案承接池口径);
+  graph(逐单元物化)与 adhoc(check_addresses 专属链)不走此门;
+- **webhook 定时路径**(integration_runner 装载前接门):命中 → 实例
+  暂停 —— 凭证域码(identity/account/login/ambiguous)沿用
+  missing_credential(复活钩子自动恢复);标签/地址域码新增
+  `precheck_config` 并入 `integration._RESUMABLE`(修好配置后人工
+  resume,防暂停后无法恢复);上方宽吞异常吞掉的混拼经门内重解析现形;
+- **adhoc**:`check_addresses`/`resolve_versions`/路由 trace 三处
+  EnvMixed 映射 409 env_mixed(此前裸冒 500);
+- **契约扩展**(全部可选、旧字段兼容):`PrecheckItem` 增
+  `execConfigId`(按执行配置口径预检,slot_map 折进有效身份集);
+  `PrecheckResult` 增 `envContext`/`envMixed`/`envWarnings`(跨标签
+  凭证提示,不拦截);`envUnspecified` 语义改「标签不可解析」(混拼
+  不再连坐误报);suites validate 复用 `_precheck_one` 自动获得新字段,
+  保持 warn 聚合(离线面恒 200),unbound 文案对齐新时机;
+- **提示不拦截**(钉死):跨标签凭证(envWarnings)/out_of_scope_targets
+  只记录/scope_missing 仍置 scheme_valid=False(真拒在 403 范围闸);
+- **测试**:新 `tests/test_precheck_hard_gate.py` 14 用例(七码正例
+  [env_unspecified 转为可达性注记] + 三负例[跨 tag 放行+envWarnings/
+  软面恒 200/suites warn 聚合] + 三路径[同步 409/定时 precheck_config
+  暂停/预检新契约] + adhoc env_mixed 409);既有簇适配(软→硬/码更换/
+  布景补部署行与实例登录口):定向簇 15 文件 175 passed;**全量首跑暴露
+  36 个「无地址/无登录口也照跑」的历史桩景**(launch 打桩掩盖了引擎缺口
+  报错路径,硬门前移后全部现形)—— 适配:conftest 四件套升五件套
+  (+幂等部署行)、`helpers.seed_service_runtime`(环境+部署行,不建
+  主档行 —— 主档行会让「服务不在目录」类 carry 用例经主档解析成功,
+  改变被测语义)、`inbound_fixtures.seed_alias` 补主档行+实例登录口、
+  s21×3(ghost 场景升 409)/s50×2/s8×2/s60×1/bindings×4/adhoc parity×1/
+  s0×1/c2×2/integration×2/consent×3/public_content×2/carry×7/
+  cross_matrix×2/injection×2/exec_config×4/plate_integration×3/
+  revision_e2e×1/save_meta×1;
+- **验证**:后端全量 **2063 passed / 2 skipped / 0 failed**(32m02s;
+  对照 M2 收口 2045,+17 = 门测试 14 + 派发快照口径 3);前端
+  vue-tsc 0 错误(契约扩展纯后端,前端 M4 消费)。
 
 ### P2-C 验证收口
 

@@ -168,6 +168,8 @@ async def test_dispatcher_labels_rejected_not_unavailable(
             code="revision_not_found", message="no such revision")
     monkeypatch.setattr(plate_client, "resolve", _rejected)
 
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("fin-service")   # M3 §8.5:派发硬门地址落点
     h = await register_and_login(client, "c2rej", "pw123456")
     # 用保存闸可过的引用("1.0#1");拒绝发生在派发期(monkeypatch resolve)
     r = await client.post("/api/scenarios", headers=h, json=make_draft(

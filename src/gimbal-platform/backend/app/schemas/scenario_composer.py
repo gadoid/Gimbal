@@ -425,9 +425,10 @@ class RunRequest(BaseModel):
     """一次执行的配方(recipe):数据集/认证等全是纯值。
 
     Case 层已解散 — RunRequest 即配方本身,直接挂在 scenario 上。
-    旧 ``env`` 字段已随 D2 退役 — 旧客户端多发的 env 键被 pydantic
-    静默忽略,仅失效、不 422。``environmentId``(authz M2a S2.1)是新
-    环境链的本次显式位,与旧 env 无关。
+    旧 ``env`` 字段已随 D2 退役;``environmentId``(authz M2a S2.1)后随
+    §8.2 环境降级轮退役 — 旧客户端多发的这两类键被 pydantic 静默忽略,
+    仅失效、不 422(重跑的环境回放走 dispatch 的 ``env_replay`` 参数,
+    不经请求体)。
     """
 
     model_config = _CAMEL

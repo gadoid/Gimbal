@@ -110,10 +110,12 @@ async def test_scheme_preview_overlay_reject_retired_fields(
 
 async def test_rerun_scrubs_legacy_bindings(
         client, plate_mock: PlateMock, monkeypatch):
-    """归档 config_json 带退役的 url/authAlias → 重跑剥离(不 422)。"""
+    """归档 config_json 带退役的 url/authAlias → 重跑剥离(不 422)。
+    M3 §8.5:场景带 ② 声明地址过派发硬门(私有区直连生效)。"""
     plate_mock.behaviour = "echo"
     h = await _member(client, "s60rerun")
-    await _seed(client, h, "sc-s60-rerun")
+    await _seed(client, h, "sc-s60-rerun",
+                config={"services": {"fin-service": "http://direct"}})
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
     r = await client.post("/api/runs", headers=h, json=_run_payload(

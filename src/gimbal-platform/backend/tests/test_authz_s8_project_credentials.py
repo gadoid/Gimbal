@@ -90,6 +90,14 @@ async def _seed_registry_base(login_url: str = "http://proj-auth") -> int:
                 SystemEnvInstance.env_id == env))).scalar_one_or_none() is None:
             db.add(SystemEnvInstance(system="fin", env_id=env,
                                      login_url=login_url))
+        # M3 §8.5:派发硬门要求地址落点(②③ 双缺 = address_missing 409)
+        # —— 注册底座补部署行,测试执行链的地址不再靠「引擎缺口报错」兜
+        from app.models import Deployment
+        if (await db.execute(sa.select(Deployment.id).where(
+                Deployment.base_service == "fin-svc",
+                Deployment.env_id == env))).scalar_one_or_none() is None:
+            db.add(Deployment(base_service="fin-svc", env_id=env,
+                              base_url="http://proj-deploy"))
         for name in ("s8-alias", "qa1"):
             if (await db.execute(sa.select(ServiceIdentity.id).where(
                     ServiceIdentity.alias_name == name)
@@ -303,11 +311,12 @@ class TestManualRunProjectSource:
         assert r.status_code == 409 and r.json()["detail"]["code"] == \
             "credential_source_invalid"
         # 成员 + 项目场景但项目凭证缺条目 → 409 文案指向项目凭证
+        # (M3 §8.5:code 细分为 account_missing)
         r = await client.post("/api/runs", headers=h, json=_run_payload(
             scenarioId="sc-s8g", dataSetIds=[], credentialSource="project"))
         assert r.status_code == 409
         det = r.json()["detail"]
-        assert det["code"] == "auth_aliases_missing"
+        assert det["code"] == "account_missing"
         assert det["credentialSource"] == "project"
         assert "项目凭证" in det["message"]
 

@@ -154,8 +154,8 @@ async def _materialized_executable(
 ) -> dict:
     """plate /convert + 执行同源物化 —— preview-plate 与 /export 共用(W1)。
 
-    S2.1:地址 ③ 层按环境链(overlay.environmentId 为本次显式位 >
-    场景项目默认 > 导出人偏好 > 默认环境;草稿无 ``scenario_id``)。
+    §8.2:地址 ③ 层按标签链(有效身份标签 > 场景项目默认 > 平台默认;
+    草稿无 ``scenario_id`` 时无项目档)。
     r3二.3:``project_id`` 非空 = 项目/公共区场景 —— 原 5 区规则与
     执行链同口径(内置凭证当空、``config.services`` 直连地址不生效,
     属主本人也一样;私有区属主导出仍带本人明文,Q3 口径)。

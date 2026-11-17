@@ -1086,6 +1086,33 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                         lease=lease)
 
             holder = inst.holder_id
+            # M3 §8.5 预检硬门 —— webhook 定时路径(与 UI/JWT、access
+            # token 经派发漏斗同一条判定,共用 run_precheck 的分类实现)。
+            # 命中 → 实例暂停:凭证域码(identity/account/login/ambiguous)
+            # 沿用 missing_credential(凭证补齐后复活钩子自动恢复);标签/
+            # 地址域码(env_unspecified/env_mixed/address_missing)新增
+            # precheck_config(修好配置后人工 resume,integration._RESUMABLE
+            # 已放行)。tpl_env 传入门内复用;上方宽吞异常吞掉的混拼会在此
+            # 重解析现形(不再静默降级无标签)。
+            from ..routers.run_precheck import (
+                PrecheckGateError, _GATE_CREDENTIAL_CODES, precheck_hard_gate,
+            )
+            try:
+                await precheck_hard_gate(
+                    db, project_id=scen.project_id,
+                    definition=definition_from_payload(scen.payload),
+                    user_id=holder or -1, bindings=bindings,
+                    cred_project_id=await instance_cred_project_id(
+                        db, inst, tpl),
+                    env=tpl_env)
+            except PrecheckGateError as e:
+                _reason = ("missing_credential"
+                           if e.code in _GATE_CREDENTIAL_CODES
+                           else "precheck_config")
+                return await _finish(
+                    db, inst, tpl, "auth",
+                    f"预检未过({e.code}): {e.message}",
+                    pause_reason=_reason, lease=lease)
             # N1 归一(评审 §3.1A):装载准备统一走 run_prepare.prepare_exec
             # —— 凭证清单(exec_auth_aliases:模板扫描 ∪ 绑定 ∪ 别名默认,
             # 此前 _auth_aliases_of 仅导清单,解析/严格检查是手写的同逻辑

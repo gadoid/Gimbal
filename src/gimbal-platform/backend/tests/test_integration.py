@@ -76,6 +76,11 @@ async def _mk_scenario(client: AsyncClient, h: dict, sid: str,
     """建草稿场景;publish=True 时发布(S1.3 = 复制到公共项目),返回
     任务应引用的 id:公共模板须引用公共副本(<原 id>-public),私有/
     个人模板照旧引用原件。"""
+    from .helpers import seed_service_runtime
+    for _svc in {str((st.get("call") or {}).get("service") or "")
+                 for st in steps if isinstance(st, dict)}:
+        if _svc:
+            await seed_service_runtime(_svc)   # M3 §8.5:定时路径硬门地址落点
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=steps))
     assert r.status_code in (200, 201), r.text
@@ -503,6 +508,8 @@ async def test_state_mapping_cursor_roundtrip(client, monkeypatch):
     from app.models.integration_task import IntegrationTask
     from app.services import integration_runner as ir
 
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("svc")   # M3 §8.5:定时路径硬门地址落点
     u = await register_and_login(client, "p4_alice", "pw123456")
     draft = make_draft("sc-p4", steps=[{
         "kind": "step",

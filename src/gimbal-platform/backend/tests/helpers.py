@@ -230,3 +230,28 @@ async def seed_deployment(db: Any, base_service: str, url: str,
         hit.base_url = url
     await db.flush()
     return env_id
+
+
+async def seed_service_runtime(
+    service: str, *, env_name: str = "测试",
+    url: str = "https://runtime.internal",
+) -> int:
+    """M3 §8.5 派发硬门布景(无身份场景):默认环境 + 主档 + 部署行,
+    全幂等 —— 标签链空时 ③ 层按平台默认环境部署表取地址。返回环境 id。"""
+    from app.core import db as db_module
+    from app.models import Environment
+
+    async with db_module.SessionLocal() as db:
+        from sqlalchemy import select as _sel
+        env = (await db.execute(_sel(Environment.id).where(
+            Environment.name == env_name))).scalar_one_or_none()
+        if env is None:
+            db.add(Environment(name=env_name, is_default=True))
+            await db.flush()
+            env = (await db.execute(_sel(Environment.id).where(
+                Environment.name == env_name))).scalar_one()
+        # 只建环境+部署行(deployments.base_service 无 FK):主档行会
+        # 让「服务不在 plate 目录」类用例经主档解析成功,改变被测语义
+        await seed_deployment(db, service, url, env_id=env)
+        await db.commit()
+        return env

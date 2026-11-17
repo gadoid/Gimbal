@@ -297,11 +297,12 @@ async def test_both_empty_single_baseline(
 async def test_dispatcher_uses_raw_step_index_base(client, plate_mock, monkeypatch):
     """Z2:definition.steps 混入非 dict 元素时,声明面/body/asserts 仍按**原始**下标寻址
     (与前端 compose_injection_scenario 同一基准)。"""
-    from .helpers import make_draft as _draft, wait_until as _wait
+    from .helpers import make_draft as _draft, wait_until as _wait, seed_service_runtime
     from .test_run_m1_capabilities import _patch_launch_capture
     from .test_scenario_visibility_and_copy import _member
 
     bob = await _member(client, "bob")
+    await seed_service_runtime("svc")   # M3 §8.5:派发硬门地址落点
     draft = _draft(
         steps=[{                "call": {"kind": "call", "protocol": "http", "service": "svc", "method": "POST", "path": "/a", "headers": {},
                         "view_hints": {"endpoint_id": "ep-raw"}},
@@ -366,10 +367,11 @@ async def test_dispatcher_tolerates_non_dict_api(client, plate_mock, monkeypatch
 async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkeypatch):
     plate_mock.lines = {"ep-absent": [{"line": "t", "revisions": 1, "latest": "t#1"}]}
     """Y:声明面**取数失败**导致的跳过与"端点本无声明"可区分 —— 前者在 run 记录里留标记。"""
-    from .helpers import make_draft as _draft
+    from .helpers import make_draft as _draft, seed_service_runtime
     from .test_scenario_visibility_and_copy import _member
 
     bob = await _member(client, "bob")
+    await seed_service_runtime("svc")   # M3 §8.5:派发硬门地址落点
     # W5/A-2:预览判定 = 任一受管系统 working/未钉即预览。锚点 ep-absent
     # 的系统钉定后本用例才走「正式执行悬空 409」路径(PlateMock /resolve
     # 回原修订)。

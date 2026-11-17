@@ -15,10 +15,51 @@ _AUTH_RE = re.compile(r"\$\{\s*auth\.([A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_.-]+)?\s*\}
 
 def scan_auth_aliases(steps: list) -> list[str]:
     """收集 steps 里 ${auth.<alias>.*} 引用的去重 alias(保持出现序)。"""
-    seen: dict[str, None] = {}  # dict 保序去重
+    seen: dict[str, None] = {}
     for found in _scan_value(steps):
         seen.setdefault(found, None)
     return list(seen)
+
+
+# ${auth.X}(裸引用 = token 面)或 ${auth.X.token};字段面(password 等)
+# 不在其中 —— 静态令牌形态不需要登录口(引擎 PreToken:password 即 token)。
+_TOKEN_FACE_RE = re.compile(r"\$\{\s*auth\.([A-Za-z0-9_-]+?)(?:\.token)?\s*\}")
+
+
+def scan_token_faces(steps: list) -> "set[str]":
+    """引用**登录态面**的身份名集(M3 §8.5 login_missing 的作用域):
+
+    * ``${auth.X}`` 裸引用 / ``${auth.X.token}`` —— 引擎登录铸 token;
+    * 步骤 ``call.user = X`` —— 以该身份调用,同走登录。
+
+    纯字段面引用(``${auth.X.password}`` 等静态令牌形态)**不在内** ——
+    账户无实例登录口是合法配置(引擎 PreToken 兜底的产品面),硬拦
+    会误伤。"""
+    out: set[str] = set()
+    if isinstance(steps, list):
+        for st in steps:
+            if isinstance(st, dict):
+                call = st.get("call")
+                if isinstance(call, dict) and call.get("user"):
+                    out.add(str(call["user"]))
+        out.update(s for s in _token_scan_value(steps) if s)
+    return out
+
+
+def _token_scan_value(node: object) -> "list[str]":
+    if isinstance(node, str):
+        return _TOKEN_FACE_RE.findall(node)
+    if isinstance(node, dict):
+        out: list[str] = []
+        for v in node.values():
+            out.extend(_token_scan_value(v))
+        return out
+    if isinstance(node, list):
+        out = []
+        for v in node:
+            out.extend(_token_scan_value(v))
+        return out
+    return []
 
 
 def _scan_value(node: object) -> list[str]:

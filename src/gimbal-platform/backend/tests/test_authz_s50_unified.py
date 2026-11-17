@@ -75,6 +75,10 @@ async def test_preview_shape_and_equality_with_dispatch(
         s.add(binding)
         s.add(Deployment(base_service="fin-svc", env_id=env_id,
                          base_url="http://deploy-url"))
+        # M3 §8.5:实例登录口(派发硬门 login_missing;§4.3 口径)
+        from app.models import SystemEnvInstance
+        s.add(SystemEnvInstance(system="fin", env_id=env_id,
+                                login_url="http://login-url"))
         await s.commit()
         binding_id = binding.id
 
@@ -123,10 +127,23 @@ async def test_preview_shape_and_equality_with_dispatch(
 
 async def test_dispatch_missing_slot_refused_and_preview_reports(
         client, plate_mock: PlateMock):
-    """缺槽:预览 missingAuths 如实报;dispatch 整单拒发(失败即中止)。"""
+    """缺槽:预览 missingAuths 如实报;dispatch 整单拒发(失败即中止)。
+    M3 §8.5:条目登记、执行人池无账户 → account_missing(悬空条目则是
+    identity_missing,另例钉)。"""
     plate_mock.behaviour = "echo"
     h = await register_and_login(client, "s50b", "pw123456")
     await _seed(client, h)   # 不种凭证
+    # 条目行种上(不种账户)—— 聚焦「缺账户」而非「条目未登记」
+    async with db_module.SessionLocal() as s:
+        env = Environment(name="s50-miss")
+        s.add(env)
+        await s.flush()
+        if (await s.execute(sa.select(Service.id).where(
+                Service.name == "fin-svc"))).scalar_one_or_none() is None:
+            s.add(Service(name="fin-svc", system="fin", kind="plate"))
+        s.add(ServiceIdentity(alias_name="qa1", base_service="fin-svc",
+                              env_id=env.id, ref_mode="default"))
+        await s.commit()
     r = await client.post("/api/runs/preview", headers=h, json={
         "scenarioId": "sc-s50"})
     assert r.status_code == 200, r.text
@@ -134,7 +151,8 @@ async def test_dispatch_missing_slot_refused_and_preview_reports(
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-s50", dataSetIds=[]))
     assert r.status_code == 409, r.text
-    assert "auth_aliases_missing" in r.text
+    # M3 §8.5:缺账户细分码(旧 auth_aliases_missing 随硬门退役)
+    assert "account_missing" in r.text
 
 
 async def test_adhoc_addresses_env_aware(client, plate_mock: PlateMock):

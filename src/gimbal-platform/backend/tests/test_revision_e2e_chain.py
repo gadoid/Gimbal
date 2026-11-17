@@ -100,10 +100,11 @@ def _strip_volatile(node: Any) -> Any:
 
 async def test_pinned_chain_reads_same_revision_and_i1_holds(
         client, tmp_path, monkeypatch):
-    from .helpers import make_draft as _draft, wait_until as _wait
+    from .helpers import make_draft as _draft, wait_until as _wait, seed_service_runtime
     from .test_run_m1_capabilities import _patch_launch_capture
     from .test_scenario_visibility_and_copy import _member
 
+    await seed_service_runtime("fin-service")   # M3 §8.5:派发硬门地址落点
     # ── 夹具面:git 临时仓库(fin@1.0 初始树) + 演练构件根 ──────────
     repo = tmp_path / "repo"
     fin = repo / "systems" / "fin"

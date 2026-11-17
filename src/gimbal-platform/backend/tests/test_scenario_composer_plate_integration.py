@@ -715,6 +715,13 @@ async def _identity(alias_name: str, base: str, *,
                 SystemEnvInstance.env_id == env))).scalar_one_or_none() is None:
             s.add(SystemEnvInstance(system=base, env_id=env,
                                     login_url=login_url))
+        # M3 §8.5:部署行(派发硬门地址落点;幂等)
+        from app.models import Deployment
+        if (await s.execute(_sel(Deployment.id).where(
+                Deployment.base_service == base,
+                Deployment.env_id == env))).scalar_one_or_none() is None:
+            s.add(Deployment(base_service=base, env_id=env,
+                             base_url=f"https://{base}.internal"))
         s.add(ServiceIdentity(alias_name=alias_name, base_service=base,
                               env_id=env, ref_mode="default"))
         await s.commit()
