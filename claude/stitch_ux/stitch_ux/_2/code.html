@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary-container": "#d7f6ff",
+          "on-tertiary-fixed": "#001f26",
+          "primary-fixed": "#dbe1ff",
+          "on-secondary-fixed": "#131b2e",
+          "surface-bright": "#f8f9ff",
+          "surface-variant": "#d3e4fe",
+          "inverse-on-surface": "#eaf1ff",
+          "tertiary": "#005e6e",
+          "on-error-container": "#93000a",
+          "surface-container-high": "#dce9ff",
+          "on-primary-fixed": "#00174b",
+          "error-container": "#ffdad6",
+          "secondary-fixed": "#dae2fd",
+          "on-surface": "#0b1c30",
+          "on-surface-variant": "#434655",
+          "outline": "#737686",
+          "surface-container-highest": "#d3e4fe",
+          "on-tertiary-fixed-variant": "#004e5c",
+          "on-tertiary": "#ffffff",
+          "on-background": "#0b1c30",
+          "surface": "#f8f9ff",
+          "on-primary-container": "#eeefff",
+          "on-secondary": "#ffffff",
+          "on-secondary-container": "#5c647a",
+          "on-primary-fixed-variant": "#003ea8",
+          "primary-fixed-dim": "#b4c5ff",
+          "surface-container": "#e5eeff",
+          "secondary-container": "#dae2fd",
+          "tertiary-fixed-dim": "#4cd7f6",
+          "primary": "#004ac6",
+          "outline-variant": "#c3c6d7",
+          "primary-container": "#2563eb",
+          "secondary": "#565e74",
+          "surface-dim": "#cbdbf5",
+          "surface-container-lowest": "#ffffff",
+          "on-error": "#ffffff",
+          "tertiary-fixed": "#acedff",
+          "background": "#f8f9ff",
+          "error": "#ba1a1a",
+          "inverse-primary": "#b4c5ff",
+          "tertiary-container": "#00788c",
+          "surface-container-low": "#eff4ff",
+          "on-primary": "#ffffff",
+          "secondary-fixed-dim": "#bec6e0",
+          "surface-tint": "#0053db",
+          "on-secondary-fixed-variant": "#3f465c",
+          "inverse-surface": "#213145"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.125rem",
+          "lg": "0.25rem",
+          "xl": "0.5rem",
+          "full": "0.75rem"
+        },
+        "spacing": {
+          "space-lg": "1rem",
+          "space-xl": "1.5rem",
+          "space-xs": "0.25rem",
+          "space-sm": "0.5rem",
+          "space-md": "0.75rem",
+          "gutter": "1rem",
+          "margin": "1.5rem"
+        },
+        "fontFamily": {
+          "headline-md": [
+            "Geist"
+          ],
+          "label-md": [
+            "JetBrains Mono"
+          ],
+          "headline-lg": [
+            "Geist"
+          ],
+          "headline-xl": [
+            "Geist"
+          ],
+          "body-md": [
+            "Geist"
+          ],
+          "body-lg": [
+            "Geist"
+          ],
+          "code-inline": [
+            "JetBrains Mono"
+          ],
+          "label-sm": [
+            "JetBrains Mono"
+          ],
+          "headline-sm": [
+            "Geist"
+          ],
+          "body-sm": [
+            "Geist"
+          ]
+        },
+        "fontSize": {
+          "headline-md": [
+            "15px",
+            {
+              "lineHeight": "22px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "600"
+            }
+          ],
+          "label-md": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "letterSpacing": "-0.01em",
+              "fontWeight": "500"
+            }
+          ],
+          "headline-lg": [
+            "18px",
+            {
+              "lineHeight": "26px",
+              "letterSpacing": "-0.015em",
+              "fontWeight": "600"
+            }
+          ],
+          "headline-xl": [
+            "24px",
+            {
+              "lineHeight": "32px",
+              "letterSpacing": "-0.02em",
+              "fontWeight": "600"
+            }
+          ],
+          "body-md": [
+            "13px",
+            {
+              "lineHeight": "18px",
+              "fontWeight": "400"
+            }
+          ],
+          "body-lg": [
+            "14px",
+            {
+              "lineHeight": "20px",
+              "fontWeight": "400"
+            }
+          ],
+          "code-inline": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "fontWeight": "400"
+            }
+          ],
+          "label-sm": [
+            "11px",
+            {
+              "lineHeight": "14px",
+              "letterSpacing": "0",
+              "fontWeight": "500"
+            }
+          ],
+          "headline-sm": [
+            "13px",
+            {
+              "lineHeight": "18px",
+              "fontWeight": "600"
+            }
+          ],
+          "body-sm": [
+            "12px",
+            {
+              "lineHeight": "16px",
+              "fontWeight": "400"
+            }
+          ]
+        }
+      },
+    },
+  }</script></head><body class="bg-surface font-body-md text-body-md text-on-surface"><aside class="fixed left-0 top-0 h-full w-64 bg-inverse-surface text-inverse-on-surface z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.12)]"><div class="h-14 px-space-lg flex items-center justify-between bg-inverse-surface"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container text-[18px]">hub</span></div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-inverse-on-surface leading-tight tracking-tight">MESH-CORE</span><span class="font-label-sm text-label-sm text-inverse-on-surface/60 leading-none">Observability Ops</span></div></div><span class="font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-primary-container text-on-primary-container">v3.2</span></div><div class="px-space-md py-space-sm"><div class="flex items-center px-space-sm py-1.5 rounded-lg bg-inverse-on-surface/10 text-inverse-on-surface/70 gap-space-sm"><span class="material-symbols-outlined text-[16px]">filter_alt</span><span class="font-label-sm text-label-sm text-inverse-on-surface/70 flex-1 truncate">Cluster: prod-mesh-east-01</span></div></div><nav class="flex-1 px-space-sm py-space-xs overflow-y-auto space-y-0.5" data-active-classes="bg-primary-container text-on-primary-container font-headline-sm"><div class="px-space-sm pt-space-xs pb-1 font-label-sm text-label-sm text-inverse-on-surface/40 uppercase tracking-wider">概览与协同</div><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="workbench" href="#"><span class="material-symbols-outlined text-[18px]">space_dashboard</span><span class="font-body-md text-body-md truncate">工作台</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="announcements" href="#"><span class="material-symbols-outlined text-[18px]">campaign</span><span class="font-body-md text-body-md truncate">通知公告</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="favorites" href="#"><span class="material-symbols-outlined text-[18px]">star</span><span class="font-body-md text-body-md truncate">我的关注</span></a><div class="px-space-sm pt-space-sm pb-1 font-label-sm text-label-sm text-inverse-on-surface/40 uppercase tracking-wider">服务网格治理</div><a aria-current="page" class="flex items-center px-space-sm py-1.5 rounded-lg transition-colors gap-space-sm bg-primary-container text-on-primary-container font-headline-sm" data-path="service-registration-and-topology" href="#"><span class="material-symbols-outlined text-[18px]">account_tree</span><span class="font-body-md text-body-md truncate">服务注册与拓扑</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="service-profiling-and-slo" href="#"><span class="material-symbols-outlined text-[18px]">speed</span><span class="font-body-md text-body-md truncate">服务画像与 SLO</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="change-adaptation-and-interception" href="#"><span class="material-symbols-outlined text-[18px]">security_update_good</span><span class="font-body-md text-body-md truncate">变更适配与拦截</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="integrated-service-mesh" href="#"><span class="material-symbols-outlined text-[18px]">lan</span><span class="font-body-md text-body-md truncate">集成服务 Mesh</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="scenario-management" href="#"><span class="material-symbols-outlined text-[18px]">schema</span><span class="font-body-md text-body-md truncate">场景管理</span></a><div class="px-space-sm pt-space-sm pb-1 font-label-sm text-label-sm text-inverse-on-surface/40 uppercase tracking-wider">数据与凭证</div><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="credential-management-center" href="#"><span class="material-symbols-outlined text-[18px]">vpn_key</span><span class="font-body-md text-body-md truncate">凭证管理中心</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="executor-groups" href="#"><span class="material-symbols-outlined text-[18px]">grouped_bar_chart</span><span class="font-body-md text-body-md truncate">执行器群组</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="field-lineage-tracing" href="#"><span class="material-symbols-outlined text-[18px]">route</span><span class="font-body-md text-body-md truncate">字段血缘溯源</span></a><div class="px-space-sm pt-space-sm pb-1 font-label-sm text-label-sm text-inverse-on-surface/40 uppercase tracking-wider">平台架构配置</div><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="system-configuration" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span class="font-body-md text-body-md truncate">系统配置</span></a><a class="flex items-center px-space-sm py-1.5 rounded-lg text-inverse-on-surface/80 hover:bg-inverse-on-surface/10 hover:text-inverse-on-surface transition-colors gap-space-sm" data-path="members-and-tenant-management" href="#"><span class="material-symbols-outlined text-[18px]">group</span><span class="font-body-md text-body-md truncate">成员与租户管理</span></a></nav><div class="p-space-sm bg-inverse-surface"><div class="flex items-center justify-between p-space-sm rounded-lg bg-inverse-on-surface/5"><div class="flex items-center gap-space-sm"><span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span><span class="font-label-sm text-label-sm text-inverse-on-surface/80">Sync Engine: OK</span></div><span class="font-label-sm text-label-sm text-inverse-on-surface/60">12ms</span></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-xl"><div class="flex items-center gap-space-md"><span class="font-headline-md text-headline-md text-on-surface tracking-tight">PLATFORM / Mesh Registry v3.2</span><div class="hidden md:flex items-center gap-space-xs px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span>Global Mesh Fabric</div></div><div class="flex items-center gap-space-lg"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[18px]">search</span><input class="w-72 h-8 pl-8 pr-3 rounded bg-surface text-on-surface placeholder:text-on-surface-variant/60 font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" placeholder="Search services, routes, CIDRs..." type="text"/></div><div class="flex items-center gap-space-sm"><div class="flex items-center gap-1.5 px-space-sm py-1 rounded bg-surface-container-low"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-label-sm text-label-sm text-on-surface-variant">Active Ingress: 1,842</span></div><button class="relative p-1.5 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-error"></span></button><button class="p-1.5 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help_outline</span></button></div><div class="flex items-center gap-space-sm pl-space-sm"><div class="flex flex-col text-right hidden lg:block"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight">Infra Architect</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-none">sre-admin@mesh.internal</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-14 bg-surface w-full px-space-xl"><div class="flex flex-col w-full pb-space-xl">
+<!-- Operational Breadcrumbs & Context Telemetry -->
+<div class="flex flex-col md:flex-row md:items-center justify-between py-space-md gap-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Topology Fabric</span>
+<span class="text-outline-variant font-label-sm text-label-sm">/</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Cluster: prod-mesh-east-01</span>
+<span class="text-outline-variant font-label-sm text-label-sm">/</span>
+<span class="font-label-sm text-label-sm text-primary font-headline-sm">Service Hierarchy &amp; Instances</span>
+</div>
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-space-xs px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-primary text-[15px]">sync_saved_locally</span>
+<span>Registry Core: Sync Latency 14ms</span>
+</div>
+<div class="flex items-center gap-space-xs px-space-sm py-1 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm shadow-sm">
+<span class="material-symbols-outlined text-tertiary text-[15px]">verified_user</span>
+<span>mTLS Cert Vault: OK</span>
+</div>
+</div>
+</div>
+<!-- Page Header & Metrics Strip -->
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-md mb-space-lg">
+<div>
+<div class="flex items-center gap-space-sm mb-1">
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-primary-container text-on-primary-container uppercase tracking-widest font-headline-sm">Registry Engine</span>
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Mesh Control Plane Tier-1</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">服务注册与拓扑管理</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">跨集群微服务定义、动态实例探针状态、别名路由与凭证插槽统御控制台</p>
+</div>
+<!-- Cluster Operational Stats Pill Strip -->
+<div class="flex items-center gap-space-sm overflow-x-auto pb-1">
+<div class="px-space-md py-space-sm rounded bg-surface-container-lowest shadow-sm flex items-center gap-space-md min-w-[140px]">
+<div class="w-8 h-8 rounded bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined text-[20px]">layers</span>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">注册服务总数</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">42 <span class="font-label-sm text-label-sm text-on-surface-variant font-normal">Services</span></div>
+</div>
+</div>
+<div class="px-space-md py-space-sm rounded bg-surface-container-lowest shadow-sm flex items-center gap-space-md min-w-[140px]">
+<div class="w-8 h-8 rounded bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[20px]">memory</span>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">活跃运行实例</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">198 <span class="font-label-sm text-label-sm text-on-surface-variant font-normal">Pods</span></div>
+</div>
+</div>
+<div class="px-space-md py-space-sm rounded bg-surface-container-lowest shadow-sm flex items-center gap-space-md min-w-[150px]">
+<div class="w-8 h-8 rounded bg-secondary-container flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined text-[20px]">vpn_key</span>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">有效配置插槽</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">312 <span class="font-label-sm text-label-sm text-on-surface-variant font-normal">Aliases</span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Plate Unconfigured Warning Notice -->
+<div class="w-full mb-space-lg p-space-md rounded bg-surface-container-high flex items-center justify-between gap-space-md shadow-sm">
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">sync_problem</span>
+</div>
+<div>
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface">Plate 平台拓扑差异告警</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-headline-sm">AUTO-DISCOVERY</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">检测到底层 Plate 同步引擎存在 3 个新部署的未注册容器端点（Cluster: prod-mesh-east-01, NS: payment-core）。请核对并将其接入对应服务架构池中。</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<button class="h-8 px-space-md rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container font-headline-sm text-headline-sm transition-colors shadow-sm">忽略提醒</button>
+<button class="h-8 px-space-md rounded bg-primary-container text-on-primary-container hover:bg-primary font-headline-sm text-headline-sm transition-colors shadow-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">add_task</span>
+        一键识别导入
+      </button>
+</div>
+</div>
+<!-- Filter & Action Control Toolbar -->
+<div class="w-full p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-lg">
+<div class="flex flex-wrap items-center gap-space-sm flex-1">
+<div class="relative flex items-center min-w-[260px] flex-1 max-w-sm">
+<span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[18px]">filter_list</span>
+<input class="w-full h-8 pl-8 pr-3 rounded bg-surface text-on-surface placeholder:text-on-surface-variant/60 font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" placeholder="快速筛选服务名称、RPC方法、实例主机..." type="text" value="order-center"/>
+</div>
+<div class="flex items-center gap-1 bg-surface-container-low p-0.5 rounded">
+<button class="px-space-sm py-1 rounded bg-surface-container-lowest text-primary font-headline-sm text-headline-sm shadow-sm">全部服务 (42)</button>
+<button class="px-space-sm py-1 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md">核心服务 (18)</button>
+<button class="px-space-sm py-1 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md">边缘网关 (6)</button>
+<button class="px-space-sm py-1 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md">异步Worker (18)</button>
+</div>
+<div class="h-4 w-px bg-surface-container"></div>
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+<span>运行正常: 39</span>
+<span class="text-outline-variant">·</span>
+<span class="material-symbols-outlined text-[16px] text-error">warning</span>
+<span class="text-error font-headline-sm">注意: 3</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<button class="h-8 px-space-sm rounded bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[16px]">swap_vert</span>
+        按权重排序
+      </button>
+<button class="h-8 px-space-sm rounded bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+        拓扑导图
+      </button>
+<button class="h-8 px-space-md rounded bg-primary-container text-on-primary-container hover:bg-primary font-headline-sm text-headline-sm flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+        注册新服务
+      </button>
+</div>
+</div>
+<!-- Services Hierarchy Stack -->
+<div class="flex flex-col gap-space-lg">
+<!-- EXPANDED SERVICE CARD: order-center -->
+<div class="w-full rounded bg-surface-container-lowest shadow-md overflow-hidden relative">
+<!-- Active Edge Indicator -->
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<!-- Tier 1: Service Definition Header Row -->
+<div class="p-space-lg flex flex-col xl:flex-row xl:items-center justify-between gap-space-md bg-surface-container-lowest">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="w-10 h-10 rounded bg-primary-fixed flex items-center justify-center text-on-primary-fixed flex-shrink-0 mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">shopping_cart_checkout</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-headline-lg text-headline-lg text-on-surface font-headline-sm tracking-tight">order-center</span>
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface font-headline-sm">gRPC / HTTP2</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-low text-tertiary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span>8 / 8 Nodes Active</span>
+</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-headline-sm">TIER-0 CORE</span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 mt-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="font-code-inline text-code-inline">Proto: schema/v2.1/order.proto</span>
+<span class="text-outline-variant">·</span>
+<span>负责人: <strong class="text-on-surface font-normal">交易链路架构组 (@alex.chen)</strong></span>
+<span class="text-outline-variant">·</span>
+<span>发布时间: 2025-05-18 10:24:02 UTC</span>
+<span class="text-outline-variant">·</span>
+<span class="font-label-sm text-label-sm text-tertiary">SLO 达标率 99.992%</span>
+</div>
+</div>
+</div>
+<!-- Service-level Action Deck -->
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<div class="hidden lg:flex flex-col text-right pr-space-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">QPS: 14,250 req/s</span>
+<span class="font-label-sm text-label-sm text-tertiary font-headline-sm">P99: 18.4ms</span>
+</div>
+<button class="h-8 px-space-sm rounded bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">alt_route</span>
+            路由策略
+          </button>
+<button class="h-8 px-space-sm rounded bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">monitor_heart</span>
+            SLO 仪表板
+          </button>
+<!-- Active Collapse Button with Toggle State -->
+<button class="h-8 px-space-md rounded bg-primary-fixed text-on-primary-fixed hover:bg-primary-fixed-dim font-headline-sm text-headline-sm flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">unfold_less</span>
+            收起实例列表
+          </button>
+</div>
+</div>
+<!-- Nested Tier 2 & 3: Instances Pool Container (Expanded State) -->
+<div class="bg-surface-container-low px-space-lg pt-space-md pb-space-lg">
+<!-- Expanded Status Informational Banner -->
+<div class="w-full px-space-md py-space-sm rounded bg-surface-container flex flex-col md:flex-row md:items-center justify-between gap-space-sm shadow-sm mb-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[18px]">dns</span>
+<span class="font-body-md text-body-md text-on-surface font-headline-sm">当前服务挂载实例: 8 个</span>
+<span class="text-outline-variant">·</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">实例超过 5 个已自动启用高密度分页器</span>
+<span class="text-outline-variant">·</span>
+<span class="font-body-sm text-body-sm text-primary">点击实例卡片可直接在右侧抽屉进行「服务配置管理」</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span>自动探活心跳同步周期: 5s</span>
+</div>
+</div>
+<!-- Quick Add / Creatable Tag Action Bar -->
+<div class="w-full p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-space-md mb-space-md">
+<div class="flex flex-wrap items-center gap-space-sm flex-1">
+<span class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1 mr-space-xs">
+<span class="material-symbols-outlined text-secondary text-[18px]">label</span>
+              部署环境 / 业务分组 Tag:
+            </span>
+<!-- Filterable Tag Pills -->
+<button class="h-6 px-space-sm rounded-full bg-primary-container text-on-primary-container font-label-sm text-label-sm flex items-center gap-1 shadow-sm">
+<span>全部 (8)</span>
+</button>
+<button class="h-6 px-space-sm rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high font-label-sm text-label-sm flex items-center gap-1 transition-colors">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>prod (2)</span>
+</button>
+<button class="h-6 px-space-sm rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high font-label-sm text-label-sm flex items-center gap-1 transition-colors">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span>staging (1)</span>
+</button>
+<button class="h-6 px-space-sm rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high font-label-sm text-label-sm flex items-center gap-1 transition-colors">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span>test (4)</span>
+</button>
+<button class="h-6 px-space-sm rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high font-label-sm text-label-sm flex items-center gap-1 transition-colors">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span>海外IDC (1)</span>
+</button>
+<!-- Creatable Tag Input Simulator -->
+<div class="flex items-center ml-space-xs">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-2 text-outline-variant text-[15px]">add</span>
+<input class="h-6 w-44 pl-6 pr-2 rounded bg-surface text-on-surface placeholder:text-on-surface-variant/50 font-label-sm text-label-sm focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" placeholder="+ 输入新Tag回车快速创建..." type="text"/>
+</div>
+</div>
+</div>
+<!-- Add New Instance Button -->
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<button class="h-7 px-space-md rounded bg-primary-container text-on-primary-container hover:bg-primary font-headline-sm text-headline-sm flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">add</span>
+              接入新实例
+            </button>
+</div>
+</div>
+<!-- Instances Table (Page 1 of 2: 5 items shown) -->
+<div class="w-full bg-surface-container-lowest rounded shadow-sm overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high/60 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider h-9">
+<th class="pl-space-md pr-space-sm py-1 font-headline-sm">实例标识 (Instance ID)</th>
+<th class="px-space-sm py-1 font-headline-sm">分组 Tag 标定</th>
+<th class="px-space-sm py-1 font-headline-sm">内部 Base URL / 暴露端口</th>
+<th class="px-space-sm py-1 font-headline-sm">健康探针指标</th>
+<th class="px-space-sm py-1 font-headline-sm">凭据与别名槽位</th>
+<th class="px-space-sm py-1 text-right pr-space-md font-headline-sm">操作</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container">
+<!-- Instance Item 1 -->
+<tr class="hover:bg-surface-container-low transition-colors group cursor-pointer">
+<td class="pl-space-md pr-space-sm py-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-tertiary text-[18px]">storage</span>
+<div>
+<div class="font-label-md text-label-md text-on-surface font-headline-sm flex items-center gap-1">
+                        order-center-prod-01
+                        <span class="material-symbols-outlined text-outline text-[14px]">content_copy</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Host: 10.240.12.88 · East-AZ-1</div>
+</div>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex flex-wrap items-center gap-1">
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container-high text-tertiary font-headline-sm">[prod]</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">生产主节点</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-code-inline text-code-inline text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">https://order-api.prod.internal:8443</span>
+<span class="material-symbols-outlined text-primary text-[15px]">lock</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label-md text-label-md text-on-surface font-headline-sm">200 OK</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">(18ms)</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">key</span>
+                      3 个配置槽位
+                    </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">mTLS / Token / Sign</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm text-right pr-space-md">
+<button class="h-7 px-space-sm rounded bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-headline-sm text-headline-sm transition-colors shadow-sm inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">tune</span>
+                    服务配置管理
+                    <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Instance Item 2 -->
+<tr class="hover:bg-surface-container-low transition-colors group cursor-pointer">
+<td class="pl-space-md pr-space-sm py-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-tertiary text-[18px]">storage</span>
+<div>
+<div class="font-label-md text-label-md text-on-surface font-headline-sm flex items-center gap-1">
+                        order-center-prod-02
+                        <span class="material-symbols-outlined text-outline text-[14px]">content_copy</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Host: 10.240.12.89 · East-AZ-2 (DR)</div>
+</div>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex flex-wrap items-center gap-1">
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container-high text-tertiary font-headline-sm">[prod]</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">生产备节点</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-code-inline text-code-inline text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">https://order-api-dr.prod.internal:8443</span>
+<span class="material-symbols-outlined text-primary text-[15px]">lock</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label-md text-label-md text-on-surface font-headline-sm">200 OK</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">(22ms)</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">key</span>
+                      2 个配置槽位
+                    </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">mTLS / Token</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm text-right pr-space-md">
+<button class="h-7 px-space-sm rounded bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-headline-sm text-headline-sm transition-colors shadow-sm inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">tune</span>
+                    服务配置管理
+                    <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Instance Item 3 -->
+<tr class="hover:bg-surface-container-low transition-colors group cursor-pointer">
+<td class="pl-space-md pr-space-sm py-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-secondary text-[18px]">storage</span>
+<div>
+<div class="font-label-md text-label-md text-on-surface font-headline-sm flex items-center gap-1">
+                        order-center-staging-01
+                        <span class="material-symbols-outlined text-outline text-[14px]">content_copy</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Host: 10.240.18.10 · Staging-VPC</div>
+</div>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex flex-wrap items-center gap-1">
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-headline-sm">[staging]</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">预发演练</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-code-inline text-code-inline text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">https://order-stg.internal:8080</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label-md text-label-md text-on-surface font-headline-sm">200 OK</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">(35ms)</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">key</span>
+                      1 个配置槽位
+                    </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Bearer Token</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm text-right pr-space-md">
+<button class="h-7 px-space-sm rounded bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-headline-sm text-headline-sm transition-colors shadow-sm inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">tune</span>
+                    服务配置管理
+                    <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Instance Item 4 (Highlighted Row Hover State) -->
+<tr class="bg-surface-container-high/40 hover:bg-surface-container-high transition-colors group cursor-pointer relative">
+<td class="pl-space-md pr-space-sm py-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[18px]">storage</span>
+<div>
+<div class="font-label-md text-label-md text-primary font-headline-sm flex items-center gap-1">
+                        order-center-test-01
+                        <span class="material-symbols-outlined text-primary text-[14px]">content_copy</span>
+<span class="font-label-sm text-label-sm px-1 py-0.2 rounded bg-primary-container text-on-primary-container font-headline-sm ml-1">HOVER FOCUS</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Host: 192.168.99.14 · Lab-K8s-East</div>
+</div>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex flex-wrap items-center gap-1">
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-headline-sm">[test]</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">联调测试</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-code-inline text-code-inline text-primary bg-surface-container-lowest px-1.5 py-0.5 rounded shadow-sm">http://order-test-gw.corp:8000</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label-md text-label-md text-on-surface font-headline-sm">200 OK</span>
+<span class="font-label-sm text-label-sm text-tertiary font-headline-sm">(12ms)</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">key</span>
+                      2 个配置槽位
+                    </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Static API-Key</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm text-right pr-space-md">
+<button class="h-7 px-space-sm rounded bg-primary-container text-on-primary-container hover:bg-primary font-headline-sm text-headline-sm transition-colors shadow-sm inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">tune</span>
+                    服务配置管理
+                    <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Instance Item 5 -->
+<tr class="hover:bg-surface-container-low transition-colors group cursor-pointer">
+<td class="pl-space-md pr-space-sm py-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[18px]">storage</span>
+<div>
+<div class="font-label-md text-label-md text-on-surface font-headline-sm flex items-center gap-1">
+                        order-center-test-perf
+                        <span class="material-symbols-outlined text-outline text-[14px]">content_copy</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Host: 192.168.102.50 · Perf-Isolated</div>
+</div>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex flex-wrap items-center gap-1">
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-headline-sm">[test]</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">压测专线</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-code-inline text-code-inline text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">http://order-perf.corp:8080</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label-md text-label-md text-on-surface font-headline-sm">200 OK</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">(45ms)</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm">
+<div class="flex items-center gap-1">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">key</span>
+                      1 个配置槽位
+                    </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Perf Mock Key</span>
+</div>
+</td>
+<td class="px-space-sm py-space-sm text-right pr-space-md">
+<button class="h-7 px-space-sm rounded bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-headline-sm text-headline-sm transition-colors shadow-sm inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">tune</span>
+                    服务配置管理
+                    <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+<!-- Instances Pagination Footer Bar -->
+<div class="px-space-md py-space-sm bg-surface-container-high/30 flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="font-label-md text-label-md text-on-surface-variant flex items-center gap-space-xs">
+<span>显示第 <strong class="text-on-surface">1 - 5</strong> 条，共 <strong class="text-on-surface">8</strong> 条实例</span>
+<span class="text-outline-variant">|</span>
+<span class="font-label-sm text-label-sm text-tertiary">Page 1 of 2</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="flex items-center gap-1 bg-surface-container-low px-space-sm py-0.5 rounded shadow-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">每页 5 条</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">arrow_drop_down</span>
+</div>
+<!-- Pagination Navigation Buttons -->
+<div class="flex items-center gap-1">
+<button class="h-7 px-space-xs rounded bg-surface-container text-on-surface-variant/40 cursor-not-allowed font-label-md text-label-md flex items-center justify-center" disabled="">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<button class="h-7 w-7 rounded bg-primary-container text-on-primary-container font-headline-sm text-headline-sm flex items-center justify-center shadow-sm">
+                  1
+                </button>
+<button class="h-7 w-7 rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center justify-center transition-colors">
+                  2
+                </button>
+<button class="h-7 px-space-xs rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center justify-center transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- COLLAPSED SERVICE CARD 2: fin-service -->
+<div class="w-full rounded bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow p-space-lg flex flex-col xl:flex-row xl:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="w-10 h-10 rounded bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[24px]">account_balance</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-headline-lg text-headline-lg text-on-surface font-headline-sm tracking-tight">fin-service</span>
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface font-headline-sm">gRPC / TLS 1.3</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-low text-tertiary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span>8 / 8 Nodes Active</span>
+</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-headline-sm">PCI-DSS CORE</span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 mt-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="font-code-inline text-code-inline">Proto: schema/v1.9/billing.proto</span>
+<span class="text-outline-variant">·</span>
+<span>负责人: <strong>金融清结算架构组 (@kevin.wu)</strong></span>
+<span class="text-outline-variant">·</span>
+<span>发布时间: 2025-05-17 19:40:11 UTC</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<div class="hidden lg:flex flex-col text-right pr-space-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">QPS: 8,110 req/s</span>
+<span class="font-label-sm text-label-sm text-tertiary font-headline-sm">P99: 11.2ms</span>
+</div>
+<button class="h-8 px-space-sm rounded bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">alt_route</span>
+          路由策略
+        </button>
+<!-- Collapsed Action Button -->
+<button class="h-8 px-space-md rounded bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-headline-sm text-headline-sm flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">unfold_more</span>
+          展开实例列表 (8)
+        </button>
+</div>
+</div>
+<!-- COLLAPSED SERVICE CARD 3: risk-engine -->
+<div class="w-full rounded bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow p-space-lg flex flex-col xl:flex-row xl:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="w-10 h-10 rounded bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[24px]">shield</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-headline-lg text-headline-lg text-on-surface font-headline-sm tracking-tight">risk-engine</span>
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface font-headline-sm">REST / gRPC</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-low text-tertiary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span>12 / 12 Nodes Active</span>
+</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-headline-sm">STREAMING EVAL</span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 mt-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="font-code-inline text-code-inline">OpenAPI: 3.0 / /v1/risk/evaluate</span>
+<span class="text-outline-variant">·</span>
+<span>负责人: <strong>风险决策算法组 (@hannah.zhao)</strong></span>
+<span class="text-outline-variant">·</span>
+<span>发布时间: 2025-05-18 08:15:00 UTC</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<div class="hidden lg:flex flex-col text-right pr-space-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">QPS: 32,800 req/s</span>
+<span class="font-label-sm text-label-sm text-tertiary font-headline-sm">P99: 9.8ms</span>
+</div>
+<button class="h-8 px-space-sm rounded bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">alt_route</span>
+          路由策略
+        </button>
+<button class="h-8 px-space-md rounded bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-headline-sm text-headline-sm flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">unfold_more</span>
+          展开实例列表 (12)
+        </button>
+</div>
+</div>
+<!-- COLLAPSED SERVICE CARD 4: auth-gateway -->
+<div class="w-full rounded bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow p-space-lg flex flex-col xl:flex-row xl:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-md min-w-0">
+<div class="w-10 h-10 rounded bg-surface-container-high flex items-center justify-center text-primary flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[24px]">vpn_lock</span>
+</div>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-space-sm">
+<span class="font-headline-lg text-headline-lg text-on-surface font-headline-sm tracking-tight">auth-gateway</span>
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface font-headline-sm">HTTP/3 / OAuth2 / OIDC</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-low text-tertiary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span>6 / 6 Nodes Active</span>
+</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-container font-headline-sm">EDGE BORDER</span>
+</div>
+<div class="flex flex-wrap items-center gap-x-space-md gap-y-1 mt-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="font-code-inline text-code-inline">Endpoints: 24 active paths / Ingress 0.0.0.0</span>
+<span class="text-outline-variant">·</span>
+<span>负责人: <strong>网关中台架构组 (@simon.li)</strong></span>
+<span class="text-outline-variant">·</span>
+<span>发布时间: 2025-05-16 22:10:44 UTC</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<div class="hidden lg:flex flex-col text-right pr-space-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">QPS: 54,120 req/s</span>
+<span class="font-label-sm text-label-sm text-tertiary font-headline-sm">P99: 4.1ms</span>
+</div>
+<button class="h-8 px-space-sm rounded bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">alt_route</span>
+          路由策略
+        </button>
+<button class="h-8 px-space-md rounded bg-surface-container-high text-primary hover:bg-primary hover:text-on-primary font-headline-sm text-headline-sm flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">unfold_more</span>
+          展开实例列表 (6)
+        </button>
+</div>
+</div>
+</div>
+<!-- Global Multi-cluster Sync Telemetry Bar -->
+<div class="w-full mt-space-xl p-space-md rounded bg-surface-container-lowest shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
+<span class="font-headline-sm text-headline-sm text-on-surface">全球 Mesh 控制面同步正常</span>
+</div>
+<span class="text-outline-variant hidden sm:inline">|</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">
+        已同步区域: <span class="font-code-inline text-code-inline text-on-surface">cn-beijing-01</span>, <span class="font-code-inline text-code-inline text-on-surface">cn-shanghai-02</span>, <span class="font-code-inline text-code-inline text-on-surface">sg-singapore-01</span>
+</span>
+</div>
+<div class="flex items-center gap-space-sm font-label-sm text-label-sm text-on-surface-variant">
+<span>最后全量校验: 13 秒前</span>
+<button class="p-1 rounded bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+</button>
+</div>
+</div>
+<!-- Simulated Micro-Interaction Script for Active Drawer Cue & Tag Entry -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tagInput = document.querySelector('input[placeholder*="输入新Tag"]');
+      if (tagInput) {
+        tagInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && tagInput.value.trim() !== '') {
+            const val = tagInput.value.trim();
+            const btn = document.createElement('button');
+            btn.className = 'h-6 px-space-sm rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm flex items-center gap-1 shadow-sm';
+            btn.innerHTML = `<span>${val} (0)</span><span class="material-symbols-outlined text-[12px] cursor-pointer">close</span>`;
+            tagInput.parentNode.parentNode.insertBefore(btn, tagInput.parentNode);
+            tagInput.value = '';
+          }
+        });
+      }
+    });
+  </script>
+</div></main></div></body></html>
