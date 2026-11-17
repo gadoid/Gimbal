@@ -26,10 +26,10 @@ migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 
 **2026-11-17(晚) 环境降级轮**:stitch 原型交互审计牵出「环境」降级为
 轻量部署标签 —— 五项决策 + 词面口径定稿入 redesign §8(标签解析链/凭证规则/
 carry 去 env/预检硬门/显式通道退役);**实施 M1(carry 去 env)→ M2(标签链
-+ 凭证规则 + 链位退役)→ M3(预检硬门三路径统一)均已完成**,每批全量绿
-推进;M3 前置的派发侧一致性审计另修三个 P1(adhoc 派发标签错位/graph
-逐单元解析不可达/rerun 环境回放通道断裂,见 §「M3 前置」);后续 M4(前端
-契约)/M5(ServiceAdmin 原型重排)/M6(收尾)未启动;同日将挂起用例
++ 凭证规则 + 链位退役)→ M3(预检硬门三路径统一)→ M4(前端契约)→
+M5(ServiceAdmin 原型重排)→ M6(收尾 + 三外部文档同步)全部完成**,每批
+全量绿推进;M3 前置的派发侧一致性审计另修三个 P1(adhoc 派发标签错位/graph
+逐单元解析不可达/rerun 环境回放通道断裂,见 §「M3 前置」);同日将挂起用例
 `test_service_fields_system_key_aggregates_member_services` 在 gimbal_test
 跑绿(test_carry_api 15 passed —— 「本机无 TEST_DATABASE_URL」记载已过时,
 库在且可用)。
@@ -577,6 +577,65 @@ P1(均为「链统一了,喂进链的参数/快照错位」),先行修复:
 - **验证**:后端全量 **2063 passed / 2 skipped / 0 failed**(32m02s;
   对照 M2 收口 2045,+17 = 门测试 14 + 派发快照口径 3);前端
   vue-tsc 0 错误(契约扩展纯后端,前端 M4 消费)。
+
+### M4 前端契约（2026-11-17，🟢 完成）
+
+- **api 类型层**(`RunRequest.environmentId` / `SchemeV2.environmentId` /
+  `PreviewRequest.environmentId` / preferences `run.environment` /
+  `ExecConfigRow|Create|Update.environmentId` 全删,各留 §8.2 退役注);
+  `PrecheckItem` + `execConfigId`;`PrecheckResult` 四新字段
+  (`envMixed` / `envContext` / `envWarnings` / `envUnspecified` 语义改写);
+  `PREVIEW_SOURCE_LABELS` 补标签链来源(`identity`/`project`/`default` —
+  旧链来源仅历史快照回放展示);
+- **组件层去 environmentId**:EffectivePreviewDialog(prop+请求键删,环境
+  读面保留「链上无环境标签」新文案);RunConfigPanel(「执行环境」区/
+  envOverride/confirm 载荷删;环境列表仅存预览名映射);SchemeRunConfigSection
+  (方案级环境区/prop/emit 删,§8.2 整体退役);useRunAssembly(opts+payload
+  删);ExecConfigsView(env 表单字段/env hub ① 改**全环境部署矩阵** —
+  不再按配置环境过滤,deps 恒拉全量,deployUrl→depsOf);
+- **M4c 预检新字段消费**:Runner 队列行 — envMixed(混拼警示+深链服务
+  注册)/envUnspecified(「执行标签不可解析」新口径)/envWarnings 逐条
+  展示/missingAuths 增根因注;发起失败行 409 七码标「预检未过(code)」
+  (后端 message 自含上下文名单,前端不二次映射);
+- **测试**:ExecConfigsView(载荷去 envId/枢纽矩阵新口径)/
+  SchemeRunConfigSection(环境位退役断言)改写;**前端全量 171 文件
+  1437 用例绿 + vue-tsc 0 + eslint 干净**;后端零改动(M3 基线 2063/2/0
+  仍有效 —— git status 仅前端文件)。
+
+### M5 ServiceAdmin 原型重排（2026-11-17，🟢 完成）
+
+- **形制按 stitch 原型**(claude/stitch_ux/_1/_2/_3)重排,四层心智不变:
+  - **服务卡片流**(_1):一服务一卡平铺(缺口降序→名字,不再按 system
+    分组表)—— 标识区(名/缩写/系统 chip/接入态 chip/漂移徽章)+
+    说明行内编辑 + **就绪度摘要**(地址 x/y · 登录口 a/b,**配置就绪度
+    替代探针**)+ 收起态部署节点预览条(逐环境 url/缺,点击直达抽屉)+
+    「展开实例列表 (N)」;
+  - **实例表**(_2):卡内展开一环境一行(实例 = 服务 × 环境)—— 环境 /
+    API 地址 / 登录口(系统共享,含版本线回显)/ 就绪度双 chip(✓✗ 地址·
+    登录口)/「服务配置管理」入口;
+  - **「服务配置管理」抽屉**(_3,替代原实例弹框):①实例端点(地址登记/
+    编辑/删除,原格编辑收口进抽屉)②实例配置(登录口/版本线/说明,
+    (system, env) 共享)③**调用身份卡**(该服务该标签下条目,只显
+    引用与可见性 — ref 默认/指定用户,维护深链子页);
+- **保留**:对账条/环境聚焦/环境管理条与环境表单/主档登记弹框/删除
+  两步确认;testid 家族延续(mx-row-/mx-cell-/mx-inst-/meta-* 等),
+  `sys-group-*`/`sys-inst-*` 随分组表退役(覆盖计数移卡头 `svc-cov-*`);
+- **测试**:ServiceAdmin 套件重写 15→19 用例(卡片流/预览条/就绪度/
+  抽屉三段/关闭路径);**前端全量 171 文件 1437 用例绿 + vue-tsc 0 +
+  eslint 干净**。
+
+### M6 收尾（2026-11-17，🟢 完成）
+
+- **全量验证**:前端 vitest 171 文件 / 1437 用例 0 failed + vue-tsc 0 +
+  eslint 0;后端本轮零改动,基线沿用 M3 收口全量 **2063 passed /
+  2 skipped / 0 failed**(commit 4f28d39c 时点证据);
+- **三外部文档同步**:PLATFORM_REQUIREMENTS(V3 现状说明补环境降级轮
+  bullet + config_json 配方键更新)、PLATFORM-SCENARIO-COMPOSER-API
+  (§2.6 退役注 + §4.18 标签链/硬门步骤 + 409 七码表 + 定时路径映射注)、
+  inbound-webhook-integration-guide(§4.2 事件 reason + §6.2 预检硬门
+  暂停段[precheck_config/凭证域映射 missing_credential] + §8 临时调用
+  标签链/409 env_mixed/错误表);
+- 环境降级轮(M1–M6)至此全部收口。
 
 ### P2-C 验证收口
 

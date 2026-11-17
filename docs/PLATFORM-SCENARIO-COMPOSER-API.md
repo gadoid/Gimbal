@@ -203,7 +203,10 @@ Authorization: Bearer <access_token>
 
 > 一次执行的配方（recipe）：数据集选择 / 注入条目 / service 绑定全是纯值。
 > 旧 `caseId` / `env` / `auths` / `retry` 键**已退役**（Case 层解散、执行环境
-> 随 D2 退役、运行级 retry 不做）。旧客户端多发的键**不报 422**：`RunRequest`
+> 随 D2 退役、运行级 retry 不做）；2026-11-17 环境降级轮（服务注册重构
+> §8.2）后，运行级 `environmentId` 显式位亦**全链退役** —— 环境按身份
+> 标签链解析（条目标签 > 项目默认 > 平台默认），缺项由派发前预检硬门
+> 409 指路（§4.18 错误表）。旧客户端多发的键**不报 422**：`RunRequest`
 > 的 `model_config` 是 `_CAMEL`
 > （`ConfigDict(populate_by_name=True, str_strip_whitespace=True)`，
 > `scenario_composer.py:28`），**未设 `extra`**，走 pydantic 缺省的
@@ -620,7 +623,13 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
    该场景 → `404 data_set_not_found`（`:393-420`）。
 5. **断言注入条目筛选**（§10）：按 `injectionEntryIds` 选中条目，对每条跑
    悬空检测；悬空的条目 skip + 告警，**绝不炸 dispatch**（`:422-503`）。
-6. 建 `Execution` 行（`status=queued`）→ spawn 后台 fan-out → 返回
+6. **执行标签解析 + 预检硬门**（M3 §8.5，2026-11-17）：部署标签按
+   **身份条目标签 > 项目默认 > 平台默认** 链解析（换用条目后的取用集合
+   为准）；随后过统一硬门（与 `POST /run/precheck` 同一套分类实现），
+   七类缺配置（混拼标签 / 标签不可解析 / 条目悬空 / 账户未装载 / 账户
+   多候选 / 登录口缺失 / 地址缺失）一律 **409 拒单不建行**，`detail` 带
+   结构化上下文（`{code, message, ...名单}`）。
+7. 建 `Execution` 行（`status=queued`）→ spawn 后台 fan-out → 返回
    `RunResponse`（`:505-632`）。
 
 后台 fan-out 的每 case 链路：`_compose_scenario`（场景定义 + 一行数据，
@@ -712,6 +721,18 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 | 409 | `row_index_out_of_range` | `rowIndexes` 有 `< 0` 或 `>= 该数据集行数` 的下标（`run_dispatcher.py:524-530`） |
 | 409 | `too_many_runs` | 派生总量超过 `MAX_RUNS_PER_EXECUTION` |
 | 409 | `shutting_down` | 优雅关闭窗口内拒单 |
+| 409 | `env_mixed` | 预检硬门（M3 §8.5）：有效身份的部署标签不一致 —— `detail.identities` 带逐条目标签 |
+| 409 | `env_unspecified` | 预检硬门：执行标签不可解析（条目标签 > 项目默认 > 平台默认 均未命中且场景用到身份条目） |
+| 409 | `identity_missing` | 预检硬门：身份条目未登记或已悬空（`detail.aliases`） |
+| 409 | `account_missing` | 预检硬门：身份条目在所选凭证池未装载（个人 / 项目池分语文案，`detail.aliases`） |
+| 409 | `account_ambiguous` | 预检硬门：身份条目命中多候选账户且无同标签唯一命中 |
+| 409 | `login_missing` | 预检硬门：登录态面引用（`${auth.X}` 裸引 / `.token` / `call.user`）的身份其实例未配置登录口（`detail.logins`）；静态令牌形态不拦 |
+| 409 | `address_missing` | 预检硬门：服务在场景声明与所选标签的部署表均缺地址（`detail.services`） |
+
+> 预检硬门七码对**定时（webhook）路径**不抛 409 而是映射实例暂停：
+> 凭证域四码 → `missing_credential`（补齐后复活钩子自动恢复）；环境 /
+> 地址域三码 → `precheck_config`（修复标签 / 地址后在集成详情启动）。
+> 见 `inbound-webhook-integration-guide.md` §6.2。
 
 > **plate / 引擎侧故障不是 HTTP 错误**：fan-out 中途 plate 不可达、plate
 > 拒绝、引擎拒绝、launch 超时等一律记进 `Execution` 行与 JSONL，响应仍是

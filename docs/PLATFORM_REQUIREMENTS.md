@@ -20,8 +20,18 @@
 >   server（8766，执行器）、backend（8000，uvicorn）、frontend（5173，Vite，
 >   代理 `/api`→8000、`/plate`→8765）。
 > - `executions.config_json` 存 V3 调度配方（camelCase）：
->   `{runId, scenarioId, dataSetIds, envId, exec_auth_alias, stepTo,
->   injectCredentials, nRuns, parallel, prefix, mergePolicy}`。
+>   `{runId, scenarioId, dataSetIds, dataSetSelection, schemeId,
+>   environmentId, environmentSource, serviceBindings, stepTo, nRuns,
+>   parallel}`（历史行照旧回放；2026-11-17 环境降级轮后新执行不再带
+>   `environmentId` 请求位 —— 环境按身份标签链解析，快照键仅用于回显）。
+> - **环境降级轮（2026-11-17，服务注册重构 §8）**：环境降为轻量部署标签，
+>   解析链 = **身份条目标签 > 项目默认 > 平台默认**（同次执行标签不一致
+>   拒发）。方案 / 执行配置 / 个人偏好的环境显式位全链退役；派发三路径
+>   （UI/JWT、access token、webhook 定时）统一**预检硬门**（409 七码：
+>   `env_mixed` / `env_unspecified` / `identity_missing` / `account_missing`
+>   / `account_ambiguous` / `login_missing` / `address_missing`；定时路径
+>   映射实例暂停 `missing_credential` / `precheck_config`）。服务注册页
+>   按卡片流重排（服务卡片 + 实例表 + 「服务配置管理」抽屉）。
 >
 > 下文保留为历史设计记录，除本节所述覆盖项外，认证/用户管理（模块 A）、
 > 认证管理（模块 D）等描述仍大体适用。

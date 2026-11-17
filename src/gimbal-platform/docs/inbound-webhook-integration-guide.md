@@ -340,7 +340,7 @@ clientRef。对账查询:`GET /api/executions?clientRef=…`(可见性
 | --- | --- |
 | `execution.finished` | 执行终态(含 canceled —— 用户取消 / 启动前取消 / 对账遇取消 job 三条路径都发) |
 | `integration.run_finished` | 集成实例一次运行收口 |
-| `integration.paused` | 集成实例暂停(reason ∈ token_revoked / token_invalidated / token_expired / token_owner_ineligible / scope_denied / resource_not_allowed / missing_credential / auth_failed / fail_streak / template_changed / made_private) |
+| `integration.paused` | 集成实例暂停(reason ∈ token_revoked / token_invalidated / token_expired / token_owner_ineligible / scope_denied / resource_not_allowed / missing_credential / precheck_config / auth_failed / fail_streak / template_changed / made_private) |
 
 JWT(前端)发起的执行没有令牌,不回调。**公共模板只有注册方自己
 的实例回调**;订阅者实例按自身身份运行,不向原注册方回调。
@@ -485,6 +485,18 @@ resource_not_allowed / token_owner_ineligible`;`token_revoked` 直接
 (补凭证后复活钩子自动恢复)、`auth_failed`、`fail_streak`、
 `template_changed` / `made_private`(重新订阅确认)。
 
+**预检硬门暂停(M3 §8.5,2026-11-17)**:定时路径在装载前接与手动
+执行同一道预检硬门(七码:`env_mixed` / `env_unspecified` /
+`identity_missing` / `account_missing` / `account_ambiguous` /
+`login_missing` / `address_missing`;判定与 `POST /run/precheck` 同一
+实现)。凭证域码(`identity_missing` / `account_missing` /
+`account_ambiguous` / `login_missing`)映射 `missing_credential` ——
+补齐凭证后复活钩子自动恢复;环境/地址域码(`env_mixed` /
+`env_unspecified` / `address_missing`)映射 `precheck_config` ——
+在服务注册侧修复(统一身份条目的部署标签、补部署地址 / 默认环境)后
+于集成详情手动启动。环境按**身份标签链**解析(条目标签 > 项目默认 >
+平台默认),定时任务不再有独立的环境显式位。
+
 ### 6.3 解绑与人员变动(调用方需要知道的部分)
 
 - **解绑**:任务的 JWT 管理者(个人任务属主 / 平台任务 member+ /
@@ -555,16 +567,18 @@ Authorization: Bearer gtk_…
 无截断/重复语义)任一非空 → 422 `adhoc_field_not_allowed`。步数 1..10。
 `release` 只能钉步骤锚到的系统,值形如 `<线>#<修订>`。
 
-**平台补什么**:method / path(plate 定义)、服务地址(别名
-`base_url`,地址链第③层)、凭证(别名 `credential_alias` → 属主
-凭证池;别名未配凭证则省略,接口若需认证由执行器步骤级报错)、
-carry、版本(下节)。请求体钉不了任何 URL、method、path、header ——
-与 M1 同一原则;临时调用的地址全部经别名解析,没有直连层。
+**平台补什么**:method / path(plate 定义)、服务地址(按**身份标签链**
+取部署表,地址链第③层:条目标签 > 平台默认,临时调用无项目归属)、
+凭证(别名 `credential_alias` → 属主凭证池;别名未配凭证则省略,接口
+若需认证由执行器步骤级报错)、carry、版本(下节)。请求体钉不了任何
+URL、method、path、header —— 与 M1 同一原则;临时调用的地址全部经
+标签链解析,没有直连层。
 
 ### 8.3 版本
 
-每个锚点系统的 `meta.plate` 声明:`release` 指定了用它;否则取
-`service` 别名所属环境的 `lines[系统]` 版本线,再经 plate 取**线内
+每个锚点系统的 `meta.plate` 声明:`release` 指定了用它;否则按**身份
+标签链**(条目标签 > 平台默认;临时调用无项目归属)定位实例,取其
+`lines[系统]` 版本线,再经 plate 取**线内
 最新修订**钉成 `<线>#<n>`。取不到 → 422 `adhoc_version_unresolved`
 (`systems[].reason`:`no_line` 别名无环境或环境未声明该系统 /
 `conflicting_lines` 同系统的多个别名分属不同线 / `line_not_in_plate`
@@ -578,8 +592,9 @@ plate 无此线)。不兜底 working:临时调用永远执行一个可追溯的�
 `{path: "steps[i].endpoint", message}`)→ 服务别名(存在 / plate /
 `base_service` 与锚点声明的服务一致,422 `adhoc_service_mismatch`,
 `services[].reason` = `unknown` / `not_plate` / `service_mismatch`,
-后者附 `endpointService` 与 `baseService`)→ 地址落点(别名无
-`base_url` → 422 `adhoc_service_unresolved`)→ 版本(8.3)→ 组装 →
+后者附 `endpointService` 与 `baseService`)→ 地址落点(身份标签链:
+条目标签不一致 → 409 `env_mixed`;所选标签部署表缺地址 → 422
+`adhoc_service_unresolved`)→ 版本(8.3)→ 组装 →
 **干跑一次 plate convert**(与 preview-plate 同口径:未知字段、必填
 缺失、类型不符 → 422 `adhoc_invalid`,`errors` 原样带回 plate 的逐
 字段错误)→ **令牌范围**(403 `resource_not_allowed`,§3.2;别名集 =
@@ -608,7 +623,8 @@ plate 不可达(取端点定义或干跑时)→ 503 `plate_unavailable`。
 | 422 | `adhoc_field_not_allowed` | 白名单外字段 / 不允许的策略 / 步数越界 / 带 runOptions 等配方字段 / release 形状或系统不对 |
 | 422 | `adhoc_step_invalid` | 步骤缺 endpoint/service 或 body/pathParams/strategy 形状不对 |
 | 422 | `adhoc_service_mismatch` | 别名不存在、非 plate 别名、或 `base_service` 与锚点在 plate 中声明的服务不一致 |
-| 422 | `adhoc_service_unresolved` | 别名无 base_url |
+| 409 | `env_mixed` | 各步身份条目的部署标签不一致(同次调用地址/版本必须同一标签;`detail.identities` 带逐条目标签,M3 §8.5) |
+| 422 | `adhoc_service_unresolved` | 所选标签的部署表缺该服务地址 |
 | 422 | `adhoc_version_unresolved` | 取不到环境版本线或修订 |
 | 422 | `adhoc_invalid` | 锚点在 plate 中不存在,或 plate convert 拒绝(均附逐字段 `errors`) |
 | 403 | `resource_not_allowed` | 临时调用超出令牌范围(§3.2) |
