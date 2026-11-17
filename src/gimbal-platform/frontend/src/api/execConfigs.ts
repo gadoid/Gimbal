@@ -23,14 +23,12 @@ export interface ExecConfigRow {
   id: number
   name: string
   isDefault: boolean
-  environmentId: number | null
   systems: SystemSubConfig[]
   scope?: 'user' | 'project'
 }
 
 export interface ExecConfigCreateInput {
   name: string
-  environmentId?: number | null
   systems?: SystemSubConfig[]
   isDefault?: boolean
   /** ⑧ 组级批次:project scope(项目变体;与 projectId 成对)。
@@ -41,8 +39,6 @@ export interface ExecConfigCreateInput {
 
 export interface ExecConfigUpdateInput {
   name?: string
-  /** 显式传 null = 不设置环境(链跳过此位);不传 = 不动 */
-  environmentId?: number | null
   systems?: SystemSubConfig[]
 }
 
@@ -68,7 +64,7 @@ export function getExecConfig(id: number): Promise<ExecConfigRow> {
     .then(({ data }) => data)
 }
 
-/** 整体替换式 PATCH;environmentId 语义见 ExecConfigUpdateInput */
+/** 整体替换式 PATCH */
 export function updateExecConfig(
   id: number,
   body: ExecConfigUpdateInput,

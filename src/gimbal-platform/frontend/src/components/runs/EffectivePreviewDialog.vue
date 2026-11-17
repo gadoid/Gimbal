@@ -1,6 +1,6 @@
 <!-- EffectivePreviewDialog.vue — S7.3 生效预览(S5 resolve_effective_config
-     的展示面):本次执行将生效的 环境/服务地址/身份条目装载/carry 逐值带来源。
-     双宿主:项目配置页签(选场景)与运行配置面板(场景/方案/环境已定,
+     的展示面):本次执行将生效的 环境标签/服务地址/身份条目装载/carry 逐值
+     带来源。双宿主:项目配置页签(选场景)与运行配置面板(场景/方案已定,
      透传上下文)。不含明文凭证(后端契约)。registry C2b:装载表口径自
      槽位切条目(行 = 条目名 → 池内账户行,bindingId = 账户 id)。 -->
 <template>
@@ -30,14 +30,14 @@
         <p v-else-if="loading" class="muted" data-testid="preview-loading">解析中…</p>
 
         <template v-else-if="cfg">
-          <!-- 环境:来源 = 链路哪一环(explicit>scheme>project>preference>default) -->
+          <!-- 环境标签:来源 = 标签链哪一环(§8.2:身份 > 项目默认 > 平台默认) -->
           <section>
             <h4>执行环境</h4>
             <p v-if="cfg.env" data-testid="preview-env">
               <b>{{ envName(cfg.env.environmentId) }}</b>
               <span class="src">{{ envSourceLabel(cfg.env.environmentSource) }}</span>
             </p>
-            <p v-else class="muted" data-testid="preview-env-none">未选定环境(地址走场景声明/别名旧链)</p>
+            <p v-else class="muted" data-testid="preview-env-none">链上无环境标签(地址不走部署表)</p>
           </section>
 
           <!-- 缺装载:执行会被拒(S5 预检失败即中止)— 置顶提示 -->
@@ -133,7 +133,8 @@
  * EffectivePreviewDialog —— S7.3 生效预览。
  * 数据面 = api/runs previewEffectiveConfig(POST /runs/preview)。
  * pickable = 未固定场景Id 时由内部选(父级传 scenarios 列表);
- * 固定形态(运行面板)透传 schemeId/environmentId/serviceBindings。
+ * 固定形态(运行面板)透传 schemeId/serviceBindings(环境随身份
+ * 标签链解析,§8.2 后不再有请求级 environmentId)。
  */
 import { computed, ref, watch } from 'vue'
 import {
@@ -147,7 +148,6 @@ const props = defineProps<{
   scenarioId?: string
   scenarios?: Array<{ id: string; name: string }>
   schemeId?: string
-  environmentId?: number | null
   serviceBindings?: Record<string, { alias: string }>
   /** 环境名映射(父级已拉过环境列表时透传,避免重复请求) */
   envNames?: Record<number, string>
@@ -210,7 +210,6 @@ async function run(): Promise<void> {
     cfg.value = await previewEffectiveConfig({
       scenarioId: sid,
       schemeId: props.schemeId,
-      environmentId: props.environmentId ?? undefined,
       serviceBindings: props.serviceBindings,
       credentialSource: props.credentialSource,
       execConfigId: props.execConfigId,

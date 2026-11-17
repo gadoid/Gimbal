@@ -3,15 +3,14 @@
  *
  * 契约对齐后端 app/routers/runs.py POST /runs/preview(S5 落地):
  * 本次执行将生效的 地址/条目装载/carry 逐值带来源,不含明文凭证;
- * 读闸同预检(不可读场景 404,不泄露存在性)。环境链与执行同源:
- * 显式 > 方案 > 项目默认 > 个人偏好 > 默认环境。
+ * 读闸同预检(不可读场景 404,不泄露存在性)。环境随身份标签链解析
+ * (§8.2:身份 > 项目默认 > 平台默认),与执行同源。
  */
 import http from './http'
 
 export interface PreviewRequest {
   scenarioId: string
   schemeId?: string
-  environmentId?: number
   /** 服务键 → {alias}(S6 后唯一形态;url/authAlias 后端 422) */
   serviceBindings?: Record<string, { alias: string }>
   /** authz M2a S8:凭证来源(同执行请求;'project' = 项目凭证池) */
@@ -21,16 +20,18 @@ export interface PreviewRequest {
   execConfigId?: number
 }
 
-/** 来源标签 → 中文(S7.3 生效预览展示;口径 = run_prepare.resolve_effective_config;
- *  分层②新增 exec_config 两档) */
+/** 来源标签 → 中文(S7.3 生效预览展示;口径 = run_prepare.resolve_effective_config)。
+ *  环境标签链(§8.2):身份 > 项目默认 > 平台默认;explicit/scheme/
+ *  preference/exec_config* 只出现在历史快照回放面,原样透出仅作展示。 */
 export const PREVIEW_SOURCE_LABELS: Record<string, string> = {
   authored: '场景声明',
   deployment: '服务注册',
+  identity: '身份标签',
+  project: '项目默认',
+  default: '平台默认',
   explicit: '本次指定',
   scheme: '方案',
-  project: '项目默认',
   preference: '我的偏好',
-  default: '默认环境',
   exec_config: '执行配置',
   exec_config_default: '默认执行配置',
 }

@@ -27,8 +27,8 @@
         {{ s.name }}
         <span v-if="!s.isDefault && schemeInvalid(s)" class="rd-chip-warn">· 失效</span>
       </button>
-      <!-- S7.3 生效预览入口(弹层/右栏两宿主共见):按当前方案+绑定+环境
-           解析逐值带来源(不含明文) -->
+      <!-- S7.3 生效预览入口(弹层/右栏两宿主共见):按当前方案+绑定解析
+           逐值带来源(环境随身份标签链,不含明文) -->
       <button
         v-if="previewScenarioId" type="button" class="ghost-btn rd-preview-btn"
         data-testid="run-preview-open" @click="previewOpen = true"
@@ -69,19 +69,9 @@
         <p v-if="!serviceRows.length" class="rd-empty">场景未声明且未引用任何 service</p>
       </section>
 
-      <!-- 执行环境(authz M2a S2:本次显式位;自建方案态不显示 —— 方案
-           环境在工作台配置,运行时按 D3 不篡改) -->
-      <section class="run-section">
-        <label class="run-label">执行环境 <span class="muted small">(本次 > 方案 > 项目默认 > 我的偏好 > 默认环境)</span></label>
-        <select v-model.number="envOverride" class="env-select" data-testid="env-override">
-          <option :value="null">按链路解析</option>
-          <option v-for="e in envOptions" :key="e.id" :value="e.id">
-            {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
-          </option>
-        </select>
-      </section>
-
-      <!-- 凭证来源(authz M2a S8:项目区场景可选项目凭证;缺省个人) -->
+      <!-- 凭证来源(authz M2a S8:项目区场景可选项目凭证;缺省个人)。
+           §8.2 后无「执行环境」显式位 —— 环境随身份标签链解析
+           (身份 > 项目默认 > 平台默认),预检缺项会以 409 指路 -->
       <section v-if="projectId != null" class="run-section">
         <label class="run-label">凭证来源 <span class="muted small">(手动执行默认个人凭证,可切换项目凭证)</span></label>
         <select v-model="credentialSource" class="env-select" data-testid="credential-source">
@@ -272,7 +262,6 @@
       :open="previewOpen"
       :scenario-id="previewScenarioId || undefined"
       :scheme-id="selected && !selected.isDefault ? selected.schemeId : undefined"
-      :environment-id="envOverride"
       :service-bindings="previewBindings"
       :env-names="previewEnvNames"
       :credential-source="projectId != null ? credentialSource : undefined"
@@ -341,17 +330,16 @@ const props = withDefaults(defineProps<{
  *  给出,不再需要宿主供 credential 选项);不可达 → 候选空、降级不误报。 */
 const aliasRows = ref<ServiceAliasRow[]>([])
 const aliasNames = computed(() => aliasRows.value.map((a) => a.aliasName))
-/** authz M2a S2:环境候选(地址链选择维度);列表不可达 → 只留「按链路」 */
-const envOptions = ref<{ id: number; name: string; is_default: boolean }[]>([])
-const envOverride = ref<number | null>(null)
+/** 环境名映射源(§8.2 后无运行时环境选择,仅供预览 envNames 透传);
+ *  列表不可达 → 预览环境名降级为「环境 #id」 */
+const envRows = ref<Array<{ id: number; name: string }>>([])
 /** authz M2a S8:凭证来源(项目区场景;缺省个人凭证,可切项目凭证) */
 const credentialSource = ref<'personal' | 'project'>('personal')
 onMounted(() => {
   import('@/api/environments').then(({ listEnvironments }) =>
     listEnvironments()).then((rows) => {
-    envOptions.value = rows.map((e) => ({
-      id: e.id, name: e.name, is_default: e.is_default }))
-  }).catch(() => { /* 环境不可达 → 不给显式选择 */ })
+    envRows.value = rows.map((e) => ({ id: e.id, name: e.name }))
+  }).catch(() => { /* 环境不可达 → 预览环境名降级 */ })
   // 同步抛兜底(http 层在无适配器/被 mock 环境可能同步炸,.catch 挂不上):
   // 注册表不可达只是候选为空,不阻塞运行。
   try {
@@ -550,7 +538,6 @@ function onConfirm() {
       ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
       ...(Object.keys(serviceBindings).length ? { serviceBindings } : {}),
       ...(debugSpec ? { debug: debugSpec } : {}),
-      ...(envOverride.value !== null ? { environmentId: envOverride.value } : {}),
       ...(props.projectId != null && credentialSource.value === 'project'
         ? { credentialSource: 'project' } : {}),
     })
@@ -585,7 +572,7 @@ const previewBindings = computed<Record<string, { alias: string }>>(() => {
   return out
 })
 const previewEnvNames = computed<Record<number, string>>(() =>
-  Object.fromEntries(envOptions.value.map((e) => [e.id, e.name])))
+  Object.fromEntries(envRows.value.map((e) => [e.id, e.name])))
 </script>
 
 <style scoped>

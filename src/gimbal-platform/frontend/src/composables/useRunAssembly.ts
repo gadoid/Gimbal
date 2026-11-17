@@ -47,8 +47,6 @@ export interface RunConfirmOpts {
   parallel?: number
   serviceBindings?: Record<string, ServiceBinding>
   injectionEntryIds?: string[]
-  /** authz M2a S2:本次执行环境(缺省 = 按链路解析) */
-  environmentId?: number
   /** C6:调试执行装载(单 case 且 nRuns=1;发起后进调试台) */
   debug?: Pick<DebugSpec, 'pause' | 'breakpoints'>
   /** authz M2a S8:'project' = 场景所属普通项目的项目凭证池 */
@@ -178,7 +176,6 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
         ? { serviceBindings: opts.serviceBindings } : {}),
       ...(opts.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
-      ...(opts.environmentId ? { environmentId: opts.environmentId } : {}),
       ...(opts.credentialSource === 'project'
         ? { credentialSource: 'project' } : {}),
     }

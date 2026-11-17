@@ -31,7 +31,6 @@ const BASE = {
   ],
   stepTo: null as number | null, nRuns: 1, parallel: 1,
   stepCount: 3,
-  environmentId: null as number | null,
   environments: [] as Array<{ id: number; name: string; is_default: boolean }>,
 }
 
@@ -63,7 +62,7 @@ describe('SchemeRunConfigSection', () => {
     })
   })
 
-  it('分层⑤:空方案(无绑定)→ 指引卡指到执行配置,不出选择器', async () => {
+  it('分层⑤:空方案(无绑定)→ 指引卡指到执行配置,不出选择器(§8.2 后无环境位)', async () => {
     listAllAliasesMock.mockResolvedValue([aliasRow('svc-a-uat', 'svc-a')])
     const w = mountSection()
     await flushPromises()
@@ -71,24 +70,10 @@ describe('SchemeRunConfigSection', () => {
     expect(w.find('[data-testid="binding-pointer-link"]').attributes('href'))
       .toBe('/exec-configs')
     expect(w.findAll('[data-testid="binding-alias"]').length).toBe(0)
-    // 环境同款:无环境 → 指引(不出 param-env select)
-    expect(w.find('[data-testid="env-pointer"]').exists()).toBe(true)
-    expect(w.find('[data-testid="param-env"]').exists()).toBe(false)
-    w.unmount()
-  })
-
-  it('分层⑤:存量环境在场 → select 可改可清空(清空=改由执行配置承载)', async () => {
-    listAllAliasesMock.mockResolvedValue([])
-    const w = mountSection({
-      environmentId: 2,
-      environments: [{ id: 2, name: 'UAT', is_default: false }],
-    })
-    await flushPromises()
-    const sel = w.find('[data-testid="param-env"]')
-    expect((sel.element as HTMLSelectElement).value).toBe('2')
+    // §8.2 方案环境整体退役:不再渲染 param-env / env-pointer
     expect(w.find('[data-testid="env-pointer"]').exists()).toBe(false)
-    await sel.setValue('')
-    expect(w.emitted('update:environmentId')!.at(-1)![0]).toBe(null)
+    expect(w.find('[data-testid="param-env"]').exists()).toBe(false)
+    expect(w.find('[data-testid="env-pointer-link"]').exists()).toBe(false)
     w.unmount()
   })
 

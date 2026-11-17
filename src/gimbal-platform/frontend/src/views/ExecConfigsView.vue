@@ -3,8 +3,8 @@
      (bindings + carryOverrides)。零凭证值零地址值 —— 凭证在凭证管理、
      地址在服务注册,这里只存引用键。
      ③ 关联枢纽(§8):对既有配置面只做**关联** —— 存引用键 + 放深链,
-     不搬数据、不代管维护面与权限门。页内四路关联:环境→地址就绪度+
-     深链服务注册(矩阵);绑定条目→个人池装载就绪(registry C3a 新链:
+     不搬数据、不代管维护面与权限门。页内四路关联:地址就绪度(部署
+     矩阵)+ 深链服务注册;绑定条目→个人池装载就绪(registry C3a 新链:
      换用条目 → ref → (system, env) 账户;与后端 pick_bindings 同构)+
      未登记深链服务子页 / 缺账户深链 /auths 按 (system, envId) 预填直达
      (注册表状态按名定向检索,规模安全);服务→逐系统子页(身份条目
@@ -19,7 +19,7 @@
       title="配置"
       :count="loading ? '' : `${rows.length} 套配置`"
       :meta="mode === 'edit' && selected ? `当前配置 · ${selected.name}` : undefined"
-      subtitle="场景外部支撑的跨场景载体:在哪(环境)、以谁(身份条目装载)、带什么业务参数(carry 覆盖)。一套默认 + 若干命名变体;执行时选一套注入。凭证在「凭证管理」按条目 ref 解析、地址随环境取部署表 —— 本页零凭证值零地址值。"
+      subtitle="场景外部支撑的跨场景载体:以谁(身份条目装载)、带什么业务参数(carry 覆盖)。一套默认 + 若干命名变体;执行时选一套注入。凭证在「凭证管理」按条目 ref 解析、地址按身份的环境标签取部署表 —— 本页零凭证值零地址值。"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -59,13 +59,6 @@
           <label class="lb">名称</label>
           <Input v-model="form.name" placeholder="如 商户B视角@UAT"
                  data-testid="ec-name" />
-          <label class="lb">环境</label>
-          <select v-model="form.envId" class="native-select" data-testid="ec-env">
-            <option value="">(不设置)</option>
-            <option v-for="e in envs" :key="e.id" :value="String(e.id)">
-              {{ e.name }}<template v-if="e.is_default"> · 默认</template>
-            </option>
-          </select>
         </div>
 
         <div v-for="(s, i) in sysRows" :key="i" class="sys">
@@ -162,11 +155,12 @@
           <span class="n">只关联不纳入 —— 维护面留在各自页面</span>
         </div>
 
-        <!-- ① 环境 → 地址就绪度(部署表读面)+ 深链「服务注册」 -->
+        <!-- ① 地址就绪度(部署矩阵读面;§8.2 配置去 env 后按全环境矩阵
+             展示 —— 执行时地址按身份的环境标签取数)+ 深链「服务注册」 -->
         <div class="svc-panel" data-testid="ec-hub-env">
           <div class="svc-panel-head">
             <span class="svc-panel-title">服务注册</span>
-            <span class="svc-panel-desc">本配置所选环境下各系统的地址就绪度</span>
+            <span class="svc-panel-desc">各系统按环境的地址就绪度(执行时按身份的环境标签取)</span>
             <span class="svc-panel-right">
               <router-link v-if="auth.can('ops.write')" to="/service-admin"
                 class="svc-link">维护在「服务注册」↗</router-link>
@@ -176,26 +170,33 @@
           <p v-if="!selected.systems.length" class="hub-note">
             本配置还没有系统子配置 —— 地址就绪度按系统展示。
           </p>
-          <p v-else-if="selected.environmentId == null" class="hub-note">
-            未设置环境(执行按环境链解析:方案 &gt; 项目默认 &gt; 本配置默认 &gt; 偏好)
-          </p>
-          <template v-else>
-            <p class="hub-note">「{{ envName(selected.environmentId) }}」下各系统地址:</p>
-            <table class="slib-table" data-testid="ec-hub-deps">
-              <thead><tr><th>系统</th><th>地址</th><th style="width:4.375rem">就绪</th></tr></thead>
-              <tbody>
-                <tr v-for="s in selected.systems" :key="`dep-${s.service}`"
+          <table v-else class="slib-table" data-testid="ec-hub-deps">
+            <thead>
+              <tr><th>系统</th><th>环境</th><th>地址</th><th style="width:4.375rem">就绪</th></tr>
+            </thead>
+            <tbody>
+              <template v-for="s in selected.systems" :key="`dep-${s.service}`">
+                <tr v-for="(d, i) in depsOf(s.service)" :key="`dep-${s.service}-${i}`"
                     :data-testid="`ec-dep-${s.service}`">
-                  <td><span class="mono">{{ s.service }}</span></td>
-                  <td><span class="mono">{{ deployUrl(s.service) || '—' }}</span></td>
+                  <td v-if="i === 0" :rowspan="depsOf(s.service).length || 1">
+                    <span class="mono">{{ s.service }}</span>
+                  </td>
+                  <td>{{ envName(d.envId) }}</td>
+                  <td><span class="mono">{{ d.baseUrl || '—' }}</span></td>
                   <td>
-                    <span v-if="deployUrl(s.service)" class="svc-flag green">就绪</span>
+                    <span v-if="d.baseUrl" class="svc-flag green">就绪</span>
                     <span v-else class="svc-flag amber">缺地址</span>
                   </td>
                 </tr>
-              </tbody>
-            </table>
-          </template>
+                <tr v-if="!depsOf(s.service).length" :data-testid="`ec-dep-${s.service}`">
+                  <td><span class="mono">{{ s.service }}</span></td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td><span class="svc-flag amber">缺地址</span></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
         </div>
 
         <!-- ② 绑定条目 → 个人池装载就绪(ref→账户新链;C3a)+ 缺失深链
@@ -380,7 +381,7 @@ const rows = ref<ExecConfigRow[]>([])
 const envs = ref<EnvironmentRow[]>([])
 const selectedId = ref<number | null>(null)
 const mode = ref<'edit' | 'create'>('edit')
-const form = ref({ name: '', envId: '' })
+const form = ref({ name: '' })
 const sysRows = ref<SysRow[]>([])
 const error = ref('')
 const delArmed = ref(false)
@@ -443,8 +444,9 @@ const envNames = computed<Record<number, string>>(() =>
 function envName(id: number): string {
   return envNames.value[id] ?? `环境 #${id}`
 }
-function deployUrl(service: string): string | null {
-  return deps.value.find((d) => d.baseService === service)?.baseUrl ?? null
+/** 系统的部署行(全环境矩阵;§8.2 后执行地址按身份的环境标签取) */
+function depsOf(service: string): Deployment[] {
+  return deps.value.filter((d) => d.baseService === service)
 }
 function aliasExists(alias: string): boolean {
   return faceMeta.value[alias] != null
@@ -497,16 +499,12 @@ async function loadHub(c: ExecConfigRow): Promise<void> {
       .catch(() => { drift.value = null }),
     // 绑定别名的注册表状态(定向检索,永不全量)
     loadFacesFor(c),
+    // 部署矩阵全量(listDeployments 固定拉全环境;§8.2 配置去 env 后
+    // 地址就绪度按矩阵展示,不再按配置环境过滤)
+    listDeployments()
+      .then((d) => { deps.value = d })
+      .catch(() => { deps.value = [] }),
   ]
-  if (c.environmentId != null) {
-    // 2026-11-13 起 listDeployments 固定拉全环境矩阵(独立部署页并入服务
-    // 注册,按环境取数的调用方收口)—— 本配置环境的地址客户端过滤
-    jobs.push(listDeployments()
-      .then((d) => { deps.value = d.filter((r) => r.envId === c.environmentId) })
-      .catch(() => { deps.value = [] }))
-  } else {
-    deps.value = []
-  }
   await Promise.all(jobs)
 }
 
@@ -518,7 +516,7 @@ function msg(e: unknown): string {
 }
 
 function fillForm(c: ExecConfigRow): void {
-  form.value = { name: c.name, envId: c.environmentId == null ? '' : String(c.environmentId) }
+  form.value = { name: c.name }
   sysRows.value = (c.systems ?? []).map((s) => ({
     service: s.service,
     binds: Object.entries(s.bindings ?? {}).map(([alias, slot]) => ({ alias, slot })),
@@ -543,7 +541,7 @@ function pick(id: number): void {
 function openCreate(): void {
   mode.value = 'create'
   selectedId.value = null
-  form.value = { name: '', envId: '' }
+  form.value = { name: '' }
   sysRows.value = []
   delArmed.value = false
   copyArmed.value = false
@@ -594,7 +592,6 @@ async function save(): Promise<void> {
   }
   const body = {
     name,
-    environmentId: form.value.envId === '' ? null : Number(form.value.envId),
     systems: payloadOf(),
   }
   try {
@@ -691,20 +688,6 @@ onMounted(async () => {
   margin-bottom: 0.75rem;
 }
 .form-grid .lb { font-size: 0.71875rem; color: var(--sl-ink-3); }
-/* 原生 select 保持表单语义(测试/键盘),外观与 shadcn Input 同档 */
-.native-select {
-  height: 2.25rem;
-  width: 100%;
-  max-width: 20rem;
-  padding: 0 0.625rem;
-  font-size: 0.8125rem;
-  color: var(--sl-ink);
-  background: var(--c-surface);
-  border: 1px solid var(--sl-line);
-  border-radius: 0.375rem;
-  outline: none;
-}
-.native-select:focus { border-color: var(--sl-accent); }
 
 .sys {
   display: flex;

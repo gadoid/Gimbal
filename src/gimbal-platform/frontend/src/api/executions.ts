@@ -83,7 +83,8 @@ export interface Execution {
     reportDefinitionId?: string | null
     /** S2.1 环境选择快照(无环境键缺席)→ 与 source 并合成行「执行环境」 */
     environmentId?: number | null
-    /** 环境来源枚举(explicit/scheme/project/preference/exec_config[_default]/default)→ 译中文 */
+    /** 标签来源枚举(§8.2 新链:identity/project/default;历史快照
+     *  的 explicit/scheme/preference/exec_config* 原样回放)→ 译中文 */
     environmentSource?: string | null
     /** §6.3 环境版本线告警(人类可读文本)→ dl「环境告警」 */
     environmentWarnings?: string[]

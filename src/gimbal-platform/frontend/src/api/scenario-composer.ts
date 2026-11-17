@@ -262,9 +262,8 @@ export interface RunRequest {
   /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
    *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */
   batchId?: string
-  /** authz M2a S2:本次执行环境(环境链首位,> 方案 > 项目默认 > 个人
-   *  偏好 > 默认环境);缺省 = 按链路解析。环境不存在 → 404 */
-  environmentId?: number
+  /** §8.2(2026-11-17 环境降级轮):显式 environmentId 全链退役(发送
+   *  被后端静默忽略)—— 执行标签按 身份 > 项目默认 > 平台默认 自动解析 */
   /** C5(P3-05):suite 编排执行 — 非空时走 graph 链(单元=平台场景);
    *  横切面 gates/checks(D-6 保留)与乘法在此声明 */
   graph?: GraphSpec
@@ -353,8 +352,7 @@ export interface SchemeV2 {
   injectionEntryIds: string[]
   serviceBindings: Record<string, ServiceBinding>
   options: RunOptions
-  /** authz M2a S2:方案环境(环境链第二位);未设置时后端不落键 */
-  environmentId?: number | null
+  /** §8.2:方案环境链位退役(存量 payload 键后端停读;读侧忽略) */
 }
 
 /** 方案 → 执行配方:把方案锁定的选择/绑定/执行指令物化成 RunRequest,
@@ -488,6 +486,9 @@ export async function validateEndpointFieldStates(
 export interface PrecheckItem {
   scenarioId: string
   schemeId: string
+  /** §8.5:按该执行配置口径预检(换用 slot_map 折进有效身份集合,
+   *  与派发同一折叠);缺省 = 不按执行配置口径 */
+  execConfigId?: number
 }
 
 /** 单条预检结论 — 全部是「这条方案配置」的事实,不是用例状态(§1.4) */
@@ -513,9 +514,16 @@ export interface PrecheckResult {
   missingAuths?: string[]
   /** 项目凭证池的缺槽清单(null = 不适用:非普通项目 / 非成员) */
   projectMissingAuths?: string[] | null
-  /** 环境链全空且场景用到身份条目(env 必填,§1.4)—— missingAuths
-   * 全数罗列只是表象,根因是未指定环境;先建/设平台默认环境 */
+  /** §8.5 语义改写:执行标签不可解析(条目标签 > 项目默认 > 平台默认
+   *  均未命中)且场景用到身份条目 —— missingAuths 全数罗列只是表象;
+   *  派发侧 409 env_unspecified。混拼不连坐(见 envMixed) */
   envUnspecified?: boolean
+  /** §8.5:多身份标签不一致(混拼)—— 派发侧 409 env_mixed */
+  envMixed?: boolean
+  /** §8.5:本次标签快照 {environmentId, environmentSource}(链空 = null) */
+  envContext?: { environmentId: number; environmentSource: string } | null
+  /** §8.5:跨标签凭证提示(账户标签 ≠ 执行标签 —— 凭证解耦,不拦截) */
+  envWarnings?: string[]
 }
 
 /** 批量预检:队列 N 条一次发回判定面(失效判定的服务端唯一实现,§1.6) */

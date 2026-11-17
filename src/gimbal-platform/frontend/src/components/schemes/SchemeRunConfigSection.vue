@@ -3,7 +3,7 @@
  *  绑定口径)② 运行参数(钳位 + 总量预览)。纯展示组件:数据进 props、
  *  变更出事件;serviceRows 派生与持久化归壳。绑定口径 = utils/run-bindings
  *  的 explicitBindingOf / degradedAlias / aliasCandidates(单源,M2a S6
- *  后绑定语义 = 「服务键 → 别名」;地址由执行环境的部署地址给出)。
+ *  后绑定语义 = 「服务键 → 别名」;地址按身份环境标签取部署表)。
  *  ③ 预埋区(plugins/logSub 自由文本)已随 M10/Q15 下线 —— wire 不再
  *  收这两个键(plugins 删除、logSub→subscribe 结构化),自由文本 UI 写
  *  的是死键,整区移除。 */
@@ -29,9 +29,7 @@ const props = defineProps<{
   stepCount: number
   /** 平台编排态步骤名(orchestration.steps[].name;缺名时选项不带名) */
   stepNames?: string[]
-  /** authz M2a S2:方案环境(环境链第二位);null = 不设置(按链路) */
-  environmentId?: number | null
-  /** 环境候选(壳装载;下拉只读展示) */
+  /** 环境名映射源(§8.2 方案环境退役;仅供预览 envNames 透传) */
   environments?: { id: number; name: string; is_default: boolean }[]
   /** S7.3 生效预览:宿主透传场景/方案 id(缺省 = 宿主无预览上下文,不显入口) */
   scenarioId?: string
@@ -43,8 +41,6 @@ const emit = defineEmits<{
   'update:stepTo': [v: number | null]
   'update:nRuns': [v: number]
   'update:parallel': [v: number]
-  /** authz M2a S2:方案环境(null = 清空) */
-  'update:environmentId': [v: number | null]
 }>()
 
 // ── ① 服务绑定 ─────────────────────────────────────────────────────
@@ -117,7 +113,7 @@ const totalRuns = computed(() =>
   clampInt(props.nRuns, 1, 64) * clampInt(props.parallel, 1, 64))
 const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
 
-// ── S7.3 生效预览:方案的绑定 + 环境逐值解析(alias 空条目不送)─────
+// ── S7.3 生效预览:方案的绑定逐值解析(环境随身份标签链;alias 空条目不送)─────
 const previewOpen = ref(false)
 const previewBindings = computed<Record<string, { alias: string }>>(() => {
   const out: Record<string, { alias: string }> = {}
@@ -220,31 +216,6 @@ const previewEnvNames = computed<Record<number, string>>(() =>
           size="small" data-testid="param-parallel" />
       </div>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
-      <div class="param-row">
-        <label>执行环境</label>
-        <!-- 分层⑤:空方案(无环境)指到执行配置;存量环境照常改(清空后
-             由执行配置承载,字段保留兼容) -->
-        <template v-if="environmentId === null || environmentId === undefined">
-          <span class="hint" data-testid="env-pointer">
-            已由「执行配置」承载(执行链:本次 &gt; 选定配置 &gt; 项目默认
-            &gt; 默认配置 &gt; 平台默认)
-          </span>
-          <a class="pointer-link" href="/exec-configs" data-testid="env-pointer-link">去执行配置 ↗</a>
-        </template>
-        <template v-else>
-          <select class="bind-alias" data-testid="param-env"
-                  :value="String(environmentId)"
-                  @change="emit('update:environmentId',
-                    ($event.target as HTMLSelectElement).value === ''
-                      ? null : Number(($event.target as HTMLSelectElement).value))">
-            <option value="">改由执行配置承载(清除方案环境)</option>
-            <option v-for="e in environments" :key="e.id" :value="String(e.id)">
-              {{ e.name }}{{ e.is_default ? '(默认)' : '' }}
-            </option>
-          </select>
-          <span class="param-hint">存量方案环境 —— 按方案遗留链位生效</span>
-        </template>
-      </div>
     </section>
 
     <!-- S7.3 生效预览(宿主透传 scenarioId/schemeId 才有入口) -->
@@ -252,7 +223,6 @@ const previewEnvNames = computed<Record<number, string>>(() =>
       :open="previewOpen"
       :scenario-id="scenarioId"
       :scheme-id="schemeId"
-      :environment-id="environmentId ?? undefined"
       :service-bindings="previewBindings"
       :env-names="previewEnvNames"
       @close="previewOpen = false"

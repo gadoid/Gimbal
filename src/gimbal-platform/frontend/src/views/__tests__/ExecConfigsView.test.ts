@@ -1,7 +1,7 @@
 /** 执行配置管理页测试(执行配置分层①/③) — API 全走 mock,载荷与
- * 交互流钉住:选中回填 / 新建(空行剔除+envId 置空)/ PATCH 保存 /
- * 默认切换 / 复制 / 两步删除 / 409 内联;③ 枢纽(地址/条目就绪 + 漂移
- * + 预览按钮)。 */
+ * 交互流钉住:选中回填 / 新建(空行剔除)/ PATCH 保存 / 默认切换 /
+ * 复制 / 两步删除 / 409 内联;③ 枢纽(地址矩阵/条目就绪 + 漂移 +
+ * 预览按钮)。§8.2 后配置无 env 位 —— 载荷不再带 environmentId。 */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -77,7 +77,7 @@ const deps = vi.mocked(depApi)
 const drift = vi.mocked(driftApi.execConfigDrift)
 
 const ROW = {
-  id: 7, name: '商户B视角@UAT', isDefault: true, environmentId: 2,
+  id: 7, name: '商户B视角@UAT', isDefault: true,
   systems: [{
     service: 'fin-service',
     bindings: { 'fin-service.merchant-b': 'merchant-b' },
@@ -121,12 +121,11 @@ describe('ExecConfigsView', () => {
     setup()
   })
 
-  it('首载:默认配置选中 → 编辑表单回填(env/绑定/carry 行)', async () => {
+  it('首载:默认配置选中 → 编辑表单回填(绑定/carry 行)', async () => {
     const w = await mountPage()
     expect(w.get('[data-testid="ec-chip-7"]').classes()).toContain('on')
     expect((w.get('[data-testid="ec-name"]').element as HTMLInputElement).value)
       .toBe('商户B视角@UAT')
-    expect((w.get('[data-testid="ec-env"]').element as HTMLSelectElement).value).toBe('2')
     expect((w.get('[data-testid="ec-sys-0"]').element as HTMLInputElement).value)
       .toBe('fin-service')
     expect((w.get('[data-testid="ec-bind-0-0"]').element as HTMLInputElement).value)
@@ -143,16 +142,14 @@ describe('ExecConfigsView', () => {
     w.unmount()
   })
 
-  it('新建:空行剔除 + envId 不设置=null → POST 载荷', async () => {
-    const CREATED = { id: 8, name: '新配置', isDefault: false,
-                      environmentId: null, systems: [] }
+  it('新建:空行剔除 → POST 载荷(§8.2 无 env 位)', async () => {
+    const CREATED = { id: 8, name: '新配置', isDefault: false, systems: [] }
     ec.createExecConfig.mockResolvedValue(CREATED)
     const w = await mountPage()
     // 保存后的 reload 返回含新配置的列表(选中新行需要它在 chips 里)
     ec.listExecConfigs.mockResolvedValue([ROW, CREATED])
     await w.get('[data-testid="ec-new"]').trigger('click')
     await w.get('[data-testid="ec-name"]').setValue('新配置')
-    // 不设置环境(select 保持 '')
     await w.get('[data-testid="ec-sys-add"]').trigger('click')
     await w.get('[data-testid="ec-sys-add"]').trigger('click')
     // 两行系统:一空一实
@@ -165,7 +162,7 @@ describe('ExecConfigsView', () => {
     await w.get('[data-testid="ec-save"]').trigger('click')
     await flushPromises()
     expect(ec.createExecConfig).toHaveBeenCalledWith({
-      name: '新配置', environmentId: null,
+      name: '新配置',
       systems: [
         // 0 号空系统行被剔除;1 号的空绑定行被剔除
         { service: 'crm', bindings: { 'crm.admin': 'admin' }, carryOverrides: {} },
@@ -176,14 +173,14 @@ describe('ExecConfigsView', () => {
     w.unmount()
   })
 
-  it('编辑保存 → PATCH 整体载荷(envId 数值化)', async () => {
+  it('编辑保存 → PATCH 整体替换载荷', async () => {
     ec.updateExecConfig.mockResolvedValue(ROW)
     const w = await mountPage()
     await w.get('[data-testid="ec-carryv-0-0"]').setValue('A')
     await w.get('[data-testid="ec-save"]').trigger('click')
     await flushPromises()
     expect(ec.updateExecConfig).toHaveBeenCalledWith(7, {
-      name: '商户B视角@UAT', environmentId: 2,
+      name: '商户B视角@UAT',
       systems: [{
         service: 'fin-service',
         bindings: { 'fin-service.merchant-b': 'merchant-b' },
@@ -195,11 +192,11 @@ describe('ExecConfigsView', () => {
 
   it('设为默认 → POST /{id}/default + 刷新', async () => {
     ec.listExecConfigs.mockResolvedValue([
-      { id: 7, name: '默认套', isDefault: true, environmentId: null, systems: [] },
-      { id: 9, name: '变体', isDefault: false, environmentId: null, systems: [] },
+      { id: 7, name: '默认套', isDefault: true, systems: [] },
+      { id: 9, name: '变体', isDefault: false, systems: [] },
     ])
     ec.setDefaultExecConfig.mockResolvedValue(
-      { id: 9, name: '变体', isDefault: true, environmentId: null, systems: [] })
+      { id: 9, name: '变体', isDefault: true, systems: [] })
     const w = await mountPage()
     await w.get('[data-testid="ec-chip-9"]').trigger('click')
     await w.get('[data-testid="ec-set-default"]').trigger('click')
@@ -210,7 +207,7 @@ describe('ExecConfigsView', () => {
   })
 
   it('复制为新配置 → copyExecConfig(id, name) 并选中副本', async () => {
-    const COPY = { id: 10, name: '副本', isDefault: false, environmentId: 2,
+    const COPY = { id: 10, name: '副本', isDefault: false,
                    systems: ROW.systems }
     ec.copyExecConfig.mockResolvedValue(COPY)
     const w = await mountPage()
@@ -227,8 +224,8 @@ describe('ExecConfigsView', () => {
 
   it('删除:两步确认 → DELETE 后回落首行', async () => {
     ec.listExecConfigs.mockResolvedValue([
-      { id: 7, name: '默认套', isDefault: true, environmentId: null, systems: [] },
-      { id: 9, name: '变体', isDefault: false, environmentId: null, systems: [] },
+      { id: 7, name: '默认套', isDefault: true, systems: [] },
+      { id: 9, name: '变体', isDefault: false, systems: [] },
     ])
     ec.deleteExecConfig.mockResolvedValue(undefined)
     const w = await mountPage()
@@ -268,11 +265,13 @@ describe('ExecConfigsView', () => {
     w.unmount()
   })
 
-  it('③ 枢纽:地址就绪 + 条目缺账户预填深链 + 漂移拉取 + pickable 预览', async () => {
+  it('③ 枢纽:地址矩阵就绪 + 条目缺账户预填深链 + 漂移拉取 + pickable 预览', async () => {
     const w = await mountPage()
-    // 地址就绪:fin-service 在所选环境(UAT=2)有部署行
+    // 地址就绪(§8.2 全环境矩阵,不再按配置环境过滤):fin-service 的
+    // 部署行(UAT=2)逐环境展示
     expect(w.get('[data-testid="ec-dep-fin-service"]').text())
       .toContain('http://uat-fin')
+    expect(w.get('[data-testid="ec-dep-fin-service"]').text()).toContain('UAT')
     expect(w.get('[data-testid="ec-dep-fin-service"]').text()).toContain('就绪')
     // 条目缺账户:merchant-b 条目在个人池无 (system, env) 命中 →
     // 缺账户 + /auths 按装载坐标(system+envId)预填直达

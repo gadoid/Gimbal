@@ -131,13 +131,26 @@
                     v-if="item.precheck.missingAuths?.length"
                     class="pc-warn"
                     data-testid="runner-missing-auths"
-                  >凭证条目未装载:{{ item.precheck.missingAuths.join('、') }}<template v-if="item.precheck.projectMissingAuths != null && !item.precheck.projectMissingAuths.length"> — 项目凭证已覆盖,发起前在右侧切「项目凭证」即可</template>;
+                  >凭证条目未装载:{{ item.precheck.missingAuths.join('、') }}<template v-if="item.precheck.projectMissingAuths != null && !item.precheck.projectMissingAuths.length"> — 项目凭证已覆盖,发起前在右侧切「项目凭证」即可</template><template v-if="item.precheck.envUnspecified"> — 若全数未装载,根因多是标签不可解析(见下)</template>;
+                  </span>
+                  <span
+                    v-if="item.precheck.envMixed"
+                    class="pc-warn"
+                    data-testid="runner-env-mixed"
+                  >身份条目的环境标签不一致(混拼)— 发起会被预检硬门拦截;
+                    <a class="pc-fix" @click.stop href="/service-admin">去「服务注册」统一条目标签 ↗</a>
                   </span>
                   <span
                     v-if="item.precheck.envUnspecified"
                     class="pc-warn"
                     data-testid="runner-env-unspecified"
-                  >未指定环境 —— 环境链全空(方案无显式位、平台无默认环境),身份条目无从解析;先在环境管理里建环境并设默认位 ↗</span>
+                  >执行标签不可解析:条目标签 &gt; 项目默认 &gt; 平台默认 均未命中 — 发起会被预检硬门拦截;给身份条目设置标签,或建/设默认环境 ↗</span>
+                  <span
+                    v-for="(w, wi) in item.precheck.envWarnings ?? []"
+                    :key="`envwarn-${wi}`"
+                    class="pc-warn"
+                    :data-testid="`runner-env-warning-${i}-${wi}`"
+                  >{{ w }}</span>
                 </template>
                 <template v-else>
                   <span class="pc-fatal">这个方案跑不了,换一个方案就能跑。</span>
@@ -244,6 +257,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { listScenarioOptions, listRunSchemes, precheckRun, runScenario } from '@/api/scenario-composer'
+import { ApiError } from '@/api/http'
 import type { PrecheckResult, SchemeV2, DataSetSelection } from '@/api/scenario-composer'
 import { listExecConfigs, type ExecConfigRow } from '@/api/execConfigs'
 import type { RunOptions } from '@/types/m2'
@@ -490,6 +504,16 @@ function genBatchId(): string {
   return `b-${Date.now().toString(36)}-${rnd}`
 }
 
+/** 启动失败的错误行:M3 §8.5 预检硬门 409 七码(env_mixed /
+ * env_unspecified / identity_missing / account_missing / account_ambiguous
+ * / login_missing / address_missing)带结构化 code + 自含指引文案
+ * (上下文名单在 message 里),标「预检未过」与网络/超闸类失败区分。 */
+function fmtLaunchError(e: unknown): string {
+  if (e instanceof ApiError && e.status === 409 && typeof e.code === 'string')
+    return `预检未过(${e.code}):${e.message}`
+  return e instanceof Error ? e.message : String(e)
+}
+
 /** 启动可跑的条(原型语义):预检未过的不连坐 — 留在队列里等换方案/修复,
  *  末尾汇总告知。全部不可跑时按钮本就禁用。 */
 async function launchQueue() {
@@ -528,8 +552,8 @@ async function launchQueue() {
         batchId,
       })
     } catch (e) {
-      // 单条失败不连坐(404 数据集被删 / 409 超闸等)— 记下继续,末尾汇总
-      failures.push(`${item.name}:${e instanceof Error ? e.message : String(e)}`)
+      // 单条失败不连坐(404 数据集被删 / 409 超闸与预检硬门等)— 记下继续,末尾汇总
+      failures.push(`${item.name}:${fmtLaunchError(e)}`)
     }
   }
   launching.value = false
