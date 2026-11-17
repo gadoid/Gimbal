@@ -3,13 +3,15 @@
        ① 服务主档 services —— 系统概念的唯一登记处(name/system/kind/abbr/
           说明);**不从 plate 目录镜像**,目录只用于对账(未登记候选/漂移)。
        ② 环境 × 系统实例 —— (system, env) → login_url / 版本线 / 说明。
-          同一 system 下多个服务共享一个实例,格内小钮编辑。
+          同一 system 下多个服务共享同一份登录口/版本线,格内小钮编辑。
        ③ 服务 × 环境 API 地址 —— deployments(执行请求的 base_url)。
        ④ 身份条目 —— 服务子页(/service-admin/{服务名})。
      本页职责 = ①②③ 的结构面 + 对账;服务名点击进子页看身份条目。
-     行 = 主档服务(按 system 分组,组头显示该系统的实例覆盖);列 = 环境
+     行 = 主档服务(按 system 分组,组头显示该系统的登录口覆盖);列 = 环境
      (chip 聚焦 = 只显该环境缺 API 地址的服务 + 环境管理条);格 = API
-     地址(行内编辑/登记)+ 登录口小钮(实例弹框)。
+     地址(行内编辑/登记)+ 实例配置小钮(登录口/版本线弹框)。
+     词汇规约(2026-11-17 用户口径):「实例」= 服务 × 环境的部署存在,
+     格即实例;「实例配置」入口编辑的是 (system, env) 共享的登录口/版本线。
      沿革:2026-11-13 矩阵化(服务×环境地址 + 说明);2026-11-16 registry
      重构 —— 服务全集从「目录∪部署」切到主档,新增登记/对账/删除,
      登录口/版本线从环境表单迁到 (system, env) 实例弹框。 -->
@@ -164,12 +166,12 @@
                 v-for="e in envs" :key="e.id"
                 :class="{ 'mx-focus': focusedEnv === e.id }"
               >{{ e.name }}</th>
-              <th style="width:4.5rem" />
+              <th style="width:4.5rem">操作</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="g in matrixGroups" :key="g.key">
-              <!-- 系统组头:系统名 + 服务数 + 该系统的实例登录口覆盖情况 -->
+              <!-- 系统组头:系统名 + 服务数 + 该系统的登录口覆盖情况 -->
               <tr class="mx-kind" :data-testid="`sys-group-${g.key}`">
                 <td :colspan="envs.length + 3">
                   <div class="grp-in">
@@ -182,12 +184,6 @@
                       :data-testid="`sys-inst-${g.key}`"
                     >登录口 {{ g.instReady }}/{{ envs.length }}</span>
                     <span class="flex-1" />
-                    <button
-                      type="button" class="svc-link"
-                      :data-testid="`sys-inst-edit-${g.key}`"
-                      :title="`编辑系统 ${g.system} 在各环境的登录口/版本线`"
-                      @click="openInstance(g.system, g.services[0].name)"
-                    >实例配置</button>
                   </div>
                 </td>
               </tr>
@@ -265,16 +261,16 @@
                       @click="startCellNew(svc.name, e.id)"
                     >缺 · 登记</button>
                   </template>
-                  <!-- 登录口(实例):小钮,已配绿 / 未配琥珀;同系统共享 -->
+                  <!-- 实例配置(登录口/版本线):小钮,已配绿 / 未配琥珀;同系统共享 -->
                   <button
                     type="button" class="inst-btn"
                     :class="{ ready: !!instOf(svc.system, e.id)?.loginUrl }"
                     :data-testid="`mx-inst-${svc.name}-${e.id}`"
                     :title="instOf(svc.system, e.id)?.loginUrl
-                      ? `登录口:${instOf(svc.system, e.id)!.loginUrl}(系统 ${svc.system} 共享)`
+                      ? `实例配置:登录口 ${instOf(svc.system, e.id)!.loginUrl}(系统 ${svc.system} 共享)`
                       : `系统 ${svc.system} 在该环境未配置登录口 — 点击配置`"
                     @click="openInstance(svc.system, svc.name, e.id)"
-                  >{{ instOf(svc.system, e.id)?.loginUrl ? '🔑 登录口' : '🔑 缺登录口' }}</button>
+                  >{{ instOf(svc.system, e.id)?.loginUrl ? '🔑 实例配置' : '🔑 实例未配置' }}</button>
                 </td>
                 <td class="c-center">
                   <DropdownMenu>
@@ -286,7 +282,7 @@
                       <DropdownMenuItem class="sl-menu-item" :data-testid="`svc-faces-${svc.name}`"
                         @click="router.push(`/service-admin/${encodeURIComponent(svc.name)}`)">身份条目</DropdownMenuItem>
                       <DropdownMenuItem class="sl-menu-item danger" :data-testid="`svc-del-${svc.name}`"
-                        @click="removeSvc(svc)">删除服务</DropdownMenuItem>
+                        @click="removeSvc(svc)">删除实例</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </td>
@@ -366,7 +362,7 @@
       <DialogContent class="max-w-[30rem]">
         <DialogHeader>
           <DialogTitle>
-            实例 · {{ instForm.system }} × {{ envNameOf(instForm.envId) }}
+            实例配置 · {{ instForm.system }} × {{ envNameOf(instForm.envId) }}
           </DialogTitle>
         </DialogHeader>
         <p class="inst-hint">
@@ -677,8 +673,8 @@ async function saveSvc(): Promise<void> {
 }
 async function removeSvc(svc: ServiceRow): Promise<void> {
   const ok = await confirmAction(
-    `删除服务「${svc.name}」?有身份条目或部署地址挂靠时会被拦截。`,
-    '删除服务',
+    `删除「${svc.name}」?该服务的登记及其在所有环境下的实例将一并移除;有身份条目或部署地址挂靠时会被拦截。`,
+    '删除实例',
     { danger: true, confirmButtonText: '删除' },
   )
   if (!ok) return

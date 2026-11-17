@@ -3,10 +3,10 @@
  *   - 服务全集 = 主档 services(注册簿制,不是 plate 目录镜像);目录只用于
  *     对账(未登记候选 / 漂移 / 不可达);
  *   - 行 = 服务,按 system 分组(服务=系统概念);列 = 环境,格 = API 地址
- *     (deployments)+ 登录口小钮(实例 login_url);
+ *     (deployments)+ 实例配置小钮(登录口 login_url);
  *   - 说明列 = 主档 description(patchService);
  *   - 服务名 → 子页 /service-admin/{服务}(身份条目);
- *   - 服务登记 / 编辑 / 删除;实例弹框(login_url/line/note)。
+ *   - 服务登记 / 编辑;行尾菜单删除实例(= 删整条登记,全环境)。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
@@ -174,7 +174,7 @@ describe('ServiceAdmin — 主档注册簿', () => {
     w.unmount()
   })
 
-  it('删除服务:确认后 DELETE;有挂靠 409 错误上屏', async () => {
+  it('删除实例(行尾菜单):确认后 DELETE;有挂靠 409 错误上屏', async () => {
     const { confirmAction } = await import('@/utils/confirmAction')
     vi.mocked(confirmAction).mockResolvedValue(true)
     vi.spyOn(svcApi, 'deleteService').mockRejectedValue(
@@ -219,7 +219,7 @@ describe('ServiceAdmin — API 地址格', () => {
 
 // ══ 环境 × 系统实例 ════════════════════════════════════════════
 describe('ServiceAdmin — 实例(登录口/版本线)', () => {
-  it('登录口小钮:已配显 ready,未配显缺;组头覆盖计数', async () => {
+  it('实例配置小钮:已配显 ready,未配显缺;组头覆盖计数', async () => {
     const w = await mountPage()
     expect(w.get('[data-testid="mx-inst-fin-service-1"]').classes()).toContain('ready')
     expect(w.get('[data-testid="mx-inst-fin-service-2"]').classes()).not.toContain('ready')
