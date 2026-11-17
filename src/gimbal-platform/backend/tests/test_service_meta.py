@@ -102,3 +102,73 @@ async def test_delete_guarded_by_hooks(client, fresh_db):
     r = await client.delete("/api/services/hooked-svc", headers=admin)
     assert r.status_code == 409, r.text
     assert "service_in_use" in r.text
+
+
+async def test_import_catalog_batch(client, fresh_db, monkeypatch):
+    """M5 对账横幅「立即批量映射」:批量登记 → system/kind 取目录聚合行;
+    幂等(第二次全 skipped);names 子集;plate 不可达降级。"""
+    from app.services import plate_client
+
+    admin = await _admin(client)
+
+    async def fake_rows(*, refresh: bool = False):
+        return [
+            {"name": "fin-service", "system": "fin", "endpointCount": 3,
+             "kind": "sut"},
+            {"name": "jira-sync", "system": "jira", "endpointCount": 1,
+             "kind": "integration"},
+        ]
+
+    monkeypatch.setattr(plate_client, "catalog_service_rows", fake_rows)
+
+    r = await client.post("/api/services/import-catalog", headers=admin,
+                          json={})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["created"] == ["fin-service", "jira-sync"]
+    assert out["skipped"] == []
+    assert out["unregistered"] == []
+
+    rows = (await client.get("/api/services", headers=admin)
+            ).json()["services"]
+    by_name = {s["name"]: s for s in rows}
+    assert by_name["fin-service"]["system"] == "fin"
+    assert by_name["fin-service"]["kind"] == "plate"      # sut → plate
+    assert by_name["jira-sync"]["kind"] == "integration"  # integration 保形
+
+    # 幂等:第二次无可导入(候选 = 目录 − 主档 = 空),skipped 也空
+    r = await client.post("/api/services/import-catalog", headers=admin,
+                          json={})
+    assert r.json()["created"] == []
+    assert r.json()["skipped"] == []
+    assert r.json()["unregistered"] == []
+
+    # names 子集:已在主档 → skipped;不在目录 → skipped
+    r = await client.post("/api/services/import-catalog", headers=admin,
+                          json={"names": ["fin-service", "ghost-svc"]})
+    assert r.json()["created"] == []
+    assert sorted(r.json()["skipped"]) == ["fin-service", "ghost-svc"]
+
+    # 普通成员无权(写面 = ops.write)
+    member = await _member(client, "import_member")
+    r = await client.post("/api/services/import-catalog", headers=member,
+                          json={})
+    assert r.status_code == 403
+
+
+async def test_import_catalog_plate_unreachable(client, fresh_db,
+                                                monkeypatch):
+    from app.services import plate_client
+
+    admin = await _admin(client)
+
+    async def boom(*, refresh: bool = False):
+        raise RuntimeError("plate down")
+
+    monkeypatch.setattr(plate_client, "catalog_service_rows", boom)
+    r = await client.post("/api/services/import-catalog", headers=admin,
+                          json={})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["plateReachable"] is False
+    assert out["created"] == []

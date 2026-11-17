@@ -35,3 +35,16 @@ export function updateDeployment(id: number, baseUrl: string): Promise<Deploymen
 export function deleteDeployment(id: number): Promise<void> {
   return http.delete(`/deployments/${id}`).then(() => undefined)
 }
+
+export interface PingResult {
+  /** true = 拿到了 HTTP 响应(401/404 也算可达;与拨测语义不同) */
+  ok: boolean
+  statusCode: number | null
+  latencyMs: number | null
+  message: string
+}
+
+/** 连通测速:后端 GET 一次部署地址(短超时),返回状态码与毫秒。 */
+export function pingDeployment(id: number): Promise<PingResult> {
+  return http.post<PingResult>(`/deployments/${id}/ping`).then(({ data }) => data)
+}

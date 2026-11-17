@@ -70,6 +70,24 @@ export function deleteService(name: string): Promise<void> {
     .then(() => undefined)
 }
 
+// ── 批量导入目录(对账横幅「立即批量映射」)──────────────────────
+export interface ImportCatalogResult {
+  /** 本次新建的主档服务名 */
+  created: string[]
+  /** 未处理:已登记 或 不在目录 */
+  skipped: string[]
+  /** remaining:目录里仍没进主档的 */
+  unregistered: string[]
+  plateReachable: boolean
+}
+
+/** 批量登记 plate 目录服务:names 缺省 = 全部未登记(幂等)。 */
+export function importCatalog(names: string[] = []): Promise<ImportCatalogResult> {
+  return http
+    .post<ImportCatalogResult>('/services/import-catalog', { names })
+    .then(({ data }) => data)
+}
+
 // ── 环境×系统实例(login_url/版本线) ─────────────────────────────
 
 export interface InstanceRow {

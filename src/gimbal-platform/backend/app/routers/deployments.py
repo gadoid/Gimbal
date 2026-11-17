@@ -8,6 +8,9 @@ Admin+(ops.write,与环境组写面同级的团队共享配置)。同键重复 4
 """
 from __future__ import annotations
 
+import time
+
+import httpx
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -66,9 +69,39 @@ class DeploymentOut(BaseModel):
     base_url: str = Field(alias="baseUrl")
 
 
+class PingOut(BaseModel):
+    """连通测速结果(服务配置管理抽屉;2026-11-17 M5)。
+
+    ``ok`` 只表示「拿到了 HTTP 响应」—— 401/404 也是可达,与拨测
+    (auth_probe,验登录态)语义不同,别混用。
+    """
+    model_config = _CAMEL
+    ok: bool
+    status_code: int | None = Field(default=None, alias="statusCode")
+    latency_ms: int | None = Field(default=None, alias="latencyMs")
+    message: str = ""
+
+
 def _out(d: Deployment) -> DeploymentOut:
     return DeploymentOut(id=d.id, baseService=d.base_service,
                          envId=d.env_id, baseUrl=d.base_url)
+
+
+async def _http_probe(url: str) -> tuple[bool, int | None, int, str]:
+    """GET 一次部署地址(短超时,跟随重定向)→ (ok, 状态码, 毫秒, 文案)。
+
+    独立成函数为可替身面(测试 monkeypatch;调用方不关心 httpx 细节)。
+    """
+    started = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=5.0,
+                                     follow_redirects=True) as client:
+            resp = await client.get(url)
+        ms = int((time.perf_counter() - started) * 1000)
+        return True, resp.status_code, ms, f"HTTP {resp.status_code} · {ms}ms"
+    except Exception as e:  # noqa: BLE001 — 测速失败是结果不是 500
+        ms = int((time.perf_counter() - started) * 1000)
+        return False, None, ms, f"不可达: {type(e).__name__}: {e}"
 
 
 async def _audit(db, user, op: str, d: Deployment, extra: dict) -> None:
@@ -155,3 +188,22 @@ async def delete_deployment(
     await db.delete(d)
     await db.commit()
     await _audit(db, user, "delete", snap, {"baseUrl": snap.base_url})
+
+
+@router.post("/{deployment_id}/ping", response_model=PingOut,
+             response_model_by_alias=True)
+async def ping_deployment(
+    deployment_id: int, user: CurrentUser, db: DbSession,
+) -> Any:
+    """连通测速(读面:地址对登录用户可见,测速不引入新信息)。
+
+    只测「部署地址是否可达」;登录态拨测走 ``POST /auths/{id}/test``。
+    """
+    d = await db.get(Deployment, deployment_id)
+    if d is None:
+        raise HTTPException(404, detail={
+            "code": "deployment_not_found",
+            "message": f"deployment not found: {deployment_id}"})
+    ok, status_code, latency_ms, message = await _http_probe(d.base_url)
+    return PingOut(ok=ok, statusCode=status_code,
+                   latencyMs=latency_ms, message=message)

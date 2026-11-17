@@ -1,14 +1,16 @@
 /**
- * ServiceAdmin.vue — 服务注册(M5 重排:卡片流 + 实例表 + 配置管理抽屉):
- *   - 服务全集 = 主档 services(注册簿制,不是 plate 目录镜像);目录只用于
- *     对账(未登记候选 / 漂移 / 不可达);
- *   - 一服务一卡(平铺不分组):标识区(名/系统 chip/接入态/漂移)+ 说明
- *     行内编辑 + 就绪度摘要(地址 x/y · 登录口 a/b)+ 部署节点预览条;
- *   - 展开实例表:实例 = 服务 × 环境,一环境一行(地址/登录口/就绪度);
- *   - 「服务配置管理」抽屉:实例端点(地址登记/编辑/删除)+ 实例配置
- *     (登录口/版本线,系统共享)+ 调用身份卡(只显引用);
- *   - 服务名 → 子页 /service-admin/{服务}(身份条目);登记/编辑/删除
- *     随卡片菜单;环境管理(聚焦态)不变。
+ * ServiceAdmin.vue — 服务注册(按 stitch 原型完整重建后的行为面):
+ *   - 指标条:服务/实例/凭据别名/缺配置;实时同步徽标;
+ *   - plate 差异横幅:未登记候选、批量导入(POST /services/import-catalog)、
+ *     单条预填登记;
+ *   - 筛选矩阵:搜索 / 环境快切 / 分类页签 / 排序 + 服务卡分页;
+ *   - 服务卡片:标识区(名/系统/接入态/漂移)、说明行内编辑、就绪度摘要、
+ *     部署节点预览条;
+ *   - 实例表:一环境一行(实例 = 服务 × 环境)、Tag(环境)过滤、就绪度
+ *     三 chip、凭据槽位、每页 5 条分页;
+ *   - 配置管理抽屉:连通测速、地址登记/编辑/删除、说明保存、调用身份卡
+ *     (拨测/设默认/编辑/删除/复制)、实例配置、测试全槽位、保存配置;
+ *   - 环境管理(聚焦态)与主档登记弹框保持。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
@@ -18,26 +20,26 @@ import * as envApi from '@/api/environments'
 import * as depApi from '@/api/deployments'
 import * as svcApi from '@/api/services'
 import * as aliasApi from '@/api/service-aliases'
-import type { ServiceAliasRow } from '@/api/service-aliases'
+import * as authApi from '@/api/auth_sessions'
 import type { ServiceRow, InstanceRow } from '@/api/services'
+import type { ServiceAliasRow } from '@/api/service-aliases'
+import type { AuthSession, TestResult } from '@/api/auth_sessions'
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 vi.mock('@/utils/confirmAction', () => ({ confirmAction: vi.fn() }))
-vi.mock('@/api/service-aliases', () => ({ listAliases: vi.fn() }))
-
-/** 抽屉调用身份面:按服务锚取条目(组件客户端按标签过滤)。 */
-const FACES: ServiceAliasRow[] = [
-  { aliasName: 'fin-service.merchant-b', baseService: 'fin-service',
-    slot: 'fin-service.merchant-b', kind: 'plate', envId: 1,
-    refMode: 'username', refUsername: 'merchant-b',
-    display: '商户B', createdAt: '', updatedAt: '' },
-  { aliasName: 'fin-service.admin', baseService: 'fin-service',
-    slot: 'fin-service.admin', kind: 'plate', envId: 2,
-    refMode: 'default', refUsername: null,
-    display: '', createdAt: '', updatedAt: '' },
-]
+vi.mock('@/api/service-aliases', () => ({
+  listAliases: vi.fn(),
+  createAlias: vi.fn(),
+  patchAlias: vi.fn(),
+  deleteAlias: vi.fn(),
+}))
+vi.mock('@/api/auth_sessions', () => ({
+  listAll: vi.fn(),
+  testConnection: vi.fn(),
+  setDefault: vi.fn(),
+}))
 
 const ENVS = [
   { id: 1, name: '测试', description: '', lines: {}, owner_id: null, is_default: true },
@@ -45,31 +47,72 @@ const ENVS = [
 ]
 const SERVICES: ServiceRow[] = [
   { name: 'fin-service', system: 'fin', kind: 'plate', abbr: '', inCatalog: true,
-    description: '交易核心服务,负责订单/支付', createdAt: null, updatedAt: null },
+    description: '交易核心服务,负责订单/支付', createdAt: null, updatedAt: '2026-11-01T10:00:00' },
   { name: 'fin-report-service', system: 'fin', kind: 'plate', abbr: '', inCatalog: true,
-    description: '', createdAt: null, updatedAt: null },
+    description: '', createdAt: null, updatedAt: '2026-11-02T10:00:00' },
   { name: 'wms-service', system: 'wms', kind: 'external', abbr: '', inCatalog: false,
     description: '', createdAt: null, updatedAt: null },
 ]
 const INSTANCES: InstanceRow[] = [
   { system: 'fin', envId: 1, envName: '测试', loginUrl: 'http://fin/auth',
-    line: '1.0', note: '', updatedAt: null },
+    line: '1.0', note: '联调用', updatedAt: null },
 ]
 const DEPS = [
   { id: 11, baseService: 'fin-service', envId: 1, baseUrl: 'http://fin-dev' },
 ]
+const ALIASES: ServiceAliasRow[] = [
+  { aliasName: 'fin-service.merchant-b', baseService: 'fin-service',
+    slot: 'fin-service.merchant-b', kind: 'plate', envId: 1,
+    refMode: 'username', refUsername: 'merchant-b',
+    display: '商户B视角', createdAt: '', updatedAt: '' },
+  { aliasName: 'fin-service.admin', baseService: 'fin-service',
+    slot: 'fin-service.admin', kind: 'plate', envId: 2,
+    refMode: 'default', refUsername: null,
+    display: '', createdAt: '', updatedAt: '' },
+]
+const ACCOUNTS: AuthSession[] = [
+  { id: 101, system: 'fin', envId: 1, username: 'merchant-b',
+    token_type: 'cookie', expires_in: 7200, isDefault: false,
+    created_at: '', updated_at: '', password_masked: '••••',
+    accountFields: { tenant: 'fin' } },
+  { id: 102, system: 'fin', envId: 2, username: 'admin',
+    token_type: 'token', expires_in: 3600, isDefault: true,
+    created_at: '', updated_at: '', password_masked: '••••' },
+]
 
-function setupBase() {
-  vi.spyOn(envApi, 'listEnvironments').mockResolvedValue(ENVS)
-  vi.spyOn(depApi, 'listDeployments').mockResolvedValue(DEPS)
+function mockAliases(): void {
+  vi.mocked(aliasApi.listAliases).mockImplementation((params?: {
+    base?: string; q?: string; page?: number; page_size?: number
+  }) => {
+    const base = params?.base
+    const items = base ? ALIASES.filter((a) => a.baseService === base) : ALIASES
+    return Promise.resolve({
+      items: params?.page_size === 1 ? [] : items,
+      total: items.length,
+      page: params?.page ?? 1,
+      pageSize: params?.page_size ?? 100,
+    })
+  })
+}
+
+function setupBase(overrides: Partial<{
+  services: ServiceRow[]
+  envs: typeof ENVS
+  deps: typeof DEPS
+  instances: InstanceRow[]
+  unregistered: string[]
+  plateReachable: boolean
+}> = {}) {
+  vi.spyOn(envApi, 'listEnvironments').mockResolvedValue(overrides.envs ?? ENVS)
+  vi.spyOn(depApi, 'listDeployments').mockResolvedValue(overrides.deps ?? DEPS)
   vi.spyOn(svcApi, 'listServices').mockResolvedValue({
-    services: SERVICES, unregistered: ['order-service'], plateReachable: true,
+    services: overrides.services ?? SERVICES,
+    unregistered: overrides.unregistered ?? ['order-service'],
+    plateReachable: overrides.plateReachable ?? true,
   })
-  vi.spyOn(svcApi, 'listInstances').mockResolvedValue(INSTANCES)
-  // 工厂 mock 会被 restoreAllMocks 清实现 → 每例在此重挂
-  vi.mocked(aliasApi.listAliases).mockResolvedValue({
-    items: FACES, total: FACES.length, page: 1, pageSize: 200,
-  })
+  vi.spyOn(svcApi, 'listInstances').mockResolvedValue(overrides.instances ?? INSTANCES)
+  vi.mocked(authApi.listAll).mockResolvedValue(ACCOUNTS)
+  mockAliases()
 }
 
 beforeEach(() => {
@@ -85,21 +128,20 @@ async function mountPage() {
   return w
 }
 
-/** 展开某服务的实例表(卡片流默认收起)。 */
 async function expand(w: Awaited<ReturnType<typeof mountPage>>, svc: string) {
   await w.get(`[data-testid="svc-expand-${svc}"]`).trigger('click')
   await flushPromises()
 }
 
-/** 打开某 (服务, 环境) 的配置管理抽屉(经实例表入口)。 */
 async function openDrawer(w: Awaited<ReturnType<typeof mountPage>>, svc: string, envId: number) {
-  await expand(w, svc)
+  // 卡片可能已展开(连续开不同环境)- 只在缺少入口时点展开
+  if (!w.find(`[data-testid="mx-inst-${svc}-${envId}"]`).exists()) {
+    await expand(w, svc)
+  }
   await w.get(`[data-testid="mx-inst-${svc}-${envId}"]`).trigger('click')
   await flushPromises()
-  return w.get('[data-testid="cfg-drawer"]')
 }
 
-/** reka 下拉菜单 teleport 到 body → 先开菜单再取项。 */
 async function openSvcMenu(w: Awaited<ReturnType<typeof mountPage>>, svc: string) {
   await w.get(`[data-testid="svc-more-${svc}"]`).trigger('click')
   await flushPromises()
@@ -110,68 +152,330 @@ function bodyEl(sel: string): DOMWrapper<Element> {
   return new DOMWrapper(el)
 }
 
-// ══ 卡片流本体 ═════════════════════════════════════════════════
-describe('ServiceAdmin — 服务卡片流', () => {
-  it('主档成卡 + 系统 chip 在场 + 对账:external 不判漂移、目录未登记候选在场', async () => {
+// ══ 指标条 / 差异横幅 / 筛选 ═══════════════════════════════════
+describe('ServiceAdmin — 指标条与差异横幅', () => {
+  it('指标:服务/实例/条目/缺配置 + 实时同步徽标', async () => {
     const w = await mountPage()
-    for (const svc of ['fin-service', 'fin-report-service', 'wms-service']) {
-      expect(w.find(`[data-testid="mx-row-${svc}"]`).exists()).toBe(true)
-    }
-    // 标识区带系统 chip(卡片流平铺,不再按 system 分组表头)
-    expect(w.get('[data-testid="mx-row-fin-service"]').text()).toContain('fin')
-    expect(w.get('[data-testid="mx-row-wms-service"]').text()).toContain('第三方')
-    expect(w.get('[data-testid="mx-row-fin-service"]').text()).toContain('plate 已同步')
-    // external 不参与对账 → 无漂移标记
-    expect(w.find('[data-testid="mx-drift-wms-service"]').exists()).toBe(false)
-    // 目录未登记候选 + 点击预填新建
-    expect(w.get('[data-testid="recon-add-order-service"]').text()).toContain('order-service')
+    expect(w.get('[data-testid="metric-services"]').text()).toContain('3')
+    expect(w.get('[data-testid="metric-instances"]').text()).toContain('1')
+    expect(w.get('[data-testid="metric-aliases"]').text()).toContain('2')
+    expect(w.get('[data-testid="metric-gaps"]').text()).toContain('3')
+    expect(w.get('[data-testid="sync-bar"]').text()).toContain('plate 目录同步正常')
     w.unmount()
   })
 
-  it('plate 行不在目录 → 漂移徽章(testid 绑定到服务名)', async () => {
-    vi.spyOn(svcApi, 'listServices').mockResolvedValue({
-      services: [{ ...SERVICES[0], inCatalog: false }],
-      unregistered: [], plateReachable: true,
+  it('差异横幅:未登记候选 + 批量导入 → importCatalog(names)', async () => {
+    vi.spyOn(svcApi, 'importCatalog').mockResolvedValue({
+      created: ['order-service'], skipped: [], unregistered: [], plateReachable: true,
     })
     const w = await mountPage()
-    expect(w.find('[data-testid="mx-drift-fin-service"]').exists()).toBe(true)
-    expect(w.find('[data-testid="mx-drift-fin-report-service"]').exists()).toBe(false)
-    w.unmount()
-  })
-
-  it('收起态部署节点预览条:逐环境 url/缺;点击直达配置抽屉', async () => {
-    const w = await mountPage()
-    expect(w.get('[data-testid="mx-prev-fin-service-1"]').text())
-      .toContain('http://fin-dev')
-    expect(w.get('[data-testid="mx-prev-fin-service-2"]').text()).toContain('缺')
-    await w.get('[data-testid="mx-prev-fin-service-1"]').trigger('click')
+    expect(w.get('[data-testid="recon-panel"]').text()).toContain('order-service')
+    await w.get('[data-testid="recon-batch-import"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(true)
+    expect(svcApi.importCatalog).toHaveBeenCalledWith(['order-service'])
     w.unmount()
   })
 
-  it('卡头就绪度摘要:地址 x/y · 登录口 a/b(系统维共享)', async () => {
+  it('全局「导入 Plate 服务定义」→ importCatalog([]);plate 不可达时禁用', async () => {
+    vi.spyOn(svcApi, 'importCatalog').mockResolvedValue({
+      created: ['order-service'], skipped: [], unregistered: [], plateReachable: true,
+    })
     const w = await mountPage()
-    expect(w.get('[data-testid="svc-cov-fin-service"]').text())
-      .toContain('地址 1/2')
-    expect(w.get('[data-testid="svc-cov-fin-service"]').text())
-      .toContain('登录口 1/2')
-    expect(w.get('[data-testid="svc-cov-wms-service"]').text())
-      .toContain('地址 0/2')
+    await w.get('[data-testid="import-catalog"]').trigger('click')
+    await flushPromises()
+    expect(svcApi.importCatalog).toHaveBeenCalledWith([])
     w.unmount()
   })
 
-  it('卡序:缺口多的排前;svc-search 客户端收窄(按名/系统)', async () => {
+  it('筛选:搜索 / 分类页签 / 环境快切', async () => {
     const w = await mountPage()
-    const cards = w.findAll('[data-testid^="mx-row-"]')
-    // 缺口降序 → 名字升序:fin-report(0/2)、wms(0/2)在前,fin-service(1/2)殿后
-    expect(cards[0].attributes('data-testid')).toBe('mx-row-fin-report-service')
-    expect(cards[1].attributes('data-testid')).toBe('mx-row-wms-service')
-    expect(cards[2].attributes('data-testid')).toBe('mx-row-fin-service')
     await w.get('[data-testid="svc-search"]').setValue('wms')
     await flushPromises()
     expect(w.findAll('[data-testid^="mx-row-"]')).toHaveLength(1)
+    await w.get('[data-testid="svc-search"]').setValue('')
+    await flushPromises()
+    await w.get('[data-testid="tab-external"]').trigger('click')
+    await flushPromises()
+    expect(w.findAll('[data-testid^="mx-row-"]')).toHaveLength(1)
     expect(w.find('[data-testid="mx-row-wms-service"]').exists()).toBe(true)
+    await w.get('[data-testid="tab-all"]').trigger('click')
+    await flushPromises()
+    // 环境快切:只显该环境缺地址的服务(fin-service 在 env1 有地址 → 隐去)
+    await w.get('[data-testid="dep-env-1"]').trigger('click')
+    expect(w.find('[data-testid="mx-row-fin-service"]').exists()).toBe(false)
+    expect(w.find('[data-testid="mx-row-wms-service"]').exists()).toBe(true)
+    w.unmount()
+  })
+})
+
+// ══ 服务卡片 ═════════════════════════════════════════════════
+describe('ServiceAdmin — 服务卡片', () => {
+  it('标识区/就绪度/预览条/漂移徽章', async () => {
+    vi.spyOn(svcApi, 'listServices').mockResolvedValue({
+      services: [{ ...SERVICES[0], inCatalog: false }, ...SERVICES.slice(1)],
+      unregistered: [], plateReachable: true,
+    })
+    const w = await mountPage()
+    const card = w.get('[data-testid="mx-row-fin-service"]')
+    expect(card.text()).toContain('Plate(目录缺席)')
+    expect(w.find('[data-testid="mx-drift-fin-service"]').exists()).toBe(true)
+    expect(w.get('[data-testid="svc-cov-fin-service"]').text()).toContain('1/2 实例就绪')
+    expect(w.get('[data-testid="svc-cov-fin-service"]').text())
+      .toContain('地址 1/2 · 登录口 1/2')
+    expect(w.get('[data-testid="mx-prev-fin-service-1"]').text())
+      .toContain('http://fin-dev')
+    // wms 无部署 → 提示
+    expect(w.get('[data-testid="mx-row-wms-service"]').text()).toContain('暂无部署节点')
+    w.unmount()
+  })
+
+  it('说明行内编辑 → patchService', async () => {
+    vi.spyOn(svcApi, 'patchService').mockResolvedValue({
+      ...SERVICES[2], description: '仓储服务',
+    })
+    const w = await mountPage()
+    await w.get('[data-testid="meta-cell-wms-service"]').trigger('click')
+    await w.get('[data-testid="meta-input-wms-service"]').setValue('仓储服务')
+    await w.get('[data-testid="meta-save-wms-service"]').trigger('click')
+    await flushPromises()
+    expect(svcApi.patchService).toHaveBeenCalledWith('wms-service', {
+      description: '仓储服务',
+    })
+    w.unmount()
+  })
+
+  it('服务卡分页:5 条/页 + 翻页', async () => {
+    const many: ServiceRow[] = Array.from({ length: 7 }, (_, i) => ({
+      name: `svc-${i}`, system: `sys-${i}`, kind: 'plate' as const,
+      abbr: '', inCatalog: true, description: '', createdAt: null,
+      updatedAt: `2026-11-0${i + 1}T00:00:00`,
+    }))
+    setupBase({ services: many, deps: [], instances: [] })
+    const w = await mountPage()
+    expect(w.findAll('[data-testid^="mx-row-"]')).toHaveLength(5)
+    expect(w.get('[data-testid="svc-page-info"]').text()).toContain('显示 1 - 5 项')
+    await w.get('[data-testid="svc-page-next"]').trigger('click')
+    await flushPromises()
+    expect(w.findAll('[data-testid^="mx-row-"]')).toHaveLength(2)
+    expect(w.get('[data-testid="svc-page-info"]').text()).toContain('显示 6 - 7 项')
+    w.unmount()
+  })
+})
+
+// ══ 实例表(展开)═══════════════════════════════════════════════
+describe('ServiceAdmin — 实例表', () => {
+  it('展开:一环境一行 + 就绪度 + 槽位 + Tag 过滤', async () => {
+    const w = await mountPage()
+    await expand(w, 'fin-service')
+    expect(w.get('[data-testid="inst-row-fin-service-1"]').text()).toContain('fin-service-测试')
+    expect(w.get('[data-testid="inst-row-fin-service-1"]').text()).toContain('✓ 地址')
+    expect(w.get('[data-testid="inst-row-fin-service-1"]').text()).toContain('✓ 登录口')
+    expect(w.get('[data-testid="inst-row-fin-service-1"]').text()).toContain('1 个配置槽位')
+    expect(w.get('[data-testid="inst-slots-fin-service-1"]').text()).toContain('ref merchant-b')
+    // env2 缺地址/登录口;条目不在此环境(admin 属于 env2,但条目加载后按 env 过滤)
+    expect(w.get('[data-testid="inst-row-fin-service-2"]').text()).toContain('缺地址')
+    // Tag 过滤:只显 env2
+    await w.get('[data-testid="tag-fin-service-2"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="inst-row-fin-service-1"]').exists()).toBe(false)
+    expect(w.find('[data-testid="inst-row-fin-service-2"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('实例分页:每页 5 条 + 翻页', async () => {
+    const envs6 = Array.from({ length: 6 }, (_, i) => ({
+      id: i + 1, name: `e${i + 1}`, description: '', lines: {},
+      owner_id: null, is_default: i === 0,
+    }))
+    setupBase({ envs: envs6, deps: [], instances: [] })
+    const w = await mountPage()
+    await expand(w, 'fin-service')
+    expect(w.findAll('[data-testid^="inst-row-fin-service-"]')).toHaveLength(5)
+    expect(w.get('[data-testid="inst-page-info-fin-service"]').text())
+      .toContain('显示第 1 - 5 条')
+    await w.get('[data-testid="inst-page-next-fin-service"]').trigger('click')
+    await flushPromises()
+    expect(w.findAll('[data-testid^="inst-row-fin-service-"]')).toHaveLength(1)
+    expect(w.find('[data-testid="inst-row-fin-service-6"]').exists()).toBe(true)
+    w.unmount()
+  })
+})
+
+// ══ 配置管理抽屉 ══════════════════════════════════════════════
+describe('ServiceAdmin — 配置管理抽屉', () => {
+  it('打开:就绪徽标 + 该标签下的条目卡(不混入其它环境)', async () => {
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(true)
+    expect(w.get('[data-testid="cfg-readiness"]').text()).toContain('配置就绪')
+    expect(w.find('[data-testid="face-card-fin-service.merchant-b"]').exists()).toBe(true)
+    expect(w.find('[data-testid="face-card-fin-service.admin"]').exists()).toBe(false)
+    const face = w.get('[data-testid="face-card-fin-service.merchant-b"]')
+    expect(face.text()).toContain('ref merchant-b')
+    expect(face.text()).toContain('merchant-b')
+    expect(face.text()).toContain('已托管(不回显)')
+    expect(w.get('[data-testid="cfg-faces-count"]').text()).toContain('1')
+    w.unmount()
+  })
+
+  it('连通测速 → pingDeployment(id) 并展示结果', async () => {
+    vi.spyOn(depApi, 'pingDeployment').mockResolvedValue({
+      ok: true, statusCode: 200, latencyMs: 12, message: 'HTTP 200 · 12ms',
+    })
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    await w.get('[data-testid="cfg-ping"]').trigger('click')
+    await flushPromises()
+    expect(depApi.pingDeployment).toHaveBeenCalledWith(11)
+    expect(w.get('[data-testid="cfg-ping-result"]').text()).toContain('HTTP 200 · 12ms')
+    w.unmount()
+  })
+
+  it('地址编辑 → updateDeployment;缺地址 → createDeployment', async () => {
+    vi.spyOn(depApi, 'updateDeployment').mockResolvedValue(
+      { id: 11, baseService: 'fin-service', envId: 1, baseUrl: 'http://v2' })
+    vi.spyOn(depApi, 'createDeployment').mockResolvedValue(
+      { id: 12, baseService: 'fin-service', envId: 2, baseUrl: 'http://fin-uat' })
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    await w.get('[data-testid="cfg-url-edit"]').trigger('click')
+    await w.get('[data-testid="mx-url-fin-service-1"]').setValue('http://v2')
+    await w.get('[data-testid="mx-save-fin-service-1"]').trigger('click')
+    await flushPromises()
+    expect(depApi.updateDeployment).toHaveBeenCalledWith(11, 'http://v2')
+    // 切到 env2(缺地址)→ 登记
+    await w.get('[data-testid="cfg-close"]').trigger('click')
+    await openDrawer(w, 'fin-service', 2)
+    await w.get('[data-testid="mx-new-url-fin-service-2"]').setValue('http://fin-uat')
+    await w.get('[data-testid="mx-register-fin-service-2"]').trigger('click')
+    await flushPromises()
+    expect(depApi.createDeployment).toHaveBeenCalledWith({
+      baseService: 'fin-service', envId: 2, baseUrl: 'http://fin-uat',
+    })
+    w.unmount()
+  })
+
+  it('实例配置与说明 → putInstance;底部保存合并 url+实例', async () => {
+    vi.spyOn(svcApi, 'putInstance').mockResolvedValue({
+      system: 'fin', envId: 1, envName: '测试', loginUrl: 'http://fin/auth2',
+      line: '2.0', note: '新说明', updatedAt: null,
+    })
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    expect((w.get('[data-testid="inst-form-url"]').element as HTMLInputElement).value)
+      .toBe('http://fin/auth')
+    await w.get('[data-testid="inst-form-url"]').setValue('http://fin/auth2')
+    await w.get('[data-testid="inst-form-line"]').setValue('2.0')
+    await w.get('[data-testid="cfg-note"]').setValue('新说明')
+    await w.get('[data-testid="cfg-save"]').trigger('click')
+    await flushPromises()
+    expect(svcApi.putInstance).toHaveBeenCalledWith('fin', 1, {
+      loginUrl: 'http://fin/auth2', line: '2.0', note: '新说明',
+    })
+    w.unmount()
+  })
+
+  it('条目卡:拨测 / 设默认 / 编辑 / 删除', async () => {
+    const { confirmAction } = await import('@/utils/confirmAction')
+    vi.mocked(confirmAction).mockResolvedValue(true)
+    vi.mocked(authApi.testConnection).mockResolvedValue({
+      ok: true, status_code: 200, message: '连通成功',
+    } as TestResult)
+    vi.mocked(authApi.setDefault).mockResolvedValue({} as AuthSession)
+    vi.mocked(aliasApi.patchAlias).mockResolvedValue(ALIASES[0])
+    vi.mocked(aliasApi.deleteAlias).mockResolvedValue(undefined)
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    // 拨测
+    await w.get('[data-testid="face-probe-fin-service.merchant-b"]').trigger('click')
+    await flushPromises()
+    expect(authApi.testConnection).toHaveBeenCalledWith(101)
+    expect(w.get('[data-testid="face-probe-result-fin-service.merchant-b"]').text())
+      .toContain('连通成功')
+    // 设默认
+    await w.get('[data-testid="face-default-fin-service.merchant-b"]').trigger('click')
+    await flushPromises()
+    expect(authApi.setDefault).toHaveBeenCalledWith(101)
+    // 编辑展示名
+    await w.get('[data-testid="face-edit-fin-service.merchant-b"]').trigger('click')
+    await w.get('[data-testid="alias-form-display"]').setValue('商户B')
+    await w.get('[data-testid="alias-form-save"]').trigger('click')
+    await flushPromises()
+    expect(aliasApi.patchAlias).toHaveBeenCalledWith('fin-service.merchant-b', {
+      refMode: 'username', refUsername: 'merchant-b', display: '商户B',
+    })
+    // 删除
+    await w.get('[data-testid="face-del-fin-service.merchant-b"]').trigger('click')
+    await flushPromises()
+    expect(aliasApi.deleteAlias).toHaveBeenCalledWith('fin-service.merchant-b')
+    w.unmount()
+  })
+
+  it('新增条目 → createAlias(服务锚 + 环境 + 引用)', async () => {
+    vi.mocked(aliasApi.createAlias).mockResolvedValue(ALIASES[0])
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    await w.get('[data-testid="cfg-alias-add"]').trigger('click')
+    await w.get('[data-testid="alias-form-name"]').setValue('fin-service.merchant-c')
+    await w.get('[data-testid="alias-form-refmode"]').setValue('username')
+    await w.get('[data-testid="alias-form-refuser"]').setValue('merchant-c')
+    await w.get('[data-testid="alias-form-display"]').setValue('商户C')
+    await w.get('[data-testid="alias-form-save"]').trigger('click')
+    await flushPromises()
+    expect(aliasApi.createAlias).toHaveBeenCalledWith({
+      aliasName: 'fin-service.merchant-c',
+      kind: 'plate',
+      baseService: 'fin-service',
+      envId: 1,
+      refMode: 'username',
+      refUsername: 'merchant-c',
+      display: '商户C',
+    })
+    w.unmount()
+  })
+
+  it('测试全槽位连通性 → 逐个 testConnection 并汇总', async () => {
+    vi.mocked(authApi.testConnection).mockResolvedValue({
+      ok: true, status_code: 200, message: 'ok',
+    } as TestResult)
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    await w.get('[data-testid="cfg-test-all"]').trigger('click')
+    await flushPromises()
+    expect(authApi.testConnection).toHaveBeenCalledTimes(1)
+    expect(w.get('[data-testid="cfg-test-all-result"]').text()).toContain('1/1 正常')
+    w.unmount()
+  })
+
+  it('关闭:✕ 与遮罩均可收起', async () => {
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    await w.get('[data-testid="cfg-close"]').trigger('click')
+    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(false)
+    // 收起卡片回到预览条 → 预览 chip 也能打开抽屉
+    await w.get('[data-testid="svc-expand-fin-service"]').trigger('click')
+    await w.get('[data-testid="mx-prev-fin-service-1"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(true)
+    await w.get('[data-testid="cfg-backdrop"]').trigger('click')
+    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
+// ══ 接入新实例 / 主档登记 ═══════════════════════════════════════
+describe('ServiceAdmin — 接入与登记', () => {
+  it('接入新实例:选服务+环境 → 打开配置抽屉', async () => {
+    const w = await mountPage()
+    await w.get('[data-testid="svc-access-global"]').trigger('click')
+    await flushPromises()
+    // reka Dialog teleport 到 body
+    await bodyEl('[data-testid="access-form-service"]').setValue('wms-service')
+    await bodyEl('[data-testid="access-form-env"]').setValue('2')
+    await bodyEl('[data-testid="access-form-save"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(true)
+    expect(w.get('[data-testid="cfg-drawer"]').text()).toContain('wms-service-预发')
     w.unmount()
   })
 
@@ -193,7 +497,7 @@ describe('ServiceAdmin — 服务卡片流', () => {
     w.unmount()
   })
 
-  it('登记校验:缺系统名前置拦截,不发请求', async () => {
+  it('登记校验:缺系统名前置拦截', async () => {
     vi.spyOn(svcApi, 'createService')
     const w = await mountPage()
     await w.get('[data-testid="svc-new"]').trigger('click')
@@ -205,24 +509,7 @@ describe('ServiceAdmin — 服务卡片流', () => {
     w.unmount()
   })
 
-  it('编辑说明 → patchService(name, {description}) 并回显', async () => {
-    vi.spyOn(svcApi, 'patchService').mockResolvedValue({
-      ...SERVICES[2], description: '仓储服务',
-    })
-    const w = await mountPage()
-    await w.get('[data-testid="meta-cell-wms-service"]').trigger('click')
-    await w.get('[data-testid="meta-input-wms-service"]').setValue('仓储服务')
-    await w.get('[data-testid="meta-save-wms-service"]').trigger('click')
-    await flushPromises()
-    expect(svcApi.patchService).toHaveBeenCalledWith('wms-service', {
-      description: '仓储服务',
-    })
-    expect(w.get('[data-testid="meta-cell-fin-service"]').text())
-      .toContain('交易核心服务')
-    w.unmount()
-  })
-
-  it('删除实例(卡片菜单):确认后 DELETE;有挂靠 409 错误上屏', async () => {
+  it('删除服务(卡片菜单):409 挂靠错误上屏', async () => {
     const { confirmAction } = await import('@/utils/confirmAction')
     vi.mocked(confirmAction).mockResolvedValue(true)
     vi.spyOn(svcApi, 'deleteService').mockRejectedValue(
@@ -237,135 +524,9 @@ describe('ServiceAdmin — 服务卡片流', () => {
   })
 })
 
-// ══ 实例表(卡内展开)═══════════════════════════════════════════
-describe('ServiceAdmin — 实例表(展开)', () => {
-  it('展开 → 一环境一行:地址/登录口/就绪度分态;环境缺地址计数', async () => {
-    const w = await mountPage()
-    // 环境 chip 计数(主档 3 服务;环境1 已部署 1 → 缺2;环境2 全缺 → 缺3)
-    expect(w.get('[data-testid="dep-env-1"]').text()).toContain('缺2')
-    expect(w.get('[data-testid="dep-env-2"]').text()).toContain('缺3')
-    await expand(w, 'fin-service')
-    expect(w.get('[data-testid="mx-cell-fin-service-1"]').text())
-      .toContain('http://fin-dev')
-    expect(w.find('[data-testid="mx-miss-fin-service-2"]').exists()).toBe(true)
-    // 就绪度:环境1 双绿(地址 + 登录口);环境2 双缺
-    const row1 = w.get('[data-testid="inst-row-fin-service-1"]').text()
-    expect(row1).toContain('✓ 地址')
-    expect(row1).toContain('✓ 登录口')
-    const row2 = w.get('[data-testid="inst-row-fin-service-2"]').text()
-    expect(row2).toContain('✗ 地址')
-    expect(row2).toContain('✗ 登录口')
-    // 配置入口:登录口已配 = ready
-    expect(w.get('[data-testid="mx-inst-fin-service-1"]').classes()).toContain('ready')
-    expect(w.get('[data-testid="mx-inst-fin-service-2"]').classes()).not.toContain('ready')
-    w.unmount()
-  })
-})
-
-// ══ 服务配置管理抽屉 ════════════════════════════════════════════
-describe('ServiceAdmin — 配置管理抽屉', () => {
-  it('实例端点:已有地址 → 编辑保存 updateDeployment(id, url)', async () => {
-    vi.spyOn(depApi, 'updateDeployment').mockResolvedValue(
-      { id: 11, baseService: 'fin-service', envId: 1, baseUrl: 'http://v2' })
-    const w = await mountPage()
-    const drawer = await openDrawer(w, 'fin-service', 1)
-    expect(drawer.text()).toContain('http://fin-dev')
-    await w.get('[data-testid="cfg-url-edit"]').trigger('click')
-    await w.get('[data-testid="mx-url-fin-service-1"]').setValue('http://v2')
-    await w.get('[data-testid="mx-save-fin-service-1"]').trigger('click')
-    await flushPromises()
-    expect(depApi.updateDeployment).toHaveBeenCalledWith(11, 'http://v2')
-    w.unmount()
-  })
-
-  it('实例端点:缺地址 → 登记 createDeployment({baseService, envId, baseUrl})', async () => {
-    vi.spyOn(depApi, 'createDeployment').mockResolvedValue(
-      { id: 12, baseService: 'wms-service', envId: 2, baseUrl: 'http://wms-uat' })
-    const w = await mountPage()
-    await openDrawer(w, 'wms-service', 2)
-    await w.get('[data-testid="mx-new-url-wms-service-2"]').setValue('http://wms-uat')
-    await w.get('[data-testid="mx-register-wms-service-2"]').trigger('click')
-    await flushPromises()
-    expect(depApi.createDeployment).toHaveBeenCalledWith(
-      { baseService: 'wms-service', envId: 2, baseUrl: 'http://wms-uat' })
-    w.unmount()
-  })
-
-  it('实例端点:删除地址 → deleteDeployment(id)', async () => {
-    vi.spyOn(depApi, 'deleteDeployment').mockResolvedValue(undefined)
-    const w = await mountPage()
-    await openDrawer(w, 'fin-service', 1)
-    await w.get('[data-testid="cfg-url-edit"]').trigger('click')
-    await w.get('[data-testid="mx-del-fin-service-1"]').trigger('click')
-    await flushPromises()
-    expect(depApi.deleteDeployment).toHaveBeenCalledWith(11)
-    w.unmount()
-  })
-
-  it('实例配置:预填实例 → putInstance(system, envId, {...})', async () => {
-    vi.spyOn(svcApi, 'putInstance').mockResolvedValue({
-      system: 'fin', envId: 1, envName: '测试', loginUrl: 'http://fin/auth2',
-      line: '2.0', note: '新实例', updatedAt: null,
-    })
-    const w = await mountPage()
-    await openDrawer(w, 'fin-service', 1)
-    expect((w.get('[data-testid="inst-form-url"]').element as HTMLInputElement).value)
-      .toBe('http://fin/auth')
-    await w.get('[data-testid="inst-form-url"]').setValue('http://fin/auth2')
-    await w.get('[data-testid="inst-form-line"]').setValue('2.0')
-    await w.get('[data-testid="inst-form-note"]').setValue('新实例')
-    await w.get('[data-testid="inst-form-save"]').trigger('click')
-    await flushPromises()
-    expect(svcApi.putInstance).toHaveBeenCalledWith('fin', 1, {
-      loginUrl: 'http://fin/auth2', line: '2.0', note: '新实例',
-    })
-    w.unmount()
-  })
-
-  it('调用身份卡:该标签下的条目只显引用与可见性(不在场的不列)', async () => {
-    const w = await mountPage()
-    await openDrawer(w, 'fin-service', 1)
-    // env1 → merchant-b(username ref);env2 的 admin 不混入
-    expect(w.find('[data-testid="cfg-face-fin-service.merchant-b"]').exists()).toBe(true)
-    expect(w.find('[data-testid="cfg-face-fin-service.admin"]').exists()).toBe(false)
-    expect(w.get('[data-testid="cfg-face-fin-service.merchant-b"]').text())
-      .toContain('ref merchant-b')
-    // 子页管理入口在场(维护留在子页,抽屉只读)
-    expect(w.get('[data-testid="cfg-faces-link"]').text()).toContain('子页管理')
-    w.unmount()
-  })
-
-  it('关闭抽屉:✕ 与遮罩均可收起', async () => {
-    const w = await mountPage()
-    await openDrawer(w, 'fin-service', 1)
-    await w.get('[data-testid="cfg-close"]').trigger('click')
-    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(false)
-    // 收起卡片回到预览条 → 预览 chip 也能打开抽屉
-    await w.get('[data-testid="svc-expand-fin-service"]').trigger('click')
-    await w.get('[data-testid="mx-prev-fin-service-1"]').trigger('click')
-    await flushPromises()
-    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(true)
-    await w.get('[data-testid="cfg-backdrop"]').trigger('click')
-    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(false)
-    w.unmount()
-  })
-})
-
-// ══ 环境管理(聚焦态)══════════════════════════════════════════
+// ══ 环境管理 ═══════════════════════════════════════════════════
 describe('ServiceAdmin — 环境管理', () => {
-  it('环境 chip 聚焦:只显该环境缺地址的服务卡 + 环境管理条在场;再点收起', async () => {
-    const w = await mountPage()
-    await w.get('[data-testid="dep-env-1"]').trigger('click')
-    expect(w.find('[data-testid="mx-row-fin-service"]').exists()).toBe(false)
-    expect(w.find('[data-testid="mx-row-wms-service"]').exists()).toBe(true)
-    expect(w.find('[data-testid="dep-current"]').exists()).toBe(true)
-    await w.get('[data-testid="dep-env-1"]').trigger('click')
-    expect(w.find('[data-testid="mx-row-fin-service"]').exists()).toBe(true)
-    expect(w.find('[data-testid="dep-current"]').exists()).toBe(false)
-    w.unmount()
-  })
-
-  it('新建环境:name/description/lines → POST 后聚焦新列', async () => {
+  it('环境快切条 + 新建环境 → POST 后聚焦', async () => {
     const created = { id: 3, name: 'UAT', description: '预发验收', lines: {},
       owner_id: null, is_default: false }
     vi.spyOn(envApi, 'createEnvironment').mockResolvedValue(created)

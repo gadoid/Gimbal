@@ -28,7 +28,10 @@ migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 
 carry 去 env/预检硬门/显式通道退役);**实施 M1(carry 去 env)→ M2(标签链
 + 凭证规则 + 链位退役)→ M3(预检硬门三路径统一)→ M4(前端契约)→
 M5(ServiceAdmin 原型重排)→ M6(收尾 + 三外部文档同步)全部完成**,每批
-全量绿推进;M3 前置的派发侧一致性审计另修三个 P1(adhoc 派发标签错位/graph
+全量绿推进;**2026-11-18 按用户复核要求 M5 重做为「严格按 stitch 原型
+完整构建 + 前后端接线」**(指标条/差异横幅/筛选矩阵/服务卡片/实例表/
+配置管理抽屉全量对齐,新增 ping 与 import-catalog 两个后端端点),
+见 §「M5 重做」;M3 前置的派发侧一致性审计另修三个 P1(adhoc 派发标签错位/graph
 逐单元解析不可达/rerun 环境回放通道断裂,见 §「M3 前置」);同日将挂起用例
 `test_service_fields_system_key_aggregates_member_services` 在 gimbal_test
 跑绿(test_carry_api 15 passed —— 「本机无 TEST_DATABASE_URL」记载已过时,
@@ -636,6 +639,53 @@ P1(均为「链统一了,喂进链的参数/快照错位」),先行修复:
   暂停段[precheck_config/凭证域映射 missing_credential] + §8 临时调用
   标签链/409 env_mixed/错误表);
 - 环境降级轮(M1–M6)至此全部收口。
+
+### M5 重做：按 stitch 原型完整构建 + 前后端接线（2026-11-18，🟢 完成）
+
+用户复核判定 M5 首版为「简化版」，要求严格按 `claude/stitch_ux/_1/_2/_3`
+原型完整构建并完成功能接线。本轮逐块对齐并新增两个真实后端端点:
+
+- **后端接线**:
+  - `POST /api/deployments/{id}/ping`(连通测速:GET 部署地址,5s 超时,
+    返回 `{ok,statusCode,latencyMs,message}`;`ok` = 拿到 HTTP 响应,
+    401/404 也算可达 —— 与拨测语义分离;读面,404 未知部署);
+  - `POST /api/services/import-catalog`(对账横幅「立即批量映射」:
+    names 空 = 全部未登记;system 取目录聚合行,kind `sut→plate` /
+    `integration` 保形;已登记/不在目录 → skipped 幂等;plate 不可达
+    → `plateReachable=false`;ops.write 门 + 审计;
+    `plate_client.catalog_service_rows(refresh=)` 增新鲜度开关);
+  - 测试:`test_service_meta.py` +2(批量导入/不可达降级)、
+    `test_authz_s20_deployments.py` +1(ping 成功/404/失败三态);
+- **前端 api**:`deployments.pingDeployment` / `services.importCatalog` 类型与封装;
+- **服务注册页(原型 _1 + _2)完整重建**:
+  - 指标条(服务/实例/凭据别名/缺配置 + 实时同步徽标)+ 全局
+    「接入新实例 / 导入 Plate 服务定义」;
+  - plate 差异横幅(UNBOUND 计数 + 未登记 chips + 立即批量映射 + 收起);
+  - 筛选矩阵(搜索 + 环境快切 + 分类页签 全部/Plate 已同步/第三方/
+    集成件 + 排序 变更时间/缺口/名称)+ 服务卡分页(5 条/页);
+  - 服务卡片:等宽图标块、名称/缩写/系统/接入态/漂移/条目数、
+    说明行内编辑、就绪度摘要(实例就绪 x/y + 地址/登录口明细)、
+    部署节点预览条、接入实例/展开实例列表;菜单含服务画像深链;
+  - 实例表:实例 = 服务 × 环境(一环境一行),Tag(环境)过滤条、
+    实例标识/分组 Tag/Base URL/配置就绪度(地址·登录口·凭据三 chip)/
+    凭据与别名槽位(条目数 + ref 摘要)/服务配置管理,每页 5 条分页;
+  - 底部同步遥测条(plate 可达性 + 刷新 + 最近刷新时间);
+- **配置管理抽屉(原型 _3)完整重建**:
+  - 实例端点:配置就绪徽标、连通测速(ping)、Base URL 复制/编辑/
+    删除/登记、适用业务场景说明保存、实例绑定标签(环境 + 系统);
+  - 调用身份与凭据槽位:条目卡(名称/ref 徽标/账户装载徽标/展示名/
+    账户/鉴权类型/凭据托管不回显/有效期/装载坐标/默认字段 chips)、
+    快速鉴权测试(`/auths/{id}/test`)、设为默认、编辑引用/展示名、
+    复制、删除、新增条目(条目名/refMode/用户名/展示名)、子页深链;
+  - 实例配置(登录口/版本线)+ 底部「测试全槽位连通性」(逐个拨测
+    汇总)/「保存配置变更」(地址 + 实例合并落库);
+- **测试**:ServiceAdmin 套件重写 19→23 用例(指标条/差异横幅/批量
+  导入/筛选/卡片/两级分页/抽屉全交互/接入新实例/环境管理);
+- **验证**:前端 vitest **171 文件 / 1441 用例 0 failed** + vue-tsc 0 +
+  eslint 0;后端全量 **2066 passed / 2 skipped / 0 failed**(28m30s;
+  对照 M3 基线 2063,+3 = 导入 2 + ping 1);浏览器实测(admin 只读直签
+  令牌):列表页/实例表/抽屉三段与原型一致,连通测速真实发起并如实报
+  不可达,快速鉴权测试与全槽位测试 3/3 命中真实 SUT 取回 token。
 
 ### P2-C 验证收口
 

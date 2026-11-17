@@ -72,6 +72,25 @@ class ServicePatch(BaseModel):
     description: str | None = Field(default=None, max_length=1024)
 
 
+class ImportCatalogIn(BaseModel):
+    """批量导入目录服务(空 = 全部未登记)。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    names: list[str] = Field(default_factory=list, max_length=200)
+
+
+class ImportCatalogOut(BaseModel):
+    """导入结果:created / skipped(已登记或不在目录)+ 剩余未登记。"""
+
+    model_config = _CAMEL
+
+    created: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
+    unregistered: list[str] = Field(default_factory=list)
+    plate_reachable: bool = Field(default=True, alias="plateReachable")
+
+
 class InstanceOut(BaseModel):
     model_config = _CAMEL
 
@@ -130,6 +149,62 @@ async def list_services(
                     or ql in s.system.lower()]
     return ServiceListOut(services=services, unregistered=unregistered,
                           plate_reachable=reachable)
+
+
+@router.post("/import-catalog", response_model=ImportCatalogOut,
+             response_model_by_alias=True)
+async def import_catalog(
+    user: MemberUser, body: ImportCatalogIn, db: DbSession,
+) -> ImportCatalogOut:
+    """批量登记 plate 目录服务(M5 对账横幅「立即批量映射」)。
+
+    * 目标 = ``names``(空 = 目录中全部未登记);
+    * 已登记 / 不在目录 → ``skipped``(不报错,幂等);
+    * ``system`` 取目录聚合行(服务真实归属),``kind``:目录 ``sut`` →
+    主档 ``plate``,``integration`` → ``integration``;可选目录缺席时
+    不登记(与单条登记防错别字同口径);
+    * plate 不可达 → ``plateReachable=false``,created 空(读面自足)。
+    """
+    from ..services import plate_client
+
+    reachable = True
+    try:
+        rows = await plate_client.catalog_service_rows(refresh=True)
+    except Exception:  # noqa: BLE001 — 目录不可达不阻塞主档
+        rows = []
+        reachable = False
+    catalog = {r["name"]: r for r in rows if r.get("name")}
+    existing = set((await db.execute(select(Service.name))).scalars().all())
+    targets = body.names or sorted(set(catalog) - existing)
+    created: list[str] = []
+    skipped: list[str] = []
+    for name in targets:
+        meta = catalog.get(name)
+        if meta is None or name in existing:
+            skipped.append(name)
+            continue
+        row = Service(
+            name=name,
+            system=str(meta.get("system") or name.split("-")[0]),
+            kind="integration" if meta.get("kind") == "integration" else "plate",
+            abbr="", description="")
+        db.add(row)
+        existing.add(name)
+        created.append(name)
+    if created:
+        await db.commit()
+        from ..services import audit as audit_svc
+
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="service_registry.write", resource_type="service",
+            resource_id=",".join(created)[:128],
+            detail={"fn": "import_catalog", "created": created})
+    return ImportCatalogOut(
+        created=created, skipped=skipped,
+        unregistered=sorted(set(catalog) - existing) if reachable else [],
+        plate_reachable=reachable)
 
 
 @router.post("", response_model=ServiceOut, status_code=201)

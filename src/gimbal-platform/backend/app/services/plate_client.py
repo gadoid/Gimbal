@@ -548,11 +548,12 @@ async def _catalog_endpoints(*, refresh: bool = False) -> list[dict]:
     return rows
 
 
-async def catalog_service_rows() -> list[dict]:
+async def catalog_service_rows(*, refresh: bool = False) -> list[dict]:
     """聚合行视图:service×system 聚合 + endpointCount,**行带 kind**
-    (由端点行带出;全量不过滤)。"""
+    (由端点行带出;全量不过滤)。``refresh=True`` 绕过 TTL 缓存(批量
+    导入等写路径用;性能敏感读面保持缺省)。"""
     by: dict[tuple[str, str], dict] = {}
-    for it in await _catalog_endpoints():
+    for it in await _catalog_endpoints(refresh=refresh):
         service = str(it.get("service") or "")
         system = str(it.get("system") or "")
         if not service or not system:

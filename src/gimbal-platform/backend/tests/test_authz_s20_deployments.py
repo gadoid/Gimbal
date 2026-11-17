@@ -80,3 +80,42 @@ async def test_environment_view_has_is_default_no_visibility(
     out = r.json()
     assert out["is_default"] is False
     assert "visibility" not in out
+
+
+async def test_deployment_ping(client, fresh_db, monkeypatch):
+    """M5 配置抽屉「连通测速」:GET 部署地址 → {ok,statusCode,latencyMs};
+    404 未知部署;失败也是 200 结果(测速失败不是 500)。"""
+    from app.routers import deployments as dep_router
+
+    h = await register_and_login(client, "s20_ping", "pw123456")
+    async with db_module.SessionLocal() as s:
+        env_id = await _env(s, "s20-ping-env")
+        s.add(Deployment(base_service="fin-ping", env_id=env_id,
+                         base_url="http://fin-ping"))
+        await s.commit()
+        dep_id = (await s.execute(select(Deployment.id).where(
+            Deployment.base_service == "fin-ping"))).scalar_one()
+
+    async def fake_ok(url: str):
+        assert url == "http://fin-ping"
+        return True, 200, 12, "HTTP 200 · 12ms"
+
+    monkeypatch.setattr(dep_router, "_http_probe", fake_ok)
+    r = await client.post(f"/api/deployments/{dep_id}/ping", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "statusCode": 200, "latencyMs": 12,
+                        "message": "HTTP 200 · 12ms"}
+
+    r = await client.post("/api/deployments/999999/ping", headers=h)
+    assert r.status_code == 404
+    assert r.json()["detail"]["code"] == "deployment_not_found"
+
+    async def fake_down(url: str):
+        return False, None, 5000, "不可达: ConnectError: refused"
+
+    monkeypatch.setattr(dep_router, "_http_probe", fake_down)
+    r = await client.post(f"/api/deployments/{dep_id}/ping", headers=h)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False and body["statusCode"] is None
+    assert body["latencyMs"] == 5000
