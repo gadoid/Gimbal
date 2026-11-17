@@ -81,6 +81,10 @@ class PrecheckResult(BaseModel):
     # 成员;非空时前端提示可切「项目凭证」或去补登记)
     project_missing_auths: "list[str] | None" = Field(
         default=None, alias="projectMissingAuths")
+    # §1.4 env 必填收紧:环境链全空(方案显式位 > 项目默认 > 个人偏好 >
+    # 平台默认均未命中)且场景用到身份条目 —— 条目无从解析,missingAuths
+    # 全数罗列只是表象;单列信号点名根因,提示先建/设平台默认环境
+    env_unspecified: bool = Field(default=False, alias="envUnspecified")
     # §7.1 范围外目标(直连地址/内置认证/白名单外策略,只记录不拦截)
     out_of_scope_targets: list[dict] = Field(
         default_factory=list, alias="outOfScopeTargets")
@@ -264,6 +268,11 @@ async def _precheck_one(
                 project_id=scen.project_id, user_id=user_id)).env_id
         except Exception:  # noqa: BLE001 — 环境解析失败按无环境口径
             _env_id = None
+        if _env_id is None:
+            # §7 风险缓解的「明确报」:条目 env 必填,环境链全空时全数
+            # missing 是表象 —— 根因是未指定环境,单列信号而非让用户
+            # 误判为凭证全丢了
+            result.env_unspecified = True
         _picked = await pick_bindings(
             db, user_id, _auth_aliases, env_id=_env_id)
         result.missing_auths = sorted(

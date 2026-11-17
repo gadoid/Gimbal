@@ -202,7 +202,7 @@
                   <span v-if="svc.abbr && svc.abbr !== svc.name" class="muted mx-abbr" :title="`缩写 ${svc.abbr}`">{{ svc.abbr }}</span>
                   <span
                     v-if="svc.kind === 'plate' && !svc.inCatalog"
-                    class="svc-flag amber" data-testid="`mx-drift-${svc.name}`"
+                    class="svc-flag amber" :data-testid="`mx-drift-${svc.name}`"
                     title="主档 plate 行已不在 plate 目录(漂移)"
                   >漂移</span>
                 </td>

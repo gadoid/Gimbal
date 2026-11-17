@@ -59,10 +59,14 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
     await _env_id()
     admin = await _admin(client)
 
-    # 强约束:目录内服务可登记;slot 兼容参数收下但忽略(注入键=条目名)
+    # 强约束:目录内服务可登记;退役 slot 入参直接 422(§2.4 不做旧
+    # 字段影子 —— extra=forbid;注入键=条目名)
     r = await client.post("/api/service-aliases", headers=admin, json={
         "aliasName": "fin-service-uat", "slot": "uat-cred",
     })
+    assert r.status_code == 422
+    r = await client.post("/api/service-aliases", headers=admin,
+                          json={"aliasName": "fin-service-uat"})
     assert r.status_code == 201, r.text
     assert r.json()["baseService"] == "fin-service"  # 派生落库
     assert r.json()["slot"] == "fin-service-uat"  # slot 出参 = 条目名
@@ -90,13 +94,13 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
                           json={"aliasName": "fin-service-x"})
     assert r.status_code == 403
 
-    # patch:ref/display 可改;slot 兼容参数(忽略,不误清);缺省 = 不动
+    # patch:ref/display 可改;缺省 = 不动;退役 slot 入参 422(extra=forbid)
     r = await client.patch("/api/service-aliases/fin-service-uat",
                            headers=admin, json={})
     assert r.status_code == 200 and r.json()["slot"] == "fin-service-uat"
     r = await client.patch("/api/service-aliases/fin-service-uat",
                            headers=admin, json={"slot": None})
-    assert r.status_code == 200 and r.json()["slot"] == "fin-service-uat"
+    assert r.status_code == 422
     r = await client.patch(
         "/api/service-aliases/fin-service-uat", headers=admin,
         json={"refMode": "username", "refUsername": "bob", "display": "UAT"})

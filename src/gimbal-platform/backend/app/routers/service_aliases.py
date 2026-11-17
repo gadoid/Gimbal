@@ -54,8 +54,6 @@ class AliasCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     alias_name: str = Field(min_length=1, max_length=128, alias="aliasName")
-    # 兼容参数(条目模型无槽;忽略)
-    slot: str | None = Field(default=None, max_length=64, alias="slot")
     # plate 走派生强约束(目录 ∪ 主档);external 显式 base_service
     # (指向主档第三方服务;校验在 service 层)。
     kind: Literal["plate", "external"] = "plate"
@@ -71,7 +69,6 @@ class AliasCreate(BaseModel):
 class AliasPatch(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    slot: str | None = Field(default=None, max_length=64, alias="slot")
     base_service: str | None = Field(
         default=None, max_length=128, alias="baseService")
     kind: Literal["plate", "external"] | None = None
@@ -151,11 +148,11 @@ async def create_alias(
 async def patch_alias(
     alias_name: str, user: MemberUser, body: AliasPatch, db: DbSession,
 ) -> AliasOut:
-    """改身份条目(Admin+):ref/display 可改;``slot`` 兼容参数(忽略)。"""
+    """改身份条目(Admin+):ref/display 可改;``base_service`` 仅 external
+    可重指(悬空条目唯一修正路径);``kind`` 由主档承载,转型在主档侧。"""
     try:
         patched = await service_aliases.patch_alias(
             db, alias_name,
-            slot=body.slot,
             base_service=(body.base_service if body.base_service is not None else ...),
             kind=body.kind,
             ref_mode=body.ref_mode,

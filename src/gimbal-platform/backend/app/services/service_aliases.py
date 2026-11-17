@@ -233,7 +233,7 @@ async def classify_services(
 
 
 async def patch_alias(
-    db: AsyncSession, alias_name: str, *, slot: str | None = ...,
+    db: AsyncSession, alias_name: str, *,
     base_service: str | None = ...,
     kind: str | None = None,
     ref_mode: str | None = None,
@@ -241,11 +241,10 @@ async def patch_alias(
     display: str | None = None,
 ) -> dict:
     """条目 patch:``ref_mode``/``ref_username``/``display`` 可改;
-    ``base_service`` 仅 external 可改(重指主档第三方服务);``slot``
-    签名兼容(忽略);``kind`` 由主档承载(条目不再可改 —— 转型走
-    主档对账)。
+    ``base_service`` 仅 external 可改(重指主档第三方服务);``kind``
+    由主档承载(条目不再可改 —— 转型走主档对账)。旧 ``slot`` 入参已
+    随请求层清扫退役(输出面 ``slot`` = 条目名是 §2 键域契约,保留)。
     """
-    _ = slot
     # alias_name 是业务键非主键(P1-7 收尾同款误用漏网:PK 是 int id,
     # db.get(str) 在 asyncpg 下直接 DataError → PATCH 端点必 500)
     row = (await db.execute(

@@ -133,6 +133,11 @@
                     data-testid="runner-missing-auths"
                   >凭证条目未装载:{{ item.precheck.missingAuths.join('、') }}<template v-if="item.precheck.projectMissingAuths != null && !item.precheck.projectMissingAuths.length"> — 项目凭证已覆盖,发起前在右侧切「项目凭证」即可</template>;
                   </span>
+                  <span
+                    v-if="item.precheck.envUnspecified"
+                    class="pc-warn"
+                    data-testid="runner-env-unspecified"
+                  >未指定环境 —— 环境链全空(方案无显式位、平台无默认环境),身份条目无从解析;先在环境管理里建环境并设默认位 ↗</span>
                 </template>
                 <template v-else>
                   <span class="pc-fatal">这个方案跑不了,换一个方案就能跑。</span>

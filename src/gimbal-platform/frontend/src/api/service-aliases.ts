@@ -55,8 +55,6 @@ export function createAlias(input: {
   aliasName: string
   /** 接入:缺省 plate(目录派生强约束);external 跳过目录校验 */
   kind?: 'plate' | 'external'
-  /** 兼容参数(条目模型无槽;后端忽略) */
-  slot?: string | null
   /** external 须显式 baseService(主档第三方服务) */
   baseService?: string | null
   /** 重构新维度:环境(缺省 = 平台默认环境兜底) */

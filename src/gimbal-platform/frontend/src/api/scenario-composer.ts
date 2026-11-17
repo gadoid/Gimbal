@@ -513,6 +513,9 @@ export interface PrecheckResult {
   missingAuths?: string[]
   /** 项目凭证池的缺槽清单(null = 不适用:非普通项目 / 非成员) */
   projectMissingAuths?: string[] | null
+  /** 环境链全空且场景用到身份条目(env 必填,§1.4)—— missingAuths
+   * 全数罗列只是表象,根因是未指定环境;先建/设平台默认环境 */
+  envUnspecified?: boolean
 }
 
 /** 批量预检:队列 N 条一次发回判定面(失效判定的服务端唯一实现,§1.6) */

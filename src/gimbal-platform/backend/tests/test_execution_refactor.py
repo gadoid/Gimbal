@@ -318,11 +318,12 @@ def _steps_draft(services: dict | None = None, body: dict | None = None) -> dict
 
 async def _setup_scenario(
     client: AsyncClient, headers: dict, *, services: dict | None = None,
+    body: dict | None = None,
 ) -> None:
     r = await client.post(
         "/api/scenarios", headers=headers,
         json={
-            **_steps_draft(services=services),
+            **_steps_draft(services=services, body=body),
             "assertion_registry": {"entries": [
                 {"id": "inj-live", "name": "金额", "value": -1, "asserts": [],
                  "path": {"stepIndex": 0, "source": "body", "jsonpath": "$.amount"}},
@@ -389,6 +390,38 @@ async def test_precheck_reports_dead_dataset_dangling_and_unbound(
     assert bad_res["danglingEntryIds"] == ["inj-dead"]
     # fin.order 无声明 URL、坏方案无环境(无默认环境)→ 未落点
     assert bad_res["unboundServices"] == ["fin.order"]
+
+
+async def test_precheck_env_unspecified_signal(
+    client: AsyncClient, plate_mock: PlateMock
+) -> None:
+    """§1.4 env 必填:环境链全空(方案无显式位、平台无默认环境)→
+    envUnspecified 点名根因 —— 全数 missing 只是表象,先建默认环境;
+    环境就位后信号熄灭(条目未装载是另一件事,不混同)。"""
+    auth = await _member(client, "alice")
+    # 步骤模板引用 ${auth.qa-entry.token} → 预检注入清单非空
+    await _setup_scenario(client, auth, body={
+        "amount": 1, "token": "${auth.qa-entry.token}"})
+    await _seed_empty_ds(client, auth)
+    scheme = await _make_scheme(client, auth, "无环境方案")
+
+    r = await client.post("/api/run/precheck", headers=auth, json=[
+        {"scenarioId": "sc-test", "schemeId": scheme}])
+    assert r.status_code == 200, r.text
+    one = r.json()[0]
+    assert one["envUnspecified"] is True
+    assert one["missingAuths"] == ["qa-entry"]
+
+    from app.core import db as db_module
+    from app.models import Environment
+    async with db_module.SessionLocal() as db:
+        db.add(Environment(name="测试", is_default=True))
+        await db.commit()
+    r2 = await client.post("/api/run/precheck", headers=auth, json=[
+        {"scenarioId": "sc-test", "schemeId": scheme}])
+    one2 = r2.json()[0]
+    assert one2["envUnspecified"] is False
+    assert one2["missingAuths"] == ["qa-entry"]
 
 
 async def test_precheck_found_and_scheme_found_gates(

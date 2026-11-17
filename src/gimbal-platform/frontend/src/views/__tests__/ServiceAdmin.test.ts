@@ -92,6 +92,17 @@ describe('ServiceAdmin — 主档注册簿', () => {
     w.unmount()
   })
 
+  it('plate 行不在目录 → 漂移徽章(testid 绑定到服务名)', async () => {
+    vi.spyOn(svcApi, 'listServices').mockResolvedValue({
+      services: [{ ...SERVICES[0], inCatalog: false }],
+      unregistered: [], plateReachable: true,
+    })
+    const w = await mountPage()
+    expect(w.find('[data-testid="mx-drift-fin-service"]').exists()).toBe(true)
+    expect(w.find('[data-testid="mx-drift-fin-report-service"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('环境缺地址计数 + 有地址格/缺格分态', async () => {
     const w = await mountPage()
     // 主档 3 服务;环境1 已部署 1 → 缺2;环境2 全缺 → 缺3
