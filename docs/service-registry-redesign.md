@@ -86,19 +86,30 @@ timestamps
 - **env 必填收紧**:登录打到具体环境实例,无环境的账户无意义;
   执行期环境链兜底「平台默认环境」已存在,预检在无环境时即报缺,不留 env 空回退分支。
 
+**实施注记(2026-11-17)**:实际列名 `owner_id` / `password_enc`(密文语义
+显式);pool 判别 = CHECK(owner/project 恰一非空),uq(pool, system, env_id,
+username) 用唯一约束 + `NULLS NOT DISTINCT` 实现(与预告的「部分索引」语义
+严格等价);真正的部分唯一索引只有 is_default 那枚(WHERE is_default)。
+「可空」列全库统一 NOT NULL + 空串缺省(仓库约定,功能等价)。
+
 ### 1.5 `deployments`(不动) — (服务, 环境) → API 地址
 
 ### 1.6 `environments`(收窄) — 平台级环境字典
 
 - 名称/描述/默认位保留;**lines 列迁出到实例后删除**。
 
-### 1.7 `carry_service_bindings` / `carry_global_defaults`(演进) — 配置值坐标定死
+### 1.7 `carry_service_bindings`(演进;`carry_global_defaults` 不动) — 配置值坐标定死
 
 ```
 + env_id 可空          空 = 全环境基线;env 命中覆盖(稀疏覆盖,表达力保留)
 service_name → config_key   键域 ∈ {条目名 > 服务名 > 系统名}(层内解析序,细到粗)
 uq(scope, scope_id, env_id, config_key, field_path)
 ```
+
+**实施注记(2026-11-17)**:坐标/env 维度只落 bindings —— 「层默认」是三级
+键域的粗端,无 config_key 可挂(给它加键坐标在语义上不成立),global_defaults
+维持 (scope, scope_id, field_path) 三列形态;env 覆盖在执行/预览/编排三链
+与凭证、地址同一位生效(透传曾缺失,见 §6.0 偏离 6,同日补齐)。
 
 **坐标闭环**:配置值 = (scope: 公共项目|项目, env?, config_key, field_path)。
 层内解析序:条目名 > 服务名 > 系统名 > 层默认 — 与 URL「服务为主、系统聚合」
@@ -152,7 +163,7 @@ uq(scope, scope_id, env_id, config_key, field_path)
 | 模块 | 依赖点 | 档 | 说明 |
 |---|---|---|---|
 | views/ServiceAdmin.vue | 全页 | **重做** | 结构面:系统分组注册簿 + 对账条 + external 登记 |
-| views/ServiceAliasDetail.vue | 身份面子页 | **重做** | 迁环境配置页;旧路由重定向(书签不 404) |
+| views/ServiceAliasDetail.vue | 身份面子页 | **重做** | 条目化子页;路由路径未变(`/service-admin/{服务}`),书签天然有效 —— 无被替换的旧路径,重定向条款空转(§6.0 偏离 8 同族) |
 | (新)环境配置页 | — | **重做** | 环境优先:系统实例列表(URL/登录口/版本线/身份条目/字段默认值入口) |
 | views/Auths.vue | 凭证表单/行/拨测 | 适配 | 账户化:表单去登录地址;分组仍 system×env |
 | components/project/ProjectCredentialsPanel.vue | 同上 | 适配 | 项目池对称 |
@@ -218,14 +229,20 @@ tier 序(公共项目层 < 项目层)不变。
 1. alembic 单版本:建新表(services/instances/identities/accounts)、environments 删
    lines 列、carry 改列;**旧表直接 drop**(service_aliases/auth_sessions/
    service_meta)。
-2. 转换脚本(读旧写新,同事务,幂等,输出迁移报告):
-   - services:fin-service/pay-service 从 plate 目录拉入;jira 登记 external;
+2. 转换(内联 0057 `upgrade()`,PG DDL 单事务;无独立脚本,见 §6.0 偏离 5):
+   - services:**旧表扫描进册**(deployments/别名/凭证行提及的服务;kind 沿
+     旧别名值,system=服务名占位待对账页校正)—— 不依赖 plate 目录可达性,
+     也更合注册簿制「存量行显式进册」;pay-service 无存量行未进册,由对账
+     条「未登记候选」一键补登自愈;
    - identities:旧别名 2 行平移(+env=测试);**admin 凭证行 alias 同步生成条目**
      (ref 回指账户,场景 ${auth.X} 键落位);
    - accounts:codfish/codfish2 两行 → (admin 池, fin-service, 测试, ×2),
-     is_default 双 True 冲突取 codfish;
-   - instances:(fin-service, 测试)/(jira, 测试) 建行,login_url 留白 ——
-     候选 https://fin-tidb.21eflag.com/ 已列报告,人工在环境配置页选定;
+     is_default 双 True 冲突取 codfish(codfish2 曾被 ON CONFLICT DO NOTHING
+     连带吞行,手工补插非默认行 —— 一次性迁移的人工兜底,事件记 commit
+     `1af0795f`);
+   - instances:(fin-service, 测试)/(jira, 测试) 建行,login_url **直写旧
+     凭证 url**(在用地址,保行为连续;原「留白人工选定」是设计期对地址
+     正确性没把握的谨慎,实况无歧义);
    - carry 238 行:config_key 直传(fin-service 落「服务」档),env_id=NULL。
 3. 存量场景不处理 —— 条目名规约延续,场景键自动落位(决策 7)。
 
@@ -262,6 +279,36 @@ tier 序(公共项目层 < 项目层)不变。
 4. **deployments 保留**：`deployments`(服务×环境 → API 地址)与
    `system_env_instances`(系统×环境 → 登录口/版本线)**语义不同、并存**，
    服务注册页分列展示与编辑。
+5. **迁移初始化与转换实态**(2026-11-17 复核追认,§5.2 已按实态改写)：
+   主档初始化未「从 plate 目录拉入」而走**旧表扫描**——注册簿制语义
+   (存量行显式进册)+ 迁移期不依赖 plate 可达性;pay-service 未进册由
+   对账条自愈;instances login_url 直写旧凭证 url(非留白);转换内联
+   0057、无独立脚本/报告输出(downgrade 本即 NotImplementedError,重放
+   不可能,幂等诉求随之缩水);清理条件较 §5 授权面多删 owner IS NULL
+   的项目池凭证行(实况空集,防御性硬化)。
+6. **carry env 覆盖层:写面先行、执行链后补**：C3b 首落时仅管理面(编辑器
+   覆盖开关 + bindings API envId)与读面(get_bindings 基线/覆盖合成)支持
+   env 维度,三处执行链消费点(prepare_exec / 生效预览 / 编排单元)未透传
+   env_id —— 覆盖行存而不生效。2026-11-17 复核补齐(见下),现执行/
+   预览/编排与凭证、地址同一位生效。
+7. **请求层 slot 入参退役延期**：P2-B.6 曾保留 AliasCreate/AliasPatch 的
+   slot 兼容入参(接受但忽略)并注「Phase 3 一并清扫」—— Phase 3 实际只
+   清了文案,入参延至 2026-11-17 复核才删除(extra=forbid,发送即 422;
+   输出面 `slot`=条目名是 §2 键域契约,保留)。
+8. **书签兼容的双形态**：Auths 收链侧保留 `?newSlot=` 查询参数作 system
+   预填兜底(发链侧深链已退役;与「书签不 404」同族的低成本连续性,代码
+   内显式注释记档);ServiceAliasDetail 路由路径自始未变,重定向条款空转
+   (§3.2 措辞已修)。
+
+**2026-11-17 一致性复核与修复**(代码 vs 本文档逐节比对;偏离 5–8 为该轮
+追认,另修四项实现缺口):
+
+| 项 | 修复 | 验证 |
+|---|---|---|
+| carry env 执行链透传 | `prepare_exec` / `resolve_effective_config` / `unit_carry_contexts`(graph_dispatch 逐单元环境位经 meta 下传)三处补传 env_id | `test_carry_env_overlay.py` 4 用例 + store 读面用例;carry 簇 58 回归绿 |
+| 预检「未指定环境」 | `PrecheckResult` 新增 `envUnspecified`(环境链全空且场景用到条目 → 点名根因;Runner 提示先建默认环境) | 预检簇 13 绿(对照用例:建默认环境后信号熄灭);§1.4/§7「明确报」至此字面成立 |
+| 漂移徽章 testid | ServiceAdmin `mx-drift-*` 缺 `:` 绑定(恒字面量)修复 | ServiceAdmin 套件 + 正向断言;前端全量 1435 绿 |
+| slot 请求入参清扫 | 见偏离 7 | 别名/导入/令牌簇 83 绿 |
 
 **Phase 1 底座**:alembic 新表全量 + 解析链重写(4.1–4.4)+ service_names 校验源
 + routers 形状(旧形状直接下线,前端同批适配凭证/环境相关调用)。

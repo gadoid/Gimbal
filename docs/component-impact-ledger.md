@@ -85,6 +85,9 @@
   `test_service_fields_system_key_aggregates_member_services`(待 PG
   环境执行 —— 本机无 TEST_DATABASE_URL)
 - api/carry.ts:getBindingsFor/putBindings 增 envId 参
+- **env 覆盖执行链透传**(2026-11-17 复核补齐):prepare_exec / 生效预览 /
+  编排单元三处消费点透传 env_id,覆盖行执行/预览真实生效(此前写面先行、
+  执行链漏接 —— redesign §6.0 偏离 6;test_carry_env_overlay 4 用例钉住)
 - 存量 238 行(服务键 fin-service)自动落「服务」档,零改值 ✅
 
 ### C3c 环境管理(现内嵌 ServiceAdmin)

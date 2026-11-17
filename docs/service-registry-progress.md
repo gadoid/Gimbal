@@ -18,8 +18,11 @@ carry 三档键选择器 + env 覆盖开关 + 后端系统键面聚合（C3b）�
 server 链槽号/入站参数槽/看板 Root 槽为别概念保留)、ServiceAliasCard 死谓词
 重做、conftest P1-7 垫片删除、概念地图/运行手册核验零残留**;
 migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 条时代重放用例恢复);
-生产环境已迁移并部署，本地三服务已起（0057 已迁）。** 重构三阶段全部收口
-(P2-C 登录后冒烟仍待 admin 凭据)。
+生产环境已迁移并部署，本地三服务已起（0057 已迁）；
+**2026-11-17 一致性复核收口:代码 vs 设计文档逐节审计,4 项实现缺口修复
+（carry env 执行链透传 / 预检 envUnspecified / 漂移 testid / slot 入参清扫）、
+6 项合理适配 + 4 项措辞修正全量追认入 redesign（§5.2 实态改写 + §6.0 偏离 5–8）。**
+重构三阶段全部收口(P2-C 登录后冒烟仍待 admin 凭据)。
 
 ## 2. 已完成
 
@@ -62,7 +65,7 @@ env 必填收紧 / 环境不符=missing / 双条目共享账户（同 binding_id
 |---|---|
 | `api/services.ts`（新） | 主档 CRUD + `(system, env)` 实例 `login_url/line/note` upsert |
 | `api/auth_sessions.ts` | 账户形状（system/envId/username 四元组、loginUrl/identityRefCount/scenarioRefCount、references 按 id） |
-| `api/service-aliases.ts` | 条目扩展 envId/refMode/refUsername/display；kind 含 integration；patch 收窄 ref/display |
+| `api/service-aliases.ts` | 条目扩展 envId/refMode/refUsername/display；kind 含 integration；patch 收窄 ref/display；create/patch 的 slot 入参已删（2026-11-17 复核清扫，发送即 422；输出 slot=条目名契约保留） |
 | `api/service-meta.ts` | 退役转门面（保形转发主档 description） |
 | `views/Auths.vue` | 重写为账户表格：system 分组、(system,env) 无默认聚合、四元组表单（实体键锁定）、username 硬确认、实例登录口回显、反查侧板列身份条目 |
 | `components/project/ProjectCredentialsPanel.vue` | 账户化：实体键锁定、只改密码（留空不发） |
@@ -124,6 +127,7 @@ accounts   2   18180789650(默认) / 18180789652
 | `16c4b731` | migrations 时代造形（`_create_retired_tables` 测试造形机制;17+2 条时代重放恢复;全量 2044/2/0）|
 | `668a6021` | Phase 3 文案清账（「槽位」全站退场 + ServiceAliasCard 重做 + conftest 垫片删除;全量 2044/2/0）|
 | `1dceea01` | P2-B.6 导入映射按 ref 语义重做（call.user→条目名统一改写;authEntries/authRenames + 登记坐标;slot/credentialAlias 键退役;no_environment 422;13 用例恢复）—— 全量 2020/26/0 |
+| 本次 | 一致性复核修复：carry env 执行链三处透传（+graph 逐单元环境位）+ test_carry_env_overlay 4 用例；预检 envUnspecified 信号（后端+Runner 展示+对照用例）；mx-drift testid 绑定；AliasCreate/Patch slot 入参清扫（422）。文档：redesign §5.2 迁移实态改写 + §6.0 偏离 5–8 + §1.4/§1.7 实施注记 + §3.2 措辞 |
 
 ## 4. 未完成 / 后续计划
 
@@ -293,7 +297,7 @@ skipif 判引擎可导入）本轮引擎可用全部跑过 —— 记档口径:�
 |---|---|
 | `app/services/scenario_import.py` | `_slot_conversion`→`_auth_rewrites`（create+map 统一改写）；`_slot_report`→`_auth_report`（新回报键+登记坐标）；create 循环去 slot 传参 + no_environment 映射 |
 | `app/routers/service_aliases.py` | 条目 create 路由停发 `slot`（服务层参数已删,继续传会 TypeError） |
-| `app/services/service_aliases.py` | `create_alias_in_transaction` 与提交包装器 `create_alias` 删 `slot` 参数；条目路由 create 停发（`AliasCreate`/`AliasPatch` 的请求层兼容字段保留,Phase 3 一并清扫） |
+| `app/services/service_aliases.py` | `create_alias_in_transaction` 与提交包装器 `create_alias` 删 `slot` 参数；条目路由 create 停发（`AliasCreate`/`AliasPatch` 的请求层兼容字段原注「Phase 3 一并清扫」—— 实际延至 2026-11-17 复核才删除，见 §「一致性复核与修复」） |
 | `tests/test_scenario_import_pipeline.py` | 7 用例恢复（回报断言切 authEntries；ServiceAlias→ServiceIdentity；create 前置播种默认环境） |
 | `tests/test_authz_s75_import_slots.py` | 6 用例按新语义重写（四件套播种；multi_user/no_identity 分支；登记坐标断言） |
 | `frontend/src/api/scenario-import.ts` | `ImportSlotRow`→`ImportAuthEntry`；`ImportMapping` 删 `credentialAlias` |
@@ -337,6 +341,41 @@ skipif 判引擎可导入）本轮引擎可用全部跑过 —— 记档口径:�
 `test_exec_config_migration` 4 passed（2 恢复 + 2 原有）。修一个顺带发现：
 0038 用例的 `AuthSession` ORM 播种走 conftest 垫片映射到 `AuthAccount` 必炸
 → 改裸 SQL 插造形表。
+
+### 一致性复核与修复（2026-11-17，✅ 完成）
+
+对 `453e4f51` 做代码 vs 设计文档逐节审计（三路并行：数据层 / 解析链与路由 /
+前端），逐项裁定「真缺陷 / 合理适配 / 文档过宽」后处置：
+
+**修复 4 项**（实现背离设计的真缺口）：
+
+1. **carry env 覆盖执行链透传**：C3b 首落只有管理面（编辑器开关 + bindings
+   API envId）与读面（get_bindings 基线/覆盖合成）支持 env，三处执行链消费点
+   `prepare_exec` / `resolve_effective_config` / `unit_carry_contexts` 均未传
+   `env_id` —— 覆盖行存而不生效（env 在三个调用点全部在手，纯透传漏接）。
+   补齐 + graph_dispatch 逐单元环境位经 meta 下传；新增
+   `test_carry_env_overlay.py` 4 用例（机制/执行/预览/编排）+ store 读面用例。
+2. **预检「未指定环境」**：环境链全空（无偏好且无 is_default 环境 —— 可达的
+   误配置态）时条目全数 missing，用户误判凭证全丢。`PrecheckResult` 新增
+   `envUnspecified`（用到条目且环境链空 → 点名根因），Runner 展示「先建默认
+   环境」提示；对照用例：建默认环境后信号熄灭。§1.4/§7「明确报」至此字面成立。
+3. **漂移徽章 testid**：ServiceAdmin `mx-drift-*` 缺 `:` 绑定（恒字面量，
+   正向漂移无测试所以未暴露）→ 修复 + 正向断言。
+4. **slot 请求入参清扫**（P2-B.6 欠账，原注 Phase 3 清扫未执行）：
+   AliasCreate/AliasPatch 删 slot 字段（extra=forbid → 发送即 422），
+   服务层 `patch_alias` 签名同步删参；前端 `createAlias` 类型同步；
+   测试改断言 422。
+
+**追认与措辞修正**（实现走了更稳的路、文档未跟上 —— 代码不动，全量整理进
+redesign）：迁移实态（旧表扫描进册 / login_url 直写 / codfish2 手工补插 /
+内联无报告 / 清理扩删空集）、carry_global_defaults 不演进（层默认无键坐标
+语义）、uq 用 NULLS NOT DISTINCT（等价部分索引）、列名 owner_id/password_enc
+与空串约定、patch 面含 external 重指（悬空条目唯一修正路径）、路由重定向
+空转、Auths `?newSlot=` 收侧垫片 —— 见 redesign §5.2 改写 + §6.0 偏离 5–8
++ §1.4/§1.7 实施注记。
+
+**验证**：carry 簇 58 + 8 绿；预检簇 13 绿；别名/导入/令牌簇 83 绿；
+前端 vitest 全量 **171 文件 1435 passed** + vue-tsc 0 错误 + eslint 干净。
 
 ### P2-C 验证收口
 
