@@ -3,6 +3,8 @@
 > 2026-11-16 与使用者多轮讨论定稿。前身:「服务配置(身份面)+部署表」二合一页。
 > 本文是实施锚点;口径以本文为准,阶段推进中如有修订在此追加。
 >
+> **2026-11-17 追加 §8「环境降级为轻量标签」** —— 对本章既定口径的修订以 §8 为准。
+>
 > **总原则(2026-11-16 拍板):开发环境,数据非最优先保障项 —— 架构完整闭环优先。**
 > 不为存量数据保留过渡兼容;表结构一步到位;初始化可重建,转换脚本仅兜底。
 
@@ -21,13 +23,18 @@
    plate 改名可对账出漂移;external 照常登记(kind 三态沿用)。
 2. **URL 粒度=service**(可独立部署最小单位),系统层做聚合呈现与批量填充;
    系统级默认地址 fallback 不建(需要时是增量,不是欠账)。
-3. **环境=平台级共享字典**(部署面横切,不按组织切)。
+3. **环境=平台级共享字典**(部署面横切,不按组织切)。2026-11-17 起降级为
+   轻量标签轴(仍是平台级字典;角色收窄见 §8)。
 4. **实例唯一 + 配置 overlay**:同一 (env, system) 不并排多套实例;
-   差异化走「多身份条目」(并排命名身份)与「配置值分层」(基础/项目/个人)。
+   差异化走「多身份条目」(并排命名身份)与「配置值分层」(基础/项目;个人层
+   后收编为默认执行配置 —— 分层⑥,原文「基础/项目/个人」系写作时旧三层口径,
+   2026-11-17 复核订正)。
    部署真有多套 → 拆多环境。
 5. **账户实体化**:凭证行去槽位化,密码只存一份;条目引用账户(ref=默认账户|指定 username);
    登录地址上提到实例层,凭证表单「登录地址」退役。
 6. **环境显式化**:身份条目与账户的 env **必填**(见 §2.3 收紧);管理面在环境配置页。
+   (2026-11-17 修订:必填保留,语义降为归档标签 —— 条目 env 决定执行标签、
+   账户 env 归档+登录口坐标;「同 env 匹配」门槛退役,见 §8.3。)
 7. **场景键稳定 = 架构决策,非代码适配**:条目命名规约延续 `<服务名>-<后缀>`,
    存量场景键天然落在条目名域内 —— 新解析链只认条目名,**不写旧形态适配分支**。
 8. **数据非保障项**:不做行为等价性保证、不做旧端点/旧字段过渡窗口、不做回退分支;
@@ -92,6 +99,10 @@ username) 用唯一约束 + `NULLS NOT DISTINCT` 实现(与预告的「部分索
 严格等价);真正的部分唯一索引只有 is_default 那枚(WHERE is_default)。
 「可空」列全库统一 NOT NULL + 空串缺省(仓库约定,功能等价)。
 
+**2026-11-17 修订(§8.3,实施 M2)**:is_default 取用位改按 **(池, system)**
+唯一(部分唯一索引重建,迁移 0059);env_id 保留为归档标签,身份引用不再
+校验同 env,登录口按**账户 env** 取(密码与登录口同源不变式)。
+
 ### 1.5 `deployments`(不动) — (服务, 环境) → API 地址
 
 ### 1.6 `environments`(收窄) — 平台级环境字典
@@ -110,6 +121,10 @@ uq(scope, scope_id, env_id, config_key, field_path)
 键域的粗端,无 config_key 可挂(给它加键坐标在语义上不成立),global_defaults
 维持 (scope, scope_id, field_path) 三列形态;env 覆盖在执行/预览/编排三链
 与凭证、地址同一位生效(透传曾缺失,见 §6.0 偏离 6,同日补齐)。
+
+**2026-11-17 退役(§8.4,实施 M1)**:env 覆盖维整体删除(生产 238 行绑定
+0 覆盖行)—— 本节 env 相关描述保留为历史;现行坐标 = (scope, config_key,
+field_path),唯一约束随迁移 0058 重建为三键形态。
 
 **坐标闭环**:配置值 = (scope: 公共项目|项目, env?, config_key, field_path)。
 层内解析序:条目名 > 服务名 > 系统名 > 层默认 — 与 URL「服务为主、系统聚合」
@@ -132,6 +147,9 @@ uq(scope, scope_id, env_id, config_key, field_path)
    login_url。下游 materialize/integration/dispatcher 零改动。
 4. **不做**的兼容:旧 API 字段影子、旧端点代理窗口、slot 读侧保留、
    登录口回退 deployments、env 空账户回退 —— 全部不留。
+5. **2026-11-17 增补(§8.2)**:`RunRequest.environmentId`、`graph.environmentId`、
+   预览 environmentId 入参与方案/执行配置/偏好三个环境链位 —— 显式注入通道
+   全部退役(UI/API/webhook 均不再接受)。
 
 ## 3. 影响面矩阵(重做 / 适配 / 兼容三档)
 
@@ -157,6 +175,9 @@ uq(scope, scope_id, env_id, config_key, field_path)
 | routers/auth_sessions.py / project_credentials.py | 列表/表单/拨测 | 适配 | 账户化形状;拨测取实例 login_url |
 | routers/run_precheck.py / runs.py / run_schemes.py / scenarios.py | 条目就绪/引用 | 兼容 | 键域不变 |
 | routers/catalog.py | plate 代理 | 兼容 | 不动;对账读它 |
+
+> 本表为 2026-11-16 轮实态。2026-11-17 环境降级轮的增量影响面
+> (env_chain / run_precheck / carry / auth 相关档位变化)见 §8.2–§8.5、§8.7。
 
 ### 3.2 前端
 
@@ -202,6 +223,10 @@ uq(scope, scope_id, env_id, config_key, field_path)
 - 取用序:ref 命中 > 缺失即缺(无环境回退分支 —— 预检期报「未指定环境」)。
 - MissingAuthAliases 语义不变(集成链 paused/missing_credential)。
 
+> 2026-11-17 修订(§8.3):ref 取用不再校验同 env —— username 引用
+> 同 tag 优先 → system 内唯一 → 歧义拦截;default 引用取 system 唯一默认;
+> 登录口按**账户 env** 取。「未指定环境」根因改为「标签不可解析」。
+
 ### 4.2 ${slot.X.field}
 
 fields_by_slot 数据源:条目 X → 账户 account_fields(键=条目名);正则零改。
@@ -212,8 +237,8 @@ deployment_urls 零改;登录口 = 实例 login_url(缺席 = 配置缺失,明确
 
 ### 4.4 carry
 
-层内链:条目键 > 服务键 > 系统键 > 层默认;env 命中 > env 空基线;
-tier 序(公共项目层 < 项目层)不变。
+层内链:条目键 > 服务键 > 系统键 > 层默认;tier 序(公共项目层 < 项目层)不变。
+(2026-11-17:「env 命中 > env 空基线」的覆盖维随 §8.4 退役。)
 
 ## 5. 迁移(简化:重建优先;含用户数据清理)
 
@@ -261,7 +286,8 @@ tier 序(公共项目层 < 项目层)不变。
 **实施中的偏离与决策**（记录以免后续误读）：
 
 1. **环境配置页未拆独立页**：实例(login_url/版本线)配置并入服务注册页
-   （system 组头「实例配置」+ 格内登录口小钮）。理由：服务注册页定位就是
+   （格内「实例配置」小钮；system 组头重复入口已于 2026-11-17 交互收口时
+   移除）。理由：服务注册页定位就是
    「服务关系 mapping 入口」，`(系统, 环境) → 地址` 是其自然组成；环境×系统
    规模仍小（当前 1 环境）。后续若膨胀可再拆。
 2. **空库 bootstrap 语义变更**：`app/core/migrations.py` 空库分支改为
@@ -291,6 +317,9 @@ tier 序(公共项目层 < 项目层)不变。
    env 维度,三处执行链消费点(prepare_exec / 生效预览 / 编排单元)未透传
    env_id —— 覆盖行存而不生效。2026-11-17 复核补齐(见下),现执行/
    预览/编排与凭证、地址同一位生效。
+   **同日反转**:当晚「环境降级」拍板(§8)整体退役 env 覆盖维 —— 本条的
+   透传补齐与 `test_carry_env_overlay` 4 用例随 M1(迁移 0058)移除;
+   记录保留为演进史,以免后续误读。
 7. **请求层 slot 入参退役延期**：P2-B.6 曾保留 AliasCreate/AliasPatch 的
    slot 兼容入参(接受但忽略)并注「Phase 3 一并清扫」—— Phase 3 实际只
    清了文案,入参延至 2026-11-17 复核才删除(extra=forbid,发送即 422;
@@ -299,6 +328,15 @@ tier 序(公共项目层 < 项目层)不变。
    预填兜底(发链侧深链已退役;与「书签不 404」同族的低成本连续性,代码
    内显式注释记档);ServiceAliasDetail 路由路径自始未变,重定向条款空转
    (§3.2 措辞已修)。
+9. **交互词汇收口（2026-11-17，用户口径）**：「实例」一词在交互词面保留给
+   **服务 × 环境的部署存在**（矩阵一格即一实例，行尾菜单删除动作称
+   「删除实例」，确认文案写明连登记带全部环境实例一并移除、挂靠拦截）；
+   格内「实例配置」小钮编辑的是 `(system, env)` 共享的**登录口/版本线**
+   （按内容命名，不再与「实例」抢词），组头同名重复入口删除；末列补
+   显名列头「操作」。**纯词面与入口调整，数据键域零改动** ——
+   `system_env_instances` 存储形态与 API 不变。(2026-11-17 环境降级轮:
+   「环境」UI 词面按 stitch 原型口径保留、呈现为 Tag 芯片,模型语义见 §8.1;
+   「实例 = 服务 × 环境」词汇不变。)
 
 **2026-11-17 一致性复核与修复**(代码 vs 本文档逐节比对;偏离 5–8 为该轮
 追认,另修四项实现缺口):
@@ -309,6 +347,7 @@ tier 序(公共项目层 < 项目层)不变。
 | 预检「未指定环境」 | `PrecheckResult` 新增 `envUnspecified`(环境链全空且场景用到条目 → 点名根因;Runner 提示先建默认环境) | 预检簇 13 绿(对照用例:建默认环境后信号熄灭);§1.4/§7「明确报」至此字面成立 |
 | 漂移徽章 testid | ServiceAdmin `mx-drift-*` 缺 `:` 绑定(恒字面量)修复 | ServiceAdmin 套件 + 正向断言;前端全量 1435 绿 |
 | slot 请求入参清扫 | 见偏离 7 | 别名/导入/令牌簇 83 绿 |
+| 交互词汇收口 | 见偏离 9（实例=服务×环境；登录口/版本线按内容命名；删除动作随行称「删除实例」） | ServiceAdmin 套件 15 绿 + 前端全量 1435 绿 |
 
 **Phase 1 底座**:alembic 新表全量 + 解析链重写(4.1–4.4)+ service_names 校验源
 + routers 形状(旧形状直接下线,前端同批适配凭证/环境相关调用)。
@@ -332,3 +371,130 @@ docs/概念地图更新。
 | carry config_key 三级键域误配 | 层内解析序测试 + 配置页键选择器(条目/服务/系统三档显式选择) |
 | 场景键落空(条目被删/改名) | 条目删除走 confirmAction+引用计数(沿用 auth_references);
   改名不做(引用键稳定是架构决策,改名=删旧建新) |
+| 环境降级轮(§8)改动面广(~55 文件+3 迁移) | 里程碑 M1–M6 分批、每批全量绿;
+  「密码与登录口同 env」不变式测试三例钉死(§8.3) |
+| 预检硬门改变错误时机(步骤级报错 → 派发前 409) | 三路径统一错误码+标签上下文;
+  开发环境直切(决策 8) |
+
+## 8. 环境降级为轻量标签(2026-11-17 拍板,实施未启动)
+
+> 本节是对 §0–§7 既定口径的修订,**冲突处以本节为准**。动因:服务注册页按
+> stitch 原型(`claude/stitch_ux/`)重排牵出的概念审计 —— 「环境」同时承担
+> 部署坐标 / 凭证匹配门槛 / carry 配置层 / 七级默认链四种角色;数据与缺陷
+> 审计判定后三者为过度设计(生产实量:1 环境、carry env 覆盖 **0** 行、
+> 方案/执行配置/项目默认/个人偏好环境全 **0**,且 13 个潜伏缺陷全部长在
+> 多余角色上 —— 预检三处环境解析口径不一、suites 预检漏传 user_id、
+> carry env 透传漏三处等,详见 progress「环境降级」节)。
+
+### 8.0 拍板决策(用户口径)
+
+1. **环境=轻量部署标签**:全局字典(`environments` 表与 id 保留)只做三件事
+   —— 分类/筛选、地址/登录口/版本线的坐标、项目/平台默认位。不再承载
+   carry 配置层、凭证匹配门槛、多层默认链。
+2. **carry 去 env 维**:键域 = 条目 > 服务 > 系统 > 层默认(项目 > 公共)。
+3. **凭证去 env 匹配**:身份引用不校验 env;username 引用同 tag 优先 →
+   system 内唯一 → 歧义拦截;默认账户按 system 唯一。
+4. **标签解析链 = 有效调用身份标签 > 项目默认 > 平台默认**;显式
+   `environmentId` 全链退役(UI/API/webhook 均不注入);多身份标签不一致
+   = 混拼硬拦截,无逃生口;换环境 = 改身份标签或项目默认。
+5. **预检硬拦截 + 明确上下文**,UI/JWT、access token、webhook 三条派发路径
+   统一硬门、一步到位。
+
+### 8.1 词面规约(2026-11-17 按 stitch 原型定稿)
+
+- 代码/表/列/历史 API 字段名**不动**:`environments`/`env_id`/快照里的
+  `environmentId` 照旧。
+- 模型与文档立「标签」新义;**UI 用户可见文案保留「环境」字样**(原型口径:
+  筛选轴叫「环境/部署环境」,Tag 只指芯片形态);「实例 = 服务 × 环境」
+  (偏离 9)词汇不变。
+- 旧章节不改词,仅以本节声明词面规约。
+
+### 8.2 标签解析链(修订 §3.1 env_chain「环境链不变」)
+
+```
+resolve_execution_tag:
+  有效调用身份的标签(多个不一致 → env_mixed 硬拦截)
+    > 项目默认标签(project.default_environment_id 保留)
+    > 平台默认标签(environments.is_default 保留)
+  全空 → env_unspecified 硬拦截
+```
+
+- **有效身份** = 执行配置「换用条目」(slot_map)∪ 场景声明条目 ∪ 行级
+  `@slot` 覆盖,取**换用后**实际取用集合 —— 标签从换用条目取,不是声明条目。
+- suite/graph **逐单元**独立解析(每单元各自身份集合;与旧「全图一个环境」
+  不同,属预期语义变更);无身份场景直落项目/平台默认位。
+- 简化链:query_views / integration 为单身份场景,标签 = 该身份 env;
+  adhoc 无项目归属,链 = 身份标签 > 平台默认。
+- **退役**:方案环境、执行配置环境、个人偏好三个链位;`RunRequest
+  .environmentId`、`graph.environmentId`、预览 environmentId 入参;
+  `env_chain.EnvironmentNotFound`(仅显式位触发)。
+- **快照兼容**:`EnvChoice` 形状不变,`source ∈ identity|project|default`;
+  历史 `config_json.environmentId/Source` 只读回放,环境行不删除。
+
+### 8.3 凭证规则(修订 §1.4 / §4.1)
+
+- 账户唯一键**保留** `(池, system, env, username)`,env = 归档标签
+  (测试/生产同用户名不同密码可共存);身份引用**不校验** env。
+- `ref_mode=username`:同 tag(条目 env)账户优先 → system 内唯一命中 →
+  多行报 `account_ambiguous`。
+- `ref_mode=default`:system 唯一默认账户;`uq_account_default` 重建为
+  `(owner_id, project_id, system) WHERE is_default`(迁移 0059)。
+- **正确性不变式:登录口按「账户 env」取** —— 密码与登录口必须同源
+  (同账户 tag),钉死测试三例:同 tag 命中 / 跨 tag 用账户 tag / 多 tag 歧义。
+- 消费点同步去 env 匹配:`auth_references`、`access_token` 范围复核、
+  `projects.slot_status`、`auth_sessions` CRUD/拨测、`project_credentials`、
+  `integration_runner`、导入、`query_views`。
+
+### 8.4 carry 去 env(修订 §1.7 / §4.4)
+
+键域 = 条目 > 服务 > 系统 > 层默认;坐标 `(scope, config_key, field_path)`;
+迁移 **0058**(fresh 守卫 → 0 行去重 → drop 列/约束 → 重建三键唯一约束)。
+管理面(编辑器覆盖开关 + bindings API envId)与执行链透传一并退役。
+
+### 8.5 预检硬门(修订 §3.1 run_precheck「兼容」)
+
+- 共用校验器(纯 DB + 请求内缓存):标签解析**一次**复用 —— 替换现有
+  三处不一致的 `resolve_environment` 调用;`builtin_auth_shadowed` 同源。
+- **硬拦截(409)**,错误码表:`env_unspecified | env_mixed |
+  address_missing | login_missing | identity_missing | account_missing |
+  account_ambiguous`;detail 必带 标签名/服务/系统/身份 上下文。
+- **提示不拦截**:账户/身份 env 与执行标签不同(凭证解耦,401 自然暴露)。
+- 契约扩展:`PrecheckItem` 增可选 `execConfigId` 等;`PrecheckResult` 增
+  `envContext / envMixed / envWarnings`(全部可选,旧字段兼容;
+  `envUnspecified` 根因语义改「标签不可解析」);修 suites `_precheck_one`
+  漏传 `user_id` 的既有缺陷。
+
+### 8.6 迁移(0057 之后)
+
+| 迁移 | 内容 | 数据风险 |
+|---|---|---|
+| 0058 | drop `carry_service_bindings.env_id` + 重建三键唯一约束 | 0(覆盖行 0) |
+| 0059 | `uq_account_default` → `(池, system) WHERE is_default` | 0(1 环境) |
+| 0060 | drop `exec_configs.environment_id` | 0(表 0 行) |
+
+均带 fresh 守卫(空库走 baseline+stamp);downgrade 不可逆(决策 8 口径);
+迁移前 pg_dump(限定 schema;主库 1915 个测试残留 schema 不动,清理另议)。
+
+### 8.7 影响面与实施里程碑
+
+后端 ~35 文件 / 前端 ~20 文件。五个消费点全部切同一标签解析实现:
+生效预览(`runs.py`)、adhoc、integration、query_views、suites。
+
+- **M1** carry 去 env(含前端编辑器/API);
+- **M2** 标签解析链 + 凭证规则 + 三链位与显式通道退役(0059/0060);
+- **M3** 预检硬门(三路径统一);
+- **M4** 前端契约(类型清理 + 各页面文案;运行面板/方案/执行配置的环境
+  控件随链位删除消失);
+- **M5** ServiceAdmin 按 stitch 原型重排(服务卡片流 + 实例表 + 「服务配置
+  管理」抽屉;实例 = 服务×环境、配置就绪度替代探针、调用身份卡只显引用
+  与可见性);
+- **M6** 收尾(全量验证 + 文档复核表 + webhook guide / PLATFORM_
+  REQUIREMENTS / PLATFORM-SCENARIO-COMPOSER-API 三外部文档随实现同步)。
+
+每批全量绿再进下一批;测试改动清单与验证命令见 progress「环境降级」节。
+
+### 8.8 不做
+
+同环境多节点/多标签实例、环境表合并、carry 两表合并、历史数据清洗、
+主库残留测试 schema 自动清理(如需另出脚本单独确认)。将来若需按部署
+差异化配置:挂到实例(服务×环境)上,不回到环境层。

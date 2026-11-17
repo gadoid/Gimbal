@@ -23,6 +23,12 @@ migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 
 （carry env 执行链透传 / 预检 envUnspecified / 漂移 testid / slot 入参清扫）、
 6 项合理适配 + 4 项措辞修正全量追认入 redesign（§5.2 实态改写 + §6.0 偏离 5–8）。**
 重构三阶段全部收口(P2-C 登录后冒烟仍待 admin 凭据)。
+**2026-11-17(晚) 环境降级轮启动**:stitch 原型交互审计牵出「环境」降级为
+轻量部署标签 —— 五项决策 + 词面口径定稿入 redesign §8(标签解析链/凭证规则/
+carry 去 env/预检硬门/显式通道退役;实施 M1–M6 未启动);同日将挂起用例
+`test_service_fields_system_key_aggregates_member_services` 在 gimbal_test
+跑绿(test_carry_api 15 passed —— 「本机无 TEST_DATABASE_URL」记载已过时,
+库在且可用)。
 
 ## 2. 已完成
 
@@ -76,7 +82,7 @@ env 必填收紧 / 环境不符=missing / 双条目共享账户（同 binding_id
 | `ProjectConfigPanel` + `EffectivePreviewDialog`(C2b) | 槽位状态节 → **身份条目装载**（已装载/未装载、项目池·已覆盖）；预览装载表 条目/账户# 口径、缺装载提示同步；carry 节 hint 对齐三档键域 |
 | `ExecConfigsView`(C3a) | 装载就绪链修复（旧 slotBound 读已退役字段恒误报）→ 条目→ref→(system,env)账户；装载坐标列；缺账户深链按 (system,envId) 预填；绑定/服务面板条目口径 |
 | `api/carry.ts` + `ServiceBindingEditor` + `ProjectConfigPanel` ③(C3b) | bindings 读写增 envId；编辑器 env 覆盖开关（基线/覆盖层）；项目配置页三档键选择器（条目/服务/系统 optgroup + 存量兜底组） |
-| **后端 `/carry/bindings/{key}/fields`** | 纯系统名键 → 该系统全部服务面并集（服务名键不受同名系统影响）；新增用例待 PG 环境执行（本机无 TEST_DATABASE_URL，语法/导入已验） |
+| **后端 `/carry/bindings/{key}/fields`** | 纯系统名键 → 该系统全部服务面并集（服务名键不受同名系统影响）；新增用例 ✅ 2026-11-17 已在 gimbal_test 执行绿（test_carry_api 15 passed;「本机无 TEST_DATABASE_URL」记载过时,库在且可用） |
 | `CaseComposerCanvas` | F4 注入改条目口径（选中已登记条目即注入 `${auth.<条目名>}.token`，切未登记名清行）；`auths` 与 `registeredAliases` 同源一次拉取 |
 | `UsersCard` / `ImportScenarioDialog` | 快照导入账户形状（键 `username@system`）；挂认证下拉退役（后端 slot 兼容忽略） |
 | `ServiceAliasDetail` | **条目化重做**：头部徽标 槽位→环境+ref（`ref 默认`/`ref 用户名·x`）；概览补 系统/环境/账户装载行；地址就绪矩阵扩 实例登录口/版本线两列（主档查系统归属，未登记主档显「—」）；凭证 tab→账户装载（ref 语义+去凭证管理）；身份条目登记表单补 环境选择（实体键不可改）+ refMode/refUsername；列表补 环境/账户装载列；键合法性校验集合 = 主档 ∪ 目录（§2.2） |
@@ -128,6 +134,7 @@ accounts   2   18180789650(默认) / 18180789652
 | `668a6021` | Phase 3 文案清账（「槽位」全站退场 + ServiceAliasCard 重做 + conftest 垫片删除;全量 2044/2/0）|
 | `1dceea01` | P2-B.6 导入映射按 ref 语义重做（call.user→条目名统一改写;authEntries/authRenames + 登记坐标;slot/credentialAlias 键退役;no_environment 422;13 用例恢复）—— 全量 2020/26/0 |
 | 本次 | 一致性复核修复：carry env 执行链三处透传（+graph 逐单元环境位）+ test_carry_env_overlay 4 用例；预检 envUnspecified 信号（后端+Runner 展示+对照用例）；mx-drift testid 绑定；AliasCreate/Patch slot 入参清扫（422）。文档：redesign §5.2 迁移实态改写 + §6.0 偏离 5–8 + §1.4/§1.7 实施注记 + §3.2 措辞 |
+| 本次 | 交互词汇收口（用户口径，§6.0 偏离 9）：「实例」=服务×环境；🔑 钮定名「实例配置」（登录口/版本线按内容命名）+ 组头重复入口删除；行尾删除动作「删除实例」+ 确认写明全环境范围；末列「操作」列头。前端 1435 绿 |
 
 ## 4. 未完成 / 后续计划
 
@@ -244,7 +251,7 @@ skipif 判引擎可导入）本轮引擎可用全部跑过 —— 记档口径:�
    （装载就绪新链 + 装载坐标 + (system,envId) 预填深链）。
 5. ~~**carry 写面**：三档键选择器 + env 覆盖开关~~ ✅ C3b 销账
    （含后端系统键面聚合；新增用例 `test_service_fields_system_key_aggregates_
-   member_services` 待 PG 环境执行 —— 本机无 TEST_DATABASE_URL）。
+   member_services` 已于 2026-11-17 在 gimbal_test 执行绿）。
 6. ~~**导入映射重做**：按 ref 语义重做导入面板的认证映射~~ ✅ P2-B.6 销账
    （详见下节；13 条挂起用例按新语义恢复）。
 7. ~~**Phase 3 文案清账**~~ ✅ 完成（见下节）。
@@ -376,6 +383,53 @@ redesign）：迁移实态（旧表扫描进册 / login_url 直写 / codfish2 �
 
 **验证**：carry 簇 58 + 8 绿；预检簇 13 绿；别名/导入/令牌簇 83 绿；
 前端 vitest 全量 **171 文件 1435 passed** + vue-tsc 0 错误 + eslint 干净。
+
+### 交互词汇收口（2026-11-17，✅ 完成，用户口径）
+
+用户走查服务注册页交互后定名（纯词面与入口调整，数据键域零改动 ——
+redesign §6.0 偏离 9）：
+
+- **「实例」= 服务 × 环境的部署存在**（矩阵一格即一实例；行尾菜单删除动作
+  称「删除实例」，确认文案写明连登记带全部环境实例一并移除、挂靠拦截）
+- **「实例配置」小钮**（格内 🔑）编辑 `(system, env)` 共享的登录口/版本线
+  （按内容命名，不再与「实例」抢词）；弹框标题对齐「实例配置 · 系统 × 环境」
+- system 组头「实例配置」重复入口删除（格内小钮可达同一弹框）
+- 末列补显名列头「操作」
+- 验证：ServiceAdmin 套件 15 绿 + 前端全量 1435 绿 + vue-tsc 0 + eslint 干净
+
+### 环境降级为轻量标签（2026-11-17，🟡 设计定稿 / 实施未启动）
+
+设计源:redesign **§8**(冲突处以 §8 为准)。本轮产出 = 调研 + 设计文档;
+代码零改动(词汇轮 5 文件 + 本轮文档改动仍在工作区未提交)。
+
+**五项决策**(用户拍板):轻量标签轴 / carry 去 env / 凭证去 env 匹配
+(同 tag 优先 → system 唯一 → 歧义;默认账户按 system)/ 标签链
+= 有效身份标签 > 项目默认 > 平台默认(显式 `environmentId` 全链退役,含 API/
+webhook)/ 预检三路径统一硬门一步到位。**词面口径**:UI 保留「环境」字样
+(stitch 原型即此口径,Tag 指芯片形态);「标签」只用于模型/文档;代码与
+表列名不动。
+
+**调研要点**(三路并行审计 + 消费点补漏):
+
+- 生产实量:environments 1 / deployments 2 / instances 2 / accounts 2(无跨
+  tag 同名)/ identities 4 / carry 238 行 env 覆盖 **0** / exec_configs 0 /
+  项目默认 0 / 方案 env 0 / executions 307(17 条含环境快照,只读回放)。
+- 环境仍是真实执行坐标(地址/登录口/版本线/默认位)—— 降的是角色不是坐标;
+  多余角色上长着 13 个潜伏缺陷(预检三处环境解析口径不一、suites `_precheck_one`
+  漏传 user_id、carry env 透传漏三处、集成缺凭证判定与执行不同环境等)。
+- **关键发现**:执行配置「换用条目」(slot_map)后的条目才是有效身份 ——
+  标签从换用条目取;行级 `@slot` 同口径;suite/graph 逐单元独立解析。
+- 五个消费点需切同一实现:生效预览 `runs.py:330-464`、`query_views.py:34-37`、
+  `integration.py:176-186`、`suites.py:1385-1413`、`adhoc_run.py:240-306`。
+- 主库存在 1915 个 `t_<uuid>` 测试残留 schema(11-16 全量 pytest 误跑主库
+  所留)—— 不自动清理;备份/审计 SQL 限定 `public.`;清理另出脚本单独确认。
+
+**实施里程碑**(redesign §8.7;每批全量绿再进下一批):
+
+M1 carry 去 env(迁移 0058)→ M2 标签链+凭证+链位退役(0059/0060)→
+M3 预检硬门 → M4 前端契约 → M5 ServiceAdmin 原型重排 → M6 收尾(含
+webhook guide / PLATFORM_REQUIREMENTS / PLATFORM-SCENARIO-COMPOSER-API
+三外部文档随实现同步)。验证命令与测试改动清单见 redesign §8.6–§8.7。
 
 ### P2-C 验证收口
 
