@@ -20,15 +20,21 @@ from app.services.carry_injection import build_carry_context
 
 def _to_0053_era(sync_url: str) -> None:
     """空 schema 先到 baseline → 时代造形(退役前三表 + environments.
-    lines)→ 续升 0053。0006/0016/0038 等触碰旧表的增量由此可重放
-    (P2-A「时代造形」机制,详见 test_migrations._create_retired_tables)。"""
+    lines + exec_configs.environment_id —— 该列已随 0060 退役,baseline
+    create_all 不再产出,0054 时代仍需)→ 续升 0053。0006/0016/0038 等
+    触碰旧表的增量由此可重放(P2-A「时代造形」机制,详见
+    test_migrations._create_retired_tables)。"""
     from alembic import command as _command
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
 
     _command.upgrade(_cfg(sync_url), "0001_baseline")
     _eng = create_engine(sync_url)
     try:
         _create_retired_tables(_eng)
+        with _eng.begin() as _conn:
+            _conn.execute(text(
+                "ALTER TABLE exec_configs"
+                " ADD COLUMN IF NOT EXISTS environment_id INTEGER"))
     finally:
         _eng.dispose()
     _command.upgrade(_cfg(sync_url), "0053_exec_configs")
@@ -97,7 +103,7 @@ def test_0054_migrates_user_layer_into_default_config():
                   "carryOverrides": {"$.grade": "A"}}]})}),
         ])
 
-        command.upgrade(_cfg(sync_url), "head")
+        command.upgrade(_cfg(sync_url), "0059_auth_default_per_system")
         assert _revision(sync_url) is not None
 
         row = _sync_all(sync_url,
@@ -139,7 +145,7 @@ def test_0054_pref_only_creates_default_config():
              " CAST(:v AS JSONB))",
              {"u": uid, "v": json.dumps({"environmentId": env_id})}),
         ])
-        command.upgrade(_cfg(sync_url), "head")
+        command.upgrade(_cfg(sync_url), "0059_auth_default_per_system")
         rows = _sync_all(sync_url,
                          "SELECT name, environment_id FROM exec_configs"
                          f" WHERE scope='user' AND scope_id={uid}")

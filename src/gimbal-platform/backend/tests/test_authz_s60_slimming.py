@@ -261,7 +261,7 @@ async def test_graph_units_get_deployment_address(client, monkeypatch):
     须从部署表拿到地址。"""
     from app.models.user import User
     from app.services import graph_dispatch, plate_client as pc
-    from app.services.env_chain import resolve_environment
+    from app.services.env_chain import resolve_execution_tag
 
     async def _fake_convert(scenario):
         return {"consumer": "gimbal", "converted": scenario}
@@ -279,7 +279,7 @@ async def test_graph_units_get_deployment_address(client, monkeypatch):
             "mode": "chain", "units": [
                 {"ref": "u1", "scenarioId": "sc-s60-g1"},
                 {"ref": "u2", "scenarioId": "sc-s60-g2"}]},
-            env=await resolve_environment(s, user_id=uid))
+            env=await resolve_execution_tag(s))   # §8.2:平台默认位
     for u in g["units"]:
         assert u["scenario"]["config"]["services"] == {
             "fin-service": "http://graph-sut"}, u["ref"]

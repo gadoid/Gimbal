@@ -4,16 +4,16 @@
 共享 → 挂人/组。一套默认 + 若干命名;子配置按系统分组内联 carry
 覆盖(决策 7 内联式,独立 carry 套装对象已撤销)。
 
-**零凭证值、零地址值**(§4 薄束性质):凭证由池按 (system, env,
-slot) 解析、地址由部署表按 (目录服务, env) 解析,本表只存引用键
+**零凭证值、零地址值**(§4 薄束性质):凭证由池按 (system, 标签,
+条目) 解析、地址由部署表按 (目录服务, 标签) 解析,本表只存引用键
 —— 条目名是名字,跨区可移植(「商户B@UAT」私有区跑解析个人池、
 项目里跑解析项目池,引用不用换)。
 
-scope 两型同构:``'user' | 'project'``(v1 只落 user,project 随
-组级批次 ⑧);(scope, scope_id) 同 carry_binding 的通用维度口径
-(无 FK)。同 scope 内 name 唯一;默认配置至多一行(部分唯一索引,
-置默认由路由原子切换)。environment_id SET NULL:环境删除后配置
-存活,环境链回落下一位(与 projects.default_environment_id 同款)。
+scope 两型同构:``'user' | 'project'``;(scope, scope_id) 同
+carry_binding 的通用维度口径(无 FK)。同 scope 内 name 唯一;默认
+配置至多一行(部分唯一索引,置默认由路由原子切换)。
+**environment_id 已随 §8.2(2026-11-17 环境降级轮)退役** —— 执行
+配置不再决定执行标签(迁移 0060 删列)。
 """
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
-    ForeignKey,
     Index,
     Integer,
     String,
@@ -41,7 +40,7 @@ class ExecConfig(Base):
     __table_args__ = (
         UniqueConstraint("scope", "scope_id", "name",
                          name="uq_exec_configs_scope_name"),
-        # 默认配置每 scope 至多一行(环境/绑定的链位②/④载体)
+        # 默认配置每 scope 至多一行(绑定的链位②载体)
         Index("uq_exec_configs_default", "scope", "scope_id", unique=True,
               postgresql_where=text("is_default")),
     )
@@ -52,10 +51,6 @@ class ExecConfig(Base):
     name: Mapped[str] = mapped_column(String(64))
     is_default: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"))
-    # 环境链位②/④的承载(可空 = 不设置,链跳过此位)
-    environment_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("environments.id", ondelete="SET NULL"),
-        nullable=True)
     # {"systems": [{"service": 目录服务名,
     #               "bindings": {身份面(别名全名): 条目名},
     #               "carryOverrides": {字段: 值}}]}

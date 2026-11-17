@@ -282,12 +282,13 @@ async def _post_adhoc_run(
     target = run_dispatcher.RunTarget(
         scenario_id=run_prepare.adhoc_placeholder_id(run_id),
         payload=payload, kind="adhoc")
-    # §7.1 追溯:临时调用地址全部经 ③(环境部署地址;环境链 = 偏好 >
-    # 默认环境);无内置认证、无范围外目标
+    # §7.1 追溯:临时调用地址全部经 ③(标签部署地址;§8.2 链 =
+    # 身份标签 > 平台默认);无内置认证、无范围外目标
     from ..services import env_chain as _ec, service_aliases as sa_svc
     alias_urls = await sa_svc.base_urls_for(
         db, used.aliases,
-        env=await _ec.resolve_environment(db, user_id=principal.user.id))
+        env=await _ec.resolve_execution_tag(
+            db, identity_names=used.aliases))
     trace = {
         "resolvedServices": {
             svc: {"url": alias_urls.get(svc), "source": "alias", "alias": svc}
@@ -331,17 +332,17 @@ async def preview_effective_config(
     """S5 生效预览:本次执行将生效的 地址/条目装载/carry(逐值带来源,
     不含明文凭证)。读闸同预检(can_read_scenario_row)。
 
-    body:{scenarioId 必填, schemeId?/environmentId?/serviceBindings?/
+    body:{scenarioId 必填, schemeId?/serviceBindings?/
     credentialSource?(S8)/execConfigId?(分层②)}
-    —— 环境链同执行:显式 > [选定执行配置 │ 方案] > 项目默认 >
-    [默认执行配置 │ 偏好] > 默认。绑定形态同执行请求(服务键 →
-    {alias};url/authAlias 422)。执行配置:显式选定才携带绑定;env/carry
-    与执行同链(项目区 carry 覆盖仅显式,决策 9)。"""
+    —— 标签链同执行(§8.2):**有效调用身份标签 > 项目默认 > 平台
+    默认**(显式 environmentId/方案/执行配置/偏好链位已退役)。
+    绑定形态同执行请求(服务键 → {alias};url/authAlias 422)。
+    执行配置:显式选定才携带绑定与 carry 覆盖(项目区仅显式,决策 9)。"""
     from pydantic import ValidationError
 
     from ..schemas.scenario_composer import (ServiceBinding,
                                              scrub_retired_bindings)
-    from ..services import env_chain, run_prepare, scenario_store, scheme_store
+    from ..services import run_prepare, scenario_store, scheme_store
     from ..services.service_aliases import (BindingAliasInvalid,
                                             validate_binding_aliases)
     from ..services.scenario_store import definition_from_payload
@@ -360,7 +361,6 @@ async def preview_effective_config(
             or not await can_read_scenario_row(db, user, scen):
         raise HTTPException(404, detail={"code": "scenario_not_found",
                                          "message": f"scenario not found: {sid}"})
-    scheme_env = None
     try:
         bindings_raw = {
             str(k): ServiceBinding.model_validate(v).model_dump()
@@ -373,7 +373,7 @@ async def preview_effective_config(
     if scheme_id:
         try:
             sch = await scheme_store.get_row(db, sid, scheme_id)
-            scheme_env = (sch.payload or {}).get("environmentId")
+            # §8.2:方案 environmentId 链位退役 —— 存量 payload 键不再消费
             bindings_raw = {
                 **scrub_retired_bindings(
                     (sch.payload or {}).get("serviceBindings")),
@@ -405,33 +405,33 @@ async def preview_effective_config(
         raise HTTPException(404, detail={
             "code": "exec_config_not_found",
             "message": str(e)}) from None
-    _exec_env = _default_exec_env = None
     _slot_map: dict[str, str] = {}
-    if _exec_cfg is not None:
-        if _exec_cfg.explicit:
-            _exec_env = _exec_cfg.env_id
-            if _exec_cfg.bindings:
-                from ..services.service_aliases import slot_lookup_overrides
-                _slot_map = await slot_lookup_overrides(
-                    db, definition_from_payload(scen.payload or {})
-                    .get("steps") or [], bindings, _exec_cfg.bindings)
-        else:
-            _default_exec_env = _exec_cfg.env_id
+    if _exec_cfg is not None and _exec_cfg.explicit and _exec_cfg.bindings:
+        from ..services.service_aliases import slot_lookup_overrides
+        _slot_map = await slot_lookup_overrides(
+            db, definition_from_payload(scen.payload or {})
+            .get("steps") or [], bindings, _exec_cfg.bindings)
     _exec_carry = carry_overrides_for(_exec_cfg, scen.project_id)
     # ⑧ 项目区链:项目默认配置覆盖压显式个人之下(与 dispatch 同款)
     from ..services.exec_config import (merge_carry_overrides,
                                         project_carry_overrides)
     _exec_carry = merge_carry_overrides(
         await project_carry_overrides(db, scen.project_id), _exec_carry)
+    # §8.2:标签 = 有效身份(绑定 + 执行配置换用后)标签 > 项目 > 平台
+    from ..services import env_chain
+    from ..services.service_aliases import exec_auth_aliases_of_definition
+    _tag_names = list(await exec_auth_aliases_of_definition(
+        db, definition_from_payload(scen.payload or {}), bindings))
+    if _slot_map:
+        _tag_names = list(dict.fromkeys(
+            _slot_map.get(a, a) for a in _tag_names if _slot_map.get(a, a)))
     try:
-        env = await env_chain.resolve_for_scenario(
-            db, sid, user_id=user.id,
-            explicit=body.get("environmentId"), scheme_env=scheme_env,
-            exec_env=_exec_env, default_exec_env=_default_exec_env)
-    except env_chain.EnvironmentNotFound as e:
-        raise HTTPException(404, detail={
-            "code": "environment_not_found",
-            "message": str(e)}) from None
+        env = await env_chain.resolve_execution_tag(
+            db, identity_names=_tag_names, project_id=scen.project_id)
+    except env_chain.EnvMixed as e:
+        raise HTTPException(409, detail={
+            "code": "env_mixed", "message": str(e),
+            "identities": e.entries}) from None
     # S8:凭证来源(同执行请求 credentialSource;项目凭证须是项目成员)
     cred_src = body.get("credentialSource")
     if principal.project_id is not None:
@@ -699,12 +699,17 @@ async def _resolved_services(db, scen, body: RunRequest,
 
     definition = definition_from_payload(scen.payload) if scen else {}
     steps = definition.get("steps") or []
+    # §8.2:标签 = 场景有效身份标签 > 项目默认 > 平台默认(显式位退役)
+    from ..services.service_aliases import exec_auth_aliases_of_definition
+    _tag_names = (list(await exec_auth_aliases_of_definition(
+        db, definition, dict(body.service_bindings or {})))
+        if scen is not None else [])
     try:
-        _env = await _ec.resolve_for_scenario(
-            db, scen.scenario_id if scen is not None else None,
-            user_id=user_id, explicit=body.environment_id)
-    except _ec.EnvironmentNotFound:
-        _env = None          # 派发侧会 404;追溯面不抢先报错
+        _env = await _ec.resolve_execution_tag(
+            db, identity_names=_tag_names,
+            project_id=(scen.project_id if scen is not None else None))
+    except _ec.EnvMixed:
+        _env = None          # 派发侧会 409;追溯面不抢先报错
     base_urls = await sa_svc.base_urls_for(
         db, referenced_services(steps), env=_env)
     from ..services.run_prepare import zone_allows_direct

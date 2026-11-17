@@ -323,10 +323,8 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
-    # authz M2a S2.1:环境链第二位(本次显式 > **方案** > 项目默认 > 个人
-    # 偏好 > 默认环境);缺省 = 不指定。悬空(环境被删)按未设置落下一位
-    environment_id: int | None = Field(default=None, ge=1,
-                                       alias="environmentId")
+    # §8.2(2026-11-17 环境降级轮):方案环境链位退役 —— 存量 payload
+    # 里的 environmentId 键不再消费(数据保留,读侧忽略)。
     # M10 RunOptions 形状(迁移完成,不再收旧平铺键)
     options: dict[str, Any] = Field(default_factory=lambda: {
         "step_from": None, "step_to": None,
@@ -337,14 +335,12 @@ class RunScheme(BaseModel):
 
 class ExportOverlay(BaseModel):
     """导出/预览的运行方案覆盖层(spec §8)。dataSetIds 有意不收 —
-    导出是场景级产物,行级展开是非目标。``environmentId``(S2.1)=
-    环境链的本次显式位(物化地址按该环境的部署表)。"""
+    导出是场景级产物,行级展开是非目标。环境显式位已随 §8.2 退役
+    (导出地址按身份标签 > 项目默认 > 平台默认解析)。"""
     model_config = _CAMEL
 
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
-    environment_id: int | None = Field(default=None, ge=1,
-                                       alias="environmentId")
 
 
 class ScenarioCopyIn(BaseModel):
@@ -419,11 +415,8 @@ class GraphSpec(BaseModel):
     # GraphUnitSpec.service_bindings:字符串别名在 wire 面 422,不静默跳过)
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
-    # authz M2a S2.1:图级环境(本次显式位;RunRequest 顶层
-    # environmentId 优先)。未给时逐单元按 方案 > 项目默认 > 个人偏好 >
-    # 默认环境 解析(环境是单元属性,不整图拉平)
-    environment_id: int | None = Field(default=None, ge=1,
-                                       alias="environmentId")
+    # §8.2(2026-11-17 环境降级轮):图级环境显式位退役 —— 逐单元按
+    # 各自身份集合解析标签(身份 > 项目默认 > 平台默认),不整图拉平。
     # 裁剪控制(重构方案第 2 处:only / toNode;fromNode 不开放)
     control: GraphControlSpec | None = None
 
@@ -469,15 +462,14 @@ class RunRequest(BaseModel):
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )
-    # authz M2a S2.1:环境链本次显式位(> 方案 > 项目默认 > 个人偏好 >
-    # 默认环境);指定的环境不存在 → 404 environment_not_found
-    environment_id: int | None = Field(default=None, ge=1,
-                                       alias="environmentId")
-    # 执行配置分层②(设计方案 §5):显式选定执行配置 —— envId 占链位②
-    # (遮蔽方案存量)、条目绑定换池取用、carry 覆盖区规则生效(项目区
-    # 「默认不吃、显式吃」,决策 9)。缺省 None = 默认链(默认配置只占
-    # env 链位④与私有区 carry;绑定不吃)。令牌/编排/临时调用携带 →
-    # 409(不吃执行配置,同指纹不变量);不属本人 → 404。
+    # §8.2(2026-11-17 环境降级轮):environmentId 显式位全链退役(UI/
+    # API/webhook 均不再接受,旧键发送被静默忽略);执行标签按
+    # 身份 > 项目默认 > 平台默认 自动解析。
+    # 执行配置分层②(设计方案 §5):显式选定执行配置 —— 条目绑定换池
+    # 取用、carry 覆盖区规则生效(项目区「默认不吃、显式吃」,决策 9)。
+    # 缺省 None = 默认链(默认配置只吃私有区 carry;绑定不吃)。
+    # 令牌/编排/临时调用携带 → 409(不吃执行配置,同指纹不变量);
+    # 不属本人 → 404。
     exec_config_id: int | None = Field(default=None, ge=1,
                                        alias="execConfigId")
     # authz M2a S8:凭证来源 —— 'personal'(缺省 None 同义)= 执行人个人

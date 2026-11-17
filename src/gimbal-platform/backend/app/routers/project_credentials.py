@@ -179,12 +179,11 @@ async def create_project_credential(
         password_enc=fernet_encrypt(payload.password),
         token_type=payload.token_type, expires_in=payload.expires_in,
         account_fields=payload.account_fields,
-        # 未显式置默认时:该 (system, env) 首个账户即默认
+        # 未显式置默认时:该 system 首个账户即默认(§8.3 按 system)
         is_default=payload.is_default or (await db.execute(
             select(AuthAccount.id).where(
                 AuthAccount.project_id == proj.id,
                 AuthAccount.system == payload.system,
-                AuthAccount.env_id == payload.env_id,
                 AuthAccount.is_default.is_(True)))).scalar_one_or_none() is None,
     )
     db.add(a)
@@ -207,7 +206,6 @@ async def _set_default(db: AsyncSession, a: AuthAccount) -> None:
     await db.execute(update(AuthAccount).where(
         AuthAccount.project_id == a.project_id,
         AuthAccount.system == a.system,
-        AuthAccount.env_id == a.env_id,
         AuthAccount.id != a.id,
         AuthAccount.is_default.is_(True),
     ).values(is_default=False))

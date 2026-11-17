@@ -237,22 +237,25 @@ async def lookup_endpoint_services(steps: list[dict]) -> dict[str, str]:
     return out
 
 
-async def check_addresses(db, services: list[str], user_id: int) -> None:
-    """§四.4(authz M2a S5 起统一):地址落点走执行同一条 ③ 层链
-    (``base_urls_for`` —— 环境感知:个人偏好/默认环境下的部署表优先、
-    别名自带地址兜底;此前 adhoc 只读别名 base_url 的旧 ③ 退役)→
-    缺 422 ``adhoc_service_unresolved``。"""
+async def check_addresses(
+    db, services: list[str], user_id: int,
+    identity_names: list[str] | None = None,
+) -> None:
+    """§四.4 + §8.2:地址落点走执行同一条 ③ 层链(``base_urls_for``,
+    标签 = 身份标签 > 平台默认 —— adhoc 无项目归属;``identity_names``
+    = 本次临时调用的身份条目名集)。缺 422 ``adhoc_service_unresolved``。"""
     from . import env_chain, service_aliases as _sa
     from .run_materialize import service_url_resolved
 
-    _env = await env_chain.resolve_environment(db, user_id=user_id)
+    _env = await env_chain.resolve_execution_tag(
+        db, identity_names=identity_names)
     alias_base_urls = await _sa.base_urls_for(db, list(services), env=_env)
     missing = [s for s in services if not service_url_resolved(
         s, declared={}, alias_base_urls=alias_base_urls)]
     if missing:
         raise AdhocRejected(
             "adhoc_service_unresolved",
-            "以下服务未配置地址(别名 base_url / 所选环境部署表均缺),"
+            "以下服务未配置地址(所选标签的部署表均缺),"
             "执行器无从落地址: " + "、".join(missing),
             extra={"services": missing})
 
@@ -287,17 +290,19 @@ async def _latest_on_line(system: str, line: str) -> str | None:
 async def resolve_versions(
     db: AsyncSession, steps: list[dict],
     release: dict[str, str] | None, *, user_id: int | None,
+    identity_names: list[str] | None = None,
 ) -> dict[str, str]:
-    """§四.5 / P3-D6:``release`` 指定的系统用它;否则**本次环境**(环境链:
-    个人偏好 > 默认环境;authz M2a S6 起别名不再挂环境)的 ``lines[系统]``
-    → 线内最新修订。取不到(无环境 / 环境未声明该系统 / plate 无此线)
-    → 422 ``adhoc_version_unresolved``。
+    """§四.5 / P3-D6 + §8.2:``release`` 指定的系统用它;否则**本次标签**
+    (身份标签 > 平台默认;``identity_names`` = 临时调用的身份条目名集)
+    的 ``lines[系统]`` → 线内最新修订。取不到(无标签 / 标签未声明该
+    系统 / plate 无此线)→ 422 ``adhoc_version_unresolved``。
     """
     from . import env_chain
 
     systems = list(dict.fromkeys(
         _system_of(str(st["endpoint"]).strip()) for st in steps))
-    choice = await env_chain.resolve_environment(db, user_id=user_id)
+    choice = await env_chain.resolve_execution_tag(
+        db, identity_names=identity_names)
     env = (await db.get(Environment, choice.env_id)
            if choice.env_id is not None else None)
     meta_plate: dict[str, str] = {}
@@ -372,9 +377,11 @@ async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str,
     endpoint_services = await lookup_endpoint_services(steps)
     rows = await load_alias_rows(db, services)
     check_services(steps, rows, endpoint_services)
-    await check_addresses(db, services, user_id)
+    # §8.2:标签 = 身份标签 > 平台默认(rows = 条目名;无项目归属)
+    await check_addresses(db, services, user_id, identity_names=list(rows))
     meta_plate = await resolve_versions(db, steps, req.release,
-                                        user_id=user_id)
+                                        user_id=user_id,
+                                        identity_names=list(rows))
     payload = build_adhoc_payload(
         steps, run_id=run_id, meta_plate=meta_plate,
         # 条目名即注入键(call.user = 条目名,users 按名注入;P1 缺陷

@@ -168,20 +168,17 @@ async def _missing_credentials(
     *, project_id: int | None = None,
 ) -> list[str]:
     """持有人/项目池中未装载的身份条目全集(W0b④;与执行期暂停判定
-    同口径 —— 重构:条目→ref→账户,取用单源 pick_bindings;环境按
-    查看者环境链解析(默认环境兜底),无环境 = 全未装载,如实列)。
+    同口径 —— 重构:条目→ref→账户,取用单源 pick_bindings;§8.3 取用
+    不校验标签 —— 不再解析环境,「缺」只取决于池内有无可用账户)。
     S8:``project_id`` 非空 = 实例用项目凭证 → 项目池。"""
     if not aliases or (holder_id is None and project_id is None):
         return [] if not aliases else list(aliases)
-    from ..services.env_chain import resolve_environment
     from ..services.run_prepare import pick_bindings
 
-    env = await resolve_environment(db, user_id=holder_id)
     if project_id is not None:
-        picked = await pick_bindings(
-            db, None, aliases, env_id=env.env_id, cred_project_id=project_id)
+        picked = await pick_bindings(db, None, aliases, cred_project_id=project_id)
     else:
-        picked = await pick_bindings(db, holder_id, aliases, env_id=env.env_id)
+        picked = await pick_bindings(db, holder_id, aliases)
     have = {p.slot for p in picked}
     return [a for a in aliases if a not in have]
 

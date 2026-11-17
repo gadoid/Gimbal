@@ -99,14 +99,14 @@ async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
 async def identities_for_account(
     db: AsyncSession, account: AuthAccount,
 ) -> list[ServiceIdentity]:
-    """ref 指向该账户的身份条目(条目不分池,匹配只看 system/env/ref
-    三元;与 run_prepare._resolve_identities 的 ref 解析同构)。"""
+    """ref 可能取到该账户的身份条目(§8.3:引用不校验标签 —— 匹配只看
+    system + ref;与 run_prepare._resolve_identities 的 ref 解析同构,
+    「可能取到」是超集展示,实际取用看解析的同标签优先序)。"""
     idents = (await db.execute(
         select(ServiceIdentity, Service.system).join(
             Service, Service.name == ServiceIdentity.base_service
         ).where(
             Service.system == account.system,
-            ServiceIdentity.env_id == account.env_id,
         ))).all()
     out: list[ServiceIdentity] = []
     for ident, _svc in idents:
@@ -124,18 +124,17 @@ async def _identity_name_map(
     """账户 id → ref 条目清单(列表页批量;一次查询全体条目+主档)。"""
     if not accounts:
         return {}
-    pairs = {(a.system, a.env_id) for a in accounts}
     rows = (await db.execute(
         select(ServiceIdentity, Service.system).join(
             Service, Service.name == ServiceIdentity.base_service)
     )).all()
-    by_key: dict[tuple[str, int], list] = {}
+    by_key: dict[str, list] = {}
     for ident, sysname in rows:
-        by_key.setdefault((sysname, ident.env_id), []).append(ident)
+        by_key.setdefault(sysname, []).append(ident)
     out: dict[int, list[ServiceIdentity]] = {}
     for a in accounts:
         matched = []
-        for ident in by_key.get((a.system, a.env_id), []):
+        for ident in by_key.get(a.system, []):
             if (ident.ref_mode == "username"
                     and ident.ref_username == a.username):
                 matched.append(ident)

@@ -229,16 +229,14 @@ async def _auth_report(
     * ``droppedUsers``:内置凭证里没有任何步骤用到的键(仅丢明文)。
     """
     from ..models.service import Service
-    from .env_chain import resolve_environment
     from .run_prepare import pick_bindings
     from .service_aliases import exec_auth_aliases_of_definition
 
     needed = await exec_auth_aliases_of_definition(db, definition)
     bound: set[str] = set()
     if needed:
-        env = await resolve_environment(db, user_id=user_id)
-        picked = await pick_bindings(
-            db, user_id, needed, env_id=env.env_id)
+        # §8.3:取用不校验标签 —— 无环境位
+        picked = await pick_bindings(db, user_id, needed)
         bound = {p.slot for p in picked}
     # 登记坐标(条目 → 主档系统):悬空 base(不在主档)时 system=None,
     # 与解析链同口径 —— 这种条目执行期必 missing,深链退化为普通入口
@@ -564,16 +562,13 @@ async def analyze_services(db, definition: dict,
 async def auth_refs(db, definition: dict, owner_id: int) -> list[dict]:
     """认证引用栏数据(P7-③):${auth.*} tag × 导入人凭证池(有/无)。"""
     from .auth_ref_scan import scan_auth_aliases
-    from .env_chain import resolve_environment
     from .run_prepare import pick_bindings
 
     tags = scan_auth_aliases(definition.get("steps") or [])
     if not tags:
         return []
-    # 重构:注入按条目解析(resolve_exec_auths 条目→ref→账户)—— 池
-    # 命中同口径(导入人环境链,默认环境兜底)
-    env = await resolve_environment(db, user_id=owner_id)
-    picked = await pick_bindings(db, owner_id, tags, env_id=env.env_id)
+    # 重构:注入按条目解析(条目→ref→账户);§8.3 取用不校验标签
+    picked = await pick_bindings(db, owner_id, tags)
     pool = {p.slot for p in picked}
     return [{"tag": t, "inMyPool": t in pool} for t in tags]
 
@@ -585,7 +580,6 @@ async def builtin_users_preview(db, definition: dict,
     (模板键按同名条目装载)、导入人同名条目是否已装载账户。最终落地
     (改写为所属服务的条目名 / 按同名条目注入 / 未落地)取决于映射决
     策,以落库结果为准。"""
-    from .env_chain import resolve_environment
     from .run_prepare import pick_bindings
 
     tags = _builtin_user_tags(definition)
@@ -593,9 +587,7 @@ async def builtin_users_preview(db, definition: dict,
         return []
     usage = _call_user_usage(definition.get("steps") or [])
     templated = _template_tags(definition)
-    env = await resolve_environment(db, user_id=owner_id)
-    bound = {p.slot for p in await pick_bindings(
-        db, owner_id, tags, env_id=env.env_id)}
+    bound = {p.slot for p in await pick_bindings(db, owner_id, tags)}
     return [{"tag": t,
              "services": sorted(s for s, ts in usage.items() if t in ts),
              "templated": t in templated,

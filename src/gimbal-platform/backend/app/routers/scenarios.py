@@ -202,15 +202,24 @@ async def _materialized_executable(
         # 的唯一开关(with_auth=False 跳过清单+解析);carry 见下方
         # (prepare_exec 内无条件构建)。
         service_bindings = {}
-    from ..services.env_chain import EnvironmentNotFound, resolve_for_scenario
+    # §8.2(2026-11-17 环境降级轮):显式 environmentId 退役 —— 导出
+    # 地址按 有效身份标签 > 项目默认 > 平台默认 解析
+    from ..services.env_chain import EnvMixed, resolve_execution_tag
+    from ..services.scenario_store import definition_from_payload as _dfp
+    from ..services.service_aliases import exec_auth_aliases_of_definition
+    _scen_row = (await scenario_store.get_row(db, scenario_id)
+                 if scenario_id else None)
     try:
-        _env = await resolve_for_scenario(
-            db, scenario_id, user_id=owner_id,
-            explicit=overlay.environment_id if overlay is not None else None)
-    except EnvironmentNotFound as e:
+        _env = await resolve_execution_tag(
+            db,
+            identity_names=await exec_auth_aliases_of_definition(
+                db, _dfp({"definition": clean}), service_bindings),
+            project_id=_scen_row.project_id if _scen_row is not None else None)
+    except EnvMixed as e:
         raise HTTPException(
-            status_code=404,
-            detail={"code": "environment_not_found", "message": str(e)})
+            status_code=409,
+            detail={"code": "env_mixed", "message": str(e),
+                    "identities": e.entries})
     try:
         prep = await run_prepare.prepare_exec(
             run_dispatcher.session_factory, {"definition": clean},

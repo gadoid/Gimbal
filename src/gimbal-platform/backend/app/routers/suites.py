@@ -1271,7 +1271,10 @@ async def validate_suite(
                 est += 1
                 continue
             pc = await _precheck_one(db, scen, PrecheckItem(
-                scenarioId=m.scenario_id, schemeId=scheme["schemeId"]))
+                scenarioId=m.scenario_id, schemeId=scheme["schemeId"]),
+                # 修复既有缺陷:漏传 user_id 会让 pick_bindings 走
+                # owner_id IS NULL 的项目池分支,missingAuths 不可信
+                user_id=user.id)
             if (sh := await _shadowed_item(
                     user.id, scen, _name_of(m.scenario_id, scen))):
                 items.append(sh)
@@ -1388,18 +1391,10 @@ async def validate_suite(
                        gd.unit_merged_bindings(graph_spec, r["unit"]))
                       for r in resolved])
             if aliases:
-                # 取用须带环境(env 必填收紧;与 materialize_graph 同族
-                # 修复 —— 此前不传 env_id,条目全数 missing,validate 恒 warn)
-                from ..services.env_chain import NO_ENV, resolve_environment
-                _env_id: int | None = None
-                try:
-                    _choice = await resolve_environment(db, user_id=user.id)
-                    if _choice is not NO_ENV:
-                        _env_id = _choice.env_id
-                except Exception:  # noqa: BLE001 — 预检不因环境链故障 500
-                    _env_id = None
+                # §8.3:取用不校验标签 —— 无环境位(旧链曾漏传 env_id
+                # 导致 validate 恒 warn;链位退役后该缺陷不复存在)
                 got = await run_prepare.resolve_exec_auths(
-                    _sf, user.id, aliases, env_id=_env_id,
+                    _sf, user.id, aliases,
                     cred_project_id=cred_project_id)
                 missing = set(aliases) - {a.alias for a in got}
                 if missing:

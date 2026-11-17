@@ -165,19 +165,9 @@ async def builtin_auth_shadowed(executor_id: int | None,
     if not users:
         return []                       # ② 不满足
     # 只收会话工厂(N1-6):开独立短会话做快照读,不与请求会话混。
-    # 取用须带环境(env 必填收紧;与 materialize_graph 同族修复 ——
-    # 此前不传 env_id,执行人自有账户也全数 missing,告警恒噪)
-    from ..services.env_chain import NO_ENV, resolve_environment
-    env_id: int | None = None
-    try:
-        async with _dbm.SessionLocal() as _s:
-            _choice = await resolve_environment(_s, user_id=executor_id)
-        if _choice is not NO_ENV:
-            env_id = _choice.env_id
-    except Exception:  # noqa: BLE001 — 环境链失败按无环境口径告警
-        env_id = None
+    # §8.3:取用不校验标签 —— 无环境位
     resolved = await _rp.resolve_exec_auths(
-        _dbm.SessionLocal, executor_id, sorted(users), env_id=env_id)
+        _dbm.SessionLocal, executor_id, sorted(users))
     return sorted(set(users) - {a.alias for a in resolved})   # ③
 
 
@@ -218,6 +208,21 @@ async def _precheck_one(
     )
     result.dangling_entry_ids = dangling
 
+    # ── 有效身份清单(§8.2:标签解析的唯一输入)────────────────────
+    # 先于地址/凭证判定 —— 标签 = 有效身份标签 > 项目默认 > 平台默认,
+    # 一次解析向下复用(替换旧的三处独立环境解析,口径不可能再漂移)。
+    from ..services import service_aliases as _sa
+    _auth_aliases = await _sa.exec_auth_aliases_of_definition(
+        db, definition_from_payload(raw_payload), bindings)
+    from ..services.env_chain import EnvMixed, resolve_execution_tag
+    _env = None
+    _env_mixed = False
+    try:
+        _env = await resolve_execution_tag(
+            db, identity_names=_auth_aliases, project_id=scen.project_id)
+    except EnvMixed:
+        _env_mixed = True      # 混拼:M3 预检硬门升 409;当前先不连坐其余信号
+
     # ── 未落点的服务引用(steps 引用 × 三层地址链皆缺)──────────
     steps = definition_from_payload(raw_payload).get("steps") or []
     declared = (definition_from_payload(raw_payload).get("config") or {}).get("services")
@@ -225,26 +230,20 @@ async def _precheck_one(
     from ..services.run_prepare import zone_allows_direct
     if not zone_allows_direct(scen.project_id):
         declared = {}        # 原 5:项目/公共区直连地址不生效
-    # N1-7:与执行期地址链同口径 —— ②authored 声明 > ③ 环境部署地址 >
+    # N1-7:与执行期地址链同口径 —— ②authored 声明 > ③ 标签部署地址 >
     # ④缺口引擎报错(① 绑定 url 随 S6 退役)。落点判定共用
     # run_materialize.service_url_resolved(物化 _apply_services 同一
     # 实现,规则不第二份重写);③层命中按需查询(只查 ② 后仍有缺口
-    # 的候选,不整表拉)。
+    # 的候选,不整表拉)。混拼时不给 ③(地址无从选,宁可多报缺)。
     from ..services.run_materialize import service_url_resolved
     candidates = [
         svc for svc in referenced_services(steps)
         if not service_url_resolved(svc, declared=declared,
                                     alias_base_urls={})
     ]
-    if candidates:
+    if candidates and _env is not None and _env.env_id is not None:
         try:
             from ..services import service_aliases
-            from ..services.env_chain import resolve_environment
-            # S2.1:③ 层按执行同链的环境(方案 > 项目默认 > 个人偏好 >
-            # 默认环境;预检看方案,无本次显式位)
-            _env = await resolve_environment(
-                db, scheme_env=payload.get("environmentId"),
-                project_id=scen.project_id, user_id=user_id)
             alias_urls = await service_aliases.base_urls_for(
                 db, candidates, env=_env)
         except Exception:  # noqa: BLE001 — 查表失败退回 ② 口径(不误放行)
@@ -255,34 +254,20 @@ async def _precheck_one(
 
     # ── S8 收口:凭证缺槽(个人池差集 + 项目池差集)────────────────
     # 与派发 fail-fast 同源:exec_auth_aliases_of_definition 清单 ∪
-    # pick_bindings 取用;环境按方案链(与 ③ 层地址同一次解析)。
-    from ..services import service_aliases as _sa
-    _auth_aliases = await _sa.exec_auth_aliases_of_definition(
-        db, definition_from_payload(raw_payload), bindings)
+    # pick_bindings 取用;§8.3 取用不校验标签。「标签不可解析」单列
+    # 信号(env_unspecified 根因语义,§8.2)—— 全数 missing 是表象。
     if _auth_aliases:
         from ..services.run_prepare import pick_bindings
-        try:
-            from ..services.env_chain import resolve_environment as _re
-            _env_id = (await _re(
-                db, scheme_env=payload.get("environmentId"),
-                project_id=scen.project_id, user_id=user_id)).env_id
-        except Exception:  # noqa: BLE001 — 环境解析失败按无环境口径
-            _env_id = None
-        if _env_id is None:
-            # §7 风险缓解的「明确报」:条目 env 必填,环境链全空时全数
-            # missing 是表象 —— 根因是未指定环境,单列信号而非让用户
-            # 误判为凭证全丢了
+        if _env is None or _env.env_id is None:
             result.env_unspecified = True
-        _picked = await pick_bindings(
-            db, user_id, _auth_aliases, env_id=_env_id)
+        _picked = await pick_bindings(db, user_id, _auth_aliases)
         result.missing_auths = sorted(
             set(_auth_aliases) - {r.slot for r in _picked})
         from ..services.zone import can_use_project_credentials
         if user_id is not None and await can_use_project_credentials(
                 db, user_id, scen.project_id):
             _pp = await pick_bindings(
-                db, None, _auth_aliases, env_id=_env_id,
-                cred_project_id=scen.project_id)
+                db, None, _auth_aliases, cred_project_id=scen.project_id)
             result.project_missing_auths = sorted(
                 set(_auth_aliases) - {r.slot for r in _pp})
 

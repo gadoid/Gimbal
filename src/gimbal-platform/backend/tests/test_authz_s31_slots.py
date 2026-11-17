@@ -32,7 +32,7 @@ async def _uid(username: str) -> int:
 
 # ── ① 取用解析:池选择 + 缺失/环境不符分类 ──────────────────────────
 
-async def test_resolve_pool_selection_and_env_mismatch(client, fresh_db):
+async def test_resolve_pool_selection_and_cross_tag(client, fresh_db):
     await register_and_login(client, "s31a0", "pw123456")
     uid = await _uid("s31a0")
     factory = db_module.SessionLocal
@@ -50,32 +50,24 @@ async def test_resolve_pool_selection_and_env_mismatch(client, fresh_db):
 
     # 个人池命中(account_id 指回账户行)
     async with factory() as db:
-        picked = await run_prepare.pick_bindings(
-            db, uid, ["qa"], env_id=env_default)
+        picked = await run_prepare.pick_bindings(db, uid, ["qa"])
         assert [p.slot for p in picked] == ["qa"]
         from app.models import AuthAccount
         acc = (await db.execute(sa.select(AuthAccount).where(
             AuthAccount.owner_id == uid))).scalar_one()
         assert picked[0].account_id == acc.id
         assert picked[0].is_default is True
+        assert picked[0].identity_env_id == env_default
 
-        # 条目在但 env ≠ 执行 env → 环境不符分类(env_bad),非缺失;
-        # resolve_exec_auths 无回退分支(决策 8):该环境下 missing
+        # §8.3:引用不校验标签 —— 无环境参数也能解析(旧「环境不符」
+        # 分类退役;resolve_exec_auths 直接命中)
         got = await run_prepare.resolve_exec_auths(
-            factory, owner_id=uid, aliases=["qa"], env_id=env_dev)
-        assert got == []
-        # 无环境执行 → 全部 missing(预检报「未指定环境」)
-        picked, missing, env_bad = await run_prepare._resolve_identities(
-            db, uid, ["qa"], env_id=None)
-        assert picked == {} and missing == ["qa"] and env_bad == []
-        # 环境对但条目不存在 → missing
-        picked, missing, env_bad = await run_prepare._resolve_identities(
-            db, uid, ["nope"], env_id=env_default)
-        assert missing == ["nope"] and env_bad == []
-        # 环境不符:条目在、env 不匹配 → env_bad(与缺失分类分开)
-        picked, missing, env_bad = await run_prepare._resolve_identities(
-            db, uid, ["qa"], env_id=env_dev)
-        assert picked == {} and missing == [] and env_bad == ["qa"]
+            factory, owner_id=uid, aliases=["qa"])
+        assert [g.alias for g in got] == ["qa"]
+        # 条目不存在 → missing
+        picked, missing, ambiguous = await run_prepare._resolve_identities(
+            db, uid, ["nope"])
+        assert missing == ["nope"] and ambiguous == []
 
 
 # ── ② /auths 写面余项 ──────────────────────────────────────────────

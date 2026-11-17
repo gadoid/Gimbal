@@ -357,18 +357,23 @@ async def test_precheck_reports_dead_dataset_dangling_and_unbound(
     await _setup_scenario(client, auth)          # steps 引用 fin.order,声明 services 缺
     await _seed_empty_ds(client, auth)
     # S6:方案选环境 → 该环境部署表给 fin.order 地址(绑定 url 退役)
+    from app.models import Service, ServiceIdentity
     async with db_module.SessionLocal() as db:
         env = Environment(name="er-dev")
         db.add(env)
         await db.flush()
+        # §8.2:标签来自有效身份 —— 条目(fin.order 自身)钉 er-dev,
+        # 预检据此取该标签的部署地址(方案 environmentId 已退役不消费)
+        db.add(Service(name="fin.order", system="fin", kind="plate"))
+        db.add(ServiceIdentity(alias_name="fin.order", base_service="fin.order",
+                               env_id=env.id, ref_mode="default"))
         db.add(Deployment(base_service="fin.order", env_id=env.id,
                           base_url="http://fin"))
         await db.commit()
         env_id = env.id
 
     good = await _make_scheme(client, auth, "好方案",
-                              injectionEntryIds=["inj-live"],
-                              environmentId=env_id)
+                              injectionEntryIds=["inj-live"])
     bad = await _make_scheme(client, auth, "坏方案",
                              dataSetSelection=[{"datasetId": "ds-gone", "rowIndexes": []}],
                              injectionEntryIds=["inj-live", "inj-dead"])
@@ -388,8 +393,9 @@ async def test_precheck_reports_dead_dataset_dangling_and_unbound(
     assert bad_res["schemeValid"] is False
     assert bad_res["deadDatasetIds"] == ["ds-gone"]
     assert bad_res["danglingEntryIds"] == ["inj-dead"]
-    # fin.order 无声明 URL、坏方案无环境(无默认环境)→ 未落点
-    assert bad_res["unboundServices"] == ["fin.order"]
+    # §8.2:标签按场景身份解析(与方案无关)—— 条目钉 er-dev且该
+    # 标签有部署行,坏方案的地址同样就绪(坏在数据集/注入,不在地址)
+    assert bad_res["unboundServices"] == []
 
 
 async def test_precheck_env_unspecified_signal(

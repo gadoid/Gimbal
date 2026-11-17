@@ -79,7 +79,7 @@ class TestStaticTokenAuth:
         from app.services.run_prepare import resolve_exec_auths
 
         out = await resolve_exec_auths(
-            db_module.SessionLocal, uid, ["platform"], env_id=env)
+            db_module.SessionLocal, uid, ["platform"])
         assert out and out[0].password == "gtk_static_token"
 
     async def test_inbound_bearer_personal_token_no_login(

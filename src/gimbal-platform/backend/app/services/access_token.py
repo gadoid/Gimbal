@@ -385,8 +385,10 @@ async def check_scope(
         by_name: dict[str, set[int]] = {}
         for ident, sysname in idents:
             ids: set[int] = set()
+            # §8.3:引用不校验标签 —— 同 system 候选全部入授权面
+            # (实际取用看解析的同标签优先序;范围从严覆盖)
             for a in pool_accounts:
-                if a.system != sysname or a.env_id != ident.env_id:
+                if a.system != sysname:
                     continue
                 if ident.ref_mode == "username":
                     if a.username == ident.ref_username:

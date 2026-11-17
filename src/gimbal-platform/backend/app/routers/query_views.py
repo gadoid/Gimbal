@@ -18,7 +18,6 @@ from app.auth import AuthSession
 from app.core.db import get_db
 from app.core.deps import CurrentUser
 from app.services import query_view_runner
-from app.services.env_chain import resolve_environment
 from app.services.run_prepare import _materialize_identities, _resolve_identities
 
 router = APIRouter(prefix="/query-views", tags=["query-views"])
@@ -29,12 +28,11 @@ def _loader(db: DbSession):
     """凭证装载闭包:runner 在凭证闸内按需调用(黑名单键在它之前
     已降级 —— 绝不急切装载,保持"401 拉黑不打 DB"语义)。
 
-    重构:``alias`` = 身份条目名 → 条目 ref → 账户(环境按查询者
-    环境链解析,默认环境兜底;解不到 = None,与旧缺行同语义)。"""
+    重构 + §8.3:``alias`` = 身份条目名 → 条目 ref → 账户(取用不
+    校验标签 —— 同标签优先 → system 唯一;解不到 = None,与旧缺行
+    同语义)。"""
     async def load(owner_id: int, alias: str) -> AuthSession | None:
-        env = await resolve_environment(db, user_id=owner_id)
-        picked, _miss, _bad = await _resolve_identities(
-            db, owner_id, [alias], env_id=env.env_id)
+        picked, _miss, _amb = await _resolve_identities(db, owner_id, [alias])
         if not picked:
             return None
         resolved = await _materialize_identities(db, picked)

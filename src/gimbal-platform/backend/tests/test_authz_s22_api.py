@@ -7,7 +7,7 @@ import sqlalchemy as sa
 from app.core import db as db_module
 from app.models import Environment
 from app.models.permission import AuditLog
-from app.services.env_chain import EnvChoice, resolve_environment
+from app.services.env_chain import EnvChoice, resolve_execution_tag
 
 from .helpers import make_draft as _draft, role_headers
 
@@ -114,7 +114,7 @@ async def test_project_default_environment(client):
                            json={"description": "x"})
     assert r.json()["defaultEnvironmentId"] == env
     async with db_module.SessionLocal() as s:
-        assert await resolve_environment(s, project_id=pid) == \
+        assert await resolve_execution_tag(s, project_id=pid) == \
             EnvChoice(env, "project")
     # 显式 null = 清空
     r = await client.patch(f"/api/projects/{pid}", headers=member,
@@ -122,41 +122,29 @@ async def test_project_default_environment(client):
     assert r.json()["defaultEnvironmentId"] is None
 
 
-# ── 偏好 run.environment ────────────────────────────────────────────
+# ── 偏好 run.environment 已退役(§8.2)──────────────────────────────
 
-async def test_run_environment_preference(client):
-    adm = await role_headers(client, "s22_pref_adm", role="admin")
+async def test_run_environment_preference_retired(client):
+    """个人偏好不再是标签链位:白名单外拒写,读面不回该键。"""
     usr = await role_headers(client, "s22_pref", role="user")
-    env = await _env_id(client, adm, "s22-pref-env")
     r = await client.put("/api/me/preferences/run.environment", headers=usr,
-                         json={"value": {"environmentId": 99999}})
-    assert r.status_code == 422 and "environment_not_found" in r.text
-    r = await client.put("/api/me/preferences/run.environment", headers=usr,
-                         json={"value": {"environmentId": env}})
-    assert r.status_code == 200, r.text
+                         json={"value": {"environmentId": 1}})
+    assert r.status_code == 422, r.text
     r = await client.get("/api/me/preferences", headers=usr)
-    assert r.json()["items"]["run.environment"] == {"environmentId": env}
-    async with db_module.SessionLocal() as s:
-        uid = (await s.execute(sa.text(
-            "SELECT id FROM users WHERE username='s22_pref'"))).scalar()
-        assert await resolve_environment(s, user_id=uid) == \
-            EnvChoice(env, "preference")
+    assert "run.environment" not in r.json()["items"]
 
 
-# ── 方案环境写时校验 ────────────────────────────────────────────────
+# ── 方案环境链位已退役(§8.2)──────────────────────────────────────
 
-async def test_scheme_environment_validated_on_write(client):
+async def test_scheme_environment_key_ignored_on_write(client):
+    """方案 environmentId 不再收不再校验:坏 id 也能 201(键被忽略),
+    响应无 environmentId。"""
     adm = await role_headers(client, "s22_sch", role="admin")
-    env = await _env_id(client, adm, "s22-sch-env")
     r = await client.post("/api/scenarios", headers=adm,
                           json=_draft("sc-s22-sch"))
     assert r.status_code in (200, 201), r.text
     r = await client.post("/api/scenarios/sc-s22-sch/run-schemes",
                           headers=adm,
                           json={"name": "坏环境", "environmentId": 99999})
-    assert r.status_code == 422 and "environment_not_found" in r.text
-    r = await client.post("/api/scenarios/sc-s22-sch/run-schemes",
-                          headers=adm,
-                          json={"name": "好环境", "environmentId": env})
     assert r.status_code == 201, r.text
-    assert r.json()["environmentId"] == env
+    assert "environmentId" not in r.json()

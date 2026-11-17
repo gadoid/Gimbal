@@ -214,6 +214,5 @@ async def test_resolve_exec_auths_stays_lenient_on_partial(client):
             Environment.is_default.is_(True)))).scalar()
 
     resolved = await resolve_exec_auths(
-        db_module.SessionLocal, uid, ["only-one", "not-there"],
-        env_id=env_id)
+        db_module.SessionLocal, uid, ["only-one", "not-there"])
     assert [a.alias for a in resolved] == ["only-one"]

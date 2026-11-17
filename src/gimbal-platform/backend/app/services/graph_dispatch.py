@@ -154,18 +154,10 @@ async def missing_auth_aliases(
          for r in resolved])
     if not aliases:
         return []
-    # 取用须带环境(env 必填收紧;与 materialize_graph 同族修复 —— 此前
-    # 不传 env_id,条目在无环境分支下全数 missing,编排预检恒拒发)
-    from .env_chain import NO_ENV, resolve_environment
-    env_id: int | None = None
-    try:
-        choice = await resolve_environment(db, user_id=owner_id)
-        if choice is not NO_ENV:
-            env_id = choice.env_id
-    except Exception:  # noqa: BLE001 — 环境链失败按无环境口径报缺
-        env_id = None
+    # §8.3:取用不校验标签 —— 无环境位(旧链曾漏传 env 导致编排预检
+    # 恒拒发;链位退役后该缺陷类不复存在)
     picked = await run_prepare.pick_bindings(
-        db, owner_id, aliases, env_id=env_id, cred_project_id=cred_project_id)
+        db, owner_id, aliases, cred_project_id=cred_project_id)
     return sorted(set(aliases) - {r.slot for r in picked})
 
 
@@ -252,42 +244,36 @@ async def materialize_graph(
         db_module.SessionLocal,
         [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
          for r in resolved])
-    # S2.1 环境链逐单元:显式位(配方快照 explicit,或图级
-    # environmentId)整图生效;否则按单元 方案 > 单元场景项目默认 >
-    # 个人偏好 > 默认环境 解析 —— 地址 ③ 层逐单元查(查表失败降级空表)
-    from .env_chain import (
-        EnvChoice, EnvironmentNotFound, resolve_environment)
-    explicit = env if (env is not None and env.source == "explicit") \
-        else None
-    if explicit is None and graph_req.get("environmentId"):
-        try:
-            explicit = await resolve_environment(
-                db, explicit=int(graph_req["environmentId"]))
-        except EnvironmentNotFound as e:
-            raise GraphDispatchError(str(e)) from None
+    # §8.2 标签解析逐单元(2026-11-17 环境降级轮):每单元按**自身
+    # 有效身份集合**解析标签(身份 > 该单元场景项目默认 > 平台默认);
+    # 图级 environmentId 显式位退役。重放快照(``env`` 非空)仍整图
+    # 生效 —— 快照就是当次执行的事实。混拼在单元内抛 EnvMixed →
+    # GraphDispatchError(派发前拒);查表失败该单元地址降级空表。
+    from .env_chain import EnvChoice, EnvMixed, resolve_execution_tag
+    from .service_aliases import exec_auth_aliases_of_definition
     unit_urls: dict[str, dict] = {}
-    first_env: EnvChoice | None = None
-    # 逐单元地址 ③ 层:环境解析失败则该单元地址降级空表(环境维已从
-    # carry 退役 §8.4,环境仍驱动地址;carry 无环境下传)
     for r in resolved:
         ref = r["unit"]["ref"]
         try:
-            ue: EnvChoice = explicit or await resolve_environment(
-                db, scheme_env=r.get("scheme_env"),
-                project_id=r["scenario_row"].project_id, user_id=owner_id)
-            if first_env is None:
-                first_env = ue
+            if env is not None and env.env_id is not None:
+                ue: EnvChoice = env          # 重放:快照整图生效
+            else:
+                _unit_aliases = await exec_auth_aliases_of_definition(
+                    db, r["composed"], unit_merged_bindings(graph_req, r["unit"]))
+                ue = await resolve_execution_tag(
+                    db, identity_names=_unit_aliases,
+                    project_id=r["scenario_row"].project_id)
             unit_urls[ref] = await service_aliases.base_urls_for(
                 db, _all_referenced_services([r]), env=ue)
+        except EnvMixed as e:
+            raise GraphDispatchError(
+                f"单元 {ref} {e}") from None
         except Exception:  # noqa: BLE001
             unit_urls[ref] = {}
-    # 认证取用须带环境(env 必填收紧,§1.4:P1 缺陷修复 —— 此前不传
-    # env_id,条目在无环境分支下全数 missing,编排链 users 恒空)。
-    # exec_auths 为全单元共享:环境取首单元解析位(显式位整图生效时
-    # 即该位;跨单元异环境属边缘,按单元取用的细粒度留待真实需求)
+    # §8.3:取用不校验标签 —— 无环境位(此前曾漏传 env 导致编排链
+    # users 恒空;链位退役后该缺陷类不复存在)
     exec_auths = (await run_prepare.resolve_exec_auths(
         db_module.SessionLocal, owner_id, auth_aliases,
-        env_id=(first_env.env_id if first_env is not None else None),
         cred_project_id=cred_project_id)
         if auth_aliases else [])
 

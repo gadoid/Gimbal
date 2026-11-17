@@ -1,43 +1,58 @@
-"""环境链 + 地址第 ③ 层(authz M2a S2.1;执行配置分层②起链位②/④
-由执行配置承载)。
+"""标签解析链 + 地址第 ③ 层(2026-11-17 环境降级轮重做,redesign §8.2)。
 
-**环境**:本次显式 > [选定执行配置 │ 方案] > 项目默认 > [默认执行
-配置 │ 个人偏好] > 默认环境(D2,Admin 指定)> 无。
-:func:`resolve_environment` 产出 :class:`EnvChoice`(环境
-id + 来源),派发时落 ``config_json``(重跑按快照回放)。
+**标签**(= 轻量部署标签,``environments`` 表):解析链 =
+**有效调用身份标签 > 项目默认 > 平台默认**。
+
+* 有效身份 = 换用后实际取用的身份条目名集(执行配置 slot_map /
+  行级 ``@slot`` 覆盖由调用方归并后传入);身份条目的 ``env_id``
+  即其标签;
+* 多身份标签不一致 → :class:`EnvMixed`(混拼,dispatch 映射 409
+  ``env_mixed``,无逃生口 —— 显式 ``environmentId`` 注入通道已全链退役);
+* 无身份/身份无标签 → 项目默认(``projects.default_environment_id``)
+  → 平台默认(``environments.is_default``);全空 → :data:`NO_ENV`
+  (预检 ``env_unspecified`` 根因);
+* 旧链位(方案环境 / 执行配置环境 / 个人偏好 / 本次显式)与
+  :class:`EnvironmentNotFound` 已退役;``EnvChoice`` 形状不变,派发仍落
+  ``config_json``(重跑按快照回放,历史 source 原样透出)。
 
 **地址 ③**(数据源;优先级裁决仍在 ``run_materialize._apply_services``):
-服务键先映射到基础服务(别名行的 ``base_service``,非别名即自身,
-D11),再查部署表 ``deployments[(base_service, env)]``。S6 起部署表是
-唯一来源(别名自带 ``base_url`` 与影子期合并分支已随 0047 退役)。
+服务键先映射到基础服务(条目表 ``base_service``,非条目名即自身),
+再查部署表 ``deployments[(base_service, 标签)]``。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.composer_scenario import ComposerScenario
 from ..models.deployment import Deployment
 from ..models.environment import Environment
-from ..models.permission import UserPref
 from ..models.project import Project
 
-# 个人偏好键(user_preferences 白名单同名;值 = 环境 id)
-PREF_KEY = "run.environment"
 
-class EnvironmentNotFound(LookupError):
-    """本次显式指定的环境不存在(调用方映射 422)。"""
+class EnvMixed(Exception):
+    """有效身份的部署标签不一致(混拼 —— 预检/派发硬拦截)。"""
 
-    def __init__(self, env_id: int) -> None:
-        super().__init__(f"environment not found: {env_id}")
-        self.env_id = env_id
+    def __init__(self, entries: dict[str, int]) -> None:
+        # 条目名 → 标签 id(展示按名排序,报错稳定)
+        self.entries = dict(sorted(entries.items()))
+        pairs = "、".join(
+            f"{alias}(标签#{env_id})" for alias, env_id in self.entries.items())
+        super().__init__(
+            f"env_mixed: 有效身份的部署标签不一致:{pairs} —— "
+            "同一次执行的地址/登录口/版本线必须落同一标签;请统一这些"
+            "身份条目的标签,或改用项目/平台默认")
 
 
 @dataclass(frozen=True)
 class EnvChoice:
-    """环境链解析结果:``env_id`` 可空(全链皆空 = 旧行为)。"""
+    """标签链解析结果:``env_id`` 可空(全链皆空 = 无 ③ 层)。
+
+    ``source`` ∈ ``identity | project | default``;历史快照里的
+    ``explicit/scheme/exec_config/...`` 仅出现在重放回放面,原样透出。
+    """
     env_id: int | None = None
     source: str | None = None
 
@@ -49,7 +64,7 @@ class EnvChoice:
         return cls(int(snap["environmentId"]), snap.get("environmentSource"))
 
     def snapshot(self) -> dict:
-        """``config_json`` 落档形态(无环境时空 dict,键缺席)。"""
+        """``config_json`` 落档形态(无标签时空 dict,键缺席)。"""
         if self.env_id is None:
             return {}
         return {"environmentId": self.env_id,
@@ -59,71 +74,36 @@ class EnvChoice:
 NO_ENV = EnvChoice()
 
 
-async def _exists(db: AsyncSession, env_id: int) -> bool:
-    return (await db.execute(select(Environment.id).where(
-        Environment.id == env_id))).scalar() is not None
-
-
-def _as_env_id(value) -> int | None:
-    """偏好/方案里的环境值容错解析(非正整数 → 无)。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int) and value > 0:
-        return value
-    if isinstance(value, str) and value.isdigit() and int(value) > 0:
-        return int(value)
-    return None
-
-
-async def resolve_environment(
+async def resolve_execution_tag(
     db: AsyncSession,
     *,
-    explicit: int | None = None,
-    scheme_env=None,
+    identity_names: Iterable[str] | None = None,
     project_id: int | None = None,
-    user_id: int | None = None,
-    exec_env: int | None = None,
-    default_exec_env: int | None = None,
 ) -> EnvChoice:
-    """按链路取第一个有效环境。
+    """按链路取本次执行的部署标签:**身份 > 项目默认 > 平台默认**。
 
-    执行配置分层②(设计方案 §5):``本次 > [选定执行配置 │ 方案] >
-    项目默认 > [默认执行配置 │ 个人偏好] > 平台默认`` —— ``exec_env``
-    = 显式选定配置的 envId(占②、遮蔽方案),``default_exec_env`` =
-    默认配置的 envId(占④、遮蔽旧偏好;无默认配置时调用方不传,
-    旧偏好即为④,§7 存量回落)。仅当配置**设了** envId 才占位。
-
-    显式指定的环境不存在 → :class:`EnvironmentNotFound`(调用方要的是
-    「我选的环境」,静默落到下一位会让用户以为生效了);方案 / 配置 /
-    偏好里悬空的环境(环境被删)视同未设置,落到下一位。
+    ``identity_names`` = 换用后实际取用的身份条目名集(调用方归并
+    slot_map / 行级覆盖后的取用集合);条目缺行(悬空名)不参与标签
+    判定 —— 它们在凭证解析里另有 missing 分类,不在这里连坐。
     """
-    if explicit is not None:
-        if not await _exists(db, explicit):
-            raise EnvironmentNotFound(explicit)
-        return EnvChoice(explicit, "explicit")
-    cid = _as_env_id(exec_env)
-    if cid is not None and await _exists(db, cid):
-        return EnvChoice(cid, "exec_config")
-    sid = _as_env_id(scheme_env)
-    if sid is not None and await _exists(db, sid):
-        return EnvChoice(sid, "scheme")
+    names = {n for n in (identity_names or ()) if n}
+    if names:
+        from ..models.service_identity import ServiceIdentity
+
+        rows = (await db.execute(
+            select(ServiceIdentity.alias_name, ServiceIdentity.env_id)
+            .where(ServiceIdentity.alias_name.in_(names)))).all()
+        entries = dict(rows)
+        tags = set(entries.values())
+        if len(tags) == 1:
+            return EnvChoice(tags.pop(), "identity")
+        if len(tags) > 1:
+            raise EnvMixed(entries)
     if project_id is not None:
         pid = (await db.execute(select(Project.default_environment_id).where(
             Project.id == project_id))).scalar()
         if pid is not None:
             return EnvChoice(pid, "project")   # FK SET NULL:非空即存在
-    did = _as_env_id(default_exec_env)
-    if did is not None and await _exists(db, did):
-        return EnvChoice(did, "exec_config_default")
-    if user_id is not None:
-        raw = (await db.execute(select(UserPref.value).where(
-            UserPref.user_id == user_id,
-            UserPref.key == PREF_KEY))).scalar()
-        if isinstance(raw, dict):   # 偏好白名单形状 {environmentId}
-            raw = raw.get("environmentId")
-        uid_env = _as_env_id(raw)
-        if uid_env is not None and await _exists(db, uid_env):
-            return EnvChoice(uid_env, "preference")
     default = (await db.execute(select(Environment.id).where(
         Environment.is_default.is_(True)))).scalar()
     if default is not None:
@@ -131,30 +111,8 @@ async def resolve_environment(
     return NO_ENV
 
 
-async def resolve_for_scenario(
-    db: AsyncSession,
-    scenario_id: str | None,
-    *,
-    user_id: int | None,
-    explicit: int | None = None,
-    scheme_env=None,
-    exec_env: int | None = None,
-    default_exec_env: int | None = None,
-) -> EnvChoice:
-    """场景执行面的便捷入口:项目默认按场景所属项目取。"""
-    project_id = None
-    if scenario_id:
-        project_id = (await db.execute(select(
-            ComposerScenario.project_id).where(
-            ComposerScenario.scenario_id == scenario_id))).scalar()
-    return await resolve_environment(
-        db, explicit=explicit, scheme_env=scheme_env,
-        project_id=project_id, user_id=user_id,
-        exec_env=exec_env, default_exec_env=default_exec_env)
-
-
 async def instance_lines(db: AsyncSession, env_id: int | None) -> dict[str, str]:
-    """环境的版本线声明(重构 §1.2:迁 ``system_env_instances.line``,
+    """标签的版本线声明(重构 §1.2:迁 ``system_env_instances.line``,
     原 ``environments.lines`` JSON 列退役;空 = 未声明)。"""
     if env_id is None:
         return {}
@@ -169,7 +127,7 @@ async def instance_lines(db: AsyncSession, env_id: int | None) -> dict[str, str]
 async def deployment_urls(
     db: AsyncSession, raw_names: list[str], env_id: int,
 ) -> dict[str, str]:
-    """服务键 → 该环境部署地址(命中才出现;重构:基名解析切条目表)。"""
+    """服务键 → 该标签部署地址(命中才出现;基名解析切条目表)。"""
     if not raw_names:
         return {}
     from ..models.service_identity import ServiceIdentity

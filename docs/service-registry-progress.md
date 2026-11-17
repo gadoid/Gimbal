@@ -453,6 +453,40 @@ webhook guide / PLATFORM_REQUIREMENTS / PLATFORM-SCENARIO-COMPOSER-API
   非 M1 回归;commit 时点证据见上)。
 - 注:本机 `rm` 别名带 `-i`,非交互删除会静默失败 —— 用 `rm -f`。
 
+### M2 标签解析链 + 凭证规则 + 链位/显式通道退役（2026-11-17，🟢 完成）
+
+- **env_chain 重写**:`resolve_execution_tag`(identity > project > default,
+  `EnvMixed` 硬拦截信号)替代 `resolve_environment/resolve_for_scenario`;
+  `EnvironmentNotFound`/`PREF_KEY` 退役;`EnvChoice` 快照形状不变(历史
+  source 原样回放,新 source ∈ identity|project|default);
+- **凭证去 env 匹配**(§8.3):`_resolve_identities` 引用不校验标签 ——
+  username 同 tag 优先 → system 唯一 → `ambiguous`;default 取 system
+  唯一默认;`PickedIdentity.env_id` = **账户 tag**(登录口按账户 tag 取,
+  不变式四例钉死:同 tag 命中/跨 tag system 唯一/多 tag 歧义/登录口随
+  账户 tag);`env_bad` 分类退役 → `ambiguous`;
+- **默认账户按 system**:模型唯一索引改 (池, system) WHERE is_default
+  (0059);auth_sessions/project_credentials 建默认/置默认/清旧默认去 env;
+  auth_references 反查、access_token 范围复核、projects.slot_status 去
+  env 匹配;
+- **链位/显式通道退役**:`RunRequest.environmentId`/`GraphSpec.environmentId`/
+  预览与导出 overlay 的 environmentId 全删(旧键静默忽略);方案 payload
+  environmentId 停读(run_schemes 写校验退役);`run.environment` 偏好键
+  出白名单;exec_configs `environment_id` 列删除(0060,模型/服务/路由/
+  schema 同步);
+- **五消费点切换**:生效预览(runs.py)/adhoc(地址+版本线)/integration
+  (缺凭证判定)/query_views(单身份装载)/suites(validate + `_precheck_one`
+  漏传 user_id 既有缺陷修复);dispatch 标签解析一次(bindings+slot_map
+  有效身份集),`dataset_binding_env_mismatch` → `dataset_binding_ambiguous`;
+  graph 逐单元按各自身份集解析标签(重放快照整图生效);
+- **迁移**:0059(默认索引三列重建+防御去重)、0060(drop exec_config env
+  列);时代造形补 exec_configs.environment_id(0054 重放);
+- **测试**:auth resolution 9(重写+不变式)/s21 10(链路+派发+预检+导出
+  +模板指纹重写)/exec chain 12(链位用例退役)/auth_sessions 19/
+  auth_references 4/s31 3/s20 4/s22 3(偏好与方案环境退役语义)/
+  bindings+token+q3 84/s50 2/s60 7/exec_configs 6/c2 8 等;后端全量
+  **2045 passed / 2 skipped / 0 failed**(48m53s;唯一失败 c2 签名残留
+  修复后复验 8/8 绿)。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。

@@ -5,9 +5,9 @@
 
 三条链的吃法(§5 全文):
 
-* **环境**:选定配置的 envId 占位②(遮蔽方案存量);默认配置的 envId
-  占位④(遮蔽旧偏好 ``run.environment``;无默认配置 → 回落旧偏好,
-  §7 存量兼容)。仅当配置**设了** envId 才占位 —— 空值不遮蔽。
+* **环境链位已退役**(§8.2,2026-11-17 环境降级轮):执行配置不再
+  决定执行标签(``environment_id`` 列随 0060 删除);标签 =
+  有效身份 > 项目默认 > 平台默认。
 * **绑定**:仅**显式选定**的配置参与(「选定执行配置 > 方案遗留 >
   场景 authored > 池默认行」)—— 默认配置的绑定不自动生效,防成员
   默认配置静默改写取用条目。语义 = 换池内取用行,**注入标签(场景引用的
@@ -42,12 +42,11 @@ class ExecConfigChoice:
     """一次执行选定的执行配置(摊平形态;零凭证值零地址值)。
 
     ``explicit`` = 是否显式选定(决策 9 与绑定链的闸:默认行 explicit
-    =False,携带 env/carry 但不携带绑定语义)。"""
+    =False,携带 carry 但不携带绑定语义;env 链位已随 §8.2 退役)。"""
     config_id: int
     name: str
     is_default: bool
     explicit: bool
-    env_id: int | None = None
     # 别名全名 → 条目名(换池内取用;注入标签不变)
     bindings: dict[str, str] = field(default_factory=dict)
     # 目录服务名 → {字段: 值|null=显式注入 null}
@@ -79,8 +78,7 @@ def choice_of_row(row: ExecConfig, *, explicit: bool) -> ExecConfigChoice:
     bindings, carries = _flatten((row.payload or {}).get("systems"))
     return ExecConfigChoice(
         config_id=row.id, name=row.name, is_default=row.is_default,
-        explicit=explicit, env_id=row.environment_id,
-        bindings=bindings, carry_overrides=carries)
+        explicit=explicit, bindings=bindings, carry_overrides=carries)
 
 
 async def load_choice(

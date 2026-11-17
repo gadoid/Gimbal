@@ -13,9 +13,8 @@ from app.models import (
     AuthAccount, Deployment, Environment, ExecConfig, Service,
     ServiceIdentity,
 )
-from app.services import carry_store, env_chain
+from app.services import carry_store
 from app.services.carry_injection import build_carry_context
-from app.services.env_chain import EnvChoice, resolve_environment
 from app.services.exec_config import (
     ExecConfigNotFound, carry_overrides_for, load_choice,
 )
@@ -117,10 +116,10 @@ async def _mk_config(
     systems = ([{"service": _BASE, "bindings": bindings or {},
                  "carryOverrides": carry or {}}]
                if (bindings or carry) else [])
+    # §8.2:environment_id 列已退役(0060);env_id 形参保留但忽略
     async with db_module.SessionLocal() as s:
         row = ExecConfig(
             scope="user", scope_id=uid, name=name, is_default=is_default,
-            environment_id=env_id,
             payload={"systems": systems})
         s.add(row)
         await s.commit()
@@ -135,40 +134,9 @@ async def _last_cfg() -> dict:
         return ex.config_json
 
 
-# ── ① 环境链插位(resolve_environment 单元)─────────────────────────
-
-async def test_env_chain_exec_positions(client, fresh_db):
-    await register_and_login(client, "ec_chain", "pw123456")
-    uid = await _uid("ec_chain")
-    async with db_module.SessionLocal() as s:
-        dflt = await _env(s, "ec-dflt", is_default=True)
-        sit = await _env(s, "ec-sit")
-        uat = await _env(s, "ec-uat")
-        # 选定配置遮蔽方案(位②,左优先)
-        assert await resolve_environment(
-            s, exec_env=uat, scheme_env=sit) == EnvChoice(uat, "exec_config")
-        # 配置没设 env(位②空)→ 方案生效
-        assert await resolve_environment(
-            s, scheme_env=sit) == EnvChoice(sit, "scheme")
-        # 默认配置遮蔽个人偏好(位④);没传(无默认配置)→ 偏好回落
-        assert await resolve_environment(
-            s, default_exec_env=uat, user_id=uid) == \
-            EnvChoice(uat, "exec_config_default")
-        from app.models.permission import UserPref
-        s.add(UserPref(user_id=uid, key=env_chain.PREF_KEY, value=sit))
-        await s.flush()
-        assert await resolve_environment(s, user_id=uid) == \
-            EnvChoice(sit, "preference")
-        assert await resolve_environment(
-            s, default_exec_env=uat, user_id=uid) == \
-            EnvChoice(uat, "exec_config_default")
-        # 悬空的配置环境视同未设置,落到下一位
-        assert await resolve_environment(
-            s, exec_env=99999, scheme_env=sit) == EnvChoice(sit, "scheme")
-        assert await resolve_environment(
-            s, default_exec_env=99999, user_id=uid) == EnvChoice(sit, "preference")
-        assert await resolve_environment(
-            s, default_exec_env=dflt) == EnvChoice(dflt, "exec_config_default")
+# ── ① 环境链位已随 §8.2 退役(2026-11-17):执行配置/方案/偏好/显式
+#    均不再占链位 —— 链路优先级用例见 test_authz_s21_env_chain
+#    (identity > project > default)。
 
 
 # ── ② load_choice 摊平 + 越权 ──────────────────────────────────────
@@ -195,13 +163,10 @@ async def test_load_choice_flatten_and_isolation(client, fresh_db):
             pass
         # None → 默认行;无默认行 → None
         assert await load_choice(s, a, None) is None
-    async with db_module.SessionLocal() as s:
-        real_env = await _env(s, "ec-lc")
-        await s.commit()
-    await _mk_config(a, "默认", is_default=True, env_id=real_env)
+    await _mk_config(a, "默认", is_default=True)
     async with db_module.SessionLocal() as s:
         ch = await load_choice(s, a, None)
-        assert ch is not None and not ch.explicit and ch.env_id == real_env
+        assert ch is not None and not ch.explicit
         assert await load_choice(s, b, None) is None
 
 
@@ -268,7 +233,7 @@ async def test_slot_lookup_overrides_and_resolve(client, fresh_db):
     assert m == {_ALIAS: "merchant-b"}   # 声明条目(注入标签)→ 换用条目
 
     resolved = await resolve_exec_auths(
-        db_module.SessionLocal, uid, [_ALIAS], env_id=env, slot_map=m)
+        db_module.SessionLocal, uid, [_ALIAS], slot_map=m)
     assert len(resolved) == 1
     assert resolved[0].alias == _ALIAS              # 注入标签不变(场景引用)
     assert resolved[0].username == "merchant-u"     # 池内取用换行
@@ -300,15 +265,17 @@ async def test_dispatch_env_from_selected_config(
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 1)
     cfg = await _last_cfg()
+    # §8.2:执行配置不再给标签 —— 来源 = 身份位(条目钉 uat)
     assert cfg["environmentId"] == uat
-    assert cfg["environmentSource"] == "exec_config"
+    assert cfg["environmentSource"] == "identity"
     assert cfg["execConfigId"] == cid
     assert cases[0]["config"]["services"][_ALIAS] == "http://uat-fin"
 
 
 async def test_dispatch_default_config_env_and_binding_injection(
         client, plate_mock: PlateMock, monkeypatch):
-    """默认链:默认配置只占 env 位④(不吃绑定);显式选定时绑定换池行。"""
+    """默认链:默认配置只吃私有区 carry(不吃绑定);显式选定时绑定换池行
+    (env 链位已随 §8.2 退役 —— 标签一律按身份解析)。"""
     plate_mock.behaviour = "echo"
     await register_and_login(client, "ec_r2", "pw123456")
     h = await register_and_login(client, "ec_r2", "pw123456")
@@ -326,14 +293,14 @@ async def test_dispatch_default_config_env_and_binding_injection(
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
-    # 默认链:env 走默认配置(位④);绑定不吃(仍取 fin-dev 默认账户)
+    # 默认链:绑定不吃(仍取 fin-dev 默认账户);标签按身份(sit)
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-ec-r2", dataSetIds=[]))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 1)
     cfg = await _last_cfg()
     assert (cfg["environmentId"], cfg["environmentSource"]) == \
-        (sit, "exec_config_default")
+        (sit, "identity")
     assert "execConfigId" not in cfg
     assert cases[0]["config"]["users"][_ALIAS]["username"] == "default-u"
 
@@ -390,7 +357,8 @@ async def test_preview_sources_with_exec_config(client, plate_mock: PlateMock):
         "scenarioId": "sc-ec-pv", "execConfigId": cid})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["env"]["environmentSource"] == "exec_config"
+    # §8.2:标签来源 = 身份位(执行配置只出绑定/carry,不再给 env)
+    assert body["env"]["environmentSource"] == "identity"
     # 取用:键 = 声明条目 fin-dev,取用 = merchant-b 账户,slotSource 明示偏离
     assert body["auths"][_ALIAS]["bindingId"] is not None
     assert body["auths"][_ALIAS]["slotSource"] == "exec_config"

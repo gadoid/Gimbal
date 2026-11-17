@@ -138,9 +138,11 @@ class PickedIdentity:
 
     slot: str          # 条目名(引用键,${auth.X}/call.user=X 的 X)
     account_id: int    # 命中账户(绑定标识)
-    env_id: int
+    env_id: int        # **账户标签**(登录口坐标;§8.3 不变式:密码与登录口同源)
     system: str        # 条目系统(base_service → services.system 派生)
     base_service: str
+    # 条目标签(执行标签链 identity 位的取值依据;§8.2)
+    identity_env_id: int
     # 命中账户是否默认位(预览 bindingId/isDefault 消费;P1 缺陷修复
     # 补齐 —— 预览块曾读不存在的 r.id/r.is_default,该路径从未被执行)
     is_default: bool = False
@@ -148,40 +150,31 @@ class PickedIdentity:
 
 async def _resolve_identities(
     db: Any, owner_id: int | None, names: list[str], *,
-    env_id: int | None, cred_project_id: int | None = None,
+    cred_project_id: int | None = None,
 ) -> tuple[dict[str, PickedIdentity], list[str], list[str]]:
-    """身份条目解析单源(重构 §4.1;不解密):条目名 → 取用账户 id。
+    """身份条目解析单源(§4.1 + §8.3 凭证去 env 匹配;不解密):
+    条目名 → 取用账户 id。
 
-    链路:条目(``env 必填``)→ 服务主档(系统派生)→ 账户池(ref_mode
-    =username 精确取 / default 取 is_default 行)。返回 (命中, 缺失,
-    环境不符);缺失口径(**无回退分支**,决策 8):条目不存在 / 执行
-    无环境 / 服务不在主档 / ref 账户缺席;环境不符 = 条目在但 env ≠
-    执行 env —— 分类供预检/行级绑定告警区分。
+    链路:条目 → 服务主档(系统派生)→ 账户池。**引用不校验标签**:
+    * ``ref_mode=username``:同标签(条目 env)账户优先 → system 内
+      唯一命中 → 多行歧义(``ambiguous``,预检/派发硬拦截);
+    * ``ref_mode=default``:system 唯一默认账户(0059 后索引钉死);
+    返回 (命中, 缺失, 歧义)。缺失口径(**无回退分支**,决策 8):
+    条目不存在 / 服务不在主档 / ref 账户缺席。
     """
     if not names:
         return {}, [], []
     uniq = list(dict.fromkeys(names))
     missing: set[str] = set()
-    env_bad: set[str] = set()
+    ambiguous: set[str] = set()
     cand: dict[str, DBIdentity] = {}
-    if env_id is None:
-        # 环境显式化:无环境执行无从解析身份(预检期报「未指定环境」)
-        missing.update(uniq)
-    else:
-        idents = (await db.execute(select(DBIdentity).where(
-            DBIdentity.alias_name.in_(uniq)))).scalars().all()
-        for i in idents:
-            if i.env_id == env_id:
-                cand[i.alias_name] = i
-            else:
-                env_bad.add(i.alias_name)
-        # 缺失/环境不符互斥分类(P1 缺陷修复:此前环境不符名同时落
-        # missing,返回端 env_bad - missing 恒空 —— 「环境不符」分类
-        # 从未到达过消费方;预检/行级绑定告警据此区分文案)
-        missing.update(n for n in uniq
-                       if n not in cand and n not in env_bad)
+    idents = (await db.execute(select(DBIdentity).where(
+        DBIdentity.alias_name.in_(uniq)))).scalars().all()
+    for i in idents:
+        cand[i.alias_name] = i
+    missing.update(n for n in uniq if n not in cand)
     if not cand:
-        return {}, sorted(missing), sorted(env_bad)
+        return {}, sorted(missing), sorted(ambiguous)
 
     # 条目系统派生:base_service → services.system(悬空条目 → missing)
     svc_rows = (await db.execute(
@@ -190,7 +183,7 @@ async def _resolve_identities(
     )).all()
     system_of = dict(svc_rows)
 
-    # 账户目标收集(ref)并批量取
+    # 账户目标收集(ref)并批量取(无标签过滤 —— 标签只做取用偏好)
     want_user: set[tuple[str, str]] = set()
     want_default: set[str] = set()
     for i in cand.values():
@@ -201,8 +194,8 @@ async def _resolve_identities(
             want_user.add((sysname, i.ref_username))
         else:
             want_default.add(sysname)
-    acc_by_key: dict[tuple[str, str], DBAuthAccount] = {}
-    acc_default: dict[str, DBAuthAccount] = {}
+    accs_by_key: dict[tuple[str, str], list[DBAuthAccount]] = {}
+    accs_default: dict[str, list[DBAuthAccount]] = {}
     if want_user or want_default:
         conds: list[Any] = []
         for sysname, username in want_user:
@@ -214,12 +207,20 @@ async def _resolve_identities(
         from sqlalchemy import or_
         accs = (await db.execute(select(DBAuthAccount).where(
             _pool_clause(owner_id, cred_project_id),
-            DBAuthAccount.env_id == env_id,
             or_(*conds)))).scalars().all()
         for a in accs:
-            acc_by_key.setdefault((a.system, a.username), a)
+            accs_by_key.setdefault((a.system, a.username), []).append(a)
             if a.is_default:
-                acc_default.setdefault(a.system, a)
+                accs_default.setdefault(a.system, []).append(a)
+
+    def _pick_one(cands: list[DBAuthAccount], tag: int) -> DBAuthAccount | None:
+        """同标签优先 → 唯一命中;多行歧义由调用方归类(§8.3)。"""
+        same = [a for a in cands if a.env_id == tag]
+        if len(same) == 1:
+            return same[0]
+        if len(cands) == 1:
+            return cands[0]
+        return None   # 0 行(None 外理)或多行歧义
 
     picked: dict[str, PickedIdentity] = {}
     for name, i in cand.items():
@@ -227,32 +228,37 @@ async def _resolve_identities(
         if not sysname:
             missing.add(name)
             continue
-        acc = (acc_by_key.get((sysname, i.ref_username))
-               if i.ref_mode == "username" and i.ref_username
-               else acc_default.get(sysname))
+        if i.ref_mode == "username" and i.ref_username:
+            cands = accs_by_key.get((sysname, i.ref_username), [])
+        else:
+            cands = accs_default.get(sysname, [])
+        acc = _pick_one(cands, i.env_id)
         if acc is None:
-            missing.add(name)
+            if cands:
+                ambiguous.add(name)   # 多候选且无同标签唯一命中
+            else:
+                missing.add(name)
             continue
         picked[name] = PickedIdentity(
-            slot=name, account_id=acc.id, env_id=i.env_id,
+            slot=name, account_id=acc.id, env_id=acc.env_id,
             system=sysname, base_service=i.base_service,
-            is_default=acc.is_default)
-    return picked, sorted(missing), sorted(env_bad)
+            identity_env_id=i.env_id, is_default=acc.is_default)
+    return picked, sorted(missing), sorted(ambiguous)
 
 
 async def pick_bindings(
     db: Any, owner_id: int | None, slots: list[str],
-    *, env_id: int | None = None, cred_project_id: int | None = None,
+    *, cred_project_id: int | None = None,
 ) -> list[PickedIdentity]:
-    """条目取用单源(不解密;重构 §4.1):条目名 → :class:`PickedIdentity`。
+    """条目取用单源(不解密;§4.4):条目名 → :class:`PickedIdentity`。
     ``resolve_exec_auths``(注入)与指纹/预览的绑定标识消费同一份裁决
     —— 取用口径结构上不可能漂移。
 
     S8:``cred_project_id`` 非空 → 从项目池取用(项目账户池),缺省 =
     ``owner_id`` 个人池。``slots`` 语义 = 身份条目名(旧槽名口径,
     规约延续)。"""
-    picked, _missing, _env_bad = await _resolve_identities(
-        db, owner_id, slots, env_id=env_id, cred_project_id=cred_project_id)
+    picked, _missing, _ambiguous = await _resolve_identities(
+        db, owner_id, slots, cred_project_id=cred_project_id)
     return sorted(picked.values(), key=lambda r: r.slot)
 
 
@@ -279,48 +285,48 @@ def strip_row_binding_columns(row: dict | None) -> dict:
 
 async def lookup_row_bindings(
     db: Any, owner_id: int | None, pairs: set[tuple[str, str]],
-    *, env_id: int | None = None, cred_project_id: int | None = None,
+    *, cred_project_id: int | None = None,
 ) -> tuple[dict[tuple[str, str], PickedIdentity], list[tuple[str, str]],
            list[tuple[str, str]]]:
     """(引用位, 绑定名) → 池内取用结果(不解密)。返回 (命中, 缺失,
-    环境不符);绑定名 = 身份条目名。行级覆盖语义 = 该行把引用位换成
+    歧义);绑定名 = 身份条目名。行级覆盖语义 = 该行把引用位换成
     指定身份(条目模型无槽,不再做同名性校验 —— 跨身份覆盖是行级
-    数据的本意);条目环境 ≠ 本次环境 → 环境不符。"""
+    数据的本意);引用不校验标签(§8.3),歧义 = 同 system 多行候选
+    且无同标签唯一命中。"""
     if not pairs:
         return {}, [], []
     names = list({a for _s, a in pairs})
-    picked, miss_names, env_names = await _resolve_identities(
-        db, owner_id, names, env_id=env_id, cred_project_id=cred_project_id)
-    miss_set, env_set = set(miss_names), set(env_names)
+    picked, miss_names, amb_names = await _resolve_identities(
+        db, owner_id, names, cred_project_id=cred_project_id)
+    miss_set, amb_set = set(miss_names), set(amb_names)
     hit: dict[tuple[str, str], PickedIdentity] = {}
     missing: list[tuple[str, str]] = []
-    env_bad: list[tuple[str, str]] = []
+    ambiguous: list[tuple[str, str]] = []
     for slot, alias in sorted(pairs):
         p = picked.get(alias)
         if p is not None:
             hit[(slot, alias)] = p
-        elif alias in env_set:
-            env_bad.append((slot, alias))
+        elif alias in amb_set:
+            ambiguous.append((slot, alias))
         else:
             missing.append((slot, alias))
-    return hit, missing, env_bad
+    return hit, missing, ambiguous
 
 
 async def resolve_row_bindings(
     db_factory: Any, owner_id: int | None, pairs: set[tuple[str, str]],
-    *, env_id: int | None = None, cred_project_id: int | None = None,
+    *, cred_project_id: int | None = None,
 ) -> dict[tuple[str, str], ResolvedAuth]:
     """行级覆盖绑定解密(执行内每个 (引用位, 绑定名) 只解密一次)。
-    缺失/环境不符的已在派发 fail-fast 拦下 —— 这里只解析命中项;
-    url 取实例登录口(缺席 = '' 走静态令牌路径)。"""
+    缺失/歧义的已在派发 fail-fast 拦下 —— 这里只解析命中项;
+    url 取实例登录口(按账户标签;缺席 = '' 走静态令牌路径)。"""
     if not pairs:
         return {}
     from ..core.security import fernet_decrypt
 
     async with db_factory() as session:
-        hit, _m, _e = await lookup_row_bindings(
-            session, owner_id, pairs, env_id=env_id,
-            cred_project_id=cred_project_id)
+        hit, _m, _a = await lookup_row_bindings(
+            session, owner_id, pairs, cred_project_id=cred_project_id)
         if not hit:
             return {}
         resolved = await _materialize_identities(session, hit)
@@ -394,7 +400,7 @@ def apply_row_bindings(
 
 async def binding_ids_for(
     db_factory: Any, owner_id: int | None, slots: list[str],
-    *, env_id: int | None = None, cred_project_id: int | None = None,
+    *, cred_project_id: int | None = None,
     slot_map: dict[str, str] | None = None,
 ) -> dict[str, int]:
     """条目名 → 取用账户 id(轻量,不解密;指纹/预览消费)。分层②:
@@ -406,7 +412,7 @@ async def binding_ids_for(
         rows = await pick_bindings(
             s, owner_id, list(dict.fromkeys(
                 lookup.get(x, x) for x in slots if lookup.get(x, x))),
-            env_id=env_id, cred_project_id=cred_project_id)
+            cred_project_id=cred_project_id)
     by_slot = {r.slot: r.account_id for r in rows}
     return {x: by_slot[lookup.get(x, x)]
             for x in dict.fromkeys(slots) if lookup.get(x, x) in by_slot}
@@ -414,16 +420,17 @@ async def binding_ids_for(
 
 async def resolve_exec_auths(
     db_factory: Any, owner_id: int | None, aliases: list[str],
-    *, env_id: int | None = None, cred_project_id: int | None = None,
+    *, cred_project_id: int | None = None,
     slot_map: dict[str, str] | None = None,
 ) -> list[ResolvedAuth]:
     """身份条目名 → ResolvedAuth(解密后的轻量值对象)。
 
-    重构 §4.1(条目→ref→账户):``aliases`` = 身份条目名(场景
-    ``call.user``/``${auth.*}`` 引用键);取用经
+    §4.1(条目→ref→账户)+ §8.3(引用不校验标签):``aliases`` = 身份
+    条目名(场景 ``call.user``/``${auth.*}`` 引用键);取用经
     :func:`_resolve_identities`(owner/项目池过滤防跨池解错),解密经
-    :func:`_materialize_identities`(url = 实例登录口,缺席 = '' 走
-    静态令牌路径 —— 配置缺失在预检期明确报,不回退业务地址)。
+    :func:`_materialize_identities`(url = 实例登录口,**按账户标签**
+    —— 密码与登录口同源不变式;缺席 = '' 走静态令牌路径,配置缺失在
+    预检期明确报,不回退业务地址)。
 
     分层② ``slot_map``(声明引用 → 池内取用条目):执行配置绑定的
     「换池内命中」—— 取用按映射后的条目,注入标签保持声明名
@@ -431,9 +438,9 @@ async def resolve_exec_auths(
 
     * 解密失败 → 抛 :class:`AuthResolveError`(V1 严格语义:
       凭证路径 fail-fast,不静默降级)。
-    * 条目解不到(不存在/无环境/悬空/无账户)→ 告警后继续(与 V1
+    * 条目解不到(不存在/悬空/无账户)或账户歧义 → 告警后继续(与 V1
       一致:缺条目只是注入不到 users,该行 run 在 Gimbal 解析
-      ``${auth.*}`` 时步骤级报错)。
+      ``${auth.*}`` 时步骤级报错;歧义在预检/派发期硬拦截)。
     * 明文只存在于返回的值对象上 — 绝不写回 ORM 行。
 
     **只收会话工厂**(N1-6):内部开独立短会话做快照读,与调用方的
@@ -448,10 +455,13 @@ async def resolve_exec_auths(
     missing_names: set[str] = set()
     by_name: dict[str, "ResolvedAuth"] = {}
     async with db_factory() as session:
-        picked, miss, env_bad = await _resolve_identities(
-            session, owner_id, pick_names,
-            env_id=env_id, cred_project_id=cred_project_id)
-        missing_names.update(miss + env_bad)
+        picked, miss, amb = await _resolve_identities(
+            session, owner_id, pick_names, cred_project_id=cred_project_id)
+        missing_names.update(miss)
+        if amb:
+            logger.warning(
+                "run_prepare: exec auth identities ambiguous "
+                "(same system, multiple tag candidates): {}", amb)
         if picked:
             by_name = await _materialize_identities(session, picked)
     for label in dict.fromkeys(aliases):
@@ -695,9 +705,9 @@ async def prepare_exec(
         async with db_factory() as s:
             prep.aliases = await service_aliases.exec_auth_aliases_of_definition(
                 s, definition, bindings)
+        # §8.3:取用不校验标签 —— 环境位只驱动地址 ③,不进凭证解析
         prep.resolved_auths = await resolve_exec_auths(
             db_factory, owner_id, prep.aliases,
-            env_id=getattr(environment, "env_id", None),
             cred_project_id=cred_project_id, slot_map=slot_map or None)
         got = {a.alias for a in prep.resolved_auths}
         prep.missing_aliases = sorted(set(prep.aliases) - got)
@@ -847,7 +857,6 @@ async def resolve_effective_config(
         rows = await pick_bindings(
             db, user_id, list(dict.fromkeys(
                 lookup.get(a, a) for a in injection if lookup.get(a, a))),
-            env_id=getattr(env, "env_id", None),
             cred_project_id=cred_project_id)
         by_slot = {r.slot: r for r in rows}
         src = "project" if cred_project_id is not None else "personal"

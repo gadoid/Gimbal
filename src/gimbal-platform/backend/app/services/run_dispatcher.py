@@ -993,46 +993,8 @@ async def dispatch_target(
             except ExecConfigNotFound as e:
                 raise NotFound("exec_config_not_found", str(e)) from None
 
-    # S2.1 环境链(分层②):本次显式(RunRequest 顶层 > 图级)> [选定
-    # 执行配置 │ 方案] > 项目默认 > [默认执行配置 │ 个人偏好] > 默认
-    # 环境。方案字段由客户端摊平;请求没带环境但带了 schemeId 时回查
-    # 方案兜底。解析结果进 config_json(重跑按快照回放)与任务配方
-    # (worker 不回查请求上下文)。配置仅设了 envId 才占位(空值不遮蔽)。
-    from .env_chain import EnvironmentNotFound, resolve_for_scenario
-    _explicit_env = req.environment_id
-    if _explicit_env is None and getattr(req, "graph", None) is not None:
-        _explicit_env = req.graph.environment_id
-    _scheme_env = None
-    if _explicit_env is None and req.scheme_id and target.kind == "scenario":
-        from . import scheme_store as _sst
-        try:
-            _sch = await _sst.get_row(db, target.scenario_id, req.scheme_id)
-            _scheme_env = (_sch.payload or {}).get("environmentId")
-        except Exception:  # noqa: BLE001 — 悬空方案不阻塞(溯源字段)
-            _scheme_env = None
-    _exec_env = None
-    _default_exec_env = None
-    if _exec_cfg is not None:
-        if _exec_cfg.explicit:
-            _exec_env = _exec_cfg.env_id
-        else:
-            _default_exec_env = _exec_cfg.env_id
-    try:
-        env_choice = await resolve_for_scenario(
-            db, target.scenario_id if target.kind == "scenario" else None,
-            user_id=user_id, explicit=_explicit_env, scheme_env=_scheme_env,
-            exec_env=_exec_env, default_exec_env=_default_exec_env)
-    except EnvironmentNotFound as e:
-        raise NotFound("environment_not_found", str(e)) from None
-
-    # 环境告警（§6.3）:本次环境的版本线 vs 场景钉定 → 写 config_json
-    try:
-        env_warnings = await _check_env_consistency(
-            db, scenario_payload, env_choice.env_id)
-    except Exception:  # noqa: BLE001 — 告警失败不阻塞执行
-        env_warnings = []
-
     # authz M2a S6:绑定 = 服务键 → 别名;选的别名须存在且同基础服务
+    # (先行 —— §8.2 标签解析要吃有效身份集合,绑定校验必须在前)
     _bindings = {k: b.model_dump(by_alias=True)
                  for k, b in (req.service_bindings or {}).items()}
     from .service_aliases import (BindingAliasInvalid,
@@ -1042,6 +1004,42 @@ async def dispatch_target(
     except BindingAliasInvalid as e:
         raise Conflict(e.code, e.message,
                        extra={"service": e.service, "alias": e.alias}) from None
+
+    # §8.2 标签解析链(2026-11-17 环境降级轮):**有效调用身份标签 >
+    # 项目默认 > 平台默认**。显式注入(RunRequest/graph 的
+    # environmentId)与方案/执行配置/偏好链位全部退役;多身份标签
+    # 不一致 → env_mixed 硬拦截(无逃生口)。有效身份 = 绑定 + 执行
+    # 配置换用(slot_map)后的取用集合。graph 单元自治:顶层不解析
+    # (快照记空),逐单元在 materialize_graph 内按各自身份集合解析;
+    # 重跑(replay)的快照标签在装配处回放。
+    from .env_chain import EnvMixed, resolve_execution_tag
+    _tag_names: list[str] = []
+    _project_id: int | None = None
+    if target.kind == "scenario":
+        from sqlalchemy import select as _sel
+        _project_id = (await db.execute(_sel(ComposerScenario.project_id).where(
+            ComposerScenario.scenario_id == target.scenario_id))).scalar()
+        from . import service_aliases as _sa
+        _tag_names = list(await _sa.exec_auth_aliases_of_definition(
+            db, definition_from_payload(scenario_payload), _bindings))
+        if _exec_cfg is not None and _exec_cfg.explicit and _exec_cfg.bindings:
+            from .service_aliases import slot_lookup_overrides as _slo
+            _sm = await _slo(db, steps, _bindings, _exec_cfg.bindings)
+            _tag_names = list(dict.fromkeys(
+                _sm.get(a, a) for a in _tag_names if _sm.get(a, a)))
+    try:
+        env_choice = await resolve_execution_tag(
+            db, identity_names=_tag_names, project_id=_project_id)
+    except EnvMixed as e:
+        raise Conflict("env_mixed", str(e),
+                       extra={"identities": e.entries}) from None
+
+    # 环境告警（§6.3）:本次标签的版本线 vs 场景钉定 → 写 config_json
+    try:
+        env_warnings = await _check_env_consistency(
+            db, scenario_payload, env_choice.env_id)
+    except Exception:  # noqa: BLE001 — 告警失败不阻塞执行
+        env_warnings = []
 
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
@@ -1183,7 +1181,7 @@ async def dispatch_target(
             db, user_id, list(dict.fromkeys(
                 _slot_map.get(a, a) for a in auth_aliases
                 if _slot_map.get(a, a))),
-            env_id=env_choice.env_id, cred_project_id=cred_project_id)
+            cred_project_id=cred_project_id)
         _picked_slots = {r.slot for r in _picked}
         _missing = sorted(a for a in set(auth_aliases)
                           if _slot_map.get(a, a) not in _picked_slots)
@@ -1214,17 +1212,18 @@ async def dispatch_target(
             raise Conflict(
                 "dataset_binding_unsupported",
                 "suite 编排暂不支持数据集账号列(@slot.<槽>)")
-        _hit, _miss, _envbad = await run_prepare.lookup_row_bindings(
+        _hit, _miss, _amb = await run_prepare.lookup_row_bindings(
             db, user_id, {(s, a) for _d, _i, s, a in _row_refs},
-            env_id=env_choice.env_id, cred_project_id=cred_project_id)
+            cred_project_id=cred_project_id)
         _src = "project" if cred_project_id is not None else "personal"
         for code, bad, msg in (
                 ("dataset_binding_missing", set(_miss),
                  ("以下数据集行的账号在项目凭证中未登记:"
                   if cred_project_id is not None else
                   "以下数据集行的账号在你名下没有同名绑定:")),
-                ("dataset_binding_env_mismatch", set(_envbad),
-                 "以下数据集行的账号绑定不属于本次执行环境:")):
+                ("dataset_binding_ambiguous", set(_amb),
+                 "以下数据集行的账号绑定存在多候选(同系统多标签且无"
+                 "唯一命中),请为其补充同标签账户或改绑:")):
             if bad:
                 rows_out = [
                     {"datasetId": d, "rowIndex": i, "slot": s, "alias": a}
@@ -2181,7 +2180,6 @@ async def _fanout(
         exec_auths = (
             await resolve_exec_auths(
                 db_factory, owner_id, auth_aliases,
-                env_id=(env_snapshot or {}).get("environmentId"),
                 cred_project_id=cred_project_id, slot_map=slot_map)
             if auth_aliases
             else []
@@ -2191,7 +2189,6 @@ async def _fanout(
             db_factory, owner_id,
             {(s, a) for ds in datasets for _i, r in ds["rows"]
              for s, a in run_prepare.row_binding_refs(r).items()},
-            env_id=(env_snapshot or {}).get("environmentId"),
             cred_project_id=cred_project_id)
     except AuthResolveError as e:
         logger.error(

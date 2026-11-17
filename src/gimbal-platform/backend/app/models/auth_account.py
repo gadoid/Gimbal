@@ -44,9 +44,10 @@ class AuthAccount(Base):
         UniqueConstraint("owner_id", "project_id", "system", "env_id",
                          "username", name="uq_account_pool_system_env_user",
                          postgresql_nulls_not_distinct=True),
-        # 每池每 (system, env) 至多一个默认账户
+        # 每池每 system 至多一个默认账户(§8.3,2026-11-17 环境降级轮:
+        # default 引用取 system 唯一默认;迁移 0059 重建索引)
         Index("uq_account_default", "owner_id", "project_id", "system",
-              "env_id", unique=True, postgresql_where=text("is_default"),
+              unique=True, postgresql_where=text("is_default"),
               postgresql_nulls_not_distinct=True),
         # S8 归属恰一(个人池 xor 项目池)
         CheckConstraint("(owner_id IS NULL) <> (project_id IS NULL)",

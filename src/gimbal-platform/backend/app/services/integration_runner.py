@@ -496,17 +496,24 @@ async def _load_exec_shape(
 
 
 async def _template_env(db, scen: ComposerScenario,
-                        scheme_payload: dict | None):
-    """模板执行环境(S2.1):方案 > 场景项目默认 > 默认环境。
+                        scheme_payload: dict | None,
+                        identity_names: "list[str] | None" = None):
+    """模板执行标签(§8.2,2026-11-17 环境降级轮):**有效身份标签 >
+    场景项目默认 > 平台默认**。方案环境链位退役;``identity_names`` =
+    模板定义的有效身份集(调用方给;缺省现场解析)。
 
-    **不吃个人偏好**:订阅实例的知情同意按模板内容算,「同一模板全
-    订阅者同一指纹」(不变量)—— 地址若随持有人偏好变,同一模板会
-    出现多份指纹;环境由模板(方案 / 项目)决定。
+    仍不吃任何个人维度:订阅实例的知情同意按模板内容算,「同一模板
+    全订阅者同一指纹」(不变量)—— 标签由模板(身份 / 项目)决定。
     """
-    from .env_chain import resolve_environment
-    return await resolve_environment(
-        db, scheme_env=(scheme_payload or {}).get("environmentId"),
-        project_id=scen.project_id, user_id=None)
+    from .env_chain import resolve_execution_tag
+    from .service_aliases import exec_auth_aliases_of_definition
+    names = identity_names
+    if names is None:
+        names = list(await exec_auth_aliases_of_definition(
+            db, definition_from_payload(scen.payload),
+            scheme_payload.get("serviceBindings") or {}))
+    return await resolve_execution_tag(
+        db, identity_names=names, project_id=scen.project_id)
 
 
 async def normal_project_of(db, tpl: IntegrationTask) -> int | None:
@@ -549,15 +556,15 @@ async def _slot_bindings_of(db, tpl: IntegrationTask,
     refs = row_binding_refs(row_dict)
     if not hits and not refs:
         return {}
-    env = await _template_env(db, scen, scheme_payload)
+    # §8.3:取用不校验标签 —— 绑定 id/行级覆盖不再带环境位
     cred_pid = await normal_project_of(db, tpl)
     out = await binding_ids_for(
         db_module.SessionLocal, tpl.owner_id, sorted(set(hits.values())),
-        env_id=env.env_id, cred_project_id=cred_pid) if hits else {}
+        cred_project_id=cred_pid) if hits else {}
     if refs:
         # M2b Q3:首行账号列覆盖的绑定 id 进指纹(订阅人知情;缺失记 -1)
         hit, _m, _e = await lookup_row_bindings(
-            db, tpl.owner_id, set(refs.items()), env_id=env.env_id,
+            db, tpl.owner_id, set(refs.items()),
             cred_project_id=cred_pid)
         for slot, alias in refs.items():
             b = hit.get((slot, alias))
@@ -1125,20 +1132,20 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             _refs = row_binding_refs(row_dict)
             if _refs:
                 _cred_pid = await instance_cred_project_id(db, inst, tpl)
-                _env_id = getattr(tpl_env, "env_id", None)
-                _hit, _miss, _envbad = await lookup_row_bindings(
-                    db, holder, set(_refs.items()), env_id=_env_id,
+                # §8.3:取用不校验标签 —— 无环境位
+                _hit, _miss, _amb = await lookup_row_bindings(
+                    db, holder, set(_refs.items()),
                     cred_project_id=_cred_pid)
-                if _miss or _envbad:
+                if _miss or _amb:
                     return await _finish(
                         db, inst, tpl, "auth",
-                        "数据集账号列缺少绑定: " + ",".join(
-                            f"{sl}={al}" for sl, al in (_miss + _envbad)),
+                        "数据集账号列缺少/歧义绑定: " + ",".join(
+                            f"{sl}={al}" for sl, al in (_miss + _amb)),
                         pause_reason="missing_credential", lease=lease)
                 try:
                     _over = await resolve_row_bindings(
                         db_module.SessionLocal, holder, set(_refs.items()),
-                        env_id=_env_id, cred_project_id=_cred_pid)
+                        cred_project_id=_cred_pid)
                 except AuthResolveError as e:
                     return await _finish(
                         db, inst, tpl, "auth", f"凭证解析失败: {e}",

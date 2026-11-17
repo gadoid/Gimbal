@@ -200,12 +200,12 @@ async def create_auth(
         token_type=payload.token_type,
         expires_in=payload.expires_in,
         account_fields=payload.account_fields,
-        # 未显式置默认时:该 (system, env) 首个账户即默认(部分唯一索引)
+        # 未显式置默认时:该 system 首个账户即默认(§8.3 按 system;
+        # 部分唯一索引钉死)
         is_default=payload.is_default or (await session.execute(
             select(AuthAccount.id).where(
                 AuthAccount.owner_id == user.id,
                 AuthAccount.system == payload.system,
-                AuthAccount.env_id == payload.env_id,
                 AuthAccount.is_default.is_(True)))).scalar_one_or_none() is None,
     )
     session.add(a)
@@ -229,14 +229,13 @@ async def set_default_account(
     user: CurrentUser,
     session: DbSession,
 ) -> AuthAccountOut:
-    """置为该 (system, env) 的默认账户(ref_mode=default 条目的取用行);
-    同域旧默认原子清除。"""
+    """置为该 system 的默认账户(§8.3:ref_mode=default 条目的取用行,
+    system 唯一);同 system 旧默认原子清除。"""
     a = await _get_owned(session, auth_id, user.id)
     await session.execute(
         update(AuthAccount).where(
             AuthAccount.owner_id == user.id,
             AuthAccount.system == a.system,
-            AuthAccount.env_id == a.env_id,
             AuthAccount.id != a.id,
             AuthAccount.is_default.is_(True),
         ).values(is_default=False))
@@ -303,7 +302,6 @@ async def patch_auth(
             update(AuthAccount).where(
                 AuthAccount.owner_id == user.id,
                 AuthAccount.system == a.system,
-                AuthAccount.env_id == a.env_id,
                 AuthAccount.id != a.id,
                 AuthAccount.is_default.is_(True),
             ).values(is_default=False))

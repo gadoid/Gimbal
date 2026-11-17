@@ -18,13 +18,14 @@ async def test_exec_config_crud_roundtrip(client, fresh_db):
         "bindings": {"fin-service.merchant-b": "merchant-b"},
         "carryOverrides": {"merchant.grade": "B", "flag.null": None},
     }]
+    # §8.2:environmentId 链位退役 —— 键被静默忽略,响应无该键
     r = await client.post("/api/exec-configs", headers=u1, json={
         "name": "商户B视角", "environmentId": None, "systems": systems,
         "isDefault": True})
     assert r.status_code == 201, r.text
     row = r.json()
     assert row["name"] == "商户B视角" and row["isDefault"] is True
-    assert row["environmentId"] is None
+    assert "environmentId" not in row
     assert row["systems"] == systems
 
     cid = row["id"]
@@ -33,14 +34,13 @@ async def test_exec_config_crud_roundtrip(client, fresh_db):
     assert r.status_code == 200 and len(r.json()) == 1
     assert r.json()[0]["id"] == cid
 
-    # PATCH:改名 + 换 systems;environmentId 未提供 → 不动
+    # PATCH:改名 + 换 systems
     r = await client.patch(f"/api/exec-configs/{cid}", headers=u1, json={
         "name": "商户B视角@UAT",
         "systems": [{"service": "crm", "bindings": {}, "carryOverrides": {}}]})
     assert r.status_code == 200, r.text
     assert r.json()["name"] == "商户B视角@UAT"
     assert r.json()["systems"][0]["service"] == "crm"
-    assert r.json()["environmentId"] is None
 
     # 重名 409(字典 detail,与常量池同款)
     r = await client.post("/api/exec-configs", headers=u1,
@@ -57,43 +57,20 @@ async def test_exec_config_crud_roundtrip(client, fresh_db):
     assert r.status_code == 401
 
 
-async def test_exec_config_environment_validation(client, fresh_db):
-    """environmentId 引用校验:不存在 → 422 environment_not_found
-    (projects 同款);建环境后可设,可显式置空(不设置)。"""
+async def test_exec_config_environment_key_retired(client, fresh_db):
+    """§8.2:environmentId 不再收不再校验 —— 坏 id 也 201,响应无该键。"""
     await register_and_login(client, "cfgu2", "pw123456")
     u2 = await register_and_login(client, "cfgu2", "pw123456")
 
     r = await client.post("/api/exec-configs", headers=u2, json={
         "name": "c", "environmentId": 424242})
-    assert r.status_code == 422
-    assert r.json()["detail"]["code"] == "environment_not_found"
-
-    r = await client.post("/api/environments", headers=u2,
-                          json={"name": "UAT", "lines": {}})
-    env_id = r.json()["id"]
-
-    r = await client.post("/api/exec-configs", headers=u2, json={
-        "name": "c", "environmentId": env_id})
-    assert r.status_code == 201 and r.json()["environmentId"] == env_id
+    assert r.status_code == 201, r.text
+    assert "environmentId" not in r.json()
     cid = r.json()["id"]
 
-    # PATCH 显式置空 ≠ 未提供(model_fields_set 区分)
-    r = await client.patch(f"/api/exec-configs/{cid}", headers=u2,
-                           json={"environmentId": None})
-    assert r.status_code == 200 and r.json()["environmentId"] is None
-
-    # PATCH 未提供 environmentId → 原值不动(已为 null,先设回再验)
-    r = await client.patch(f"/api/exec-configs/{cid}", headers=u2,
-                           json={"environmentId": env_id})
-    assert r.json()["environmentId"] == env_id
-    r = await client.patch(f"/api/exec-configs/{cid}", headers=u2,
-                           json={"name": "c2"})
-    assert r.json()["environmentId"] == env_id
-
-    # PATCH 指向不存在的环境 → 422
     r = await client.patch(f"/api/exec-configs/{cid}", headers=u2,
                            json={"environmentId": 424242})
-    assert r.status_code == 422
+    assert r.status_code == 200 and "environmentId" not in r.json()
 
 
 async def test_exec_config_default_atomic_switch(client, fresh_db):
@@ -170,15 +147,13 @@ async def test_exec_config_owner_isolation(client, fresh_db):
 
 
 async def test_exec_config_copy(client, fresh_db):
-    """复制 = 跨配置字段复用的通道(决策 7 代价补偿):env+payload
+    """复制 = 跨配置字段复用的通道(决策 7 代价补偿):payload
     全拷,副本恒非默认;重名 409。"""
     await register_and_login(client, "cfgcp", "pw123456")
     u = await register_and_login(client, "cfgcp", "pw123456")
 
-    env_id = (await client.post("/api/environments", headers=u,
-                                json={"name": "SIT"})).json()["id"]
     src = (await client.post("/api/exec-configs", headers=u, json={
-        "name": "基线", "environmentId": env_id, "isDefault": True,
+        "name": "基线", "isDefault": True,
         "systems": [{"service": "fin", "bindings": {"fin.a": "a"},
                      "carryOverrides": {"k": "v"}}]})).json()
 
@@ -188,7 +163,7 @@ async def test_exec_config_copy(client, fresh_db):
     dup = r.json()
     assert dup["id"] != src["id"]
     assert dup["name"] == "基线-变体" and dup["isDefault"] is False
-    assert dup["environmentId"] == env_id and dup["systems"] == src["systems"]
+    assert dup["systems"] == src["systems"]
 
     # 原默认不受副本影响
     r = await client.get("/api/exec-configs", headers=u)

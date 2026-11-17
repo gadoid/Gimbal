@@ -78,13 +78,14 @@ async def test_preview_shape_and_equality_with_dispatch(
         await s.commit()
         binding_id = binding.id
 
-    # ① 预览:显式环境 → 部署表接管(source=deployment)
+    # ① 预览:标签按身份解析(条目钉该环境;environmentId 显式位已退役
+    # §8.2,多发被忽略)→ 部署表接管(source=deployment)
     r = await client.post("/api/runs/preview", headers=h, json={
         "scenarioId": "sc-s50", "environmentId": env_id})
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["env"] == {"environmentId": env_id,
-                          "environmentSource": "explicit"}
+                          "environmentSource": "identity"}
     svc = out["services"]["fin-alias"]
     assert svc == {"url": "http://deploy-url", "source": "deployment",
                    "alias": "fin-alias"}
@@ -95,10 +96,11 @@ async def test_preview_shape_and_equality_with_dispatch(
     assert out["carry"]["fin-alias"]["$.fee"] == {
         "value": "0.5", "source": f"project:1:alias"}
 
-    # 无环境(无默认环境):S6 起无 ③(别名自带地址已退役)→ 不出现
+    # 不带任何入参:标签仍按身份解析(条目钉该环境)→ 地址照常出现
+    # (旧「无环境 → 无 ③」负例已随 §8.2 退役 —— 无身份才无标签)
     r = await client.post("/api/runs/preview", headers=h, json={
         "scenarioId": "sc-s50"})
-    assert "fin-alias" not in r.json()["services"]
+    assert r.json()["services"]["fin-alias"]["url"] == "http://deploy-url"
 
     # ② 执行物化:与预览同值(地址/注入键/${slot} 替换)
     cases: list[dict] = []

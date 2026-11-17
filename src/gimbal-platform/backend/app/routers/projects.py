@@ -269,22 +269,22 @@ async def project_slot_status(
     )).all()) if idents else {}
 
     def _loaded(accounts: list) -> set[str]:
-        """池内账户 → 已装载条目名集合(ref 匹配)。"""
+        """池内账户 → 已装载条目名集合(ref 匹配;§8.3 不校验标签)。"""
         out: set[str] = set()
-        by_key: dict[tuple[str, int, str], AuthAccount] = {
-            (a.system, a.env_id, a.username): a for a in accounts}
-        default_hit: set[tuple[str, int]] = set()
+        by_key: set[tuple[str, str]] = {
+            (a.system, a.username) for a in accounts}
+        default_hit: set[str] = set()
         for a in accounts:
             if a.is_default:
-                default_hit.add((a.system, a.env_id))
+                default_hit.add(a.system)
         for name, ident in idents.items():
             sysname = system_of.get(ident.base_service)
             if not sysname:
                 continue
             if ident.ref_mode == "username":
-                if (sysname, ident.env_id, ident.ref_username) in by_key:
+                if (sysname, ident.ref_username) in by_key:
                     out.add(name)
-            elif (sysname, ident.env_id) in default_hit:
+            elif sysname in default_hit:
                 out.add(name)
         return out
 

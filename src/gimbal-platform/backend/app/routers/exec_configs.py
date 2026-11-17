@@ -5,10 +5,10 @@
   同款口径);
 * ``project``(⑧ 组级批次)—— 项目变体:读 = 项目成员,写 = 项目管理
   员 ∨ Admin+(与 carry 项目层同门,复用 ``carry._resolve_scope``);
-  公共项目不可建(409,同项目凭证裁定)。项目 scope 在 v1 链路里只
+  公共项目不可建(409,同项目凭证裁定)。项目 scope 在链路里只
   携带 **carry 覆盖**(项目区链位:场景显式 > 显式选定个人 > 项目默认
-  配置 > 项目层 > 公共项目层);env/bindings 字段在模型上保留但链路
-  无位,暂不消费(§5 环境链/绑定链无项目配置位)。
+  配置 > 项目层 > 公共项目层);bindings 字段在模型上保留但链路
+  无位,暂不消费。
 
 零凭证值零地址值(§4):载荷只存引用键 —— bindings(身份面→条目)与
 carryOverrides(业务参数值内联,null=显式注入 JSON null,与 carry_store
@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..models import Environment, ExecConfig
+from ..models import ExecConfig
 from ..models.project import Project
 
 router = APIRouter(prefix="/exec-configs", tags=["exec-configs"])
@@ -60,7 +60,8 @@ class SystemSubConfig(BaseModel):
 
 class ExecConfigCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
-    environmentId: int | None = None
+    # §8.2(2026-11-17):environmentId 链位退役 —— 字段删除,旧客户端
+    # 多发该键被 pydantic 静默忽略
     systems: list[SystemSubConfig] = Field(default_factory=list,
                                            max_length=64)
     isDefault: bool = False
@@ -72,7 +73,6 @@ class ExecConfigCreate(BaseModel):
 
 class ExecConfigUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
-    environmentId: int | None = None
     systems: list[SystemSubConfig] | None = None
 
 
@@ -84,7 +84,6 @@ class ExecConfigView(BaseModel):
     id: int
     name: str
     isDefault: bool
-    environmentId: int | None
     systems: list[SystemSubConfig]
     scope: str = "user"
 
@@ -93,8 +92,7 @@ def _view(row: ExecConfig) -> ExecConfigView:
     systems = (row.payload or {}).get("systems") or []
     return ExecConfigView(
         id=row.id, name=row.name, isDefault=row.is_default,
-        environmentId=row.environment_id, systems=systems,
-        scope=row.scope)
+        systems=systems, scope=row.scope)
 
 
 async def _project_gate(db: AsyncSession, user, project_id: int | None,
@@ -130,14 +128,6 @@ async def _access(db: AsyncSession, config_id: int, user,
     if row.scope == "project":
         await _project_gate(db, user, row.scope_id, write=write)
     return row
-
-
-async def _check_env(db: AsyncSession, env_id: int | None) -> None:
-    if env_id is not None and await db.get(Environment, env_id) is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail={"code": "environment_not_found",
-                    "message": f"environment not found: {env_id}"})
 
 
 def _name_conflict(name: str) -> HTTPException:
@@ -184,13 +174,11 @@ async def create_exec_config(
         scope, scope_id = "project", pid
     else:
         scope, scope_id = "user", user.id
-    await _check_env(db, body.environmentId)
     if body.isDefault:
         await _clear_default(db, scope, scope_id)
     row = ExecConfig(
         scope=scope, scope_id=scope_id,
         name=body.name, is_default=body.isDefault,
-        environment_id=body.environmentId,
         payload={"systems": [s.model_dump() for s in body.systems]},
     )
     db.add(row)
@@ -217,13 +205,9 @@ async def patch_exec_config(
     user: CurrentUser,
     db: DbSession,
 ) -> ExecConfigView:
-    """整体替换式 PATCH;``environmentId`` 用 model_fields_set 区分
-    「未提供」与「显式置空(不设置环境)」(projects 同款)。默认切换
-    不在此面 —— POST /{id}/default 原子切换。"""
+    """整体替换式 PATCH。默认切换不在此面 —— POST /{id}/default
+    原子切换。"""
     row = await _access(db, config_id, user, write=True)
-    if "environmentId" in body.model_fields_set:
-        await _check_env(db, body.environmentId)
-        row.environment_id = body.environmentId
     if body.name is not None:
         row.name = body.name
     if body.systems is not None:
@@ -241,9 +225,9 @@ async def patch_exec_config(
 async def set_default_exec_config(
     config_id: int, user: CurrentUser, db: DbSession
 ) -> ExecConfigView:
-    """置为默认(user scope = 环境链位④载体 + carry 个人默认;project
-    scope = 项目区 carry 链的项目配置层)。原子切换:同一事务先清旧默认
-    再置新;部分唯一索引兜并发(撞索引 → 409)。"""
+    """置为默认(user scope = carry 个人默认;project scope = 项目区
+    carry 链的项目配置层)。原子切换:同一事务先清旧默认再置新;部分
+    唯一索引兜并发(撞索引 → 409)。"""
     row = await _access(db, config_id, user, write=True)
     await _clear_default(db, row.scope, row.scope_id)
     row.is_default = True
@@ -272,7 +256,6 @@ async def copy_exec_config(
     row = ExecConfig(
         scope=src.scope, scope_id=src.scope_id,
         name=body.name, is_default=False,
-        environment_id=src.environment_id,
         # 深拷贝:JSON 列不共享可变对象(改源不牵连副本)
         payload=deepcopy(src.payload) or {"systems": []},
     )
