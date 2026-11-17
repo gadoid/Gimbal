@@ -267,10 +267,8 @@ async def materialize_graph(
             raise GraphDispatchError(str(e)) from None
     unit_urls: dict[str, dict] = {}
     first_env: EnvChoice | None = None
-    # §1.7 稀疏覆盖:逐单元环境位随 carry 下传(env 命中行覆盖全环境
-    # 基线),与该单元地址 ③ 层同一次解析 —— 环境解析失败则该单元
-    # carry 只吃基线(与地址降级空表同款语义)
-    unit_envs: dict[str, "int | None"] = {}
+    # 逐单元地址 ③ 层:环境解析失败则该单元地址降级空表(环境维已从
+    # carry 退役 §8.4,环境仍驱动地址;carry 无环境下传)
     for r in resolved:
         ref = r["unit"]["ref"]
         try:
@@ -279,7 +277,6 @@ async def materialize_graph(
                 project_id=r["scenario_row"].project_id, user_id=owner_id)
             if first_env is None:
                 first_env = ue
-            unit_envs[ref] = ue.env_id
             unit_urls[ref] = await service_aliases.base_urls_for(
                 db, _all_referenced_services([r]), env=ue)
         except Exception:  # noqa: BLE001
@@ -303,8 +300,7 @@ async def materialize_graph(
         [{"project_id": r["scenario_row"].project_id,
           "user_id": (owner_id if r["scenario_row"].project_id is None
                       else None),
-          # §1.7 稀疏覆盖:该单元环境链解析位(env 命中行覆盖基线)
-          "env_id": unit_envs.get(r["unit"]["ref"]),
+          # 环境维已退役(§8.4):carry 无环境位(unit_envs 不再下传)
           # S6:绑定选别名 → carry 别名键随之切换
           "bindings": unit_merged_bindings(graph_req, r["unit"])}
          for r in resolved])

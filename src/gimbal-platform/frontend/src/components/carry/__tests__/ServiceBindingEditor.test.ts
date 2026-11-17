@@ -20,12 +20,6 @@ vi.mock('@/api/carry', () => ({
   putBindings: vi.fn(),
   getServiceFields: vi.fn(),
 }))
-vi.mock('@/api/environments', () => ({
-  listEnvironments: vi.fn().mockResolvedValue([
-    { id: 7, name: 'dev', is_default: true },
-    { id: 8, name: 'uat', is_default: false },
-  ]),
-}))
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
@@ -138,7 +132,7 @@ describe('ServiceBindingEditor — 别名键(三层视图)', () => {
     expect(carryApi.putBindings).toHaveBeenCalledTimes(1)
     const [key] = vi.mocked(carryApi.putBindings).mock.calls[0]
     expect(key).toBe('fin-service-uat')
-    expect(vi.mocked(toast.success).mock.calls.some((c) => c[0] === '已保存(全环境基线)')).toBe(true)
+    expect(vi.mocked(toast.success).mock.calls.some((c) => c[0] === '已保存')).toBe(true)
     w.unmount()
   })
 })
@@ -155,35 +149,15 @@ describe('ServiceBindingEditor — base 服务键(无服务级层)', () => {
   })
 })
 
-describe('ServiceBindingEditor — env 覆盖开关(registry C3b §1.7)', () => {
-  it('基线缺省:读/写不带 envId(全环境基线层)', async () => {
+describe('ServiceBindingEditor — env 覆盖维已退役(§8.4)', () => {
+  it('读写均无环境参数;sbe-env 开关不在场', async () => {
     const w = await mountEditor()
-    expect((w.get('[data-testid="sbe-env"]').element as HTMLSelectElement).value)
-      .toBe('')
-    expect(carryApi.getBindingsFor).toHaveBeenCalledWith(
-      'fin-service-uat', undefined, undefined)
+    expect(w.find('[data-testid="sbe-env"]').exists()).toBe(false)
+    expect(carryApi.getBindingsFor).toHaveBeenCalledWith('fin-service-uat', undefined)
     await w.find('[data-testid="save-service"]').trigger('click')
     await flushPromises()
     expect(carryApi.putBindings).toHaveBeenCalledWith(
-      'fin-service-uat', expect.anything(), undefined, undefined)
-    w.unmount()
-  })
-
-  it('切环境覆盖层:读/写带 envId,保存 toast 标覆盖层', async () => {
-    const w = await mountEditor()
-    await w.get('[data-testid="sbe-env"]').setValue('8')
-    await flushPromises()
-    expect(carryApi.getBindingsFor).toHaveBeenCalledWith(
-      'fin-service-uat', undefined, 8)
-    // base 层读同坐标
-    expect(carryApi.getBindingsFor).toHaveBeenCalledWith(
-      'fin-service', undefined, 8)
-    await w.find('[data-testid="save-service"]').trigger('click')
-    await flushPromises()
-    expect(carryApi.putBindings).toHaveBeenCalledWith(
-      'fin-service-uat', expect.anything(), undefined, 8)
-    expect(vi.mocked(toast.success).mock.calls
-      .some((c) => c[0] === '已保存(uat 覆盖层)')).toBe(true)
+      'fin-service-uat', expect.anything(), undefined)
     w.unmount()
   })
 })

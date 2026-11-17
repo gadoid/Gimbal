@@ -5,9 +5,9 @@
   * 锁定键:serviceKey 由父页指定(条目详情 / 服务详情),不再内置选择器
     —— 配置入口收拢到服务注册,自由输入键的路线废止;
   * 「来源」列(§2.4):无本键行的字段显式标注有效值来自哪层 ——
-    本键 / 服务级(条目键时) / 默认值 / 无行(不注入),三态各有位置;
-  * env 覆盖开关(registry §1.7):写入坐标 = (键, env) —— 空 = 全环境
-    基线层,选定环境 = 覆盖层(读面命中行覆盖基线,与运行时同序)。
+    本键 / 服务级(条目键时) / 默认值 / 无行(不注入),三态各有位置。
+  env 覆盖开关已随环境降级轮退役(§8.4,2026-11-17)—— 写入坐标 =
+  (scope, 键),只有基线层;需要按部署差异化时挂实例,不回环境层。
   三态(hasRow/isNull/值)布尔列编码、CSV 三件套、degraded 保存门控、
   R1-B1 编码修复全部原样(真源 utils/carry-entries + carry-csv)。
 -->
@@ -16,30 +16,16 @@
     <div class="svc-panel-head">
       <span class="svc-panel-title">
       <svg class="head-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-        {{ ownLabel }}绑定(覆盖层)
+        {{ ownLabel }}绑定
       </span>
       <span class="svc-panel-desc">
         <code class="mono">{{ serviceKey }}</code> → 拉取 carry 字段面(plate 声明并集)→ 逐字段填值;
-        保存 = 本键整表替换{{ isAlias ? ',只写别名键的行,其余层不动' : '' }};
-        写入层 = <b>{{ envSel === '' ? '全环境基线' : `${envNameOf(envId!)} 覆盖` }}</b>
+        保存 = 本键整表替换{{ isAlias ? ',只写别名键的行,其余层不动' : '' }}
       </span>
     </div>
 
     <TooltipProvider>
       <div class="svc-bar">
-        <!-- env 覆盖开关(registry C3b §1.7):envId 空 = 全环境基线层;
-             传值 = 该环境覆盖层(读面命中行覆盖基线,运行时同序) -->
-        <select
-          v-model="envSel" class="env-select" data-testid="sbe-env"
-          :title="envSel === ''
-            ? '当前写入:全环境基线层(所有环境未命中覆盖行时生效)'
-            : `当前写入:${envNameOf(envId!)} 的覆盖层(命中优先于基线)`"
-        >
-          <option value="">覆盖层:全环境基线</option>
-          <option v-for="e in envs" :key="e.id" :value="String(e.id)">
-            覆盖层:{{ e.name }}
-          </option>
-        </select>
         <Tooltip>
           <TooltipTrigger as-child>
             <Button variant="outline" :disabled="!rows.length" data-testid="import-csv" @click="pickCsv">导入 CSV</Button>
@@ -199,7 +185,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { listEnvironments } from '@/api/environments'
 
 const props = defineProps<{
   /** 绑定键:别名全名或 base 服务名(保存整表替换的键)。 */
@@ -234,16 +219,6 @@ const defaultsMap = ref<CarryValues>({})
 const baseBindings = ref<CarryValues>({})
 const loadingFields = ref(false)
 
-// ── env 覆盖开关(registry C3b §1.7)──────────────────────────────
-/** 覆盖层选择:'' = 全环境基线;'<envId>' = 该环境覆盖层(读命中覆盖
- *  基线,写只写该坐标 —— 切换即重拉,两层数据互不可见地隔离)。 */
-const envSel = ref('')
-const envId = computed(() =>
-  envSel.value === '' ? undefined : Number(envSel.value))
-const envs = ref<Array<{ id: number; name: string }>>([])
-function envNameOf(id: number): string {
-  return envs.value.find((e) => e.id === id)?.name ?? `环境#${id}`
-}
 /** 字段面降级门控(数据安全):rows 仅由 plate 面构建,而保存是整表替换 —
  *  面不完整(单端点 /full 失败,或加载整体失败)时放行保存会不可逆删除
  *  不可见端点的绑定值。每次 reload 重置。 */
@@ -289,11 +264,10 @@ async function reload(): Promise<void> {
   degraded.value = false
   loadingFields.value = true
   try {
-    // 绑定读带 env 覆盖坐标(本键与 base 层同坐标,与运行时解析同序)
     const tasks: [Promise<{ fields: CarryFieldFace[]; degraded: boolean }>, Promise<CarryValues>, Promise<CarryValues>] = [
       getServiceFields(props.serviceKey),
-      getBindingsFor(props.serviceKey, props.target, envId.value),
-      isAlias.value ? getBindingsFor(props.baseService!, props.target, envId.value) : Promise.resolve({}),
+      getBindingsFor(props.serviceKey, props.target),
+      isAlias.value ? getBindingsFor(props.baseService!, props.target) : Promise.resolve({}),
     ]
     const [faceRes, bound, base] = await Promise.all(tasks)
     degraded.value = faceRes.degraded
@@ -397,11 +371,8 @@ async function save() {
   // 输入框可编辑(透继承层 placeholder),用户填了值必须建行
   const entries = buildServiceEntries(rows.value)
   try {
-    // 写入坐标 = (键, env):基线层或某环境覆盖层,由开关指定
-    await putBindings(props.serviceKey, entries, props.target, envId.value)
-    toast.success(envId.value == null
-      ? '已保存(全环境基线)'
-      : `已保存(${envNameOf(envId.value)} 覆盖层)`)
+    await putBindings(props.serviceKey, entries, props.target)
+    toast.success('已保存')
     void reload()
   } catch (e) {
     showError('保存', e)
@@ -409,31 +380,14 @@ async function save() {
 }
 
 watch(() => [props.serviceKey, props.baseService, props.target], () => { void reload() })
-watch(envSel, () => { void reload() })
 onMounted(async () => {
   defaultsMap.value = await getDefaults().catch((): CarryValues => ({}))
-  listEnvironments()
-    .then((rows) => { envs.value = rows.map((e) => ({ id: e.id, name: e.name })) })
-    .catch(() => { /* 环境列表缺席 → 只剩基线档 */ })
   await reload()
 })
 </script>
 
 <style scoped>
 .head-icon { flex: none; color: var(--sl-accent); }
-
-/* env 覆盖开关:svc-bar 内与 CSV 三件套同排 */
-.env-select {
-  height: 2.125rem;
-  padding: 0 0.5rem;
-  font-size: 0.78125rem;
-  color: var(--sl-ink);
-  background: var(--c-surface);
-  border: 1px solid var(--sl-line);
-  border-radius: 0.5rem;
-  outline: none;
-}
-.env-select:focus { border-color: var(--sl-accent); }
 
 /* 字段路径 = 这张表的主键:等宽、加粗、可折行 */
 .path {

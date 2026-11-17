@@ -431,6 +431,28 @@ M3 预检硬门 → M4 前端契约 → M5 ServiceAdmin 原型重排 → M6 收�
 webhook guide / PLATFORM_REQUIREMENTS / PLATFORM-SCENARIO-COMPOSER-API
 三外部文档随实现同步)。验证命令与测试改动清单见 redesign §8.6–§8.7。
 
+### M1 carry 去 env（2026-11-17，🟢 代码完成，全量基线见 commit）
+
+- 模型/存储/注入/router/schema 去 env 维(`carry_binding` 三键唯一约束 /
+  `get/put_bindings` / `build_carry_context` / bindings API envId 与
+  `BindingRowOut.envId`);执行链三消费点(`prepare_exec` /
+  `resolve_effective_config` / `unit_carry_contexts`)与 graph_dispatch
+  `unit_metas` 去 env_id 下传;
+- 迁移 **0058**(fresh 守卫 → 防御去重 → drop 约束/FK/列 → 三键重建;
+  downgrade 不可逆),时代造形重放链全绿;
+- 前端:`api/carry.ts` 去 envId;`ServiceBindingEditor` 覆盖开关退役
+  (含 env 列表拉取);测试 2 用例改写为「无环境参数 + 开关不在场」;
+- 测试:`test_carry_env_overlay.py` 4 用例删除(偏离 6 反转落地);
+  `test_carry_store` env 覆盖用例删除;顺带修 **复核轮漏改**的
+  `test_authz_s60_slimming::test_alias_router_slimmed`(slot 入参
+  已 422,断言仍期望 200-忽略 —— 复核轮只跑定向簇未跑全量所致);
+- 验证:carry 消费簇 12 文件 90+ 绿;migrations 26 绿;前端全量
+  171 文件/1434 用例 + vue-tsc 0 + eslint 0;后端全量
+  **2044 passed / 2 skipped / 0 确定性失败**(两轮全量各有一次 adhoc
+  单用例抖动、两例互不相同且单独+邻接簇均绿 —— 判满载引擎类 flake,
+  非 M1 回归;commit 时点证据见上)。
+- 注:本机 `rm` 别名带 `-i`,非交互删除会静默失败 —— 用 `rm -f`。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。

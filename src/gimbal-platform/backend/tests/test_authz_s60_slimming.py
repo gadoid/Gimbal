@@ -150,20 +150,25 @@ async def test_alias_router_slimmed(client):
             "baseService": "pay", **extra})
         assert r.status_code == 422, (extra, r.text)
     await _s60_identity("pay-s60", "pay")
+    # slot 请求入参已退役(2026-11-17 复核清扫,redesign §6.0 偏离 7):
+    # AliasPatch extra=forbid —— 发送即 422;输出面 slot=条目名契约保留
     r = await client.patch("/api/service-aliases/pay-s60", headers=adm,
                            json={"slot": "maker"})
-    assert r.status_code == 200, r.text
-    out = r.json()
-    # slot 兼容参数收下但忽略:出参 slot = 条目名(条目模型无槽)
-    assert out["slot"] == "pay-s60"
-    assert not ({"baseUrl", "environmentId", "credentialAlias",
-                 "ownerUserId"} & set(out))
+    assert r.status_code == 422, r.text
     r = await client.patch("/api/service-aliases/pay-s60", headers=adm,
                            json={"baseUrl": "http://x"})
     assert r.status_code == 422, r.text
     r = await client.patch("/api/service-aliases/pay-s60", headers=adm,
                            json={"slot": None})
-    assert r.status_code == 200 and r.json()["slot"] == "pay-s60", r.text
+    assert r.status_code == 422, r.text
+    # 输出面:列表回显 slot = 条目名,退役字段不再出现(单条 GET 端点无)
+    r = await client.get("/api/service-aliases", headers=adm,
+                         params={"q": "pay-s60"})
+    assert r.status_code == 200, r.text
+    out = next(a for a in r.json()["items"] if a["aliasName"] == "pay-s60")
+    assert out["slot"] == "pay-s60"
+    assert not ({"baseUrl", "environmentId", "credentialAlias",
+                 "ownerUserId"} & set(out))
     # 部署冲突读面退役
     r = await client.get("/api/deployments/conflicts", headers=adm)
     assert r.status_code in (404, 405, 422), r.text

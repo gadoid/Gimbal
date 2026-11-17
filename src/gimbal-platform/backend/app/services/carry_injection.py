@@ -71,7 +71,6 @@ async def build_carry_context(
     user_id: int | None = None,
     bindings: dict | None = None,
     exec_overrides: dict[str, dict[str, str | None]] | None = None,
-    env_id: int | None = None,
 ) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
 
@@ -82,8 +81,8 @@ async def build_carry_context(
     是默认执行配置(``exec_overrides`` 覆盖层),``user_id`` 参数仅为签名
     兼容,不再构成 tier。
 
-    环境维度(§1.7 稀疏覆盖):``env_id`` = 本次执行环境;绑定值取
-    「环境命中行覆盖全环境基线」,缺省 None = 只取基线。
+    环境维已退役(2026-11-17,§8.4):环境只做轻量部署标签,不再承载
+    carry 配置层 —— 本函数无环境位;需要按部署差异化时挂实例(服务×环境)。
 
     分层②(执行配置):``exec_overrides``({目录服务: {字段: 值}})是
     配置覆盖层,合区位次 = **场景显式之下、层序之上**(值 null = 显式
@@ -178,8 +177,7 @@ async def build_carry_context(
                 for key in (system_key, base, alias_key):
                     if not key:
                         continue
-                    override = await carry_store.get_bindings(
-                        db, key, t, env_id=env_id)
+                    override = await carry_store.get_bindings(db, key, t)
                     if override:
                         rows_t = {**rows_t, **override}
                 rows = {**rows, **rows_t}
