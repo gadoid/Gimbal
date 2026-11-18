@@ -1,230 +1,197 @@
-<!-- ProjectConfigPanel.vue — M2a S7.3 项目详情「配置」页签;⑧ 增挂
-     项目执行配置列表。
-     普通项目:默认环境(项目管理员可改)+ 项目层 carry(默认值 / 按
-     服务)+ 身份条目装载(成员凭证清单;registry C2b 口径:条目 ×
-     成员池装载矩阵)+ 项目执行配置(项目变体;读 = 成员,写 = 项目
-     管理员)+ 生效预览。公共项目:配置页签 = 原 /carry-config 的
-     「全局默认」(Admin+ 可写;公共项目不可 PATCH,无默认环境/条目
-     装载/执行配置节)。
-     2026-11-16 重塑:各节落分区卡(节头 + QTip 说明);装载 chips
-     令牌化(夜间同色);项目执行配置表 → slib-table,行内四输入新建收
-     进 Dialog,删除走 confirmAction;原生 select(默认环境/预览/服务键)
-     保留 —— 高频快路径。 -->
+<!-- ProjectConfigPanel.vue — M2a S7.3 项目详情「配置」页签。
+     2026-11-18(晚)配置页逻辑调整(用户决策):一条配置 = 默认环境
+     标签;标签圈定注册簿「服务实例」,凭证按 (system, env) 与实例匹配
+     —— 新增「服务实例 × 凭证匹配」分区(InstanceCredentialMatchPanel,
+     现成端点拼装)。**手写配置空间退场**:carry 默认值改只读视图、
+     按键编辑(三档键 + ServiceBindingEditor)与项目执行配置(手写
+     service/field/value 变体)整节撤下;项目层值的写入口收敛为
+     「carry 同步(plate 漂移)」,实例/地址/登录口在服务注册维护,
+     凭证在项目凭证池 + 个人凭证管理。后端端点均保留(执行链仍消费)。
+     保留节:默认环境 / 实例×凭证匹配 / 默认值(只读) / 身份条目装载 /
+     项目凭证 / 生效预览 / carry 同步。公共项目:全局默认只读视图。
+     写面守门:canManage(后端 _require_manage 同口径);漂移生成批
+     同口径。 -->
 <template>
   <div class="panel" data-testid="prj-config-panel">
-    <!-- ① 默认环境(普通项目):链路 项目默认 > 个人偏好 > 默认环境 -->
-    <section v-if="!isPublic" class="cfg-section">
-      <h2>默认环境</h2>
-      <p class="hint">
-        项目内容执行时的环境兜底(环境链:本次指定 &gt; 方案 &gt; <b>项目默认</b> &gt; 我的偏好 &gt; 默认环境)。
-      </p>
-      <div class="row">
-        <select v-model="envId" class="field-select" data-testid="prj-config-env" :disabled="!canManage">
-          <option value="">(未设置)</option>
-          <option v-for="e in envs" :key="e.id" :value="String(e.id)">
-            {{ e.name }}<template v-if="e.is_default"> · 默认</template>
-          </option>
-        </select>
-        <button
-          v-if="canManage" type="button" class="save-btn"
-          data-testid="prj-config-env-save" @click="saveEnv"
-        >保存默认环境</button>
-      </div>
-      <p v-if="envError" class="err" data-testid="prj-config-env-err">{{ envError }}</p>
-    </section>
+    <!-- ══ 原型 _6 · 配置中心(左栏导航 + 右侧分区)════════════════ -->
+    <div class="cfg-shell">
+      <aside class="cfg-rail" data-testid="prj-cfg-nav">
+        <div class="cfg-rail-head">
+          <span class="cfg-rail-icon" aria-hidden="true">⚙</span>
+          <div>
+            <b>项目配置中心</b>
+            <span class="muted">{{ isPublic ? '全局默认(公共项目层)' : '项目层配置' }}</span>
+          </div>
+        </div>
+        <nav class="cfg-rail-nav">
+          <button
+            v-for="n in navSections" :key="n.id"
+            type="button" class="cfg-rail-item"
+            :class="{ on: activeSection === n.id }"
+            :data-testid="`prj-cfg-nav-${n.id}`"
+            @click="goSection(n.id)"
+          >
+            <span class="rail-dot" aria-hidden="true" />
+            <span class="rail-t">{{ n.title }}</span>
+            <span v-if="n.count != null" class="cfg-nav-count">{{ n.count }}</span>
+          </button>
+        </nav>
+        <p class="cfg-rail-note">
+          参数优先级准则:单步用例覆写 &gt; 场景级配置 &gt; 服务级画像 &gt;
+          <b>当前项目全局兜底</b>。
+        </p>
+      </aside>
 
-    <!-- ② carry 默认值:普通项目 = 项目层;公共项目 = 全局默认(原 /carry-config) -->
-    <section class="cfg-section">
-      <h2>{{ isPublic ? '全局默认(公共项目层)' : '项目层 carry 默认值' }}</h2>
-      <p class="hint">
-        {{ isPublic
-          ? '条目/服务/系统级都未命中时最后生效的兜底层;删行 = 不注入,null = 显式注入 JSON null。'
-          : '本项目内容执行时优先于全局默认生效;删行 = 不注入,null = 显式注入 JSON null。' }}
-      </p>
-      <CarryDefaultsEditor
-        :target="defaultsTarget"
-        :can-write="isPublic ? isAdminPlus : !!canManage"
-        :tid="isPublic ? 'prj-cfg-global' : 'prj-cfg-project'"
-        :highlight-path="highlightPath"
-      />
-    </section>
+      <div class="cfg-body">
 
-    <!-- ③ 按键编辑(项目层,普通项目):三档键选择器(registry C3b
-         §1.7 键域三级化:条目名 > 服务名 > 系统名;系统级值作用于该系统
-         全部服务,面 = 成员服务并集)+ ServiceBindingEditor(env 覆盖开关) -->
-    <section v-if="!isPublic" class="cfg-section">
-      <h2>项目层 carry · 按键</h2>
-      <p class="hint">选条目 / 服务 / 系统键编辑本项目的绑定值(键内继承:条目键 &gt; 服务键 &gt; 系统键 &gt; 层默认;系统键作用于该系统全部服务)。</p>
-      <div class="row">
-        <select v-model="serviceKey" class="field-select" data-testid="prj-config-svc">
-          <option value="" disabled>选择配置键…</option>
-          <optgroup label="身份条目">
-            <option v-for="k in keyGroups.identity" :key="k" :value="k">{{ k }}</option>
-          </optgroup>
-          <optgroup label="服务">
-            <option v-for="k in keyGroups.service" :key="k" :value="k">{{ k }}</option>
-          </optgroup>
-          <optgroup label="系统">
-            <option v-for="k in keyGroups.system" :key="k" :value="k">{{ k }}</option>
-          </optgroup>
-          <optgroup v-if="keyGroups.legacy.length" label="存量绑定键">
-            <option v-for="k in keyGroups.legacy" :key="k" :value="k">{{ k }}</option>
-          </optgroup>
-        </select>
-        <input
-          v-model="svcInput" class="field-input svc-input" placeholder="或输入条目 / 服务 / 系统键"
-          data-testid="prj-config-svc-input" @keyup.enter="applySvcInput"
+      <!-- ① 默认环境(普通项目):链路 项目默认 > 个人偏好 > 默认环境 -->
+      <section v-if="!isPublic" id="prj-cfg-env" class="cfg-section">
+        <h2>默认环境</h2>
+        <p class="hint">
+          项目内容执行时的环境兜底(环境链:本次指定 &gt; 方案 &gt; <b>项目默认</b> &gt; 我的偏好 &gt; 默认环境)。
+        </p>
+        <div class="row">
+          <select v-model="envId" class="field-select" data-testid="prj-config-env" :disabled="!canManage">
+            <option value="">(未设置)</option>
+            <option v-for="e in envs" :key="e.id" :value="String(e.id)">
+              {{ e.name }}<template v-if="e.is_default"> · 默认</template>
+            </option>
+          </select>
+          <button
+            v-if="canManage" type="button" class="save-btn"
+            data-testid="prj-config-env-save" @click="saveEnv"
+          >保存默认环境</button>
+        </div>
+        <p v-if="envError" class="err" data-testid="prj-config-env-err">{{ envError }}</p>
+      </section>
+
+      <!-- ② 服务实例 × 凭证匹配(2026-11-18 调整:一条配置圈定实例,
+           凭证按 (system, env) 匹配;数据 = 注册簿实例 + 部署地址 +
+           项目/个人凭证池,全现成端点) -->
+      <section v-if="!isPublic" id="prj-cfg-instances" class="cfg-section" data-testid="prj-inst-section">
+        <h2>服务实例 × 凭证匹配</h2>
+        <p class="hint">
+          默认标签下的注册簿实例:API 地址 / 登录口 / 版本线来自服务注册;每行匹配
+          项目池与个人池凭证 —— 这就是项目内容的身份配置面。
+        </p>
+        <InstanceCredentialMatchPanel
+          :project-id="project.id"
+          :env-id="project.defaultEnvironmentId"
+          :can-manage="canManage"
+          @register="goSection('prj-cfg-credentials')"
         />
-        <button type="button" class="ghost-btn" data-testid="prj-config-svc-go" @click="applySvcInput">编辑</button>
-      </div>
-      <ServiceBindingEditor v-if="activeSvc" :key="activeSvc" :service-key="activeSvc" :target="projectTarget" />
-    </section>
+      </section>
 
-    <!-- ④ 身份条目装载 = 成员凭证清单(普通项目,只读不落库;口径自
-         槽位切条目,C2b:条目 ref 能在成员池解析到账户 = 已装载) -->
-    <section v-if="!isPublic" class="cfg-section">
-      <h2>身份条目装载(成员凭证清单)</h2>
-      <p class="hint">
-        项目场景引用的身份条目 × 成员装载情况 —— 条目按 ref 取执行者本人池的账户,装载到位执行才不缺凭据。
-      </p>
-      <p v-if="slotLoading" class="hint">加载中…</p>
-      <template v-else-if="slots.length">
-        <div v-for="s in slots" :key="s.slot" class="slot-card" :data-testid="`prj-slot-${s.slot}`">
-          <header>
-            <b class="mono slot-name">{{ s.slot }}</b>
-            <span class="muted">{{ s.scenarios.length }} 个场景引用</span>
-            <!-- S8:项目池已覆盖该条目(成员可切换为项目账户执行) -->
-            <span
-              v-if="s.projectBound" class="slot-chip proj"
-              :data-testid="`prj-slot-${s.slot}-proj`"
-            >项目池 · 已覆盖</span>
-          </header>
-          <div class="chips">
-            <span
-              v-for="m in s.members" :key="m.userId"
-              class="slot-chip" :class="m.bound ? 'ok' : 'miss'"
-              :data-testid="`prj-slot-${s.slot}-${m.userId}`"
-            >{{ m.displayName }}{{ m.bound ? ' · 已装载' : ' · 未装载' }}</span>
-          </div>
+      <!-- ③ 默认值(只读):普通项目 = 项目层;公共项目 = 全局默认。
+           手写编辑已退场 —— 项目层值来自 plate 同步(下方「carry 同步」),
+           公共层由变更适配中心维护;此处只呈现当前生效值。 -->
+      <section id="prj-cfg-carry" class="cfg-section">
+        <h2>{{ isPublic ? '全局默认(公共项目层)' : '项目层 carry 默认值' }}</h2>
+        <p class="hint">
+          兜底层当前生效值(只读):{{ isPublic
+            ? '条目/服务/系统级都未命中时最后生效;删行 = 不注入,null = 显式注入 JSON null。'
+            : '本项目内容执行时优先于全局默认生效;删行 = 不注入,null = 显式注入 JSON null。' }}
+        </p>
+        <p v-if="defaultsLoading" class="hint">加载中…</p>
+        <div v-else-if="defaultsRows.length" class="lib-card">
+          <table class="slib-table">
+            <thead><tr><th style="width:14rem">参数键</th><th>值</th></tr></thead>
+            <tbody>
+              <tr v-for="(row, i) in defaultsRows" :key="row.k"
+                  :data-testid="`${defaultsTid}-row-${i}`">
+                <td><span class="mono dk">{{ row.k }}</span></td>
+                <td>
+                  <code v-if="row.v === null" class="mono nullv">null(显式抹除)</code>
+                  <code v-else class="mono">{{ row.v }}</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </template>
-      <p v-else class="hint" data-testid="prj-slots-empty">
-        项目场景还没有引用任何身份条目(无凭据注入的场景不在此列)。
-      </p>
-    </section>
+        <p v-else class="hint" :data-testid="`${defaultsTid}-empty`">
+          该层暂无兜底参数 —— 未命中的键不注入。
+        </p>
+      </section>
 
-    <!-- ④·5 项目凭证(S8):项目管理员维护,成员只读不见明文 -->
-    <section v-if="!isPublic" class="cfg-section">
-      <h2>项目凭证</h2>
-      <ProjectCredentialsPanel :project="project" />
-    </section>
+      <!-- ③ 按键编辑:2026-11-18 调整撤下(手写配置空间退场;三档键
+           绑定值的历史数据仍生效,维护走变更适配/plate 同步) -->
 
-    <!-- ⑤ 生效预览(普通项目):选场景 → 逐值带来源 -->
-    <section v-if="!isPublic" class="cfg-section">
-      <h2>生效预览</h2>
-      <p class="hint">选一个项目场景,预览本次执行将生效的 环境 / 地址 / 身份条目装载 / carry(逐值带来源)。</p>
-      <div class="row">
-        <select v-model="previewScenario" class="field-select" data-testid="prj-config-preview-scen">
-          <option value="" disabled>选择场景…</option>
-          <option v-for="s in scenOptions" :key="s.id" :value="s.id">
-            {{ s.name }}({{ s.id }})
-          </option>
-        </select>
-        <button
-          type="button" class="save-btn" :disabled="!previewScenario"
-          data-testid="prj-config-preview-go" @click="previewOpen = true"
-        >预览</button>
-      </div>
-    </section>
-
-    <!-- ⑥ carry 漂移(项目层,普通项目):S7.6 按层维护视图 -->
-    <section v-if="!isPublic" class="cfg-section">
-      <h2>carry 漂移(项目层)</h2>
-      <p class="hint">
-        本项目层绑定值 vs plate 字段面的三类 diff;勾选生成的值表批只作用于项目层(公共层/个人层互不影响)。
-      </p>
-      <CarryDriftPanel
-        title="项目层绑定 vs plate 面"
-        :target="projectTarget"
-        tid="prj-cfg"
-      />
-    </section>
-
-    <!-- ⑧ 项目执行配置(项目变体):读 = 成员,写 = 项目管理员;
-         项目区 carry 链位 = 场景显式 > 显式个人 > 项目默认配置 > 项目层 -->
-    <section v-if="!isPublic" class="cfg-section" data-testid="prj-exec-configs">
-      <h2>项目执行配置</h2>
-      <p class="hint">
-        项目变体(按系统分组的 carry 覆盖)—— 项目内容执行的共用业务
-        参数;链位:场景显式 &gt; 显式选定个人配置 &gt; <b>项目默认配置</b>
-        &gt; 项目层 &gt; 公共项目层。与成员的个人执行配置不冲突(显式个人
-        配置压项目变体之上)。
-      </p>
-      <div v-if="execCfgs.length" class="lib-card">
-        <table class="slib-table">
-          <thead><tr><th>名称</th><th>覆盖</th><th style="width:5.625rem">默认</th>
-              <th v-if="canManage" style="width:5.625rem">操作</th></tr></thead>
-          <tbody>
-            <tr v-for="c in execCfgs" :key="c.id" :data-testid="`prj-ec-${c.id}`">
-              <td><span class="ec-name">{{ c.name }}</span></td>
-              <td><span class="mono muted">{{ carrySummary(c) }}</span></td>
-              <td>
-                <span v-if="c.isDefault" class="svc-flag green">默认</span>
-                <button v-else-if="canManage" type="button" class="link-btn"
-                  :data-testid="`prj-ec-default-${c.id}`"
-                  @click="setDefaultCfg(c)">设为默认</button>
-                <span v-else class="muted">—</span>
-              </td>
-              <td v-if="canManage">
-                <button type="button" class="rm-btn"
-                  :data-testid="`prj-ec-del-${c.id}`"
-                  @click="delCfg(c)">删除</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-else class="hint">暂无项目执行配置 —— 项目内容按 项目层/公共层 合成 carry。</p>
-      <button v-if="canManage" type="button" class="ghost-btn"
-              data-testid="prj-ec-add-open" @click="cfgDialogOpen = true">+ 新建配置(默认)</button>
-      <p v-if="cfgError" class="err" data-testid="prj-ec-err">{{ cfgError }}</p>
-    </section>
-
-    <!-- 新建项目执行配置(首条覆盖:服务 + 字段 + 值,可空) -->
-    <Dialog :open="cfgDialogOpen" @update:open="cfgDialogOpen = $event">
-      <DialogContent class="max-w-[26.25rem]">
-        <DialogHeader>
-          <DialogTitle>新建项目执行配置</DialogTitle>
-        </DialogHeader>
-        <div class="flex flex-col gap-3">
-          <label class="field">
-            <span class="field-label">变体名<span class="req">*</span>(如 大促模式)</span>
-            <input v-model="newCfgName" class="field-input" data-testid="prj-ec-name" />
-          </label>
-          <label class="field">
-            <span class="field-label">目录服务名</span>
-            <input v-model="newCfgService" class="field-input" data-testid="prj-ec-service" placeholder="带覆盖字段时必填" />
-          </label>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="field">
-              <span class="field-label">字段(如 $.pv)</span>
-              <input v-model="newCfgField" class="field-input" data-testid="prj-ec-field" />
-            </label>
-            <label class="field">
-              <span class="field-label">值</span>
-              <input v-model="newCfgValue" class="field-input" data-testid="prj-ec-value" />
-            </label>
+      <!-- ④ 身份条目装载 = 成员凭证清单(普通项目,只读不落库;口径自
+           槽位切条目,C2b:条目 ref 能在成员池解析到账户 = 已装载) -->
+      <section v-if="!isPublic" id="prj-cfg-slots" class="cfg-section">
+        <h2>身份条目装载(成员凭证清单)</h2>
+        <p class="hint">
+          项目场景引用的身份条目 × 成员装载情况 —— 条目按 ref 取执行者本人池的账户,装载到位执行才不缺凭据。
+        </p>
+        <p v-if="slotLoading" class="hint">加载中…</p>
+        <template v-else-if="slots.length">
+          <div v-for="s in slots" :key="s.slot" class="slot-card" :data-testid="`prj-slot-${s.slot}`">
+            <header>
+              <b class="mono slot-name">{{ s.slot }}</b>
+              <span class="muted">{{ s.scenarios.length }} 个场景引用</span>
+              <!-- S8:项目池已覆盖该条目(成员可切换为项目账户执行) -->
+              <span
+                v-if="s.projectBound" class="slot-chip proj"
+                :data-testid="`prj-slot-${s.slot}-proj`"
+              >项目池 · 已覆盖</span>
+            </header>
+            <div class="chips">
+              <span
+                v-for="m in s.members" :key="m.userId"
+                class="slot-chip" :class="m.bound ? 'ok' : 'miss'"
+                :data-testid="`prj-slot-${s.slot}-${m.userId}`"
+              >{{ m.displayName }}{{ m.bound ? ' · 已装载' : ' · 未装载' }}</span>
+            </div>
           </div>
-          <p class="hint">新建即设为项目默认配置;后续可再切换默认。</p>
+        </template>
+        <p v-else class="hint" data-testid="prj-slots-empty">
+          项目场景还没有引用任何身份条目(无凭据注入的场景不在此列)。
+        </p>
+      </section>
+
+      <!-- ④·5 项目凭证(S8):项目管理员维护,成员只读不见明文 -->
+      <section v-if="!isPublic" id="prj-cfg-credentials" class="cfg-section">
+        <h2>项目凭证</h2>
+        <ProjectCredentialsPanel :project="project" />
+      </section>
+
+      <!-- ⑤ 生效预览(普通项目):选场景 → 逐值带来源 -->
+      <section v-if="!isPublic" id="prj-cfg-preview" class="cfg-section">
+        <h2>生效预览</h2>
+        <p class="hint">选一个项目场景,预览本次执行将生效的 环境 / 地址 / 身份条目装载 / carry(逐值带来源)。</p>
+        <div class="row">
+          <select v-model="previewScenario" class="field-select" data-testid="prj-config-preview-scen">
+            <option value="" disabled>选择场景…</option>
+            <option v-for="s in scenOptions" :key="s.id" :value="s.id">
+              {{ s.name }}({{ s.id }})
+            </option>
+          </select>
+          <button
+            type="button" class="save-btn" :disabled="!previewScenario"
+            data-testid="prj-config-preview-go" @click="previewOpen = true"
+          >预览</button>
         </div>
-        <DialogFooter>
-          <Button variant="outline" @click="cfgDialogOpen = false">取消</Button>
-          <Button :disabled="creatingCfg || !newCfgName.trim()" data-testid="prj-ec-add" @click="addCfg">
-            {{ creatingCfg ? '创建中…' : '创建(默认)' }}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </section>
+
+      <!-- ⑥ carry 同步(项目层 vs plate;手写退场后项目层值的唯一写入口) -->
+      <section v-if="!isPublic" id="prj-cfg-drift" class="cfg-section">
+        <h2>carry 同步(项目层 ← plate)</h2>
+        <p class="hint">
+          本项目层绑定值 vs plate 字段面的三类 diff;勾选生成的值表批只作用于项目层(公共层/个人层互不影响)—— 手写编辑退场后,这里是项目层值的维护入口。
+        </p>
+        <CarryDriftPanel
+          title="项目层绑定 vs plate 面"
+          :target="projectTarget"
+          tid="prj-cfg"
+        />
+      </section>
+
+      <!-- ⑧ 项目执行配置:2026-11-18 调整撤下 —— 与「只保留一条配置
+           (默认环境标签)」冲突;存量变体数据与后端端点保留,执行链
+           仍按 场景显式 > 显式个人 > 项目默认配置 > 项目层 消费。 -->
+
+      </div><!-- /.cfg-body -->
+    </div><!-- /.cfg-shell -->
 
     <EffectivePreviewDialog
       :open="previewOpen"
@@ -238,56 +205,67 @@
 
 <script setup lang="ts">
 /**
- * ProjectConfigPanel —— S7.3 项目配置页签。
- * 数据面:patchProject(defaultEnvironmentId)/ carry(target 作用域)/
- * getSlotStatus / listScenarios(projectId)。写面守门:canManage(后端
- * _require_manage 同口径);公共项目全局默认 = Admin+(can('ops.write'))。
+ * ProjectConfigPanel —— S7.3 项目配置页签(2026-11-18 逻辑调整后)。
+ * 数据面:patchProject(defaultEnvironmentId)/ getDefaults(只读)/
+ * getSlotStatus / listScenarios(projectId);实例×凭证匹配与漂移各自
+ * 组件内取数。写面守门:canManage(后端 _require_manage 同口径)。
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import {
-  listExecConfigs, createExecConfig, setDefaultExecConfig,
-  deleteExecConfig, type ExecConfigRow,
-} from '@/api/execConfigs'
-import { useAuthStore } from '@/stores/auth'
 import {
   getSlotStatus, patchProject, type ProjectOut, type SlotStatusRow,
 } from '@/api/projects'
 import { listEnvironments, type EnvironmentRow } from '@/api/environments'
-import { getBindings, type ScopeTarget } from '@/api/carry'
-import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
-import { listServices, type ServiceRow } from '@/api/services'
+import { getDefaults, type ScopeTarget } from '@/api/carry'
 import { listScenarios } from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
-import { confirmAction } from '@/utils/confirmAction'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import CarryDefaultsEditor from '@/components/carry/CarryDefaultsEditor.vue'
-import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import CarryDriftPanel from '@/components/carry/CarryDriftPanel.vue'
+import InstanceCredentialMatchPanel from '@/components/project/InstanceCredentialMatchPanel.vue'
 import ProjectCredentialsPanel from '@/components/project/ProjectCredentialsPanel.vue'
 import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
 
 const props = defineProps<{ project: ProjectOut }>()
 const emit = defineEmits<{ changed: [] }>()
 
-const auth = useAuthStore()
-const route = useRoute()
 const isPublic = computed(() => props.project.kind === 'public')
 const canManage = computed(() => !!props.project.canManage)
-const isAdminPlus = computed(() => auth.can('ops.write'))
-
-/** ?path= 深链(原 /carry-config 行为):全局默认来源 chip 的落点,
- * 只在公共项目(= 全局默认编辑面)生效。 */
-const highlightPath = computed(() =>
-  (isPublic.value && typeof route.query.path === 'string') ? route.query.path : '')
 
 const projectTarget = computed<ScopeTarget>(() => (
   { scope: 'project', projectId: props.project.id }))
-/** carry 默认值编辑层:公共项目 = 全局(公共项目层);普通 = 项目层 */
+/** carry 默认值层:公共项目 = 全局(公共项目层);普通 = 项目层 */
 const defaultsTarget = computed<ScopeTarget>(() =>
   (isPublic.value ? { scope: 'global' } : projectTarget.value))
+const defaultsTid = computed(() =>
+  (isPublic.value ? 'prj-cfg-global' : 'prj-cfg-project'))
+
+// ── 原型 _6:配置中心左栏导航(锚点;计数用已有数据如实填充)────
+// slots 在下方声明;computed 惰性求值,渲染时已初始化。
+const activeSection = ref(isPublic.value ? 'prj-cfg-carry' : 'prj-cfg-env')
+const navSections = computed(() => {
+  const out: Array<{ id: string; title: string; hint: string; count: number | null }> = []
+  if (!isPublic.value) {
+    out.push({ id: 'prj-cfg-env', title: '默认环境', hint: '项目内容执行的环境兜底',
+      count: props.project.defaultEnvironmentId != null ? 1 : 0 })
+    out.push({ id: 'prj-cfg-instances', title: '实例 × 凭证', hint: '标签下实例与凭证匹配',
+      count: null })
+  }
+  out.push({ id: 'prj-cfg-carry', title: isPublic.value ? '全局默认(只读)' : '项目层默认值(只读)',
+    hint: '兜底参数当前生效值', count: null })
+  if (!isPublic.value) {
+    out.push({ id: 'prj-cfg-slots', title: '身份条目装载', hint: '条目 × 成员装载矩阵',
+      count: slots.value.length || null })
+    out.push({ id: 'prj-cfg-credentials', title: '项目凭证', hint: '项目池账户,成员只读',
+      count: null })
+    out.push({ id: 'prj-cfg-preview', title: '生效预览', hint: '逐值带来源', count: null })
+    out.push({ id: 'prj-cfg-drift', title: 'carry 同步', hint: '项目层 vs plate 字段面', count: null })
+  }
+  return out
+})
+
+function goSection(id: string): void {
+  activeSection.value = id
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 // ── ① 默认环境 ───────────────────────────────────────────────────
 const envs = ref<EnvironmentRow[]>([])
@@ -315,41 +293,23 @@ async function saveEnv(): Promise<void> {
   }
 }
 
-// ── ③ 按键编辑:三档键选择器(registry C3b)──────────────────────
-// 选项面 = 条目注册表 ∪ 主档服务/系统 ∪ 存量绑定键;按档分组呈现,
-// 让「键落在哪一档」在写面显式可选(层内解析序:条目 > 服务 > 系统)。
-const aliasRows = ref<ServiceAliasRow[]>([])
-const svcRows = ref<ServiceRow[]>([])
-const boundKeys = ref<string[]>([])
-const serviceKey = ref('')
-const svcInput = ref('')
-const activeSvc = ref('')
+// ── ③ 默认值(只读;手写编辑 2026-11-18 退场)─────────────────────
+const defaultsRows = ref<Array<{ k: string; v: string | null }>>([])
+const defaultsLoading = ref(true)
 
-const keyGroups = computed<Record<'identity' | 'service' | 'system' | 'legacy', string[]>>(() => {
-  const identities = new Set(aliasRows.value.map((a) => a.aliasName))
-  const services = new Set(svcRows.value.map((s) => s.name))
-  const systems = new Set(svcRows.value.map((s) => s.system).filter(Boolean))
-  const identity: string[] = []
-  const service: string[] = []
-  const system: string[] = []
-  const legacy: string[] = []
-  for (const k of [...new Set([
-    ...boundKeys.value, ...identities, ...services, ...systems,
-  ])].sort()) {
-    if (identities.has(k)) identity.push(k)
-    else if (services.has(k)) service.push(k)
-    else if (systems.has(k)) system.push(k)
-    else legacy.push(k)
+async function loadDefaults(): Promise<void> {
+  defaultsLoading.value = true
+  try {
+    const d = await getDefaults(defaultsTarget.value)
+    defaultsRows.value = Object.entries(d ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => ({ k, v: v ?? null }))
+  } catch {
+    defaultsRows.value = []
+  } finally {
+    defaultsLoading.value = false
   }
-  return { identity, service, system, legacy }
-})
-
-function applySvcInput(): void {
-  const k = svcInput.value.trim()
-  if (k) activeSvc.value = k
 }
-
-watch(serviceKey, (k) => { if (k) activeSvc.value = k })
 
 // ── ④ 装载状态 ───────────────────────────────────────────────────
 const slots = ref<SlotStatusRow[]>([])
@@ -360,105 +320,16 @@ const scenOptions = ref<Array<{ id: string; name: string }>>([])
 const previewScenario = ref('')
 const previewOpen = ref(false)
 
-// ── ⑧ 项目执行配置(项目变体;读=成员,写=项目管理员)─────────────
-const execCfgs = ref<ExecConfigRow[]>([])
-const cfgDialogOpen = ref(false)
-const newCfgName = ref('')
-const newCfgService = ref('')
-const newCfgField = ref('')
-const newCfgValue = ref('')
-const creatingCfg = ref(false)
-const cfgError = ref('')
-
-function carrySummary(c: ExecConfigRow): string {
-  const parts = (c.systems ?? []).map((s) =>
-    `${s.service}:${Object.keys(s.carryOverrides ?? {}).length}`)
-  return parts.length ? parts.join(' · ') : '(空)'
-}
-
-async function loadCfgs(): Promise<void> {
-  if (isPublic.value || props.project.id == null) return
-  try {
-    execCfgs.value = await listExecConfigs(props.project.id)
-  } catch { execCfgs.value = [] }   // 读失败降级空表,不阻塞页签
-}
-
-async function addCfg(): Promise<void> {
-  cfgError.value = ''
-  const name = newCfgName.value.trim()
-  if (!name) return
-  const svc = newCfgService.value.trim()
-  const field = newCfgField.value.trim()
-  if (field && !svc) {
-    cfgError.value = '带覆盖字段时目录服务名必填'
-    return
-  }
-  creatingCfg.value = true
-  try {
-    await createExecConfig({
-      name, scope: 'project', projectId: props.project.id,
-      isDefault: true,
-      systems: svc ? [{ service: svc, bindings: {},
-                        carryOverrides: field ? { [field]: newCfgValue.value } : {} }]
-                   : [],
-    })
-    cfgDialogOpen.value = false
-    newCfgName.value = ''
-    newCfgService.value = ''
-    newCfgField.value = ''
-    newCfgValue.value = ''
-    await loadCfgs()
-  } catch (e) {
-    cfgError.value = String((e as Error).message ?? e)
-  } finally {
-    creatingCfg.value = false
-  }
-}
-
-async function setDefaultCfg(c: ExecConfigRow): Promise<void> {
-  cfgError.value = ''
-  try {
-    await setDefaultExecConfig(c.id)
-    toast.success(`「${c.name}」已设为项目默认配置`)
-    await loadCfgs()
-  } catch (e) { cfgError.value = String((e as Error).message ?? e) }
-}
-
-async function delCfg(c: ExecConfigRow): Promise<void> {
-  const ok = await confirmAction(
-    `删除项目执行配置「${c.name}」?项目内容将回落到 项目层/公共层 合成 carry。`,
-    '删除执行配置',
-    { danger: true, confirmButtonText: '删除' },
-  )
-  if (!ok) return
-  cfgError.value = ''
-  try {
-    await deleteExecConfig(c.id)
-    toast.success(`已删除 ${c.name}`)
-    await loadCfgs()
-  } catch (e) { cfgError.value = String((e as Error).message ?? e) }
-}
-
 onMounted(async () => {
   const jobs: Promise<void>[] = [
     listEnvironments().then((rows) => { envs.value = rows }),
+    loadDefaults(),
   ]
   if (!isPublic.value) {
     jobs.push(
-      loadCfgs(),
       getSlotStatus(props.project.id)
         .then((r) => { slots.value = r.slots })
         .catch(() => { slots.value = [] }),
-      getBindings()
-        .then((b) => { boundKeys.value = Object.keys(b).sort() })
-        .catch(() => { boundKeys.value = [] }),
-      // 三档键选择器的选项面(条目注册表 + 主档;失败降级存量键)
-      listAllAliases()
-        .then((rows) => { aliasRows.value = rows })
-        .catch(() => { aliasRows.value = [] }),
-      listServices()
-        .then((out) => { svcRows.value = out.services })
-        .catch(() => { svcRows.value = [] }),
       listScenarios({ projectId: props.project.id, page_size: 100 })
         .then((env) => {
           scenOptions.value = env.items.map((s) => ({
@@ -481,6 +352,92 @@ onMounted(async () => {
 
 <style scoped>
 .panel { display: flex; flex-direction: column; gap: 1rem; }
+
+/* ── 原型 _6 · 配置中心(左栏 3 / 右侧 9)───────────────────── */
+.cfg-shell {
+  display: grid;
+  grid-template-columns: 15.625rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.cfg-rail {
+  position: sticky;
+  top: 4.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.875rem;
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.625rem;
+}
+.cfg-body { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.cfg-rail-head { display: flex; align-items: center; gap: 0.625rem; }
+.cfg-rail-icon {
+  flex: none;
+  width: 2.25rem; height: 2.25rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  color: var(--sl-accent);
+  background: var(--sl-accent-soft);
+  border-radius: 0.5rem;
+}
+.cfg-rail-head b { display: block; font-size: 0.9375rem; color: var(--sl-ink); }
+.cfg-rail-head .muted { display: block; font-size: 0.71875rem; }
+.cfg-rail-nav { display: flex; flex-direction: column; gap: 0.125rem; }
+.cfg-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.5rem;
+  text-align: left;
+  font: inherit;
+  font-size: 0.78125rem;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 0.375rem;
+  color: var(--sl-ink-2);
+}
+.cfg-rail-item:hover { background: var(--soft-neutral-bg); color: var(--sl-ink); }
+.cfg-rail-item.on { background: var(--sl-accent-soft); color: var(--sl-accent); font-weight: 600; }
+.rail-dot {
+  flex: none;
+  width: 0.375rem; height: 0.375rem;
+  border-radius: 50%;
+  background: var(--sl-line);
+}
+.cfg-rail-item.on .rail-dot { background: var(--sl-accent); }
+.rail-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfg-rail-note {
+  margin: 0.25rem 0 0;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--sl-ink-3);
+  background: var(--soft-neutral-bg);
+  border-radius: 0.375rem;
+}
+.cfg-rail-note b { color: var(--sl-ink); }
+.cfg-nav-count {
+  flex: none;
+  min-width: 1.125rem;
+  padding: 0 0.25rem;
+  font-size: 0.65625rem;
+  text-align: center;
+  color: var(--sl-accent);
+  background: var(--sl-accent-soft);
+  border-radius: 62.4375rem;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 56.25rem) {
+  .cfg-shell { grid-template-columns: 1fr; }
+  .cfg-rail { position: static; }
+}
+/* 锚点跳转落点不被页头遮住 */
+.cfg-section { scroll-margin-top: 4.5rem; }
+
 /* 分区卡:各配置节独立成卡,节间呼吸与层级一眼可辨 */
 .cfg-section {
   display: flex;
@@ -495,7 +452,7 @@ onMounted(async () => {
 .hint { margin: 0; color: var(--sl-ink-3); font-size: 0.75rem; }
 .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 
-.field-select, .field-input {
+.field-select {
   height: 2.125rem;
   padding: 0 0.625rem;
   font-size: 0.8125rem;
@@ -505,9 +462,8 @@ onMounted(async () => {
   border-radius: 0.5rem;
   outline: none;
 }
-.field-select:focus, .field-input:focus { border-color: var(--sl-accent); }
+.field-select:focus { border-color: var(--sl-accent); }
 .field-select:disabled { opacity: 0.6; cursor: not-allowed; }
-.svc-input { max-width: 16.25rem; }
 .save-btn {
   height: 2.125rem;
   padding: 0 0.875rem;
@@ -522,39 +478,11 @@ onMounted(async () => {
 }
 .save-btn:hover { background: #265fd4; }
 .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.ghost-btn {
-  align-self: flex-start;
-  height: 1.875rem;
-  padding: 0 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--sl-accent);
-  background: none;
-  border: 1px solid var(--sl-accent);
-  border-radius: 0.5rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ghost-btn:hover { background: var(--sl-accent-soft); }
-.link-btn {
-  padding: 0;
-  border: 0;
-  background: none;
-  font-size: 0.75rem;
-  color: var(--sl-accent);
-  cursor: pointer;
-}
-.link-btn:hover { text-decoration: underline; }
-.rm-btn {
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
-  color: var(--sl-bad);
-  background: none;
-  border: 1px solid var(--sv-bad-line, var(--sl-bad));
-  border-radius: 0.375rem;
-  cursor: pointer;
-}
-.rm-btn:hover { background: var(--sl-bad-soft); }
+
+/* ── 默认值只读视图 ───────────────────────────────────────────── */
+.dk { font-size: 0.78125rem; color: var(--sl-ink); }
+.nullv { color: var(--sl-bad); }
+
 .err { color: var(--sl-bad); font-size: 0.78125rem; margin: 0; }
 .muted { color: var(--sl-ink-3); }
 .mono { font-family: var(--font-mono, monospace); }
@@ -582,11 +510,4 @@ onMounted(async () => {
 .slot-chip.ok { background: var(--sl-ok-soft); color: var(--sl-ok); border-color: var(--sl-ok); }
 .slot-chip.miss { background: var(--sl-warn-soft); color: var(--sl-warn); border-color: var(--sl-warn); }
 .slot-chip.proj { background: var(--sl-accent-soft); color: var(--sl-accent); border-color: var(--sl-accent); }
-
-.ec-name { font-weight: 600; font-size: 0.8125rem; color: var(--sl-ink); }
-
-/* Dialog 内表单 */
-.field { display: flex; flex-direction: column; gap: 0.25rem; }
-.field-label { font-size: 0.78125rem; font-weight: 600; color: var(--sl-ink); }
-.req { color: var(--sl-bad); margin-left: 0.125rem; }
 </style>

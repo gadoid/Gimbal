@@ -5,7 +5,7 @@
  * 无默认环境与装载状态节(公共项目不可 PATCH、slot-status 422)。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
@@ -13,17 +13,15 @@ import * as projectsApi from '@/api/projects'
 import * as carryApi from '@/api/carry'
 import * as aliasApi from '@/api/service-aliases'
 import * as servicesApi from '@/api/services'
+import * as deploymentsApi from '@/api/deployments'
+import * as authSessionsApi from '@/api/auth_sessions'
 import * as envApi from '@/api/environments'
 import * as scenApi from '@/api/scenario-composer'
 import * as credApi from '@/api/project_credentials'
 import * as execApi from '@/api/execConfigs'
 
-/** body 查询(新建配置表单经 ui/Dialog Portal 渲染进 body) */
-function q(sel: string): DOMWrapper<Element> {
-  const el = document.body.querySelector(sel)
-  if (!el) throw new Error(`body 里找不到 ${sel}`)
-  return new DOMWrapper(el)
-}
+/** 新建配置表单已随 ⑧ 分区退场;body 查询场景只剩预览弹窗(直接用
+ *  document.querySelector)。 */
 
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -62,6 +60,15 @@ beforeEach(() => {
     ],
     unregistered: [], plateReachable: true,
   })
+  // 实例 × 凭证匹配(2026-11-18 配置页调整):四路现成端点拼装
+  vi.spyOn(servicesApi, 'listInstances').mockResolvedValue([
+    { system: 'fin', envId: 7, envName: 'dev', groupId: 'g1', tags: ['dev'],
+      loginUrl: 'http://fin-login', line: 'v2', note: '', updatedAt: null },
+  ] as never)
+  vi.spyOn(deploymentsApi, 'listDeployments').mockResolvedValue([
+    { id: 1, baseService: 'fin-service', envId: 7, baseUrl: 'http://fin-api' },
+  ] as never)
+  vi.spyOn(authSessionsApi, 'listAll').mockResolvedValue([] as never)
   vi.spyOn(carryApi, 'getDrift').mockResolvedValue({
     services: [{ service: 'fin-service', orphaned: ['$.old'], uncovered: [],
       renamedSuggestions: [] }],
@@ -160,19 +167,38 @@ describe('ProjectConfigPanel — 普通项目', () => {
     w.unmount()
   })
 
-  it('三档键选择器:条目/服务/系统分组,存量绑定键落兜底组(registry C3b)', async () => {
-    vi.spyOn(carryApi, 'getBindings').mockResolvedValue(
-      { 'fin-service': {}, 'legacy-alias-x': {} })
+  it('默认值(只读):项目层键值呈现;手写编辑面不再渲染', async () => {
     const w = mountPanel()
     await flushPromises()
-    const groups = w.get('[data-testid="prj-config-svc"]').findAll('optgroup')
-    expect(groups.map((g) => g.attributes('label')))
-      .toEqual(['身份条目', '服务', '系统', '存量绑定键'])
-    expect(groups[0].text()).toContain('fin-service-uat')
-    expect(groups[1].text()).toContain('fin-service')
-    expect(groups[2].text()).toContain('fin')
-    // 主档已知键不入兜底组;三档外的存量键才落「存量绑定键」
-    expect(groups[3].text()).toContain('legacy-alias-x')
+    const row = w.find('[data-testid="prj-cfg-project-row-0"]')
+    expect(row.exists()).toBe(true)
+    expect(row.text()).toContain('$.a')
+    expect(row.text()).toContain('v')
+    w.unmount()
+  })
+
+  it('实例 × 凭证匹配:默认标签下的实例拼装 地址/登录口/凭证匹配', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    expect(servicesApi.listInstances).toHaveBeenCalledWith(7)
+    const row = w.find('[data-testid="prj-inst-row-fin"]')
+    expect(row.exists()).toBe(true)
+    expect(row.text()).toContain('fin-service')       // 地址(服务→系统归行)
+    expect(row.text()).toContain('http://fin-api')
+    expect(row.text()).toContain('http://fin-login')
+    expect(row.text()).toContain('项目池未登记')       // 项目凭证 envId=1 ≠ 标签 7
+    expect(row.text()).toContain('个人池 0 个账户')
+    expect(w.find('[data-testid="prj-inst-reg-fin"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('手写配置空间退场:按键编辑 / 项目执行配置分区不再渲染', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('[data-testid="prj-config-svc"]').exists()).toBe(false)
+    expect(w.find('[data-testid="prj-exec-configs"]').exists()).toBe(false)
+    expect(w.find('[data-testid="prj-ec-add-open"]').exists()).toBe(false)
+    expect(execApi.listExecConfigs).not.toHaveBeenCalled()
     w.unmount()
   })
 })
@@ -246,69 +272,15 @@ describe('ProjectConfigPanel — S8 项目凭证/装载项目覆盖', () => {
   })
 })
 
-describe('ProjectConfigPanel — ⑧ 项目执行配置(项目变体)', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.restoreAllMocks()
-    vi.spyOn(envApi, 'listEnvironments').mockResolvedValue([])
-    vi.spyOn(carryApi, 'getDefaults').mockResolvedValue({})
-    vi.spyOn(carryApi, 'putDefaults').mockResolvedValue({})
-    vi.spyOn(carryApi, 'getBindings').mockResolvedValue({})
-    vi.spyOn(carryApi, 'getDrift').mockResolvedValue(
-      { services: [], plateReachable: true, scope: 'project', scopeId: 3 })
-    vi.spyOn(projectsApi, 'getSlotStatus').mockResolvedValue({ slots: [] })
-    vi.spyOn(scenApi, 'listScenarios').mockResolvedValue(
-      { items: [], total: 0, page: 1, page_size: 100 } as never)
-    vi.spyOn(credApi, 'listProjectCredentials').mockResolvedValue(
-      { items: [], total: 0, page: 1, page_size: 100 } as never)
-  })
-
-  it('管理员:列表渲染 + 新建发 scope=project/projectId + 设默认', async () => {
-    const row = { id: 11, name: '大促模式', isDefault: true,
-                  environmentId: null, scope: 'project' as const,
-                  systems: [{ service: 'fin', bindings: {},
-                              carryOverrides: { '$.pv': 'x' } }] }
-    const list = vi.spyOn(execApi, 'listExecConfigs')
-      .mockResolvedValue([row])
-    const create = vi.spyOn(execApi, 'createExecConfig')
-      .mockResolvedValue(row)
-    const router = createRouter({ history: createMemoryHistory(),
-      routes: [{ path: '/', component: { template: '<div/>' } }] })
-    const w = mount(ProjectConfigPanel, {
-      props: { project: proj },
-      global: { plugins: [createPinia(), router] },
-    })
-    await flushPromises()
-    expect(list).toHaveBeenCalledWith(3)
-    expect(w.get('[data-testid="prj-ec-11"]').text()).toContain('大促模式')
-    expect(w.get('[data-testid="prj-ec-11"]').text()).toContain('fin:1')
-    // 新建:表单在 Dialog(2026-11-16 重塑)→ 先开弹窗,body 查询
-    await w.get('[data-testid="prj-ec-add-open"]').trigger('click')
-    await flushPromises()
-    await q('[data-testid="prj-ec-name"]').setValue('新变体')
-    await q('[data-testid="prj-ec-service"]').setValue('fin')
-    await q('[data-testid="prj-ec-field"]').setValue('$.pv')
-    await q('[data-testid="prj-ec-value"]').setValue('v2')
-    await q('[data-testid="prj-ec-add"]').trigger('click')
-    await flushPromises()
-    expect(create).toHaveBeenCalledWith({
-      name: '新变体', scope: 'project', projectId: 3, isDefault: true,
-      systems: [{ service: 'fin', bindings: {},
-                  carryOverrides: { '$.pv': 'v2' } }],
-    })
-    w.unmount()
-  })
-
-  it('公共项目:不出项目执行配置节', async () => {
-    vi.spyOn(execApi, 'listExecConfigs').mockResolvedValue([])
-    const router = createRouter({ history: createMemoryHistory(),
-      routes: [{ path: '/', component: { template: '<div/>' } }] })
-    const w = mount(ProjectConfigPanel, {
-      props: { project: projPublic },
-      global: { plugins: [createPinia(), router] },
-    })
-    await flushPromises()
-    expect(w.find('[data-testid="prj-exec-configs"]').exists()).toBe(false)
-    w.unmount()
+describe('ProjectConfigPanel — ⑧ 项目执行配置(2026-11-18 退场)', () => {
+  it('分区整体撤下:不再拉取 / 渲染(端点与存量数据保留,由执行链消费)', async () => {
+    // 覆盖普通 + 公共两种项目形态
+    for (const p of [proj, projPublic]) {
+      const w = mountPanel(p)
+      await flushPromises()
+      expect(w.find('[data-testid="prj-exec-configs"]').exists()).toBe(false)
+      w.unmount()
+    }
+    expect(execApi.listExecConfigs).not.toHaveBeenCalled()
   })
 })
