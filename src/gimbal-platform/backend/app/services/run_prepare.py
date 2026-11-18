@@ -773,13 +773,16 @@ async def prepare_exec(
                 # S4:carry 作用域 = 公共项目层 < (项目层 ∨ 执行人个人层;
                 # 项目区不吃个人层 —— 区模型收敛裁定);分层②:执行配置
                 # 覆盖层压在场景显式之下、层序之上(区规则由调用方裁)。
-                # 环境维已退役(§8.4):carry 无环境位
+                # §8.9 实例档:执行标签 env(与地址③同一 EnvChoice;
+                # env_id=None = 标签链全空 → 实例档跳过)
                 prep.carry_ctx = await build_carry_context(
                     s, definition, ui_field_states=ui_field_states,
                     project_id=project_id,
                     user_id=(owner_id if project_id is None else None),
                     bindings=bindings,
-                    exec_overrides=exec_carry_overrides)
+                    exec_overrides=exec_carry_overrides,
+                    env_id=(getattr(environment, "env_id", None)
+                            if environment is not None else None))
         except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
             logger.opt(exception=True).warning(
                 "run_prepare: carry context build failed; skipped")
@@ -880,7 +883,12 @@ async def resolve_effective_config(
     # carry:tier 序逐层归并,逐 path 标注来源(作用域:键层级);
     # 分层②:执行配置覆盖层压在层序之上(场景显式在 carry_face 已先行);
     # 分层⑥:个人层已收编为默认执行配置(决策 8),user_id 不再构成 tier。
-    # 环境维已退役(§8.4):carry 只有基线层
+    # §8.9 实例档:键序 条目 > 实例(system, 执行标签 env) > 服务 >
+    # 层默认(粗先细后,字段级覆盖;预览与执行链同序 —— 此前预览漏
+    # 粗档,本批补齐)。来源标注:`...:instance:{envId}`
+    from sqlalchemy import select as sa_select
+
+    from ..models.service import Service as DBService
     from .service_names import resolve_base_with_aliases
     tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
     if project_id is not None:
@@ -891,20 +899,36 @@ async def resolve_effective_config(
         if isinstance(svc, str) and svc:
             raw_svcs.append(svc)
     carry_out: dict[str, dict[str, dict]] = {}
-    for raw in dict.fromkeys(raw_svcs):
-        base = await resolve_base_with_aliases(db, raw)
+    base_of: dict[str, str | None] = {
+        raw: await resolve_base_with_aliases(db, raw)
+        for raw in dict.fromkeys(raw_svcs)}
+    system_of: dict[str, str] = {}
+    bases_known = {b for b in base_of.values() if b}
+    if bases_known:
+        system_of = dict((await db.execute(
+            sa_select(DBService.name, DBService.system).where(
+                DBService.name.in_(bases_known)))).all())
+    carry_env = env.env_id if env is not None else None
+    for raw, base in base_of.items():
         if base is None:
             continue
         alias_key = service_aliases.effective_alias(raw, bindings)
+        instance_key = system_of.get(base) or None
         merged: dict[str, dict] = {}
         for t in tiers:
             t_base = await carry_store.get_bindings(db, base, t)
+            t_inst = (await carry_store.get_instance_bindings(
+                db, instance_key, carry_env, t)
+                if instance_key and carry_env is not None else {})
             t_alias = (await carry_store.get_bindings(db, alias_key, t)
-                       if base != alias_key else {})
-            for path in set(t_base) | set(t_alias):
+                       if alias_key and alias_key != base else {})
+            for path in set(t_base) | set(t_inst) | set(t_alias):
                 if path in t_alias:
                     merged[path] = {"value": t_alias[path],
                                     "source": f"{t[0]}:{t[1]}:alias"}
+                elif path in t_inst:
+                    merged[path] = {"value": t_inst[path],
+                                    "source": f"{t[0]}:{t[1]}:instance:{carry_env}"}
                 else:
                     merged[path] = {"value": t_base[path],
                                     "source": f"{t[0]}:{t[1]}:base"}
@@ -967,7 +991,8 @@ async def unit_carry_contexts(
 
     ``unit_metas``(S4):与 composed_units 同序的作用域上下文
     ({project_id, user_id, bindings};缺省 = 无第二层,只吃公共项目层)。
-    环境维已退役(§8.4):unit_metas 的 ``env_id`` 键不再消费(传入忽略)。
+    §8.9 实例档:``env_id`` 键 = 该单元解析出的执行标签(env_mixed 已在
+    派发前拦,单元级恒单值;缺省/None → 实例档跳过)。
     Suite 单元规格今日无 fieldStates 面(ui.fieldStates 是单场景执行链
     的 payload 面);后续编排单元带面时在此透传。
     """
@@ -982,7 +1007,8 @@ async def unit_carry_contexts(
                     s, d, ui_field_states=None,
                     project_id=meta.get("project_id"),
                     user_id=meta.get("user_id"),
-                    bindings=meta.get("bindings"))
+                    bindings=meta.get("bindings"),
+                    env_id=meta.get("env_id"))
         except Exception:  # noqa: BLE001 — 单单元降级,不阻塞全图
             logger.opt(exception=True).warning(
                 "run_prepare: unit carry build failed; unit skips carry")

@@ -71,18 +71,23 @@ async def build_carry_context(
     user_id: int | None = None,
     bindings: dict | None = None,
     exec_overrides: dict[str, dict[str, str | None]] | None = None,
+    env_id: int | None = None,
 ) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
 
     authz M2a S4 作用域分层(D3 + 区模型收敛):tier 序 = 公共项目层 <
-    项目层;层内键域三级(重构 §1.7,**细到粗**):身份条目名 > 服务名 >
-    系统名 > 层默认 —— 系统级默认直接挂系统键,不必复制到每个服务。
-    执行配置分层⑥(决策 8):**个人层不再存在** —— 个人缺省 carry 的家
-    是默认执行配置(``exec_overrides`` 覆盖层),``user_id`` 参数仅为签名
-    兼容,不再构成 tier。
+    项目层;层内键域(§8.9,**细到粗**):身份条目名 > 实例(system, env)
+    > 服务名 > 层默认 —— **实例档压过服务档**(部署差异化默认值:
+    测试/预发布/生产同字段不同值),条目键压过一切;原「系统名」粗档
+    已由实例档替换(§8.9,存量 0 行守卫迁移 0063)。执行配置分层⑥
+    (决策 8):**个人层不再存在** —— 个人缺省 carry 的家是默认执行配置
+    (``exec_overrides`` 覆盖层),``user_id`` 参数仅为签名兼容,不构成 tier。
 
-    环境维已退役(2026-11-17,§8.4):环境只做轻量部署标签,不再承载
-    carry 配置层 —— 本函数无环境位;需要按部署差异化时挂实例(服务×环境)。
+    实例档环境 = **执行标签**(``env_id``,与地址取数同源:有效身份 >
+    项目默认 > 平台默认;env_mixed 已被预检硬拦,执行级恒单值)。
+    ``env_id=None``(标签链全空 / 导入析出等无执行上下文)→ 实例档
+    跳过,仅按 服务 < 条目 合成 —— 与 §8.4「环境不承载配置层」一致,
+    环境位只作为实例键坐标进入,不构成独立覆盖层。
 
     分层②(执行配置):``exec_overrides``({目录服务: {字段: 值}})是
     配置覆盖层,合区位次 = **场景显式之下、层序之上**(值 null = 显式
@@ -147,7 +152,8 @@ async def build_carry_context(
         svc = _step_service(step)
         if isinstance(svc, str) and svc:
             raw_services.setdefault(svc, None)
-    # 系统键派生(三级键域的粗端):base → services.system 批量一次
+    # 系统派生(§8.9 实例档坐标的 system 半边):base → services.system
+    # 批量一次
     from ..models.service import Service as DBService
     service_bindings: dict[str, dict[str, str | None] | None] = {}
     resolved_bases = {
@@ -167,19 +173,27 @@ async def build_carry_context(
                 "step 跳过 carry 填充", raw)
             service_bindings[raw] = None
         else:
-            # 层内三级键域(§1.7 细到粗,粗先 merge 细后覆盖,字段级):
-            # 系统键 < 服务键 < 条目键(alias_key = 方案选定的生效条目)
+            # 层内键域(§8.9 细到粗,粗先 merge 细后覆盖,字段级):
+            # 服务键 < 实例键(system × 执行标签 env)< 条目键
+            # (alias_key = 方案选定的生效条目)。env_id=None → 实例档
+            # 跳过(无执行标签上下文,不猜环境)
             alias_key = effective_alias(raw, bindings)
-            system_key = system_of.get(base) or None
+            instance_key = system_of.get(base) or None
             rows: dict[str, str | None] = {}
             for t in tiers:
                 rows_t: dict[str, str | None] = {}
-                for key in (system_key, base, alias_key):
-                    if not key:
-                        continue
-                    override = await carry_store.get_bindings(db, key, t)
-                    if override:
-                        rows_t = {**rows_t, **override}
+                override = await carry_store.get_bindings(db, base, t)
+                if override:
+                    rows_t = {**rows_t, **override}
+                if instance_key and env_id is not None:
+                    inst = await carry_store.get_instance_bindings(
+                        db, instance_key, env_id, t)
+                    if inst:
+                        rows_t = {**rows_t, **inst}
+                if alias_key and alias_key != base:
+                    alias_ov = await carry_store.get_bindings(db, alias_key, t)
+                    if alias_ov:
+                        rows_t = {**rows_t, **alias_ov}
                 rows = {**rows, **rows_t}
             # 分层②:执行配置覆盖(目录服务键;null = 显式注入 null)
             ov = (exec_overrides or {}).get(base)

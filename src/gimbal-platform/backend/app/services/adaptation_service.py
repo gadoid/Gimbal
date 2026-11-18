@@ -469,8 +469,14 @@ async def _apply_carry_op(db: AsyncSession, op: AdaptationOp,
     """CARRY_OPS 收敛应用到值表(service 缺省 = 全局默认表)。
 
     S7.6:按批次作用域落表;返回 ``(service, old, new)`` 供公共层写后
-    的项目层遮蔽通知(非公共层调用方自行忽略)。"""
+    的项目层遮蔽通知(非公共层调用方自行忽略)。
+    §8.9:系统档裸键封堵(apply 时刻防御 —— 存量 op 在迁移前生成时
+    触到系统键,此处拒绝;实例档适配 op 为后续缺口)。"""
     service = payload.get("service")
+    if service and await carry_store.is_pure_system_key(db, service):
+        raise ValueError(
+            f"carry_system_key_retired: {service} — 系统档已退场(§8.9),"
+            "按部署差异化写实例档;实例键适配 op 暂不支持,请人工处理")
     if op.op_type == "renameCarryPath":
         src, dst = payload["from"], payload["to"]
         if service:
@@ -987,7 +993,11 @@ async def create_op(
     if op_type not in ALL_OPS:
         raise ValueError(f"bad_op_type: {op_type} not in {ALL_OPS}")
     if op_type in CARRY_OPS:
-        pass  # 无场景/数据集寻址;payload.service 决定触哪张值表
+        # 无场景/数据集寻址;payload.service 决定触哪张值表。
+        # §8.9:系统档裸键在入口即拒(与 _apply_carry_op 双保险)
+        _svc = payload.get("service")
+        if _svc and await carry_store.is_pure_system_key(db, _svc):
+            raise ValueError(f"carry_system_key_retired: {_svc}")
     elif op_type in DATASET_OPS and not dataset_id:
         raise ValueError(f"op_needs_dataset: {op_type} requires datasetId")
     elif not scenario_id:

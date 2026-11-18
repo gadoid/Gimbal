@@ -871,6 +871,13 @@
           </div>
           <p v-if="instFormError" class="err">{{ instFormError }}</p>
         </section>
+
+        <!-- ④ carry 默认值(实例)(§8.9 部署级默认值:系统 × 环境,
+             值对该系统全部服务在本环境生效 —— 实例档压过服务档)-->
+        <ServiceBindingEditor v-if="drawer.svc.system"
+          :key="`inst-carry-${drawer.svc.system}-${drawer.envId}`"
+          :service-key="drawer.svc.system"
+          :instance-env-id="drawer.envId" />
       </div>
 
       <!-- 抽屉底部固定动作条 -->
@@ -924,6 +931,7 @@ import {
 } from '@/api/auth_sessions'
 import { confirmAction } from '@/utils/confirmAction'
 import { toast } from '@/utils/toast'
+import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'

@@ -23,6 +23,30 @@ migrations 时代造形已落地(`_create_retired_tables` 测试造形机制,19 
 （carry env 执行链透传 / 预检 envUnspecified / 漂移 testid / slot 入参清扫）、
 6 项合理适配 + 4 项措辞修正全量追认入 redesign（§5.2 实态改写 + §6.0 偏离 5–8）。**
 重构三阶段全部收口(P2-C 登录后冒烟仍待 admin 凭据)。
+**2026-11-18(晚) 项目详情 A 级批次**:stitch 排期(stitch-plan §3)的 7 项
+A 级能力全部接回 —— 后端 5 增量(`?projectId=` 聚合/列表/facets、
+filter-groups project 桶、MemberOut 资产计数、实例×凭证聚合端点)+
+迁移 0062(executions.project_id 索引,顺修 model/DB drift);前端场景
+页签改 `useScenarioListView('project')` 共享骨架(FilterPopover + 分组 +
+仅看关注)、头卡运行成功率格 + 跳转带参、ExecutionsList 项目 chip 深链、
+成员计数列 + CSV 导出(papaparse)、匹配面板单端点化。
+**2026-11-18(晚) ExecConfigsView 注册簿驱动重构**:个人配置页
+(/exec-configs,手写退场后执行配置唯一手写面)写面不再自由手敲 ——
+服务选自主档、换用条目选自该服务身份条目、carry 字段接 plate 字段面
+软引导;carry 值三态修复 null 回填丢真;枢纽①改部署×实例并集矩阵
+(补登录口列)、③说明直读主档(service-meta 调用退役)。仅前端,
+api/execConfigs 契约零改动。**同日晚表单 v2(用户复核:手写拼行退场)**:
+级联 服务→实例过滤(表单态,§8.2 不固化环境)→身份条目表(行内
+「换用为」+ 装载列)→carry 面行,「添加绑定/添加 carry」按钮移除
+(详见 §「ExecConfigsView 注册簿驱动重构」末节)。
+**2026-11-19 carry 实例档 + 配置页 v3(用户决策,redesign §8.9)**:
+系统档粗档退场 → 实例档 (system, env)(链序 条目 > 实例 > 服务 >
+层默认,实例压过服务 —— 部署差异化默认值;迁移 0063 五键坐标 +
+守卫删系统键行);执行链/预览/编排三处键序同步(预览顺手补齐漏
+粗档的既有口径差);实例值端点 + 裸系统键 422 + 适配 op 校验层封堵;
+ServiceAdmin 抽屉新增「carry 默认值(实例)」分区;ExecConfigsView
+表单 v3(配置级 carryOverrides 写面退场,存量只读回写)。详见 §
+「carry 实例档与配置页 v3」。
 **2026-11-17(晚) 环境降级轮**:stitch 原型交互审计牵出「环境」降级为
 轻量部署标签 —— 五项决策 + 词面口径定稿入 redesign §8(标签解析链/凭证规则/
 carry 去 env/预检硬门/显式通道退役);**实施 M1(carry 去 env)→ M2(标签链
@@ -686,6 +710,209 @@ P1(均为「链统一了,喂进链的参数/快照错位」),先行修复:
   对照 M3 基线 2063,+3 = 导入 2 + ping 1);浏览器实测(admin 只读直签
   令牌):列表页/实例表/抽屉三段与原型一致,连通测速真实发起并如实报
   不可达,快速鉴权测试与全槽位测试 3/3 命中真实 SUT 取回 token。
+
+### A 级批次：项目详情 7 项能力接回（2026-11-18 晚，🟢 完成）
+
+`docs/project-detail-stitch-plan.md` §3 排期的 A 级 7 项（原型有、后端无）
+一个批次全接回；后端小增量 + 前端接回 + 迁移 0062:
+
+- **后端 5 增量**:
+  - `/executions/summary?projectId=`：项目维度 KPI（行集 = project_id 快照
+    列，跨 owner;门 = 成员 ∨ Admin+,非成员 404）;`consecutive_failure_streaks`
+    泛化 owner/project 二选一;
+  - `/executions?projectId=`：列表项目过滤（JWT 面;failedTotal 同口径;
+    streaks 信号列随行集切换）;
+  - `/scenarios/facets?projectId=`：facets 项目口径（取代 scope/visibility
+    分桶;读门同 get_project）;
+  - filter-groups `project` 桶：`Literal` 扩值 + `projectId` 必填位
+    （422 `project_id_required`），pref key `scenario_filter_groups.project.<id>`
+    （零迁移,按项目隔离）;
+  - `MemberOut.scenarioCount/suiteCount`：成员资产计数
+    （(project_id, owner_id) GROUP BY ×2）;
+  - `GET /projects/{id}/instance-credential-matches?envId=`：实例×凭证聚合
+    （单 session 五查:实例/部署/主档/项目凭证/个人计数;成员视图 username
+    脱敏;公共项目 409、非成员 404）;
+- **迁移 0062**：`ix_executions_project_id` 单列索引 —— 0040 建列时漏建
+  （model index=True 与 DB drift,create_all 测试库一直有）;
+- **前端 6 落点**:
+  - 头卡第 4 格「运行成功率(7天)」（`prj-stat-passrate`,软失败显 —）+
+    「执行历史/监控指标」跳转带 `query.projectId`;
+  - `ExecutionsList`：`?projectId=` 深链 chip（可清除）+ KPI 同口径;
+    `refreshSummary` 兑现「软失败不阻塞列表」契约（Promise.resolve 包调用,
+    修出 clearAllMocks 暴露的同步炸路径）;
+  - 场景页签换共享骨架：新组件 `ProjectScenariosTab`（`useScenarioListView
+    ('project', {projectId})`:检索/facets/分组/分页全下推 + 「★ 仅看关注」
+    project 桶专属;列面不变）;
+  - `ProjectMembersPanel`：场景/用例集两列 + 「导出 CSV」
+    （papaparse unparse + BOM,全量成员台账口径,不受前端筛选影响）;
+  - `InstanceCredentialMatchPanel`：五路 Promise.all → 单聚合端点
+    （含加载失败显式提示）;
+  - API 层:`listExecutions/getExecutionsSummary/fetchScenarioFacets` 加
+    projectId、`FilterBucket` 扩 project、`getInstanceCredentialMatches`;
+- **测试**:
+  - 后端 +9：summary 项目口径/门、列表过滤、facets 项目口径 + q 叠加 +
+    非成员 404、project 桶回环/隔离/缺参 422、成员计数、聚合端点矩阵
+    （管理员 vs 成员脱敏/个人计数/env 收敛/非成员 404）;
+  - 前端 +5:头卡四格 + 跳转带参、场景页签骨架（FilterPopover/分组/
+    facets projectId）、ExecutionsList 深链 chip、composable project 桶
+    参数、成员面板计数列 + CSV(全量/BOM/表头);
+- **验证**:前端 vitest **172 文件 / 1459 用例 0 failed** + vue-tsc 0
+  （含基线遗留 2 错一并修复:ProjectConfigPanel envId 收窄、成员徽章
+  Record 索引）+ eslint 0;后端全量 **2080 passed / 2 skipped / 0 failed**
+  （32m48s;对照 M5 重做基线 2066,+14 = 本批新用例 9 + 守卫白名单随
+  scope 行形同步 2 + 首跑被同库并发 pg_dump/alembic 干扰的 1 error +
+  2 failed 修复）;grep 守卫 owner-compare 白名单按 scope 重构换形同步;
+  迁移 0062 本地已 pg_dump 备份后落库;三服务重启后 curl 冒烟全绿
+  （summary/facets/聚合端点/项目桶 CRUD,含 404/409/422 失败面）,
+  浏览器走查待可登录凭据(同 P2-C 挂起项)。
+
+### ExecConfigsView 注册簿驱动重构（2026-11-18 晚，🟢 完成）
+
+项目侧「手写配置空间退场」后，`/exec-configs` 为执行配置**唯一手写面**
+（Runner 仍选配置、执行链仍消费 bindings/carry 覆盖、后端 CRUD 保留）。
+本批把该页写面从自由手敲升级为注册簿驱动，枢纽对齐四层模型。
+**仅前端零后端；`api/execConfigs.ts` 类型与函数签名零改动**（Runner /
+执行链不受牵连；载荷契约不变，§8.2 无 env 位口径延续）。
+
+- **写面选择器化**（原生 select + datalist，不引入新 UI 组件）:
+  - 服务 select 自主档（`listServices`;option `name(system)`、title=说明）；
+    存量值落「存量(未在主档)」optgroup;主档空/拉取失败 → 降级 Input 手输；
+  - 换用条目 select 自该服务身份条目（`listAliases({base, page_size:200})`，
+    与 listAllAliases 同口径）；未选服务/加载中 → 禁用占位；注册表空/失败 →
+    Input 降级；存量值（含跨服务换用）落兜底组 —— **新写限定同服务**
+    （schema 全局扁平允许跨服务但语义异常，存量保留不断数据）；
+    **选项集铁律：注册表条目 ∪ 当前行存量值**（native select v-model 值
+    必须在选项集中，否则回填视觉丢值）；
+  - 声明条目保持手输（跨服务、注册表规模不可枚举）+ datalist 软引导
+    （当前配置各服务已加载条目并集；「✕ 未登记」枢纽兜底仍在）；
+  - carry 字段 Input + datalist 接 plate 字段面（`getServiceFields` 键归一
+    直传服务名；**软引导不门控** —— 覆盖层非整表替换，区别于
+    ServiceBindingEditor 的 degraded 保存禁用）；
+  - **carry 值三态**（isNull 拆列，借 ServiceBindingEditor 思路）修复
+    null 回填丢真：旧 `fillForm` 把 null 折成 ''、保存原样存回；
+    现在 null → isNull 态（值输入禁用 + 「设 null/取消 null」开关），
+    `payloadOf` isNull → null、空串仍 '';
+- **枢纽对齐**:
+  - 面板①地址就绪度改「该服务部署环境 ∪ 归属 system 实例环境」并集矩阵
+    （有实例无地址的环境也出行）+ 登录口列（`listInstances()` 全量，
+    ServiceAdmin refreshAll 同款用法,静默降级；与 InstanceCredentialMatchPanel
+    行语义对齐）;分组列头「系统」→「服务」+ system 标注（分组键是目录服务名）;
+  - 面板③服务接入退役 `service-meta` 兼容层调用:说明直读已加载主档
+    （零新增请求）;补「系统」列;**模块保留**（ServiceAliasDetail 仍在用）;
+  - 面板②④⑤不动（C3a 装载就绪链 / carry 覆盖+漂移 / 生效预览）;
+- **测试**:ExecConfigsView.test.ts 14→18 用例 —— mock 基建重排
+  （services 补 listInstances、**新增 carry 模块 mock**（原完全未 mock）、
+  aliases 按 {base}/{q} 参数分派、删 service-meta mock 改走主档
+  description）;表单用例改 select 交互（setValue 后 flush 等条目懒加载）;
+  新增 4 用例:carry null 三态回归钉（回填显式 null + PATCH null + 取消
+  恢复字串）、换用条目下拉 base 过滤、服务不在主档存量兜底（option 归属
+  存量 optgroup + PATCH 保留）、面板①并集行（SIT 实例无部署 → 出行显
+  登录口标缺地址）;
+- **验证**:前端 vitest **172 文件 / 1463 用例 0 failed**（对照 A 级批次
+  基线 1459,+4 = 本批新用例）+ vue-tsc 0 + eslint 0;后端零改动。
+
+#### 表单 v2:级联驱动,手写拼行退场（2026-11-18 晚,用户复核,🟢 完成）
+
+用户复核指出 v1 仍保留「+ 添加绑定」「+ 添加 carry」手动拼行交互,与
+注册簿心智不符;期望级联 **服务 → 实例 → 调用身份 → 字段面 → 凭证
+装载状态**,行全部从注册簿长出来。约束不变（payload 形态 / §8.2 配置
+不固化环境 / 凭证薄束）,纯交互重构、payload 与 `api/execConfigs.ts`
+仍零改动:
+
+- **身份条目表（替代「添加绑定」）**:行 = 该服务注册表条目
+  （`listAliases base` 过滤,按实例过滤收窄行集）;列 = 条目 / 装载坐标
+  （条目自带 envId + 主档 system）/ **个人池解析账户**（页内 authRows
+  同构判定:default ref 只认 isDefault、username ref 认用户名;缺账户
+  → /auths 预填深链 —— 「选凭证」的等价操作）/「换用为」select
+  （候选 = 该服务全部条目**按环境 optgroup**,跨环境换用 = §8.2 后的
+  换环境机制,不被实例过滤收窄;选了即 upsert binds,'' = 移除）;
+- **carry 面行（替代「添加 carry」）**:行 = `getServiceFields` 字段面
+  （字段/类型/说明/值三态）;面内字段未填且非 null = 不覆盖
+  （payloadOf 剔除）;面不可达/为空 → 整节降级手写（**仅降级态**提供
+  「+ 添加」）;面外存量字段落手写行（保持「值留空 = 注入空串」旧语义）;
+- **实例过滤（表单态,不进 payload）**:该服务归属 system 的实例行
+  （环境名 + 标签）,只收窄身份表行集;`listInstances` 移 onMounted
+  旁路（create 模式可用,枢纽①共用）;
+- **存量节**:声明条目 ∉ 注册表的绑定（未登记/跨服务）落「存量绑定」
+  节可改可删;换用值不在候选集 → 存量 optgroup 兜底 —— **注册簿制
+  后果:未登记声明侧不再提供手输新增,新换用只能从已登记条目行上选**;
+- **单一数据源**:内部仍 `binds`/`carries` 数组,身份表行与面行皆派生
+  视图;fillForm/payloadOf 保存链与重名校验/409 内联不动;
+- **测试**:14→18→**22 用例** —— 新增/改写:首载身份表回填换用值 +
+  面行回填 + 添加按钮退场断言、新建行内「换用为」即成绑定、面内未填
+  字段不进覆盖、null 三态（面行）、换用候选环境 optgroup 分组、存量
+  绑定节 + 跨服务换用存量组、实例过滤收窄行集（候选不收窄）、装载列
+  解析账户/缺账户深链、无面降级手写（此时才可添加）;
+- **验证**:前端 vitest **172 文件 / 1467 用例 0 failed**（+4）+
+  vue-tsc 0 + eslint 0;后端零改动。
+
+#### 表单 v3 + carry 实例档:系统档 → 实例档,配置页 carry 退场（2026-11-19,用户决策,🟢 完成）
+
+用户复核两连:① 配置页 carry 面多余 —— 值随调用身份走(条目/服务/
+实例绑定 + 默认值层),配置级 `carryOverrides` 写面退场;② carry 系统档
+不合理 —— 按部署实例做默认值差异化(测试/预发布/生产同字段不同值)远
+比"跨部署同值"常见,系统档 → 实例档。定稿 redesign **§8.9**,一批做全
+(后端模型/迁移/链路 + 前端四件)。
+
+- **设计要点**:链序 `条目 > 实例(system, env) > 服务 > 层默认`
+  (**实例压过服务** —— 档位上移而非替换系统档原位;服务与实例正交,
+  按部署差异化诉求定序);实例 = `system_env_instances` 行;坐标 =
+  `(scope, config_key=系统名, instance_env_id, field_path)`,sentinel 0
+  = 基线行,五键唯一约束;与 §8.4 退役的"任意键 env 覆盖"语义不同
+  (独立实例档 vs env 维覆盖);**实例档环境 = 执行标签**(与地址同源,
+  env=None 跳过);同名碰撞(服务名=系统名)两行并存靠 instance_env_id
+  区分、实例压过服务;
+- **后端**:
+  - 模型 `carry_binding.py` 加 `instance_env_id NOT NULL server_default 0`,
+    唯一约束四键→五键;**迁移 `0063`**(0058 模板):加列 → 守卫报告并
+    删除纯系统键行(`∈ 系统名集合 且 ∉ 已登记服务名`,预计 0 行 —— 无
+    UI 写入口、0057 存量 238 行全落服务档)→ 重建五键约束;fresh 链
+    (baseline create_all)直建终态守卫空转;
+  - 执行链 `carry_injection.build_carry_context` 加 `env_id` 参数,层内
+    merge 键序 服务 → 实例 → 条目(系统键查找删除);`prepare_exec` 传
+    执行标签、`graph_dispatch` 逐单元下传(`unit_carry_contexts` 消费
+    metas.env_id);
+  - **预览同步(顺手修既有口径差)**:`resolve_effective_config` 此前只
+    查 base+alias 两档漏粗档 —— 补齐为 `条目 > 实例 > 服务 > 层默认`,
+    逐值 source 扩 `{scope}:{scopeId}:instance:{envId}`;
+  - 端点:`GET/PUT /carry/bindings/{system}/instances/{envId}`(system
+    须命中主档、(system,env) 须有实例行否则 404;权限门同既有值端点);
+    裸系统名值端点 422 `carry_system_key_retired`;`/{key}/fields` 不动
+    (系统名键面 = 成员服务声明并集,原样复用);
+  - 封堵与清扫:变更适配走 store 直连不经路由 —— 系统键封堵落在
+    **op 校验层**(`create_op`/`_apply_carry_op` 双保险);`carry_drift`
+    实例行单列报告(`instanceEnvId` 标注,face = 系统成员并集,不进
+    适配批);`list_bindings` flat 视图滤实例行;`scenario_import` 的
+    user-scope 直连残余为既有问题,记档不改;
+- **前端**:
+  - `api/carry.ts` 实例端点 client;`api/runs.ts` `carrySourceLabel`
+    扩"·实例"档;`CarryDriftPanel` 实例行只读呈现(不进适配批);
+  - `ServiceBindingEditor` 加 `instanceEnvId` 模式(字段面复用系统名键,
+    值表走实例端点,「来源」列降两态,保存写实例键);
+  - `ServiceAdmin` 配置管理抽屉新增「carry 默认值(实例)」分区
+    (词面注明:值对该系统全部服务在本环境生效);
+  - **ExecConfigsView 表单 v3**:carry 节整撤(字段面机制/面行/手写行/
+    降级添加全移除);存量 `carryOverrides` 只读视图(`ec-carry-legacy`)
+    + `payloadOf` 原样回写(null 保真);枢纽④(carry 覆盖+漂移)退场
+    (`execConfigDrift` 调用移除,API 导出与后端端点保留);文案按
+    "配置 = 选身份"重写;身份表/实例过滤/存量绑定节不动;
+- **测试**:后端新增 `test_carry_instance_key.py` **8 用例**(store 实例
+  roundtrip/基线隔离、纯系统键判定、**执行链键序钉**(实例压过服务/
+  条目压过实例/无 env 跳过/无实例行回落)、预览同序 + instance source、
+  实例端点门(404×2/422/403/回环)、同名碰撞、漂移实例行、**迁移 0063
+  时代降形重放**(baseline 是动态 create_all → 升 0062 后手动拆列重建
+  四键再重放));前端 ExecConfigsView 22→21(v3 改写:存量只读回写含
+  null、carry 控件全站退场断言、execConfigDrift 不再调用)+ 编辑器
+  +1(实例模式);
+- **验证**:后端 carry 域 26 用例 + 注入/适配/权限 22 用例绿;
+  前端 vitest **172 文件 / 1466 用例 0 failed** + vue-tsc 0 + eslint 0;
+  后端全量 pytest **2088 passed / 2 skipped / 1 error**(对照 A 级基线
+  2080,+8 = 本批新用例;唯一 error = `test_adhoc_run` 单例收尾后后台
+  心跳 UPDATE 打到已删 per-test schema 的异步越界 flake —— 该文件整跑
+  复验 **30 passed / 0 error**,与 carry 改动无关);迁移 0063 开发库已
+  pg_dump 备份(容器 /var/tmp/pre_0063.dump)后落库:0062→0063 真实
+  执行,列/五键约束/236 行保留(238−2:开发库原有 2 条系统键行按守卫
+  删除,属设计内行为)。
 
 ### P2-C 验证收口
 

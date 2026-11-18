@@ -498,3 +498,50 @@ resolve_execution_tag:
 同环境多节点/多标签实例、环境表合并、carry 两表合并、历史数据清洗、
 主库残留测试 schema 自动清理(如需另出脚本单独确认)。将来若需按部署
 差异化配置:挂到实例(服务×环境)上,不回到环境层。
+
+### 8.9 carry 实例档(系统档 → 实例档;2026-11-19 定稿)
+
+§8.8 留的"挂实例"方向落地,同时把**系统档粗档退场**(用户决策:按部署
+实例做默认值差异化 —— 测试/预发布/生产同字段不同值 —— 远比"跨部署
+同值"常见;系统档前端写入口已随项目配置页手写退场撤空,替换代价小)。
+
+- **新链序(层内,细到粗)**:`条目 > 实例(system, env) > 服务 > 层默认`。
+  服务与实例是正交维度(服务 × 环境),链序是设计选择 —— 按部署差异化
+  诉求**实例必须压过服务**(服务 timeout=30、SIT 实例 60 → SIT=60、
+  无实例行的环境回落 30;条目键压过一切)。与旧三档"条目 > 服务 >
+  系统"不同:实例不是替换系统档的位置(最粗端),而是**档位上移**。
+- **实例词义统一**:实例 = `system_env_instances` 行 = (system, env);
+  §8.1 的"服务×环境"是交互词面。值表坐标 =
+  `(scope, config_key=系统名, instance_env_id, field_path)`;sentinel
+  `instance_env_id=0` = 条目/服务档基线行(避开 NULL 唯一性陷阱),
+  五键唯一约束。**与 §8.4 退役的"任意键 env 覆盖"语义不同**:那是
+  env 维覆盖任意档,这是独立实例档 —— 环境只作实例键坐标,不构成覆盖层。
+- **实例档环境 = 执行标签**(与地址取数同源:`有效身份 > 项目默认 >
+  平台默认`;env_mixed 已被预检硬拦,执行级恒单值)。`env=None`
+  (标签链全空 / 导入析出)→ 实例档跳过,按 服务 < 条目 合成。
+- **同名碰撞**:服务名 = 系统名时(0057 主档初始化即如此),同
+  config_key 的服务档行(env=0)与实例档行(envId)并存,靠
+  instance_env_id 区分,实例压过服务;键判定"纯系统名"= ∈ 系统名集合
+  且 ∉ 已登记服务名(同名按服务名放行)。
+- **API**:值表 `GET/PUT /api/carry/bindings/{system}/instances/{envId}`
+  (system 须命中主档、(system, env) 须有实例行,否则 404;权限门随
+  既有值端点同口径)。裸系统名值端点 422 `carry_system_key_retired`;
+  字段面端点 `/{key}/fields` 不动 —— 系统名键面(成员服务声明并集)
+  原样复用给实例键(plate 声明面无环境维)。变更适配/导入走 store
+  直连,系统键封堵落在 **op 校验层**(`create_op` / `_apply_carry_op`
+  双保险);实例键进适配 op 为后续缺口。
+- **消费面同步**:`build_carry_context` 加 `env_id` 参数(`prepare_exec`
+  传执行标签;`unit_carry_contexts` 经 graph_dispatch 逐单元下传);
+  预览 `resolve_effective_config` 同序(顺手修既有口径差:预览此前
+  只查 base+alias 两档漏粗档),逐值 source 扩
+  `{scope}:{scopeId}:instance:{envId}`;漂移报告实例行单列
+  (`instanceEnvId` 标注,face = 系统成员并集,不进适配批)。
+- **迁移 0063**:加列(server_default 0)→ 守卫报告并删除纯系统键行
+  (预计 0 行:无 UI 写入口、0057 存量 238 行全落服务档)→ 重建五键
+  唯一约束。fresh 链(baseline create_all)直建终态,守卫空转。
+- **前端**:ServiceAdmin 配置管理抽屉新增「carry 默认值(实例)」分区
+  (`ServiceBindingEditor` instanceEnvId 模式:字段面复用系统名键,
+  值表走实例端点,「来源」列降两态);预览来源标签扩"·实例"档;
+  CarryDriftPanel 实例行只读。**同批:ExecConfigsView 表单 v3** ——
+  配置级 `carryOverrides` 写面退场(业务参数随调用身份走,本页收敛为
+  "选身份"),存量值只读回写、执行链照常消费。

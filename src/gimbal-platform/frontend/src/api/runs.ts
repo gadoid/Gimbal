@@ -36,15 +36,22 @@ export const PREVIEW_SOURCE_LABELS: Record<string, string> = {
   exec_config_default: '默认执行配置',
 }
 
-/** carry 来源形如 "{scope}:{scopeId}:base|alias"(scope = project/user;
- * scopeId 为公共项目 id 时即「全局层」);分层②的配置覆盖层另有
- * 'exec_config' 一档。拆层名供展示。 */
+/** carry 来源形如 "{scope}:{scopeId}:base|alias|instance:{envId}"(scope
+ * = project/user;scopeId 为公共项目 id 时即「全局层」);分层②的配置
+ * 覆盖层另有 'exec_config' 一档;§8.9 实例档来源带环境坐标(系统×环境
+ * 部署默认,压过服务档)。拆层名供展示。 */
 export function carrySourceLabel(source: string): string {
   if (source === 'exec_config') return '执行配置覆盖'
   const m = /^(project|user):(\d+):(base|alias)$/.exec(source)
-  if (!m) return source
-  const scope = m[1] === 'project' ? '项目层' : '个人层'
-  return m[3] === 'alias' ? `${scope}·别名` : scope
+  if (m) {
+    const scope = m[1] === 'project' ? '项目层' : '个人层'
+    return m[3] === 'alias' ? `${scope}·别名` : scope
+  }
+  const mi = /^(project|user):(\d+):instance:(\d+)$/.exec(source)
+  if (mi) {
+    return `${mi[1] === 'project' ? '项目层' : '个人层'}·实例`
+  }
+  return source
 }
 
 export interface PreviewEnv {

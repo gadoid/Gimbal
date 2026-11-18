@@ -19,6 +19,8 @@ vi.mock('@/api/carry', () => ({
   getBindingsFor: vi.fn(),
   putBindings: vi.fn(),
   getServiceFields: vi.fn(),
+  getBindingsForInstance: vi.fn(),
+  putBindingsInstance: vi.fn(),
 }))
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -158,6 +160,31 @@ describe('ServiceBindingEditor — env 覆盖维已退役(§8.4)', () => {
     await flushPromises()
     expect(carryApi.putBindings).toHaveBeenCalledWith(
       'fin-service-uat', expect.anything(), undefined)
+    w.unmount()
+  })
+})
+
+describe('ServiceBindingEditor — 实例档模式(§8.9)', () => {
+  it('值表走实例端点;ownLabel=本实例;无「服务级」来源;保存写实例键', async () => {
+    vi.mocked(carryApi.getBindingsForInstance).mockResolvedValue({ '$.own-val': 'v1' })
+    const router = makeRouter()
+    const w = mount(ServiceBindingEditor, {
+      props: { serviceKey: 'fin', instanceEnvId: 2 },
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+    // 字段面复用系统名键(成员服务声明并集)
+    expect(carryApi.getServiceFields).toHaveBeenCalledWith('fin')
+    // 值表走实例端点(坐标 = 系统×环境),基线/服务级层不读
+    expect(carryApi.getBindingsForInstance).toHaveBeenCalledWith('fin', 2, undefined)
+    expect(carryApi.getBindingsFor).not.toHaveBeenCalled()
+    expect(w.text()).toContain('本实例绑定')
+    expect(w.text()).not.toContain('服务级')
+    await w.find('[data-testid="save-service"]').trigger('click')
+    await flushPromises()
+    expect(carryApi.putBindingsInstance).toHaveBeenCalledWith(
+      'fin', 2, expect.anything(), undefined)
+    expect(carryApi.putBindings).not.toHaveBeenCalled()
     w.unmount()
   })
 })

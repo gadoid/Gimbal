@@ -26,6 +26,20 @@ async def public_scope(db) -> "tuple[str, int]":
     return ("project", pid if pid is not None else 0)
 
 
+async def is_pure_system_key(db, key: str) -> bool:
+    """§8.9:键是主档系统名且**非**已登记服务名 = 已退场的系统档裸键
+    (写入口封堵:值表只收 条目/服务/实例 坐标)。同名碰撞(键既是服务
+    名又是系统名)按服务名判定,不是系统裸键。"""
+    from ..models.service import Service
+
+    if (await db.execute(
+            select(Service.id).where(Service.name == key))).scalar() is not None:
+        return False
+    return (await db.execute(
+        select(Service.id).where(Service.system == key).limit(1))
+    ).scalar() is not None
+
+
 async def _scoped(db, scope: "tuple[str, int] | None") -> "tuple[str, int]":
     return scope if scope is not None else await public_scope(db)
 
@@ -45,14 +59,16 @@ async def visible_scopes(db, user) -> "list[tuple[str, int]]":
 async def get_bindings(db, config_key: str,
                        scope: "tuple[str, int] | None" = None,
                        ) -> dict[str, str | None]:
-    """键 → 生效绑定(注入读面)。环境维已退役(§8.4)—— 只有基线层,
-    层序/键域合并在 ``carry_injection.build_carry_context``。"""
+    """键 → 生效绑定(注入读面;§8.9 只读基线行 = 条目/服务档,
+    实例行由 :func:`get_instance_bindings` 单读)。层序/键域合并在
+    ``carry_injection.build_carry_context``。"""
     scope = await _scoped(db, scope)
     rows = (await db.execute(
         select(CarryServiceBinding).where(
             CarryServiceBinding.config_key == config_key,
             CarryServiceBinding.scope == scope[0],
             CarryServiceBinding.scope_id == scope[1],
+            CarryServiceBinding.instance_env_id == 0,
         )
     )).scalars().all()
     return {r.field_path: r.value for r in rows}
@@ -67,15 +83,62 @@ async def put_bindings(
     updated_by_name: str,
     scope: "tuple[str, int] | None" = None,
 ) -> None:
-    """整体替换(行集 diff):替换坐标 = (scope, config_key)。"""
+    """整体替换(行集 diff):替换坐标 = (scope, config_key, 基线行)。
+    §8.9:删除范围恒限 ``instance_env_id=0`` —— 同 config_key 的实例
+    行(服务名=系统名同名碰撞时两档并存)不受基线整表替换波及。"""
     scope = await _scoped(db, scope)
     await db.execute(delete(CarryServiceBinding).where(
         CarryServiceBinding.config_key == config_key,
         CarryServiceBinding.scope == scope[0],
-        CarryServiceBinding.scope_id == scope[1]))
+        CarryServiceBinding.scope_id == scope[1],
+        CarryServiceBinding.instance_env_id == 0))
     for path, value in sorted(entries.items()):
         db.add(CarryServiceBinding(
             config_key=config_key,
+            scope=scope[0], scope_id=scope[1],
+            field_path=path, value=value,
+            updated_by_id=updated_by_id, updated_by_name=updated_by_name,
+        ))
+
+
+async def get_instance_bindings(
+    db, system: str, env_id: int,
+    scope: "tuple[str, int] | None" = None,
+) -> dict[str, str | None]:
+    """实例键 → 生效绑定(§8.9 实例档;坐标 = (scope, 系统名, 环境))。"""
+    scope = await _scoped(db, scope)
+    rows = (await db.execute(
+        select(CarryServiceBinding).where(
+            CarryServiceBinding.config_key == system,
+            CarryServiceBinding.scope == scope[0],
+            CarryServiceBinding.scope_id == scope[1],
+            CarryServiceBinding.instance_env_id == env_id,
+        )
+    )).scalars().all()
+    return {r.field_path: r.value for r in rows}
+
+
+async def put_instance_bindings(
+    db,
+    system: str,
+    env_id: int,
+    entries: dict[str, str | None],
+    *,
+    updated_by_id: int | None,
+    updated_by_name: str,
+    scope: "tuple[str, int] | None" = None,
+) -> None:
+    """实例键整体替换(§8.9;替换坐标 = (scope, 系统名, 环境))。"""
+    scope = await _scoped(db, scope)
+    await db.execute(delete(CarryServiceBinding).where(
+        CarryServiceBinding.config_key == system,
+        CarryServiceBinding.scope == scope[0],
+        CarryServiceBinding.scope_id == scope[1],
+        CarryServiceBinding.instance_env_id == env_id))
+    for path, value in sorted(entries.items()):
+        db.add(CarryServiceBinding(
+            config_key=system,
+            instance_env_id=env_id,
             scope=scope[0], scope_id=scope[1],
             field_path=path, value=value,
             updated_by_id=updated_by_id, updated_by_name=updated_by_name,
@@ -130,6 +193,10 @@ async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
     事),``baseService`` 标注归一关系供面板标注「别名 → base」。
     plate 不可达时无从归一,键原样参与(既有全 orphaned 降级不变)。
 
+    §8.9 实例行(``instance_env_id>0``)单列报告:face = 该系统全部成员
+    服务声明并集(与实例键面端点同构),``instanceEnvId`` 标注环境;
+    基线行 diff 不受实例行混入影响。
+
     返回 ``{"services": [...], "plateReachable": bool}``。
     """
     from .adaptation_service import _plate_list_endpoints, _plate_full_endpoint
@@ -143,8 +210,13 @@ async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
                           CarryServiceBinding.scope_id == scope[1])
     rows = (await db.execute(stmt)).scalars().all()
     bound_by_service: dict[str, set[str]] = {}
+    bound_by_instance: dict[tuple[str, int], set[str]] = {}
     for r in rows:
-        bound_by_service.setdefault(r.config_key, set()).add(r.field_path)
+        if r.instance_env_id:
+            bound_by_instance.setdefault(
+                (r.config_key, r.instance_env_id), set()).add(r.field_path)
+        else:
+            bound_by_service.setdefault(r.config_key, set()).add(r.field_path)
 
     # 面并集(按服务);plate_services = 目录服务全集(键归一的解析域)
     face_by_service: dict[str, set[str]] = {}
@@ -198,4 +270,23 @@ async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
                     "orphaned": orphaned,
                     "uncovered": uncovered,
                     "renamedSuggestions": suggestions})
+    # §8.9 实例行:face = 系统成员服务声明并集(carry.py service_fields
+    # 系统档同构);orphaned/uncovered 对该 (system, env) 坐标整体给
+    from ..models.service import Service as DBService
+
+    for (system, env_id) in sorted(bound_by_instance):
+        members = (await db.execute(
+            select(DBService.name).where(DBService.system == system)
+        )).scalars().all()
+        face = set()
+        for m in members:
+            face |= face_by_service.get(m, set())
+        bound = bound_by_instance[(system, env_id)]
+        orphaned = sorted(bound - face)
+        uncovered = sorted(face - bound)
+        out.append({"service": system, "baseService": None,
+                    "instanceEnvId": env_id,
+                    "orphaned": orphaned,
+                    "uncovered": uncovered,
+                    "renamedSuggestions": []})
     return {"services": out, "plateReachable": reachable}

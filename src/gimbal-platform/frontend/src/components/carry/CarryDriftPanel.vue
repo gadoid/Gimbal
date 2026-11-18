@@ -1,7 +1,9 @@
 <!-- CarryDriftPanel.vue — M2a S7.6:分层 carry 漂移面板(项目配置页 /
      我的配置复用)。数据 = getDrift(target);勾选生成作用域化的 carry 批
      (openCarryBatch(service, target)),跳批次详情页应用。分权后端同
-     carry 写面:项目层 = 项目管理员,个人层 = 本人。 -->
+     carry 写面:项目层 = 项目管理员,个人层 = 本人。
+     §8.9:instanceEnvId 非空的行 = 实例档(系统×环境)diff —— 只读
+     呈现,不进适配批(实例键适配 op 为后续缺口)。 -->
 <template>
   <div class="cdp" :data-testid="`carry-drift-${tid}`">
     <div class="head">
@@ -27,15 +29,30 @@
     <p v-else-if="loadFailed" class="hint">加载失败,请刷新</p>
     <p v-else-if="drift.length === 0" class="hint">暂无 carry 数据</p>
     <div v-else class="list">
-      <div v-for="s in drift" :key="s.service" class="svc" data-testid="drift-svc">
-        <div class="name mono">{{ s.service }}</div>
-        <p v-if="!hasCarryDrift(s)" class="ok">✓ 无漂移</p>
-        <div v-else class="checks">
-          <label v-for="opt in driftCheckOptions(s)" :key="opt.key" class="check">
-            <input v-model="checked" type="checkbox" :value="opt.key" :disabled="!plateReachable" />
-            {{ opt.text }}
-          </label>
+      <div v-for="s in drift" :key="s.instanceEnvId ? `${s.service}#${s.instanceEnvId}` : s.service"
+           class="svc" data-testid="drift-svc">
+        <div class="name mono">
+          {{ s.service }}<template v-if="s.instanceEnvId"> · 实例#{{ s.instanceEnvId }}</template>
         </div>
+        <template v-if="s.instanceEnvId">
+          <!-- §8.9 实例档行:只读呈现(实例键暂不进适配批,维护在
+               服务注册的实例抽屉「carry 默认值(实例)」) -->
+          <p v-if="!hasCarryDrift(s)" class="ok">✓ 无漂移</p>
+          <div v-else class="checks">
+            <p v-if="s.orphaned.length" class="check">面外字段:{{ s.orphaned.join('、') }}</p>
+            <p v-if="s.uncovered.length" class="check">未覆盖:{{ s.uncovered.join('、') }}</p>
+            <p class="hint">实例档(系统 × 环境)维护在服务注册的实例配置,不进适配批</p>
+          </div>
+        </template>
+        <template v-else>
+          <p v-if="!hasCarryDrift(s)" class="ok">✓ 无漂移</p>
+          <div v-else class="checks">
+            <label v-for="opt in driftCheckOptions(s)" :key="opt.key" class="check">
+              <input v-model="checked" type="checkbox" :value="opt.key" :disabled="!plateReachable" />
+              {{ opt.text }}
+            </label>
+          </div>
+        </template>
       </div>
     </div>
   </div>

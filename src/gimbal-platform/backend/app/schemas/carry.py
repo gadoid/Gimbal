@@ -72,6 +72,9 @@ class ServiceDrift(BaseModel):
     # 别名键归一后的 base 服务(键不是目录服务时标注,面板显示
     # 「别名 → base」);目录服务键为 None
     baseService: str | None = None
+    # §8.9 实例行:非空 = 实例键 (system, instanceEnvId) 的 diff 行
+    # (face = 系统成员服务声明并集);基线行为 None
+    instanceEnvId: int | None = None
     orphaned: list[str] = Field(default_factory=list)
     uncovered: list[str] = Field(default_factory=list)
     renamedSuggestions: list[dict[str, str]] = Field(default_factory=list)

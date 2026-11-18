@@ -252,6 +252,7 @@ async def materialize_graph(
     from .env_chain import EnvChoice, EnvMixed, resolve_execution_tag
     from .service_aliases import exec_auth_aliases_of_definition
     unit_urls: dict[str, dict] = {}
+    unit_envs: dict[str, int | None] = {}
     for r in resolved:
         ref = r["unit"]["ref"]
         try:
@@ -263,12 +264,14 @@ async def materialize_graph(
                 ue = await resolve_execution_tag(
                     db, identity_names=_unit_aliases,
                     project_id=r["scenario_row"].project_id)
+            unit_envs[ref] = ue.env_id
             unit_urls[ref] = await service_aliases.base_urls_for(
                 db, _all_referenced_services([r]), env=ue)
         except EnvMixed as e:
             raise GraphDispatchError(
                 f"单元 {ref} {e}") from None
         except Exception:  # noqa: BLE001
+            unit_envs[ref] = None
             unit_urls[ref] = {}
     # §8.3:取用不校验标签 —— 无环境位(此前曾漏传 env 导致编排链
     # users 恒空;链位退役后该缺陷类不复存在)
@@ -281,13 +284,14 @@ async def materialize_graph(
     # 单元共用);单单元失败降 None 不阻塞。此前显式 None 是绕开空 dict
     # 炸 _apply_carry 的权宜 —— Suite 无 carry 的功能缺口由归一补齐。
     # S4:逐单元 carry 作用域(单元场景项目;私有区单元 → 执行人个人层)
+    # §8.9 实例档:逐单元执行标签(env_mixed 已派发前拦,单值)下传
+    # 作实例键坐标;S6:绑定选别名 → carry 别名键随之切换
     carry_ctxs = await run_prepare.unit_carry_contexts(
         db_module.SessionLocal, [r["composed"] for r in resolved],
         [{"project_id": r["scenario_row"].project_id,
           "user_id": (owner_id if r["scenario_row"].project_id is None
                       else None),
-          # 环境维已退役(§8.4):carry 无环境位(unit_envs 不再下传)
-          # S6:绑定选别名 → carry 别名键随之切换
+          "env_id": unit_envs.get(r["unit"]["ref"]),
           "bindings": unit_merged_bindings(graph_req, r["unit"])}
          for r in resolved])
 

@@ -112,8 +112,46 @@ async def _resolve_scope(
 def _svc_map(rows) -> dict[str, dict[str, str | None]]:
     out: dict[str, dict[str, str | None]] = {}
     for r in rows:
+        if r.instance_env_id:
+            continue  # §8.9 实例行不进 flat 合并视图(逐实例维护面另读)
         out.setdefault(r.config_key, {})[r.field_path] = r.value
     return out
+
+
+async def _reject_pure_system_key(db, service: str) -> None:
+    """§8.9:裸系统名不再是合法值表键(系统档退场,实例档接棒 —— 按部署
+    差异化走 ``/bindings/{system}/instances/{envId}``)。同名碰撞(键既是
+    服务名又是系统名)按服务名放行 —— 服务档行合法。"""
+    if await carry_store.is_pure_system_key(db, service):
+        raise HTTPException(422, detail={
+            "code": "carry_system_key_retired",
+            "message": "系统级 carry 键已退场 —— 按部署差异化请写实例档 "
+                       f"PUT /carry/bindings/{service}/instances/{{envId}}"
+                       "(坐标 = 系统 × 环境)"})
+
+
+async def _require_instance_key(db, system: str, env_id: int) -> None:
+    """§8.9 实例键校验:system 须命中主档系统名(有成员服务)、
+    (system, env) 须存在实例行 —— 实例是值的宿主,未接入的环境无档。"""
+    from ..models.service import Service as DBService
+    from ..models.system_env_instance import SystemEnvInstance
+
+    members = (await db.execute(
+        select(DBService.id).where(DBService.system == system).limit(1))
+    ).scalar() is not None
+    if not members:
+        raise HTTPException(404, detail={
+            "code": "not_found",
+            "message": f"主档无系统 {system!r}(实例键 = 系统名 × 环境)"})
+    inst = (await db.execute(
+        select(SystemEnvInstance.id).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.env_id == env_id).limit(1))).scalar() is not None
+    if not inst:
+        raise HTTPException(404, detail={
+            "code": "not_found",
+            "message": f"系统 {system!r} 在环境 #{env_id} 没有实例行 —— "
+                       "先在服务注册接入实例(登记登录口/API 地址)"})
 
 
 @router.get("/defaults", response_model=DefaultsOut)
@@ -161,13 +199,14 @@ async def put_defaults(
 @router.get("/bindings", response_model=BindingsOut)
 async def list_bindings(user: CurrentUser, db=DbSession):
     """可见层并集(公共项目 + 我所在项目 + 我的个人层);后层覆盖
-    前层(与运行时 tier 同序),flat bindings = 合并视图,rows 带层。"""
+    前层(与运行时 tier 同序),flat bindings = 合并视图,rows 带层。
+    §8.9:仅基线行(条目/服务档)—— 实例档行逐实例维护,不进 flat 面。"""
     scopes = await carry_store.visible_scopes(db, user)
     rank = {sc: i for i, sc in enumerate(scopes)}
     rows = sorted(
         (r for r in (await db.execute(
             select(CarryServiceBinding))).scalars().all()
-         if (r.scope, r.scope_id) in scopes),
+         if (r.scope, r.scope_id) in scopes and not r.instance_env_id),
         key=lambda r: rank[(r.scope, r.scope_id)])
     merged = _svc_map(rows)   # tier 序在后 → 同键覆盖(tier 靠后者赢)
     return BindingsOut(
@@ -183,8 +222,10 @@ async def get_bindings(
     scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ):
-    """读某键的生效绑定(环境维退役 §8.4 —— 只有基线层)。"""
+    """读某键的生效绑定(基线层:条目/服务档键;系统档已退场 §8.9,
+    实例档走 ``/bindings/{system}/instances/{envId}``)。"""
     sc = await _resolve_scope(db, user, scope, project_id, write=False)
+    await _reject_pure_system_key(db, service)
     return ServiceBindingsOut(
         bindings=await carry_store.get_bindings(db, service, sc),
         scope=sc[0], scopeId=sc[1])
@@ -196,8 +237,9 @@ async def put_bindings(
     scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ):
-    """替换坐标 = (scope, config_key);环境覆盖层已退役(§8.4)。"""
+    """替换坐标 = (scope, config_key, 基线行);系统档已退场(§8.9)。"""
     sc = await _resolve_scope(db, user, scope, project_id, write=True)
+    await _reject_pure_system_key(db, service)
     old = await carry_store.get_bindings(db, service, sc)
     await carry_store.put_bindings(
         db, service, body.bindings,
@@ -219,6 +261,61 @@ async def put_bindings(
                          user.display_name or user.username)
     return ServiceBindingsOut(
         bindings=await carry_store.get_bindings(db, service, sc),
+        scope=sc[0], scopeId=sc[1])
+
+
+@router.get("/bindings/{system}/instances/{env_id}",
+            response_model=ServiceBindingsOut)
+async def get_instance_bindings(
+    system: str, env_id: int, user: CurrentUser, db=DbSession,
+    scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+):
+    """§8.9 实例档读:坐标 = (scope, 系统名, 环境) —— 部署级默认值
+    (测试/预发布/生产同字段不同值);链序 条目 > 实例 > 服务 > 层默认。"""
+    sc = await _resolve_scope(db, user, scope, project_id, write=False)
+    await _require_instance_key(db, system, env_id)
+    return ServiceBindingsOut(
+        bindings=await carry_store.get_instance_bindings(
+            db, system, env_id, sc),
+        scope=sc[0], scopeId=sc[1])
+
+
+@router.put("/bindings/{system}/instances/{env_id}",
+            response_model=ServiceBindingsOut)
+async def put_instance_bindings(
+    system: str, env_id: int, user: CurrentUser, body: CarryMapIn, db=DbSession,
+    scope: Annotated[str, Query(pattern="^(global|project|user)$")] = "global",
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+):
+    """§8.9 实例档整表替换:值对该系统全部服务在本环境生效(实例 =
+    系统 × 环境,非单服务);权限门与裸键写面同口径(层 + Admin+)。"""
+    sc = await _resolve_scope(db, user, scope, project_id, write=True)
+    await _require_instance_key(db, system, env_id)
+    old = await carry_store.get_instance_bindings(db, system, env_id, sc)
+    await carry_store.put_instance_bindings(
+        db, system, env_id, body.bindings,
+        updated_by_id=user.id,
+        updated_by_name=user.display_name or user.username,
+        scope=sc,
+    )
+    await db.commit()
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="carry.write", resource_type="carry",
+        resource_id=f"{system}#{env_id}",
+        detail={"service": system, "instanceEnvId": env_id,
+                "scope": sc[0], "scopeId": sc[1]},
+    )
+    # S7.6:公共层写 → 项目层同键遮蔽通知(实例键坐标 = 系统×环境)
+    await _notify_shadow(db, sc, system, old, body.bindings or {},
+                         user.display_name or user.username)
+    return ServiceBindingsOut(
+        bindings=await carry_store.get_instance_bindings(
+            db, system, env_id, sc),
         scope=sc[0], scopeId=sc[1])
 
 

@@ -84,6 +84,29 @@ export async function putBindings(
   return data.bindings
 }
 
+/** §8.9 实例档读写:坐标 = (scope, 系统名, 环境) —— 部署级默认值
+ * (测试/预发布/生产同字段不同值),值对该系统全部服务在本环境生效。
+ * 键序:条目 > 实例 > 服务 > 层默认;字段面复用 getServiceFields(系统名
+ * 键面 = 成员服务声明并集)。系统须在主档、(system, env) 须有实例行
+ * (否则 404);裸系统名值端点已 422 退役(carry_system_key_retired)。 */
+export async function getBindingsForInstance(
+  system: string, envId: number, target?: ScopeTarget,
+): Promise<CarryValues> {
+  const { data } = await http.get<{ bindings: CarryValues }>(
+    `/carry/bindings/${encodeURIComponent(system)}/instances/${envId}`,
+    bindingParams(target))
+  return data.bindings
+}
+
+export async function putBindingsInstance(
+  system: string, envId: number, bindings: CarryValues, target?: ScopeTarget,
+): Promise<CarryValues> {
+  const { data } = await http.put<{ bindings: CarryValues }>(
+    `/carry/bindings/${encodeURIComponent(system)}/instances/${envId}`,
+    { bindings }, bindingParams(target))
+  return data.bindings
+}
+
 /** 单个 carry 字段的面元信息(plate /full request.declarations 的 carry 通道条目聚合并集)。 */
 export interface CarryEndpointMini {
   id: string
@@ -115,9 +138,12 @@ export async function getServiceFields(service: string): Promise<ServiceFields> 
 }
 
 /** 单服务漂移项:orphaned=绑定有面无 / uncovered=面有绑定无 /
- *  renamedSuggestions=单×单 配对建议(多候选不猜)。 */
+ *  renamedSuggestions=单×单 配对建议(多候选不猜)。instanceEnvId 非空
+ * (§8.9)= 实例键 (system, env) 的 diff 行(face = 系统成员服务并集,
+ * 实例档暂不进适配批)。 */
 export interface ServiceDrift {
   service: string
+  instanceEnvId?: number | null
   orphaned: string[]
   uncovered: string[]
   renamedSuggestions: Array<{ from: string; to: string }>

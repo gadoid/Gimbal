@@ -20,7 +20,8 @@
       </span>
       <span class="svc-panel-desc">
         <code class="mono">{{ serviceKey }}</code> → 拉取 carry 字段面(plate 声明并集)→ 逐字段填值;
-        保存 = 本键整表替换{{ isAlias ? ',只写别名键的行,其余层不动' : '' }}
+        保存 = 本键整表替换{{ isAlias ? ',只写别名键的行,其余层不动' : '' }}{{ isInstance
+          ? ';实例 = 系统 × 环境,值对该系统全部服务在本环境生效(链序 条目 > 实例 > 服务 > 层默认)' : '' }}
       </span>
     </div>
 
@@ -179,6 +180,7 @@ import {
 } from '@/utils/carry-csv'
 import {
   getDefaults, getBindingsFor, putBindings, getServiceFields,
+  getBindingsForInstance, putBindingsInstance,
   type CarryEndpointMini, type CarryFieldFace, type CarryValues, type ScopeTarget,
 } from '@/api/carry'
 import { Button } from '@/components/ui/button'
@@ -187,10 +189,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 const props = defineProps<{
-  /** 绑定键:别名全名或 base 服务名(保存整表替换的键)。 */
+  /** 绑定键:别名全名或 base 服务名(保存整表替换的键);实例模式下
+   *  须为主档系统名(值表坐标 = (scope, 系统名, 环境))。 */
   serviceKey: string
   /** 归一后的 base 目录服务;= serviceKey 时无「服务级」继承层。 */
   baseService?: string | null
+  /** §8.9 实例档模式:非空 = 编辑 (system, env) 实例键(部署级默认值,
+   *  值对该系统全部服务在本环境生效);字段面复用系统名键(成员服务
+   *  声明并集);「服务级」继承层不显示(按消费服务各不相同)。 */
+  instanceEnvId?: number | null
   /** S7.3:编辑层(缺省 = 全局/公共项目层,键详情页形态);项目配置
    *  页签传 {scope:'project', projectId} —— 读写都落本层。 */
   target?: ScopeTarget
@@ -206,8 +213,11 @@ interface ServiceRow extends ServiceCarryRow {
   description: string
 }
 
-const isAlias = computed(() => !!props.baseService && props.baseService !== props.serviceKey)
-const ownLabel = computed(() => (isAlias.value ? '本别名' : '本服务'))
+const isInstance = computed(() => props.instanceEnvId != null)
+const isAlias = computed(() =>
+  !isInstance.value && !!props.baseService && props.baseService !== props.serviceKey)
+const ownLabel = computed(() =>
+  (isInstance.value ? '本实例' : (isAlias.value ? '本别名' : '本服务')))
 const router = useRouter()
 
 /** 表底统计(原型 H-alias-detail):本键行数 / 非 none 来源的链路覆盖数。 */
@@ -226,10 +236,11 @@ const degraded = ref(false)
 
 type Source = 'own' | 'service' | 'default' | 'none'
 
-/** 无本键行时的来源判定(与 carry_injection 三层链同构,只读展示)。 */
+/** 无本键行时的来源判定(与执行链同构,只读展示;实例模式下无
+ * 「服务级」继承层 —— 按消费服务各不相同,无法显示单值)。 */
 function sourceOf(row: ServiceRow): Source {
   if (row.hasRow) return 'own'
-  if (isAlias.value && row.path in baseBindings.value) return 'service'
+  if (!isInstance.value && isAlias.value && row.path in baseBindings.value) return 'service'
   if (row.path in defaultsMap.value) return 'default'
   return 'none'
 }
@@ -243,10 +254,19 @@ function sourceLabel(row: ServiceRow): string {
   }
 }
 
-/** 无行时的 placeholder:透出继承层会注入什么(值本身,不改此处)。 */
+/** 无行时的 placeholder:透出继承层会注入什么(值本身,不改此处;
+ * 实例模式只透层默认)。 */
 function valuePlaceholder(row: ServiceRow): string {
   if (row.isNull) return '显式 null(不注入值)'
   if (row.hasRow) return ''
+  if (isInstance.value) {
+    if (row.path in defaultsMap.value) {
+      const v = defaultsMap.value[row.path]
+      if (v === null) return '默认注入 null'
+      return v === '' ? '默认注入(空串)' : v
+    }
+    return '未配置(按 服务/条目 键与层默认合成)'
+  }
   if (isAlias.value && row.path in baseBindings.value) {
     const v = baseBindings.value[row.path]
     if (v === null) return '服务级注入 null'
@@ -264,10 +284,16 @@ async function reload(): Promise<void> {
   degraded.value = false
   loadingFields.value = true
   try {
+    // 实例模式(§8.9):值表走实例端点(坐标 = 系统×环境);字段面
+    // 复用系统名键(成员服务声明并集);无「服务级」继承层可读
     const tasks: [Promise<{ fields: CarryFieldFace[]; degraded: boolean }>, Promise<CarryValues>, Promise<CarryValues>] = [
       getServiceFields(props.serviceKey),
-      getBindingsFor(props.serviceKey, props.target),
-      isAlias.value ? getBindingsFor(props.baseService!, props.target) : Promise.resolve({}),
+      isInstance.value
+        ? getBindingsForInstance(props.serviceKey, props.instanceEnvId!, props.target)
+        : getBindingsFor(props.serviceKey, props.target),
+      (!isInstance.value && isAlias.value)
+        ? getBindingsFor(props.baseService!, props.target)
+        : Promise.resolve({}),
     ]
     const [faceRes, bound, base] = await Promise.all(tasks)
     degraded.value = faceRes.degraded
@@ -371,7 +397,12 @@ async function save() {
   // 输入框可编辑(透继承层 placeholder),用户填了值必须建行
   const entries = buildServiceEntries(rows.value)
   try {
-    await putBindings(props.serviceKey, entries, props.target)
+    if (isInstance.value) {
+      await putBindingsInstance(
+        props.serviceKey, props.instanceEnvId!, entries, props.target)
+    } else {
+      await putBindings(props.serviceKey, entries, props.target)
+    }
     toast.success('已保存')
     void reload()
   } catch (e) {
@@ -379,7 +410,8 @@ async function save() {
   }
 }
 
-watch(() => [props.serviceKey, props.baseService, props.target], () => { void reload() })
+watch(() => [props.serviceKey, props.baseService, props.instanceEnvId, props.target],
+  () => { void reload() })
 onMounted(async () => {
   defaultsMap.value = await getDefaults().catch((): CarryValues => ({}))
   await reload()

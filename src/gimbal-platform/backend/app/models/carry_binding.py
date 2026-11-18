@@ -8,12 +8,18 @@ null 语义(写死):行存在即声明注入,value=NULL 注入 JSON null(显式�
 * scope 分层(S4 沿用):公共项目层 < 项目层;``scope_id`` 多态指向
   projects.id / users.id,应用层校验,不落 FK;
 * **环境维已退役(2026-11-17,redesign §8.4)**:环境只做轻量部署标签,
-  不再承载 carry 配置层 —— 多服务共享一层配置时同名字段必然打架;
-  需要「同服务不同部署不同值」时挂实例(服务×环境),不回到环境层。
+  不再承载 carry 配置层 —— 多服务共享一层配置时同名字段必然打架。
   原 ``env_id`` 覆盖行生产为 0,迁移 0058 直接删除;
-* ``config_key`` 三档键域(层内解析序,**细到粗**):身份条目名 >
-  服务名 > 系统名 —— 系统级配置(如 orgNo)直接挂系统键,不必复制
-  到每个服务;条目键 = 旧别名键(键域兼容,存量行自动落「服务」档)。
+* **实例档(2026-11-19,redesign §8.9)**:按部署差异化(测试/预发布/
+  生产同字段不同值)的需求落**实例档** —— ``instance_env_id`` 非零行
+  = (config_key=系统名, instance_env_id=环境) 实例键,替换原「系统名」
+  粗档(系统级跨部署同值场景罕见,档位退场,存量 0 行守卫迁移 0063);
+  语义与 §8.4 退役的「任意键 env 覆盖」不同:这是独立实例档,不是
+  env 维覆盖。``instance_env_id=0`` = 条目/服务档基线行(默认)。
+* ``config_key`` 层内解析序(**细到粗**,§8.9):身份条目名 >
+  实例(system, env) > 服务名 > 层默认 —— 实例档压过服务档(部署
+  差异化默认值),条目键压过一切;条目键 = 旧别名键(键域兼容,
+  存量行自动落「服务」档)。
 """
 from __future__ import annotations
 
@@ -29,15 +35,22 @@ from ..core.db import Base
 class CarryServiceBinding(Base):
     __tablename__ = "carry_service_bindings"
     __table_args__ = (
+        # §8.9 五键:instance_env_id ∈ {0=基线行, 环境id=实例行}(sentinel
+        # 0 避开 NULL 唯一性陷阱;同 config_key 两档并存靠该列区分)
         UniqueConstraint("scope", "scope_id", "config_key", "field_path",
-                         name="uq_carry_svc_path"),
+                         "instance_env_id", name="uq_carry_svc_path"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # 配置键三档(§1.7):身份条目名 > 服务名 > 系统名。读侧按层内链
-    # 归一(条目键 > 服务键 > 系统键 > 默认表);写侧整表替换按
-    # (scope, config_key) 坐标操作。
+    # 配置键(§8.9):身份条目名 / 服务名 / 系统名(实例档专用,配
+    # instance_env_id 非零)。读侧按层内链归一(条目键 > 实例键 >
+    # 服务键 > 默认表);写侧整表替换按 (scope, config_key,
+    # instance_env_id) 坐标操作。
     config_key: Mapped[str] = mapped_column(String(128))
+    # §8.9 实例档:0 = 条目/服务档基线行(默认);非零 = 实例键行的
+    # 环境 id(config_key 须为该环境实例行的系统名)
+    instance_env_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0"))
     # S4:作用域('project'|'user';公共项目行 = 旧全局层)
     scope: Mapped[str] = mapped_column(String(16), nullable=False,
                                        default="project",
