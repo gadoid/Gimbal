@@ -319,6 +319,9 @@ export function listExecutions(params?: {
   /** 按访问令牌列经它发起的执行(webhook v4)。authz W4:执行可见收敛为
    *  属主∨本令牌(admin 旁路已删)—— 后端只回调用方自己可见的行。 */
   tokenId?: number
+  /** 项目过滤(A 级批次 2026-11-18):项目详情头卡深链;JWT 面消费,
+   *  令牌路径后端忽略。 */
+  projectId?: number
 }) {
   // 后端 Query 形参是 snake_case — 出参侧保持 snake_case(既有约定)。
   return http
@@ -335,13 +338,15 @@ export function listExecutions(params?: {
         created_from: params?.createdFrom,
         created_to: params?.createdTo,
         token_id: params?.tokenId,
+        projectId: params?.projectId,
       },
     })
     .then((r) => r.data)
 }
 
 /** 顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。
- *  口径 = 查询者自己的执行(owner 隔离);行级分布不落库,不在响应里。 */
+ *  口径 = 查询者自己的执行(owner 隔离);行级分布不落库,不在响应里。
+ *  projectId(A 级批次 2026-11-18)= 项目维度聚合(项目详情头卡)。 */
 export interface ExecutionsSummary {
   windowDays: number
   totalExecutions: number
@@ -354,9 +359,13 @@ export interface ExecutionsSummary {
   activeExecutions: number
 }
 
-export function getExecutionsSummary(windowDays = 7): Promise<ExecutionsSummary> {
+export function getExecutionsSummary(
+  windowDays = 7, projectId?: number,
+): Promise<ExecutionsSummary> {
   return http
-    .get<ExecutionsSummary>('/executions/summary', { params: { window_days: windowDays } })
+    .get<ExecutionsSummary>('/executions/summary', {
+      params: { window_days: windowDays, projectId },
+    })
     .then((r) => r.data)
 }
 

@@ -77,6 +77,11 @@
         批次 {{ filterBatch }}
         <button class="batch-clear" title="清除批次筛" @click="clearBatch">×</button>
       </span>
+      <!-- A 级批次(2026-11-18):项目详情头卡深链 ?projectId=,chip 可清除 -->
+      <span v-if="filterProjectId" class="batch-chip" data-testid="exec-project-chip">
+        项目 #{{ filterProjectId }}
+        <button class="batch-clear" title="清除项目筛" data-testid="exec-project-clear" @click="clearProject">×</button>
+      </span>
       <Button size="sm" class="h-7" data-testid="exec-apply" @click="applyFilters">查询</Button>
       <span class="filter-spacer"></span>
       <span class="filter-count">
@@ -320,7 +325,10 @@ const summary = ref<ExecutionsSummary | null>(null)
 
 function refreshSummary() {
   const days = appliedWindow.value ? Number(appliedWindow.value) : 7
-  getExecutionsSummary(days).then((s) => { summary.value = s }).catch(() => { /* KPI 软失败 */ })
+  // Promise.resolve 包一层:契约是「KPI 软失败绝不阻塞列表」—— 即便取数
+  // 端点不可用(甚至同步抛),也只留空 KPI,不带走 onMounted 里的首拉。
+  Promise.resolve(getExecutionsSummary(days, filterProjectId.value ?? undefined))
+    .then((s) => { summary.value = s ?? null }).catch(() => { /* KPI 软失败 */ })
 }
 
 // 通过率 = 当前筛选结果重算(Σpassed / Σ(passed+failed),Execution 计数器;
@@ -370,6 +378,12 @@ const filterStatus = ref(
 const filterWindow = ref('')
 /** 批次归并视图:执行器队列发起后 ?batch_id= 深链到达;chip 可清除。 */
 const filterBatch = ref(typeof route.query.batch_id === 'string' ? route.query.batch_id : '')
+/** 项目过滤(A 级批次 2026-11-18):项目详情头卡深链 ?projectId= 到达;
+ *  chip 可清除 —— 列表与 KPI 带同口径(后端按 project_id 快照列收敛)。 */
+const filterProjectId = ref<number | null>(
+  typeof route.query.projectId === 'string' && /^\d+$/.test(route.query.projectId)
+    ? Number(route.query.projectId)
+    : null)
 
 const appliedQ = ref(query.value)
 const appliedStatus = ref(filterStatus.value)
@@ -414,6 +428,7 @@ async function fetchFiltered(): Promise<void> {
   if (appliedQ.value.trim()) params.q = appliedQ.value.trim()
   if (appliedStatus.value) params.status = appliedStatus.value as ExecutionStatus
   if (appliedBatch.value) params.batchId = appliedBatch.value
+  if (filterProjectId.value != null) params.projectId = filterProjectId.value
   if (appliedWindow.value) {
     params.createdFrom = new Date(
       Date.now() - Number(appliedWindow.value) * 86_400_000,
@@ -470,6 +485,10 @@ function filterByBatch(batchId: string) {
 }
 function clearBatch() {
   filterBatch.value = ''
+  applyFilters()
+}
+function clearProject() {
+  filterProjectId.value = null
   applyFilters()
 }
 

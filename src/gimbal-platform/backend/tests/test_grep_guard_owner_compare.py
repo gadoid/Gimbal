@@ -47,8 +47,10 @@ _ALLOWLIST: dict[str, int] = {
     'routers/auth_sessions.py:if a is None or a.owner_id != owner_id:': 1,
     'routers/constants.py:base = select(ConstantEntry).where(ConstantEntry.owner_id == user.id)': 1,
     'routers/constants.py:if entry is None or entry.owner_id != owner_id:': 1,
-    'routers/executions.py:Execution.owner_id == user.id,': 2,
-    'routers/executions.py:base = select(Execution).where(Execution.owner_id == user.id)': 1,
+    'routers/executions.py:Execution.owner_id == user.id,': 1,
+    # A 级批次(2026-11-18):summary 重构为 scope 变量(owner/project 二选一),
+    # base 行收进 scope 形;行内容变 = 条目跟着换形
+    'routers/executions.py:scope = Execution.owner_id == user.id': 1,
     'routers/integration.py:"canManage": db_tpl.owner_id == current.id,': 1,
     'routers/integration.py:"mine": db_tpl.owner_id == current.id,': 1,
     'routers/integration.py:IntegrationTask.holder_id == holder))).scalar()': 1,
@@ -59,6 +61,8 @@ _ALLOWLIST: dict[str, int] = {
     'routers/integration.py:return tpl.owner_id == user.id': 1,
     'routers/integration.py:subscribed = (inst is not None and inst.holder_id == user.id)': 1,
     'routers/me.py:AuthAccount).where(AuthAccount.owner_id == user.id))).scalar_one())': 1,
+    # A 级批次(2026-11-18):实例×凭证聚合端点的个人池计数(本人镜头)
+    'routers/projects.py:.where(AuthAccount.owner_id == user.id,': 1,
     'routers/me.py:ComposerScenario.owner_id == user.id,': 1,
     'routers/me.py:Execution.owner_id == user.id,': 2,
     'routers/me.py:IntegrationTask.holder_id == user.id))': 1,
@@ -102,7 +106,9 @@ _ALLOWLIST: dict[str, int] = {
     'services/adaptation_service.py:ComposerScenario.owner_id == owner_id': 1,
     'services/adaptation_service.py:stmt = stmt.where(ComposerScenario.owner_id == user_id)': 1,
     'services/auth_references.py:if r.owner_id == user.id and (r.kinds & COUNTED_KINDS))': 1,
-    'services/execution_store.py:.where(Execution.owner_id == owner_id)': 1,
+    # A 级批次(2026-11-18):streaks 泛化 owner/project 二选一,原
+    # .where(Execution.owner_id == owner_id) 行形收进 scope
+    'services/execution_store.py:scope = (Execution.owner_id == owner_id if owner_id is not None': 1,
     'services/integration_runner.py:IntegrationTask.holder_id != tpl.owner_id,': 2,
     'services/integration_runner.py:IntegrationTask.holder_id == holder,': 2,
     'services/integration_runner.py:and (inst.holder_id != user_id': 1,

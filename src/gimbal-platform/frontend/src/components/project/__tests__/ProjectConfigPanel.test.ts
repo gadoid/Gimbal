@@ -12,9 +12,6 @@ import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
 import * as projectsApi from '@/api/projects'
 import * as carryApi from '@/api/carry'
 import * as aliasApi from '@/api/service-aliases'
-import * as servicesApi from '@/api/services'
-import * as deploymentsApi from '@/api/deployments'
-import * as authSessionsApi from '@/api/auth_sessions'
 import * as envApi from '@/api/environments'
 import * as scenApi from '@/api/scenario-composer'
 import * as credApi from '@/api/project_credentials'
@@ -53,22 +50,17 @@ beforeEach(() => {
       slot: 'fin-service-uat', envId: 7, refMode: 'default', refUsername: null,
       display: '', createdAt: '', updatedAt: '' },
   ])
-  vi.spyOn(servicesApi, 'listServices').mockResolvedValue({
-    services: [
-      { name: 'fin-service', system: 'fin', kind: 'plate', abbr: '',
-        description: '', inCatalog: true, createdAt: '', updatedAt: '' },
-    ],
-    unregistered: [], plateReachable: true,
+  // 实例 × 凭证匹配(A 级批次 2026-11-18):聚合端点一次拉齐
+  // (原 5 路前端拼装下沉;项目池凭证 envId=1 ≠ 标签 7 → 服务端过滤后不进行)
+  vi.spyOn(projectsApi, 'getInstanceCredentialMatches').mockResolvedValue({
+    envId: 7, canManage: true,
+    instances: [{
+      system: 'fin', tags: ['dev'], loginUrl: 'http://fin-login', line: 'v2',
+      addresses: [{ service: 'fin-service', baseUrl: 'http://fin-api' }],
+      projectCredentials: [],
+      personalCount: 0,
+    }],
   })
-  // 实例 × 凭证匹配(2026-11-18 配置页调整):四路现成端点拼装
-  vi.spyOn(servicesApi, 'listInstances').mockResolvedValue([
-    { system: 'fin', envId: 7, envName: 'dev', groupId: 'g1', tags: ['dev'],
-      loginUrl: 'http://fin-login', line: 'v2', note: '', updatedAt: null },
-  ] as never)
-  vi.spyOn(deploymentsApi, 'listDeployments').mockResolvedValue([
-    { id: 1, baseService: 'fin-service', envId: 7, baseUrl: 'http://fin-api' },
-  ] as never)
-  vi.spyOn(authSessionsApi, 'listAll').mockResolvedValue([] as never)
   vi.spyOn(carryApi, 'getDrift').mockResolvedValue({
     services: [{ service: 'fin-service', orphaned: ['$.old'], uncovered: [],
       renamedSuggestions: [] }],
@@ -177,10 +169,10 @@ describe('ProjectConfigPanel — 普通项目', () => {
     w.unmount()
   })
 
-  it('实例 × 凭证匹配:默认标签下的实例拼装 地址/登录口/凭证匹配', async () => {
+  it('实例 × 凭证匹配:默认标签下的聚合行 地址/登录口/凭证匹配', async () => {
     const w = mountPanel()
     await flushPromises()
-    expect(servicesApi.listInstances).toHaveBeenCalledWith(7)
+    expect(projectsApi.getInstanceCredentialMatches).toHaveBeenCalledWith(3, 7)
     const row = w.find('[data-testid="prj-inst-row-fin"]')
     expect(row.exists()).toBe(true)
     expect(row.text()).toContain('fin-service')       // 地址(服务→系统归行)

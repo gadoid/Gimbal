@@ -2,11 +2,10 @@
      (2026-11-18 配置页逻辑调整:一条配置 = 默认环境标签,标签圈定
      注册簿实例,凭证按 (system, env) 与实例匹配)。
 
-     数据面全部现成端点拼装(决策:不加后端聚合):
-     · 实例   GET /services/instances?envId(系统×标签行:登录口/版本线/标签组)
-     · 地址   GET /deployments(服务×标签 → base_url;经服务主档归到系统)
-     · 项目池 GET /projects/{id}/credentials((system, env, username))
-     · 个人池 GET /auths(本人账户,计数呈现)
+     A 级批次(2026-11-18)起数据面改走聚合端点(原 5 路前端拼装下沉):
+     GET /projects/{id}/instance-credential-matches?envId=
+     = 环境下实例行 × 部署地址(经服务主档归系统)× 项目池凭证(成员
+     视图 username 脱敏)× 个人池计数,一次拉齐。
      页面只读呈现 + 「登记项目凭证」跳到下方项目凭证分区(池管理仍在那)。
      不提供手写配置空间 —— 值的维护在服务注册(实例/地址)与凭证池。 -->
 <template>
@@ -15,6 +14,9 @@
       先在上方设置项目的默认环境标签 —— 实例与凭证都按标签圈定。
     </p>
     <p v-else-if="loading" class="hint">加载中…</p>
+    <p v-else-if="loadError" class="hint" data-testid="prj-inst-error">
+      实例×凭证匹配加载失败({{ loadError }})— 稍后重试。
+    </p>
     <p v-else-if="!rows.length" class="hint" data-testid="prj-inst-empty">
       该标签下还没有系统实例 —— 在「服务注册」页接入实例(登记 API 地址与登录口)后出现在这里。
     </p>
@@ -39,8 +41,8 @@
               </div>
             </td>
             <td>
-              <div v-if="r.addrs.length" class="addrs">
-                <div v-for="a in r.addrs" :key="a.service" class="mono addr"
+              <div v-if="r.addresses.length" class="addrs">
+                <div v-for="a in r.addresses" :key="a.service" class="mono addr"
                      :title="a.baseUrl">{{ a.service }} → {{ a.baseUrl }}</div>
               </div>
               <span v-else class="miss">缺 API 地址</span>
@@ -51,8 +53,8 @@
             </td>
             <td><span class="muted">{{ r.line || '—' }}</span></td>
             <td>
-              <div v-if="r.projectCreds.length" class="creds">
-                <span v-for="c in r.projectCreds" :key="c.id" class="cred-chip proj">
+              <div v-if="r.projectCredentials.length" class="creds">
+                <span v-for="c in r.projectCredentials" :key="c.id" class="cred-chip proj">
                   <span class="mono">{{ c.username }}</span><b v-if="c.isDefault">· 默认</b>
                 </span>
               </div>
@@ -64,7 +66,7 @@
             <td><span class="svc-flag" :class="rowTone(r)">{{ rowLabel(r) }}</span></td>
             <td>
               <button
-                v-if="canManage && !r.projectCreds.length"
+                v-if="canManage && !r.projectCredentials.length"
                 type="button" class="reg-btn"
                 :data-testid="`prj-inst-reg-${r.system}`"
                 @click="$emit('register')"
@@ -80,10 +82,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { listInstances, listServices, type InstanceRow } from '@/api/services'
-import { listDeployments, type Deployment } from '@/api/deployments'
-import { listProjectCredentials } from '@/api/project_credentials'
-import { listAll as listMyAccounts, type AuthSession } from '@/api/auth_sessions'
+import { getInstanceCredentialMatches, type MatchInstance } from '@/api/projects'
 
 const props = defineProps<{
   projectId: number
@@ -93,54 +92,28 @@ const props = defineProps<{
 }>()
 defineEmits<{ register: [] }>()
 
-interface MatchRow {
-  system: string
-  tags: string[]
-  loginUrl: string
-  line: string
-  addrs: { service: string; baseUrl: string }[]
-  projectCreds: { id: number; username: string; isDefault: boolean }[]
-  personalCount: number
-}
+type MatchRow = MatchInstance
 
 const rows = ref<MatchRow[]>([])
 const loading = ref(false)
+const loadError = ref('')
 
 async function load(): Promise<void> {
   const envId = props.envId
   if (envId == null) {
     rows.value = []
+    loadError.value = ''
     return
   }
   loading.value = true
+  loadError.value = ''
   try {
-    // 四路独立降级:任一源失败只影响对应列,不空掉整表
-    const [insts, deps, svcList, projCreds, mine] = await Promise.all([
-      listInstances(envId).catch((): InstanceRow[] => []),
-      listDeployments().catch((): Deployment[] => []),
-      listServices().catch(() => ({ services: [], unregistered: [], plateReachable: false })),
-      listProjectCredentials(props.projectId)
-        .catch(() => ({ items: [], canManage: false })),
-      listMyAccounts().catch((): AuthSession[] => []),
-    ])
-    // 服务名 → 系统名(地址按系统归行;未注册主档的服务归不进任何系统)
-    const systemOf = new Map(svcList.services.map((s) => [s.name, s.system]))
-    rows.value = [...insts]
-      .sort((a, b) => a.system.localeCompare(b.system))
-      .map((inst) => ({
-        system: inst.system,
-        tags: inst.tags,
-        loginUrl: inst.loginUrl,
-        line: inst.line,
-        addrs: deps
-          .filter((d) => d.envId === envId && systemOf.get(d.baseService) === inst.system)
-          .map((d) => ({ service: d.baseService, baseUrl: d.baseUrl })),
-        projectCreds: projCreds.items
-          .filter((c) => c.system === inst.system && c.envId === envId)
-          .map((c) => ({ id: c.id, username: c.username, isDefault: !!c.isDefault })),
-        personalCount: mine.filter(
-          (a) => a.system === inst.system && a.envId === envId).length,
-      }))
+    const out = await getInstanceCredentialMatches(props.projectId, envId)
+    // 服务端已按 system 排序;此处再排一道保形(接口演进不依赖顺序契约)
+    rows.value = [...out.instances].sort((a, b) => a.system.localeCompare(b.system))
+  } catch (e) {
+    rows.value = []
+    loadError.value = (e as Error).message
   } finally {
     loading.value = false
   }
@@ -148,8 +121,8 @@ async function load(): Promise<void> {
 
 /** 行状态:登录口 / 地址 / 任一凭证池,三者齐 = 就绪 */
 function rowOk(r: MatchRow): boolean {
-  return Boolean(r.loginUrl) && r.addrs.length > 0
-    && (r.projectCreds.length > 0 || r.personalCount > 0)
+  return Boolean(r.loginUrl) && r.addresses.length > 0
+    && (r.projectCredentials.length > 0 || r.personalCount > 0)
 }
 function rowTone(r: MatchRow): string {
   return rowOk(r) ? 'green' : 'amber'

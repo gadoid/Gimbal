@@ -83,20 +83,43 @@ async def executions_summary(
     user: CurrentUser,
     session: DbSession,
     window_days: Annotated[int, Query(ge=1, le=90)] = 7,
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> ExecutionSummaryOut:
     """顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。
 
     口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);
     窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。
-    行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。"""
+    行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。
+
+    ``projectId``(项目详情 A 级批次,2026-11-18)= 项目维度聚合:
+    行集 = executions.project_id 快照列(全员发起,跨 owner);门 =
+    项目成员 ∨ Admin+,非成员 404(不泄露存在性,与 get_project 同口径)。"""
+    if project_id is not None:
+        from ..models.project import Project, ProjectMember
+
+        from ._ownership import has_capability
+
+        proj = await session.get(Project, project_id)
+        my_role = None
+        if proj is not None:
+            my_role = (await session.execute(select(ProjectMember.role).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user.id))).scalar_one_or_none()
+        if proj is None or (my_role is None
+                            and not has_capability(user, "ops.write")):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "not_found",
+                        "message": f"project not found: {project_id}"})
+        scope = Execution.project_id == project_id
+    else:
+        scope = Execution.owner_id == user.id
     since = utcnow() - timedelta(days=window_days)
-    base = select(Execution).where(Execution.owner_id == user.id)
 
     window_rows = (
         (
             await session.execute(
-                base.where(Execution.created_at >= since)
-                .with_only_columns(
+                select(
                     Execution.id,
                     Execution.scenario_id,
                     Execution.status,
@@ -105,6 +128,9 @@ async def executions_summary(
                     Execution.failed,
                     Execution.started_at,
                     Execution.finished_at,
+                ).where(
+                    scope,
+                    Execution.created_at >= since,
                 )
             )
         )
@@ -115,7 +141,7 @@ async def executions_summary(
             select(func.count())
             .select_from(Execution)
             .where(
-                Execution.owner_id == user.id,
+                scope,
                 Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING)),
             )
         )
@@ -132,7 +158,11 @@ async def executions_summary(
             durations.append((row.finished_at - row.started_at).total_seconds())
         if row.status == STATUS_FAILED:
             failed_scenario_ids.add(row.scenario_id)
-    streaks = await execution_store.consecutive_failure_streaks(session, user.id)
+    streaks = await execution_store.consecutive_failure_streaks(
+        session,
+        owner_id=None if project_id is not None else user.id,
+        project_id=project_id,
+    )
     # 反复失败:窗内失败单里,所处失败链 ≥3 的 scenario(「反复」的阈值;
     # 计数去重到 scenario — 执行记录页的信号列才逐单展开)。
     repeat_scenarios = {
@@ -193,6 +223,7 @@ async def list_executions(
     token_id: Annotated[int | None, Query(alias="tokenId", ge=1)] = None,
     client_ref: Annotated[str | None, Query(alias="clientRef",
                                             max_length=128)] = None,
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> ExecutionListOut:
     """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
 
@@ -241,6 +272,15 @@ async def list_executions(
             Execution.project_id.in_(
                 _sel(ProjectMember.project_id).where(
                     ProjectMember.user_id == user.id))))
+    # 项目过滤(A 级批次,2026-11-18):叠加在可见性之上 —— 可见性含
+    # 「我所在项目」口径,显式 projectId 只是把集合收敛到单项目(JWT 面
+    # 消费;令牌/ tokenId 面照旧个人口径,忽略该参数)。
+    project_scoped = (
+        project_id is not None
+        and not getattr(principal, "is_token", False)
+        and token_id is None)
+    if project_scoped:
+        base = base.where(Execution.project_id == project_id)
     if q:
         # G1 扩口径:快照名/活名都可命中(改名后旧名仍可搜到历史执行);
         # 活名子查询套可见性谓词(吃 trgm),与展示投影同口径。
@@ -308,7 +348,12 @@ async def list_executions(
     )
     # 「连续第 N 次失败」信号(§3.2):一次轻行扫描算好全量失败链,
     # 逐单映射进列表行;detail 不带该字段(它是列表层的"值不值得点开")。
-    streaks = await execution_store.consecutive_failure_streaks(session, user.id)
+    # 项目过滤时链按项目行集算(跨 owner 同 scenario 连败),与行集同口径。
+    streaks = await execution_store.consecutive_failure_streaks(
+        session,
+        owner_id=None if project_scoped else user.id,
+        project_id=project_id if project_scoped else None,
+    )
     # 快照存在性一次批量查(M2 拆表:不再随行加载大 JSON 列)
     with_snap = await execution_store.snapshot_ids(session, [e.id for e in rows])
     # G1:展示名一次批量查(可读活名;否则回落行上快照)

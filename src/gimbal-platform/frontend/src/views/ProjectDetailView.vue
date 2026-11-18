@@ -49,7 +49,8 @@
               <i class="dot" />{{ isPublic ? '全员可见' : '成员可见' }}
             </span>
           </div>
-          <!-- 统计:场景 / 用例集 / 成员(原型的运行成功率 → 排期,不渲染) -->
+          <!-- 统计:场景 / 用例集 / 成员 / 运行成功率(A 级批次 2026-11-18
+               接回:项目维度聚合端点 ?projectId=;软失败显 —) -->
           <div class="prj-stats" data-testid="prj-stats">
             <div class="stat">
               <span class="k">用例场景</span>
@@ -63,15 +64,20 @@
               <span class="k">成员</span>
               <span class="v">{{ project.memberCount ?? 0 }}</span>
             </div>
+            <div class="stat" data-testid="prj-stat-passrate">
+              <span class="k">运行成功率(7天)</span>
+              <span class="v">{{ passRateText }}</span>
+            </div>
           </div>
           <p v-if="project.description" class="prj-desc">{{ project.description }}</p>
           <p v-if="metaText" class="prj-meta" data-testid="prj-meta">{{ metaText }}</p>
         </div>
         <div class="prj-head-actions">
+          <!-- A 级批次(2026-11-18):跳转带 projectId 过滤参 -->
           <Button variant="outline" size="sm" data-testid="prj-history"
-                  @click="router.push('/executions')">执行历史</Button>
+                  @click="goExecutions">执行历史</Button>
           <Button size="sm" data-testid="prj-metrics"
-                  @click="router.push('/analytics')">监控指标</Button>
+                  @click="goAnalytics">监控指标</Button>
           <!-- 编辑/删除只对普通项目(公共项目后端 409 保护,入口不展示) -->
           <Button
             v-if="project.canManage && !isPublic"
@@ -111,104 +117,13 @@
       <SuitesPublic v-else-if="isPublic && tab === 'suites'" embedded />
 
       <!-- ══ 原型 _2 · 场景(用例)页签(普通项目)═══════════════ -->
-      <template v-else-if="tab === 'scenarios'">
-        <div class="slib-toolbar">
-          <input
-            v-model="scenQ"
-            class="slib-search"
-            placeholder="按名 / scenarioId 搜索"
-            data-testid="prj-scen-q"
-            @keyup.enter="loadScenarios(1)"
-          />
-          <select v-model="scenPriority" class="toolbar-select" data-testid="prj-scen-priority"
-                  @change="loadScenarios(1)">
-            <option value="">全部优先级</option>
-            <option v-for="p in [0, 1, 2, 3]" :key="p" :value="String(p)">P{{ p }}</option>
-          </select>
-          <button
-            type="button" class="seg-btn" :class="{ on: scenStarred }"
-            data-testid="prj-scen-starred" title="仅看已关注(★)"
-            @click="scenStarred = !scenStarred; loadScenarios(1)"
-          >★ 仅看关注</button>
-          <span class="flex-1" />
-          <button v-if="canWrite" type="button" class="slib-create" data-testid="prj-scen-new"
-                  @click="newScenarioInProject">在本项目新建场景</button>
-        </div>
-        <div v-if="!scenLoaded" class="empty">加载中…</div>
-        <div v-else-if="scenarios.length" class="lib-card">
-          <table class="slib-table">
-            <thead><tr>
-              <th>场景信息</th>
-              <th style="width:8.125rem">系统</th>
-              <th style="width:5.625rem">模块</th>
-              <th style="width:4.375rem" class="c-center">优先级</th>
-              <th style="width:6.25rem">作者</th>
-              <th>Tags</th>
-              <th style="width:6.25rem">最后编辑</th>
-              <th style="width:3.5rem" class="c-center">操作</th>
-            </tr></thead>
-            <tbody>
-              <tr v-for="r in scenarios" :key="r.meta.scenarioId" class="slib-row"
-                  :data-testid="`prj-scen-${r.meta.scenarioId}`"
-                  @click="openScenario(r.meta.scenarioId)">
-                <td>
-                  <div class="sl-name">
-                    <StarToggle :starred="!!r.starred" @toggle="toggleStar(r)" />
-                    <button
-                      type="button" class="nm"
-                      :data-testid="`prj-scen-name-${r.meta.scenarioId}`"
-                      :title="r.meta.name || r.meta.scenarioId"
-                      @click.stop="openScenario(r.meta.scenarioId)"
-                    >{{ r.meta.name || r.meta.scenarioId }}</button>
-                  </div>
-                  <div class="sl-sid">{{ r.meta.scenarioId }}</div>
-                  <div v-if="r.meta.description" class="sl-desc">{{ r.meta.description }}</div>
-                </td>
-                <td>
-                  <div class="sys-cell">
-                    <template v-if="r.meta.system.length">
-                      <SystemChip v-for="s in r.meta.system.slice(0, 2)" :key="s" :sys="s" />
-                      <span v-if="r.meta.system.length > 2" class="muted">+{{ r.meta.system.length - 2 }}</span>
-                    </template>
-                    <span v-else class="muted">—</span>
-                  </div>
-                </td>
-                <td><TagPill :label="r.meta.module || '未分类'" /></td>
-                <td class="c-center"><PriorityPill :priority="r.meta.priority" /></td>
-                <td><span class="muted">{{ r.meta.author || r.meta.owner || '—' }}</span></td>
-                <td>
-                  <div v-if="r.tags.length" class="sys-cell">
-                    <TagPill v-for="t in r.tags.slice(0, 3)" :key="t" :label="t" tone="accent" />
-                    <TagPill v-if="r.tags.length > 3" :label="`+${r.tags.length - 3}`" />
-                  </div>
-                  <span v-else class="muted">—</span>
-                </td>
-                <td><span class="muted">{{ formatTime(r.meta.updateTime) }}</span></td>
-                <td class="c-center">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger class="more-btn" :data-testid="`prj-scen-more-${r.meta.scenarioId}`" @click.stop>⋯</DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="sl-menu">
-                      <DropdownMenuItem class="sl-menu-item" :data-testid="`prj-scen-detail-${r.meta.scenarioId}`" @click="openScenario(r.meta.scenarioId)">查看详情</DropdownMenuItem>
-                      <DropdownMenuItem class="sl-menu-item" :data-testid="`prj-scen-run-${r.meta.scenarioId}`" @click="runVerify(r)">执行</DropdownMenuItem>
-                      <DropdownMenuItem class="sl-menu-item" :data-testid="`prj-scen-copy-${r.meta.scenarioId}`" @click="copyToMine(r)">复制到我的</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-else class="empty-cta">
-          <p>本项目还没有场景<template v-if="canWrite"> —— 点右上「在本项目新建场景」开始</template>。</p>
-        </div>
-        <Pagination
-          v-if="scenTotal > 1"
-          v-model:page="scenPage"
-          v-model:page-size="scenPageSize"
-          :total="scenTotal"
-          show-page-size show-jump
-        />
-      </template>
+      <!-- A 级批次(2026-11-18)改用场景库共享骨架的 project 桶:
+           FilterPopover(facets 项目口径)+ 筛选分组(project 桶)+ 服务端分页 -->
+      <ProjectScenariosTab
+        v-else-if="tab === 'scenarios'"
+        :project-id="project.id"
+        :can-write="canWrite"
+      />
 
       <!-- ══ 原型 _1 · 用例集卡片流(普通项目)══════════════════ -->
       <template v-else-if="tab === 'suites'">
@@ -391,27 +306,20 @@
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProject, deleteProject, type ProjectOut } from '@/api/projects'
+import { getExecutionsSummary } from '@/api/executions'
 import { useAuthStore } from '@/stores/auth'
-import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { projectRoleLabel } from '@/utils/projectRole'
-import { listScenarios, listDataSets, runScenario } from '@/api/scenario-composer'
-import type { ScenarioListItem } from '@/types/scenario-composer'
 import { listSuites, createSuite, runSuite, type SuiteSummary } from '@/api/suites'
 import { listIntegrationTasks, runIntegrationTask, type IntegrationTaskItem } from '@/api/integration'
 import { MODE_LABEL } from '@/utils/suiteStructure'
-import { scenarioDetailUrl } from '@/utils/links'
-import { FollowCapError } from '@/composables/useFollowLayout'
 import { usePagerSize } from '@/composables/usePagerSize'
-import StarToggle from '@/components/scenario-lib/StarToggle.vue'
-import SystemChip from '@/components/SystemChip.vue'
-import TagPill from '@/components/TagPill.vue'
-import PriorityPill from '@/components/PriorityPill.vue'
 import { Pagination } from '@/components/ui/pagination'
 import ProjectEditDialog from '@/components/project/ProjectEditDialog.vue'
 import ProjectMembersPanel from '@/components/project/ProjectMembersPanel.vue'
 import ProjectConfigPanel from '@/components/project/ProjectConfigPanel.vue'
 import PromotionsPanel from '@/components/project/PromotionsPanel.vue'
 import ProjectTokensPanel from '@/components/project/ProjectTokensPanel.vue'
+import ProjectScenariosTab from '@/components/project/ProjectScenariosTab.vue'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { confirmAction } from '@/utils/confirmAction'
@@ -425,7 +333,6 @@ const SuitesPublic = defineAsyncComponent(() => import('@/views/SuitesPublic.vue
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const scenStore = useScenarioComposerStore()
 const formatTime = shortDateTime
 
 const project = ref<ProjectOut | null>(null)
@@ -515,77 +422,30 @@ async function removeProject(): Promise<void> {
   }
 }
 
-// ── 普通项目:场景页签(列面对齐原型 _2 / 公共场景页)────────────
-const scenarios = ref<ScenarioListItem[]>([])
-const scenQ = ref('')
-const scenPriority = ref('')
-const scenStarred = ref(false)
-const scenPage = ref(1)
-const scenTotal = ref(0)
-const { pageSize: scenPageSize } = usePagerSize('prj-detail-scen', 20)
-const scenLoaded = ref(false)
+// ── 普通项目:场景页签(共享骨架 project 桶,委托 ProjectScenariosTab)─
 
-async function loadScenarios(page = scenPage.value): Promise<void> {
+// ── 头卡运行成功率(A 级批次 2026-11-18)─────────────────────────
+// 项目维度聚合(?projectId=);软失败显 —(无执行/端点不可达均非阻断)
+const passRate = ref<number | null>(null)
+const passRateText = computed(() =>
+  passRate.value == null ? '—' : `${(passRate.value * 100).toFixed(1)}%`)
+
+async function loadPassRate(): Promise<void> {
   if (!project.value) return
-  scenPage.value = page
-  const env = await listScenarios({
-    projectId: project.value.id,
-    q: scenQ.value.trim() || undefined,
-    priority: scenPriority.value || undefined,
-    starred: scenStarred.value || undefined,
-    page, page_size: scenPageSize.value,
-  })
-  scenarios.value = env.items
-  scenTotal.value = env.total
-  scenLoaded.value = true
-}
-
-// 筛选变化回第 1 页重拉(watch 而非内联,统一入口)
-watch([scenPriority, scenStarred], () => void loadScenarios(1))
-watch(scenPageSize, () => void loadScenarios(1))
-
-function newScenarioInProject(): void {
-  void router.push({ path: '/composer/new', query: { projectId: String(project.value?.id) } })
-}
-function openScenario(id: string): void {
-  void router.push(scenarioDetailUrl(id))
-}
-
-/** 验证执行:与公共场景页同款(默认 config 全数据集,无 schemeId) */
-async function runVerify(row: ScenarioListItem): Promise<void> {
-  const id = row.meta.scenarioId
   try {
-    const sets = await listDataSets({ scenarioId: id })
-    const res = await runScenario({
-      scenarioId: id,
-      dataSetIds: sets.map((d) => d.datasetId),
-    })
-    toast.success(`已发起验证执行 ${res.runId}`)
-  } catch (e) {
-    toast.error(`执行失败: ${(e as Error).message}`)
+    const s = await getExecutionsSummary(7, project.value.id)
+    passRate.value = s.passRate
+  } catch {
+    passRate.value = null
   }
 }
 
-async function copyToMine(row: ScenarioListItem): Promise<void> {
-  try {
-    const saved = await scenStore.copyScenario(row.meta.scenarioId)
-    toast.success(`已复制到我的场景：${saved.meta.name || saved.meta.scenarioId}`)
-  } catch (e) {
-    showError('复制', undefined, (e as Error).message)
-  }
+// ── 头卡跳转(A 级批次:带 projectId 过滤参)──────────────────────
+function goExecutions(): void {
+  void router.push({ path: '/executions', query: { projectId: String(project.value?.id) } })
 }
-
-/** 星标乐观翻转 + 失败回滚(与公共场景页同款) */
-async function toggleStar(row: ScenarioListItem): Promise<void> {
-  const next = !row.starred
-  row.starred = next
-  try {
-    await scenStore.toggleStarWithCap(row.meta.scenarioId, next)
-  } catch (e) {
-    row.starred = !next
-    if (e instanceof FollowCapError) toast.error(e.message)
-    else showError('关注', undefined, (e as Error).message)
-  }
+function goAnalytics(): void {
+  void router.push({ path: '/analytics', query: { projectId: String(project.value?.id) } })
 }
 
 // ── 普通项目:用例集卡片流(原型 _1)─────────────────────────────
@@ -739,13 +599,14 @@ async function loadDetail(): Promise<void> {
     notFound.value = true
     return
   }
+  void loadPassRate()   // 头卡成功率软失败,不阻断页签数据
   await refreshTabData()
 }
 
 async function refreshTabData(): Promise<void> {
   try {
-    if (tab.value === 'scenarios' && !isPublic.value) await loadScenarios(1)
-    else if (tab.value === 'suites' && !isPublic.value) await loadSuites(1)
+    // 场景页签(普通项目)= ProjectScenariosTab 自管(骨架 onMounted)
+    if (tab.value === 'suites' && !isPublic.value) await loadSuites(1)
     else if (tab.value === 'tasks') await loadTasks()
   } catch (e) {
     showError('加载项目内容', undefined, (e as Error).message)

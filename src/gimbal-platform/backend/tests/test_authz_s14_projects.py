@@ -223,6 +223,39 @@ class TestMemberManagement:
             "/api/auth/me", headers=h_mb)).json()["projects"]
             if p_["kind"] != "public"] == []
 
+    async def test_member_asset_counts(self, client):
+        """成员列表带本项目资产数(A 级批次 2026-11-18):owner 归属权威,
+        按 (project_id, owner_id) 聚合;项目外的不算。"""
+        from app.core import db as db_module
+        from app.models import ComposerScenario
+        from app.models.suite import Suite
+
+        h_admin, h_pa, h_mb, h_out, pid = await self._mk(client, "s14mc")
+        pa_uid = await _uid(client, h_admin, "s14mc_pa")
+        mb_uid = await _uid(client, h_admin, "s14mc_mb")
+        assert (await client.post(
+            f"/api/projects/{pid}/members", headers=h_pa,
+            json={"userId": mb_uid})).status_code == 201
+
+        async with db_module.SessionLocal() as s:
+            for i in range(2):
+                s.add(ComposerScenario(
+                    scenario_id=f"sc-s14mc-{i}",
+                    owner_id=pa_uid, project_id=pid))
+            s.add(ComposerScenario(
+                scenario_id="sc-s14mc-out",
+                owner_id=pa_uid))
+            s.add(Suite(name="套件A", owner_id=mb_uid, project_id=pid))
+            await s.commit()
+
+        r = await client.get(f"/api/projects/{pid}/members", headers=h_pa)
+        assert r.status_code == 200, r.text
+        by_uid = {m["userId"]: m for m in r.json()}
+        assert by_uid[pa_uid]["scenarioCount"] == 2
+        assert by_uid[pa_uid]["suiteCount"] == 0
+        assert by_uid[mb_uid]["scenarioCount"] == 0
+        assert by_uid[mb_uid]["suiteCount"] == 1
+
     async def test_last_project_admin_protection(self, client):
         h_admin, h_pa, h_mb, h_out, pid = await self._mk(client, "s14m2")
         pa_uid = await _uid(client, h_admin, "s14m2_pa")

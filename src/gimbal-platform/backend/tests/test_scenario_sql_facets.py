@@ -115,3 +115,53 @@ async def test_facets_endpoint(client, owner):
     fm = r.json()
     m_mods = {x["value"]: x["count"] for x in fm["modules"]}
     assert m_mods == {"trade": 1}
+
+
+async def test_facets_project_scope(client, owner):
+    """projectId facets(A 级批次 2026-11-18):行集收敛到项目快照列,
+    取代 scope/visibility 分桶;读门与项目详情同口径(非成员 404)。"""
+    from sqlalchemy import select, update
+
+    from app.core import db as db_module
+    from app.models import ComposerScenario
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with db_module.SessionLocal() as s:
+        proj = Project(name="p-facets", kind="normal", description="")
+        s.add(proj)
+        await s.flush()
+        owner_uid = (await s.execute(select(User.id).where(
+            User.username == "m3owner"))).scalar_one()
+        s.add(ProjectMember(project_id=proj.id, user_id=owner_uid,
+                            role="admin"))
+        await s.commit()
+        pid = proj.id
+        # 把两条场景搬进项目(第三条留在外面)
+        await s.execute(
+            update(ComposerScenario)
+            .where(ComposerScenario.scenario_id.in_(("sc-m3-a", "sc-m3-b")))
+            .values(project_id=pid))
+        await s.commit()
+
+    r = await client.get("/api/scenarios/facets",
+                         params={"projectId": pid}, headers=owner)
+    assert r.status_code == 200, r.text
+    f = r.json()
+    mods = {x["value"]: x["count"] for x in f["modules"]}
+    assert mods == {"trade": 2}                    # 只项目内两条(无 asset)
+    syss = {x["value"]: x["count"] for x in f["systems"]}
+    assert syss == {"order-svc": 1, "acct-svc": 1}
+
+    # q 叠加在项目口径上
+    r = await client.get("/api/scenarios/facets",
+                         params={"projectId": pid, "q": "订单"},
+                         headers=owner)
+    mods_q = {x["value"]: x["count"] for x in r.json()["modules"]}
+    assert mods_q == {"trade": 1}
+
+    # 非成员 404
+    outsider = await register_and_login(client, "m3outsider", "m3-pass-123")
+    r = await client.get("/api/scenarios/facets",
+                         params={"projectId": pid}, headers=outsider)
+    assert r.status_code == 404, r.text

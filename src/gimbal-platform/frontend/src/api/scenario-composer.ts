@@ -82,6 +82,9 @@ export async function fetchScenarioFacets(params: {
   visibility?: 'public' | 'private'
   /** 与列表同口径的浏览镜头(§5.1;S7.0:private = 我的私有)。 */
   scope?: 'private' | 'mine' | 'all'
+  /** 项目口径(A 级批次 2026-11-18):项目详情场景页签;给定时取代
+   *  visibility/scope 分桶。 */
+  projectId?: number
 }): Promise<ScenarioFacets> {
   const { data } = await http.get<ScenarioFacets>('/scenarios/facets', { params })
   return data

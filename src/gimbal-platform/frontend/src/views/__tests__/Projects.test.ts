@@ -30,6 +30,25 @@ vi.mock('@/api/scenario-composer', () => ({
   listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
   listDataSets: vi.fn().mockResolvedValue([{ datasetId: 'd1' }]),
   runScenario: vi.fn().mockResolvedValue({ runId: 'r-1' }),
+  // A 级批次:场景页签共享骨架的 facets 数据源(项目口径)
+  fetchScenarioFacets: vi.fn().mockResolvedValue({
+    modules: [], systems: [], tags: [], authors: [], priorities: [],
+  }),
+}))
+vi.mock('@/api/scenario-filter-groups', () => ({
+  // A 级批次:project 桶分组(骨架会话加载,失败不阻断列表)
+  listFilterGroups: vi.fn().mockResolvedValue([]),
+  createFilterGroup: vi.fn(),
+  deleteFilterGroup: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/api/executions', () => ({
+  // A 级批次:头卡运行成功率(项目维度聚合;软失败路径由实现兜)
+  getExecutionsSummary: vi.fn().mockResolvedValue({
+    windowDays: 7, totalExecutions: 4, totalRuns: 10, passedRuns: 9,
+    failedRuns: 1, passRate: 0.9, avgDurationSec: 2, repeatFailureScenarios: 0,
+    activeExecutions: 0,
+  }),
+  listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, failedTotal: 0 }),
 }))
 vi.mock('@/api/suites', () => ({
   listSuites: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 12 }),
@@ -255,7 +274,7 @@ describe('ProjectDetailView — stitch 重建(2026-11-18)', () => {
     return { w, router }
   }
 
-  it('头卡:统计三格 + 可见性徽章 + 执行历史/监控指标跳转', async () => {
+  it('头卡:统计四格(含运行成功率)+ 可见性徽章 + 执行历史/监控指标跳转带 projectId', async () => {
     const { w, router } = await mountTab('scenarios', { scen: SCEN })
     expect(w.find('[data-testid="prj-vis-badge"]').text()).toContain('成员可见')
     const stats = w.find('[data-testid="prj-stats"]').text()
@@ -263,20 +282,38 @@ describe('ProjectDetailView — stitch 重建(2026-11-18)', () => {
     expect(stats).toContain('3')       // scenarioCount
     expect(stats).toContain('1')       // suiteCount
     expect(stats).toContain('2')       // memberCount
-    await w.find('[data-testid="prj-metrics"]').trigger('click')
+    // A 级批次:项目维度聚合的运行成功率(mock passRate=0.9 → 90.0%)
+    expect(w.find('[data-testid="prj-stat-passrate"]').text()).toContain('90.0%')
+    // 跳转带 projectId 过滤参(先 history:跳转后详情页卸载,再点不到)
+    await w.find('[data-testid="prj-history"]').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/analytics')
+    expect(router.currentRoute.value.path).toBe('/executions')
+    expect(router.currentRoute.value.query.projectId).toBe('7')
     w.unmount()
+    // 监控指标同口径
+    const again = await mountTab('scenarios', { scen: SCEN })
+    await again.w.find('[data-testid="prj-metrics"]').trigger('click')
+    await flushPromises()
+    expect(again.router.currentRoute.value.path).toBe('/analytics')
+    expect(again.router.currentRoute.value.query.projectId).toBe('7')
+    again.w.unmount()
   })
 
-  it('场景表:星标/优先级/标签/筛选;⋯ 执行走 数据集全集 + 无 schemeId', async () => {
+  it('场景表:星标/FilterPopover(项目口径 facets)/分组/仅看关注;⋯ 执行走 数据集全集 + 无 schemeId', async () => {
     const { w } = await mountTab('scenarios', { scen: SCEN })
     expect(w.find('[data-testid="prj-scen-name-sc-1"]').text()).toBe('订单创建')
     expect(w.find('.star-btn').exists()).toBe(true)
-    expect(w.find('[data-testid="prj-scen-priority"]').exists()).toBe(true)
+    // A 级批次:筛选面 = 共享骨架(FilterPopover + FilterGroups + 仅看关注)
+    expect(w.find('[data-testid="filter-trigger"]').exists()).toBe(true)
+    expect(w.find('[data-testid="filter-groups"]').exists()).toBe(true)
     expect(w.find('[data-testid="prj-scen-starred"]').exists()).toBe(true)
     expect(w.text()).toContain('P1')
     expect(w.text()).toContain('回归')
+    // 项目口径:列表与 facets 都带 projectId=7
+    expect(composerApi.listScenarios).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 7 }))
+    expect(composerApi.fetchScenarioFacets).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 7 }))
     // ⋯ 菜单 teleport 到 body:执行 = listDataSets 全集 + runScenario
     await w.find('[data-testid="prj-scen-more-sc-1"]').trigger('click')
     await flushPromises()

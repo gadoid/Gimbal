@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -87,6 +87,10 @@ class MemberOut(BaseModel):
     displayName: str
     role: str
     addedAt: str | None = None
+    # 成员在本项目的资产数(A 级批次 2026-11-18,按 owner 归属聚合);
+    # add/patch 单行返回不带计数(默认 0,列表口径才消费)
+    scenarioCount: int = 0
+    suiteCount: int = 0
 
 
 async def _load_project(db: AsyncSession, project_id: int) -> Project:
@@ -510,6 +514,118 @@ async def delete_project(
     await db.commit()
 
 
+# ── 实例 × 凭证匹配(A 级批次 2026-11-18)────────────────────────
+class MatchAddrOut(BaseModel):
+    service: str
+    baseUrl: str
+
+
+class MatchCredOut(BaseModel):
+    id: int
+    # 成员视图脱敏(username='',与项目凭证列表同口径)
+    username: str
+    isDefault: bool
+
+
+class MatchInstanceOut(BaseModel):
+    system: str
+    tags: list[str] = Field(default_factory=list)
+    loginUrl: str | None = None
+    line: str | None = None
+    addresses: list[MatchAddrOut] = Field(default_factory=list)
+    projectCredentials: list[MatchCredOut] = Field(default_factory=list)
+    personalCount: int = 0
+
+
+class InstanceCredentialMatchOut(BaseModel):
+    envId: int
+    canManage: bool
+    instances: list[MatchInstanceOut] = Field(default_factory=list)
+
+
+@router.get("/{project_id}/instance-credential-matches",
+            response_model=InstanceCredentialMatchOut)
+async def instance_credential_matches(
+    user: CurrentUser, db: DbSession, project_id: int,
+    env_id: Annotated[int, Query(alias="envId", ge=1)],
+) -> InstanceCredentialMatchOut:
+    """服务实例 × 凭证匹配聚合(A 级批次):配置页「实例×凭证匹配」分区
+    原由前端拼 5 路端点(instances/deployments/services/项目凭证/个人
+    凭证),此处一次拉齐。行 = 环境下注册簿实例,按 (system, env) 拼
+    部署地址与两池凭证 —— 与前端 MatchRow 形状对齐。
+
+    门与项目凭证列表同口径:普通项目成员(Admin+ 非成员同 404);
+    非管理员成员的 username 脱敏(_member_view 同款)。"""
+    from ..models.auth_account import AuthAccount
+    from ..models.deployment import Deployment
+    from ..models.environment import Environment as Env
+    from ..models.service import Service
+    from ..models.system_env_instance import SystemEnvInstance
+
+    proj = await _load_project(db, project_id)
+    if proj.kind == "public":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "public_project_no_credentials",
+                    "message": "公共项目没有项目凭证(公共内容由订阅者用"
+                               "自己的凭证执行)"})
+    role = await _my_role(db, user, project_id)
+    if role is None:
+        # Admin+ 非成员同 404(读面不因平台角色放宽,与凭证列表一致)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found",
+                    "message": f"project not found: {project_id}"})
+    can_manage = role == "admin"
+
+    inst_rows = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.env_id == env_id)
+        .order_by(SystemEnvInstance.system))).scalars().all()
+    # 同组标签集(一实例多标签;与 services.list_instances 同口径)
+    from .services import _tags_by_group
+
+    tags_by_group = await _tags_by_group(
+        db, {inst.group_id for inst in inst_rows})
+    # 部署地址(按 env 收敛;服务名→系统名经主档翻译)
+    dep_rows = (await db.execute(
+        select(Deployment).where(Deployment.env_id == env_id))).scalars().all()
+    svc_system = dict((await db.execute(
+        select(Service.name, Service.system))).all())
+    # 项目凭证(按 env 过滤;非管理员脱敏 username)
+    proj_creds = (await db.execute(
+        select(AuthAccount).where(
+            AuthAccount.project_id == project_id,
+            AuthAccount.env_id == env_id))).scalars().all()
+    # 个人池只数计数(本人在该 (system, env) 的凭证数)
+    mine_counts = dict((await db.execute(
+        select(AuthAccount.system, func.count())
+        .where(AuthAccount.owner_id == user.id,
+               AuthAccount.env_id == env_id)
+        .group_by(AuthAccount.system))).all())
+
+    instances = [
+        MatchInstanceOut(
+            system=inst.system,
+            tags=tags_by_group.get(inst.group_id, []),
+            loginUrl=inst.login_url, line=inst.line,
+            addresses=[
+                MatchAddrOut(service=d.base_service, baseUrl=d.base_url)
+                for d in dep_rows
+                if svc_system.get(d.base_service) == inst.system],
+            projectCredentials=[
+                MatchCredOut(
+                    id=c.id,
+                    username=c.username if can_manage else "",
+                    isDefault=bool(c.is_default))
+                for c in proj_creds if c.system == inst.system],
+            personalCount=mine_counts.get(inst.system, 0),
+        )
+        for inst in inst_rows]
+    return InstanceCredentialMatchOut(
+        envId=env_id, canManage=can_manage, instances=instances)
+
+
 # ── 成员管理 ───────────────────────────────────────────────────────
 @router.get("/{project_id}/members", response_model=list[MemberOut])
 async def list_members(
@@ -522,10 +638,28 @@ async def list_members(
         .join(User, User.id == ProjectMember.user_id)
         .where(ProjectMember.project_id == project_id)
         .order_by(ProjectMember.user_id))).all()
+    # 成员 × 本项目资产数(A 级批次):owner 归属权威,按 (project_id,
+    # owner_id) 一次 GROUP BY(照 list_projects 的 _group_n 模板)。
+    from ..models.composer_scenario import ComposerScenario
+    from ..models.suite import Suite
+
+    async def _owner_n(stmt) -> dict[int, int]:
+        return {uid: n for uid, n in (await db.execute(stmt)).all()}
+
+    scenario_n = await _owner_n(
+        select(ComposerScenario.owner_id, func.count())
+        .where(ComposerScenario.project_id == project_id)
+        .group_by(ComposerScenario.owner_id))
+    suite_n = await _owner_n(
+        select(Suite.owner_id, func.count())
+        .where(Suite.project_id == project_id)
+        .group_by(Suite.owner_id))
     return [MemberOut(
         userId=m.user_id, username=u.username,
         displayName=u.display_name or u.username, role=m.role,
-        addedAt=m.added_at.isoformat() if m.added_at else None)
+        addedAt=m.added_at.isoformat() if m.added_at else None,
+        scenarioCount=scenario_n.get(m.user_id, 0),
+        suiteCount=suite_n.get(m.user_id, 0))
         for m, u in rows]
 
 

@@ -67,6 +67,7 @@ async def _insert_execution(
     finished_at: datetime | None = None,
     plate_pins: dict | None = None,
     m2_hash: str | None = None,
+    project_id: int | None = None,
 ) -> int:
     from app.core.db import SessionLocal
     from app.models import Execution
@@ -82,6 +83,7 @@ async def _insert_execution(
             batch_id=batch_id,
             plate_pins=plate_pins,
             m2_hash=m2_hash,
+            project_id=project_id,
         )
         if created_at is not None:
             ex.created_at = created_at
@@ -143,6 +145,88 @@ async def test_summary_owner_isolation(client: AsyncClient) -> None:
     body = r.json()
     assert body["totalExecutions"] == 0
     assert body["totalRuns"] == 0 and body["passRate"] is None
+
+
+# ── summary / list 项目口径(A 级批次,2026-11-18)────────────────────
+async def _mk_project(name: str, *, members: dict[str, str]) -> int:
+    """直插普通项目 + 成员 {username: role}(照 s11 的 _mk_project)。"""
+    from app.core.db import SessionLocal
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    async with SessionLocal() as db:
+        proj = Project(name=name, kind="normal", description="")
+        db.add(proj)
+        await db.flush()
+        for uname, role in members.items():
+            uid = (await db.execute(select(User.id).where(
+                User.username == uname))).scalar_one()
+            db.add(ProjectMember(project_id=proj.id, user_id=uid, role=role))
+        await db.commit()
+        return proj.id
+
+
+async def _uid(username: str) -> int:
+    from app.core.db import SessionLocal
+    from app.models.user import User
+
+    async with SessionLocal() as db:
+        return (await db.execute(select(User.id).where(
+            User.username == username))).scalar_one()
+
+
+async def test_summary_project_scope_and_gate(client: AsyncClient) -> None:
+    """projectId = 项目维度聚合:跨 owner 的项目行都算、非项目行不算;
+    非成员 404(不泄露存在性)。"""
+    alice_auth = await _register_and_login(client, "alice", "alicepass123")
+    bob_auth = await _register_and_login(client, "bob", "bobpass456")
+    carol_auth = await _register_and_login(client, "carol", "carolpass789")
+    alice, bob, carol = await _uid("alice"), await _uid("bob"), await _uid("carol")
+    pid = await _mk_project("p-exec", members={"alice": "admin", "bob": "member"})
+    now = datetime.utcnow()
+    await _insert_execution(owner_id=alice, project_id=pid, status="done",
+                            total_runs=2, passed=1, failed=1,
+                            created_at=now - timedelta(days=1))
+    await _insert_execution(owner_id=bob, project_id=pid, status="done",
+                            total_runs=4, passed=4, failed=0,
+                            created_at=now - timedelta(days=2))
+    # 项目外的个人执行不进项目口径
+    await _insert_execution(owner_id=alice, status="done",
+                            total_runs=10, passed=10,
+                            created_at=now - timedelta(days=1))
+
+    r = await client.get("/api/executions/summary",
+                         params={"projectId": pid}, headers=alice_auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["totalExecutions"] == 2          # 跨 owner 的项目行
+    assert body["totalRuns"] == 6 and body["passedRuns"] == 5
+    assert abs(body["passRate"] - 5 / 6) < 1e-6
+    # 非成员 404(carol 不在项目)
+    r = await client.get("/api/executions/summary",
+                         params={"projectId": pid}, headers=carol_auth)
+    assert r.status_code == 404, r.text
+
+
+async def test_list_project_id_filter(client: AsyncClient) -> None:
+    """列表 projectId 过滤:只回项目行(failedTotal 同口径)。"""
+    alice_auth = await _register_and_login(client, "alice", "alicepass123")
+    alice = await _uid("alice")
+    pid = await _mk_project("p-list", members={"alice": "admin"})
+    await _insert_execution(owner_id=alice, project_id=pid, status="done")
+    await _insert_execution(owner_id=alice, project_id=pid, status="failed")
+    await _insert_execution(owner_id=alice, status="done")   # 项目外
+
+    r = await client.get("/api/executions",
+                         params={"projectId": pid, "page_size": 50},
+                         headers=alice_auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 2 and body["failedTotal"] == 1
+    # 不带 projectId 的默认口径不受影响(个人 + 我所在项目 = 3)
+    r = await client.get("/api/executions", params={"page_size": 50},
+                         headers=alice_auth)
+    assert r.json()["total"] == 3
 
 
 # ── list 筛选(status / 时间 / 批次)──────────────────────────────

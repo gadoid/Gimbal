@@ -112,6 +112,53 @@ async def test_blank_name_and_unknown_bucket_rejected(client: AsyncClient):
     assert r.status_code == 422
 
 
+# ── project 桶(A 级批次,2026-11-18)──────────────────────────────
+async def _save_project(client: AsyncClient, hdr: dict, name: str,
+                        project_id: int | None, q: str = ""):
+    body = {"bucket": "project", "name": name, "q": q, "filters": _F}
+    if project_id is not None:
+        body["projectId"] = project_id
+    return await client.post("/api/scenario-filter-groups",
+                             headers=hdr, json=body)
+
+
+async def test_project_bucket_roundtrip_and_isolation(client: AsyncClient):
+    hdr = await _mk(client, "fg_proj")
+    r = await _save_project(client, hdr, "项目条件", project_id=7)
+    assert r.status_code == 200, r.text
+    gid = r.json()["id"]
+    # 读回须带同一 projectId;其他桶/其他项目互不可见
+    r = await client.get("/api/scenario-filter-groups", headers=hdr,
+                         params={"bucket": "project", "projectId": 7})
+    assert [i["name"] for i in r.json()["items"]] == ["项目条件"]
+    r = await client.get("/api/scenario-filter-groups", headers=hdr,
+                         params={"bucket": "project", "projectId": 8})
+    assert r.json()["items"] == []
+    assert await _list(client, hdr, "mine") == []
+    # 删除也要带 projectId(不带 = 另一个键,404)
+    r = await client.delete(
+        f"/api/scenario-filter-groups/project/{gid}", headers=hdr)
+    assert r.status_code == 422          # 缺 projectId 直接 422
+    r = await client.delete(
+        f"/api/scenario-filter-groups/project/{gid}", headers=hdr,
+        params={"projectId": 8})
+    assert r.status_code == 404
+    r = await client.delete(
+        f"/api/scenario-filter-groups/project/{gid}", headers=hdr,
+        params={"projectId": 7})
+    assert r.status_code == 200
+
+
+async def test_project_bucket_requires_project_id(client: AsyncClient):
+    hdr = await _mk(client, "fg_proj_req")
+    r = await _save_project(client, hdr, "缺项目", project_id=None)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "project_id_required"
+    r = await client.get("/api/scenario-filter-groups", headers=hdr,
+                         params={"bucket": "project"})
+    assert r.status_code == 422
+
+
 async def test_requires_auth(client: AsyncClient):
     r = await client.get("/api/scenario-filter-groups")
     assert r.status_code in (401, 403)

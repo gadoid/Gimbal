@@ -35,11 +35,14 @@ export type ScenarioListRow = ScenarioListItem
 export const LIST_PAGE_SIZE = 10
 
 /** 分桶:mine = 「我的场景」页(S7.0 口径:scope=private——我名下且
- *  未加入任何项目;进项目的场景从项目页进),public = 公共页
- *  (visibility=public,兼容别名 = 公共项目)。 */
-type Bucket = 'mine' | 'public'
+ * 未加入任何项目;进项目的场景从项目页进),public = 公共页
+ * (visibility=public,兼容别名 = 公共项目),project = 项目详情场景
+ * 页签(A 级批次 2026-11-18:projectId 过滤 + 独立分组桶)。 */
+type Bucket = 'mine' | 'public' | 'project'
 
-export function useScenarioListView(bucket: Bucket) {
+export function useScenarioListView(
+  bucket: Bucket, opts: { projectId?: number } = {},
+) {
   const store = useScenarioComposerStore()
   const route = useRoute()
 
@@ -62,10 +65,15 @@ export function useScenarioListView(bucket: Bucket) {
 
   const params = () => ({
     q: effQ() || undefined,
-    // 分桶下推:mine 桶恒 scope=private,public 桶维持 visibility=public。
+    // 分桶下推:mine 桶恒 scope=private,public 桶维持 visibility=public,
+    // project 桶(A 级批次)= projectId 过滤(取代 scope/visibility)。
     ...(bucket === 'mine'
       ? { scope: 'private' as const }
-      : { visibility: 'public' as const }),
+      : bucket === 'public'
+        ? { visibility: 'public' as const }
+        : { projectId: opts.projectId }),
+    // 「★ 仅看关注」只挂在 project 桶(场景库两页无此面)
+    ...(bucket === 'project' && starred.value ? { starred: true } : {}),
     system: filters.value.systems.join(',') || undefined,
     module: filters.value.modules.join(',') || undefined,
     tag: filters.value.tags.join(',') || undefined,
@@ -74,6 +82,9 @@ export function useScenarioListView(bucket: Bucket) {
     updatedWithin:
       filters.value.updatedWithin !== 'all' ? filters.value.updatedWithin : undefined,
   })
+
+  /** project 桶专属:仅看关注(后端 ?starred=true 服务端过滤)。 */
+  const starred = ref(false)
 
   const initialPage = (() => {
     const p = Number.parseInt(String(route.query.page ?? '1'), 10)
@@ -84,7 +95,9 @@ export function useScenarioListView(bucket: Bucket) {
     fetch: (p) => store.fetchPage(p),
     params,
     pageSize: LIST_PAGE_SIZE,
-    pagerKey: bucket === 'mine' ? 'scenarios-mine' : 'scenarios-public',
+    pagerKey: bucket === 'mine' ? 'scenarios-mine'
+      : bucket === 'public' ? 'scenarios-public'
+        : `scenarios-project-${opts.projectId}`,
     syncUrl: true,
     initialPage,
   })
@@ -109,9 +122,12 @@ export function useScenarioListView(bucket: Bucket) {
 
   async function loadFacets(): Promise<void> {
     try {
-      facets.value = await fetchScenarioFacets(bucket === 'mine'
-        ? { q: effQ() || undefined, scope: 'private' as const }
-        : { q: effQ() || undefined, visibility: 'public' as const })
+      facets.value = await fetchScenarioFacets(
+        bucket === 'mine'
+          ? { q: effQ() || undefined, scope: 'private' as const }
+          : bucket === 'public'
+            ? { q: effQ() || undefined, visibility: 'public' as const }
+            : { q: effQ() || undefined, projectId: opts.projectId })
     } catch {
       facets.value = null
     }
@@ -136,7 +152,7 @@ export function useScenarioListView(bucket: Bucket) {
   async function loadGroups(): Promise<void> {
     groupsState.value = 'loading'
     try {
-      groups.value = await listFilterGroups(bucket)
+      groups.value = await listFilterGroups(bucket, opts.projectId)
       groupsState.value = 'ready'
       if (!urlRestoreDone) {
         urlRestoreDone = true
@@ -191,7 +207,7 @@ export function useScenarioListView(bucket: Bucket) {
     savingGroup.value = true
     try {
       await createFilterGroup({
-        bucket, name, q: q.value, filters: filters.value,
+        bucket, projectId: opts.projectId, name, q: q.value, filters: filters.value,
       })
       appliedGroupId.value = ''
       applyingGroup = true
@@ -210,7 +226,7 @@ export function useScenarioListView(bucket: Bucket) {
   /** 删的若是正在应用的分组 → 一并退出分组态(名称搜索源没了,回全量)。 */
   async function removeGroup(id: string): Promise<void> {
     try {
-      await deleteFilterGroup(bucket, id)
+      await deleteFilterGroup(bucket, id, opts.projectId)
       if (appliedGroupId.value === id) {
         appliedGroupId.value = ''
         applyingGroup = true
@@ -237,7 +253,7 @@ export function useScenarioListView(bucket: Bucket) {
 
   return {
     store,
-    q, filters,
+    q, filters, starred,
     page: list.page,
     items: list.items,
     /** 兼容旧消费面:rows/paged 均为当前页(服务端已分页)。 */

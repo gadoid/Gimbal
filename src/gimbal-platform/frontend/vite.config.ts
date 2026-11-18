@@ -33,8 +33,10 @@ export default defineConfig({
         },
       },
       // V3 composer 的接口目录 (Catalog Panel) 直接拉 Plate 的端点契约
+      // 2026-11-10 起 plate 钉 8890(8765 落 Hyper-V 排除段,见
+      // src/restart-services.ps1);代理目标从 8765 同步到 8890
       '/plate': {
-        target: 'http://127.0.0.1:8765',
+        target: 'http://127.0.0.1:8890',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/plate/, ''),
       },

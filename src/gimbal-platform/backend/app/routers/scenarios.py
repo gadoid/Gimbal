@@ -452,6 +452,8 @@ async def scenario_facets(
     q: str | None = None,
     visibility: str | None = None,
     scope: Literal["mine", "all"] = "all",
+    # A 级批次(2026-11-18):项目详情场景页签 FilterPopover 的项目口径
+    project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> dict:
     """五维 facets:modules/systems/tags/authors/priorities 可选值+计数。
 
@@ -459,7 +461,30 @@ async def scenario_facets(
     GROUP BY + jsonb unnest;SQLite Python 兜底(方言分派同 list)。
     scope 与 list 同口径(§5.1):mine 只统计自己创建的;visibility=public
     时 scope 不叠加。
+
+    ``projectId``:行集收敛到项目快照列(取代 scope/visibility 分桶);
+    读门与 GET /projects/{id} 同口径(成员 ∨ 公共项目 ∨ Admin+),
+    非成员 404 —— facets 是 list 的派生面,门不得松于 list。
     """
+    if project_id is not None:
+        from sqlalchemy import select as _sel
+
+        from ..models.project import Project, ProjectMember
+
+        from ._ownership import has_capability
+
+        proj = await db.get(Project, project_id)
+        my_role = None
+        if proj is not None:
+            my_role = (await db.execute(_sel(ProjectMember.role).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user.id))).scalar_one_or_none()
+        if proj is None or (my_role is None and proj.kind != "public"
+                            and not has_capability(user, "ops.write")):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "not_found",
+                        "message": f"project not found: {project_id}"})
     if visibility == "public":
         scope = "all"
     is_pg = db.bind.dialect.name == "postgresql"
@@ -467,7 +492,7 @@ async def scenario_facets(
         from ..services import scenario_query
         out = await scenario_query.facets(
             db, user=user, viewer_id=user.id, q=q, visibility=visibility,
-            scope=scope)
+            scope=scope, project_id=project_id)
         return {
             dim: [{"value": k, "count": n} for k, n in pairs]
             for dim, pairs in out.items()

@@ -30,14 +30,23 @@
 
 > 分级：**A** = 小后端增量即可接回（性价比高）；**B** = 需新模型/新台账；
 > **C** = 产品决策后立项。前端侧已预留的落点一并注明。
+>
+> **2026-11-18 A 级批次已全部接回**（7 项：运行成功率 / 项目过滤深链 /
+> facets 项目口径 / filter-groups project 桶 / 成员资产计数 / 成员 CSV
+> 导出 / 实例×凭证聚合端点），下表对应行标 ✅;后端新增
+> `?projectId=`(summary/list/facets)、project 桶、
+> `/projects/{id}/instance-credential-matches`、MemberOut 计数字段、
+> 迁移 0062（executions.project_id 索引）；前端场景页签改
+> `useScenarioListView('project')` 共享骨架（FilterPopover + FilterGroups
+> + 仅看关注）。剩 B/C 级待排期。
 
 ### 头卡 / 统计
 
 | 能力 | 缺口 | 级 | 前端落点 |
 |---|---|---|---|
-| 运行成功率（98.6%） | 无项目维度执行聚合端点（`/executions/summary` 仅个人口径；`executions.project_id` 快照列已存在） | A | `ProjectDetailView` 头卡 `.prj-stats` 加一格即可 |
+| ✅ 运行成功率（98.6%） | ~~无项目维度执行聚合端点~~ 已接回：`/executions/summary?projectId=`（2026-11-18） | A | 头卡 `.prj-stats` 第 4 格 `prj-stat-passrate` |
 | 今日执行次数 / 自动化覆盖率 | 无来源 | B | 同上（_2 指标卡） |
-| 执行历史/监控指标带项目过滤 | 两个页面均无 `?projectId=` 过滤 | A | 头卡按钮跳转参数 |
+| ✅ 执行历史/监控指标带项目过滤 | 已接回：executions 列表 `?projectId=` + `ExecutionsList` 深链 chip（2026-11-18；Analytics 延后页仅透传） | A | 头卡按钮跳转带 `query.projectId` |
 
 ### 场景页签（_2）
 
@@ -45,10 +54,10 @@
 |---|---|---|---|
 | 被复制次数列 | 无字段（仅 forked_from_id 血缘）；公共页同口径留 `—` | B | 表格加一列（两处：普通/公共桶） |
 | Draft 副本徽章 | 场景无 draft 概念（仅 suite 有 isDraft） | C | 名称旁 chip |
-| facets 高级筛选（FilterPopover） | `/scenarios/facets` 不支持 projectId | A | 工具条替换为 FilterPopover |
+| ✅ facets 高级筛选（FilterPopover） | 已接回：`/scenarios/facets?projectId=`（读门同项目详情；2026-11-18） | A | 场景页签改共享骨架，FilterPopover 已上 |
 | 按所属 Suite 筛选 | 无反查列表参数（仅 `/scenarios/{id}/suites` 单查） | B | 工具条下拉 |
 | 批量导入/导出、批量执行 | 导入仅单 bundle JSON 预检；导出仅单场景；无批量执行端点 | B | 工具条按钮 + 选中态列 |
-| 快速视图分组（存为分组） | filter-groups bucket 仅 `mine\|public`，无 project 桶 | A | 复用 `FilterGroups` + `useScenarioListView` 扩桶 |
+| ✅ 快速视图分组（存为分组） | 已接回：filter-groups `project` 桶（按项目 id 隔离，pref key `…project.<id>`；2026-11-18） | A | `useScenarioListView('project')` + `FilterGroups` 已上 |
 
 ### 用例集页签（_1）
 
@@ -82,9 +91,9 @@
 | 能力 | 缺口 | 级 | 前端落点 |
 |---|---|---|---|
 | 工号 / 业务部门列 | User 模型无 department/employee_id | B | 成员单元格副行 |
-| 负责资产数量（场景/用例集 per 成员） | 无聚合 | A（成本低） | 成员列表端点补两计数字段即可 |
+| ✅ 负责资产数量（场景/用例集 per 成员） | 已接回：`MemberOut.scenarioCount/suiteCount`（owner 归属 GROUP BY；2026-11-18） | A（成本低） | 成员表两列 `prj-mem-scen-/prj-mem-suite-` |
 | 最近活跃时间 | 无 last_active 跟踪 | B | 同上 |
-| 导出成员权限清单 CSV | 全仓无 CSV 导出（papaparse 已在依赖） | A | 工具条按钮，纯前端可先行（数据齐后） |
+| ✅ 导出成员权限清单 CSV | 已接回：papaparse unparse + BOM，全量成员口径（2026-11-18） | A | 工具条 `prj-mem-export` |
 | 从用户组批量导入 / 部门多选 | 无 user group 概念 | B | 添加成员 Dialog |
 | 四级角色（Owner/Admin/Developer/Reporter） | 现三级（admin/member/user），波及全部 canManage/canWrite | C | 角色徽章 + 行内 select |
 
@@ -101,7 +110,7 @@
 | CSV 导入导出 / 历史版本快照 / 配置哈希 | 均无 | B | 只读视图工具条 + 底部校验条 |
 | 告警与 Webhook 回调 / 并发策略与超时熔断 分区 | 无项目级告警/并发配置（出站 webhook 是令牌回调另一机制） | C | 导航条分区卡 |
 | 数据池与参数驱动文件（项目层） | `/data-sets` 挂场景非项目 | B | 导航条分区卡 |
-| 实例 × 凭证匹配聚合端点 | 现由前端拼 4 个现成端点（instances/deployments/项目凭证/个人凭证）；量大后可下沉 | A（后续优化） | `InstanceCredentialMatchPanel` 一次拉齐 |
+| ✅ 实例 × 凭证匹配聚合端点 | 已接回：`GET /projects/{id}/instance-credential-matches?envId=`（成员视图 username 脱敏；2026-11-18） | A（后续优化） | `InstanceCredentialMatchPanel` 已单端点化 |
 
 ## 4. 验证口径
 

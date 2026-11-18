@@ -55,6 +55,10 @@
         data-testid="prj-mem-q"
       />
       <span class="flex-1" />
+      <!-- A 级批次(2026-11-18):权限清单 CSV(全量成员,不受前端筛选影响;
+           papaparse unparse + BOM,Excel 打开中文不乱码) -->
+      <Button v-if="members.length" variant="outline" size="sm" data-testid="prj-mem-export"
+              @click="exportCsv">导出 CSV</Button>
       <Button size="sm" data-testid="prj-add-open" @click="openAdd">+ 添加成员</Button>
     </div>
 
@@ -65,6 +69,9 @@
         <tr>
           <th>成员</th>
           <th style="width:9.375rem">项目角色</th>
+          <!-- 负责资产数(A 级批次 2026-11-18):owner 归属聚合 -->
+          <th style="width:5.625rem" class="c-center">场景数</th>
+          <th style="width:5.625rem" class="c-center">用例集数</th>
           <th style="width:8.75rem">加入时间</th>
           <th style="width:5rem" />
         </tr>
@@ -83,12 +90,18 @@
           <td>
             <!-- 行内改角色 = 快路径(末位管理员保护由后端 409 兜底) -->
             <span class="role-badge" :class="m.role" :data-testid="`prj-role-badge-${m.userId}`">
-              {{ PROJECT_ROLE_LABEL[m.role] }}
+              {{ projectRoleLabel(m.role) }}
             </span>
             <select :value="m.role" class="role-select" :data-testid="`prj-role-${m.userId}`"
                     aria-label="改角色" @change="changeRole(m, $event)">
               <option v-for="r in ROLES" :key="r" :value="r">{{ PROJECT_ROLE_LABEL[r] }}</option>
             </select>
+          </td>
+          <td class="c-center">
+            <span class="muted" :data-testid="`prj-mem-scen-${m.userId}`">{{ m.scenarioCount ?? 0 }}</span>
+          </td>
+          <td class="c-center">
+            <span class="muted" :data-testid="`prj-mem-suite-${m.userId}`">{{ m.suiteCount ?? 0 }}</span>
           </td>
           <td><span class="muted">{{ m.addedAt ? shortDateTime(m.addedAt) : '—' }}</span></td>
           <td>
@@ -144,14 +157,16 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import Papa from 'papaparse'
 import {
   listMembers, addMember, patchMember, removeMember,
   type ProjectOut, type ProjectMember, type ProjectRole,
 } from '@/api/projects'
-import { PROJECT_ROLE_LABEL } from '@/utils/projectRole'
+import { PROJECT_ROLE_LABEL, projectRoleLabel } from '@/utils/projectRole'
 import { getRoster } from '@/api/handoff'
 import { shortDateTime } from '@/utils/datetime'
 import { confirmAction } from '@/utils/confirmAction'
+import { downloadFile } from '@/utils/download'
 import { toast } from '@/utils/toast'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -215,6 +230,25 @@ function openAdd(): void {
 
 async function load(): Promise<void> {
   members.value = await listMembers(props.project.id)
+}
+
+/** 权限清单 CSV(A 级批次 2026-11-18):导出全量成员(不受前端角色/
+ *  搜索筛选影响 —— 筛选是浏览态,清单是台账);BOM 头保 Excel 中文。 */
+function exportCsv(): void {
+  const rows = members.value.map((m) => ({
+    姓名: m.displayName || m.username,
+    用户名: m.username,
+    项目角色: projectRoleLabel(m.role) || m.role,
+    场景数: m.scenarioCount ?? 0,
+    用例集数: m.suiteCount ?? 0,
+    加入时间: m.addedAt ? shortDateTime(m.addedAt) : '',
+  }))
+  const csv = '\uFEFF' + Papa.unparse(rows)
+  const date = new Date().toISOString().slice(0, 10)
+  const safeName = props.project.name.replace(/[\\/:*?"<>|]/g, '_')
+  downloadFile(`项目成员权限清单-${safeName}-${date}.csv`, csv,
+    'text/csv;charset=utf-8')
+  toast.success(`已导出 ${rows.length} 位成员的权限清单`)
 }
 
 async function add(): Promise<void> {

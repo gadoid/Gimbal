@@ -344,21 +344,29 @@ def execution_list_item(
 
 
 async def consecutive_failure_streaks(
-    session: AsyncSession, owner_id: int
+    session: AsyncSession, owner_id: int | None = None, *,
+    project_id: int | None = None,
 ) -> dict[int, int]:
     """execution id → 「连续第 N 次失败」(执行设计 §3.2 信号列)。
 
-    口径:同 owner 同 scenario 的执行按 id 升序(= 时间序)连续计失败,
-    失败单自身计入 N;成功/取消单断链。一次轻行扫描(只取三列,倒序
-    取最近 _STREAK_SCAN_LIMIT 条)内存里转回时间正序走一遍:失败链第
-    N 单记 N(最新单拿链长 — 「已经连挂 N 次」),非失败单不进返回表
-    (前端只在 failed 行渲染信号)。
+    口径:``owner_id`` = 同 owner 同 scenario;``project_id``(A 级批次
+    2026-11-18)= 项目快照行集内同 scenario 跨 owner 连败(项目聚合面
+    与行集同口径)。二者恰传其一。执行按 id 升序(= 时间序)连续计
+    失败,失败单自身计入 N;成功/取消单断链。一次轻行扫描(只取三列,
+    倒序取最近 _STREAK_SCAN_LIMIT 条)内存里转回时间正序走一遍:失败
+    链第 N 单记 N(最新单拿链长 — 「已经连挂 N 次」),非失败单不进
+    返回表(前端只在 failed 行渲染信号)。
     """
+    if (owner_id is None) == (project_id is None):
+        raise ValueError(
+            "consecutive_failure_streaks: owner_id / project_id 恰传其一")
+    scope = (Execution.owner_id == owner_id if owner_id is not None
+             else Execution.project_id == project_id)
     rows = (
         (
             await session.execute(
                 select(Execution.id, Execution.scenario_id, Execution.status)
-                .where(Execution.owner_id == owner_id)
+                .where(scope)
                 .order_by(Execution.id.desc())
                 .limit(_STREAK_SCAN_LIMIT)
             )

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,15 +29,26 @@ router = APIRouter(
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-#: 分桶 = 场景库的两个列表页;条件在 mine/public 之间不互用(可见范围不同)。
-Bucket = Literal["mine", "public"]
+#: 分桶 = 场景库的两个列表页 + 项目详情场景页签(A 级批次 2026-11-18);
+#: 条件在 mine/public/project 之间不互用(可见范围不同),project 桶再按
+#: 项目 id 隔离(每项目独立一组)。
+Bucket = Literal["mine", "public", "project"]
 
 _PREF_KEY = "scenario_filter_groups"
 MAX_GROUPS = 30
 _MAX_FILTER_BYTES = 8 * 1024
 
 
-def _pref_key(bucket: str) -> str:
+def _bucket_key(bucket: str, project_id: int | None) -> str:
+    """桶 → user_prefs 键。project 桶必须带 projectId(422),键形如
+    ``scenario_filter_groups.project.<id>``(长度 ≤64,String(64) 限内)。"""
+    if bucket == "project":
+        if project_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "project_id_required",
+                        "message": "project 桶必须带 projectId"})
+        return f"{_PREF_KEY}.project.{project_id}"
     return f"{_PREF_KEY}.{bucket}"
 
 
@@ -57,7 +68,11 @@ class GroupListOut(BaseModel):
 
 
 class GroupIn(BaseModel):
+    model_config = {"populate_by_name": True}
+
     bucket: Bucket
+    # project 桶必填(422 由 _bucket_key 抛);其余桶忽略该位
+    project_id: int | None = Field(default=None, ge=1, alias="projectId")
     name: str = Field(min_length=1, max_length=30)
     q: str = Field(default="", max_length=200)
     #: 前端 utils/filters.ts 的 ScenarioFilters —— 对本层是不透明 JSON,
@@ -78,22 +93,22 @@ def _to_group(raw: Any) -> dict[str, Any]:
     }
 
 
-async def _read(db: AsyncSession, user_id: int, bucket: str):
+async def _read(db: AsyncSession, user_id: int, key: str):
     pref = (await db.execute(
         select(UserPref).where(
-            UserPref.user_id == user_id, UserPref.key == _pref_key(bucket))
+            UserPref.user_id == user_id, UserPref.key == key)
     )).scalar_one_or_none()
     raw = (pref.value or {}).get("groups") if pref else None
     groups = [_to_group(g) for g in raw] if isinstance(raw, list) else []
     return pref, groups
 
 
-async def _write(db: AsyncSession, user_id: int, bucket: str,
+async def _write(db: AsyncSession, user_id: int, key: str,
                  pref: UserPref | None, groups: list[dict[str, Any]]) -> None:
     # 整对象重新赋值(SQLAlchemy 不追踪 JSON 列的原地改动)
     value = {"groups": groups}
     if pref is None:
-        db.add(UserPref(user_id=user_id, key=_pref_key(bucket), value=value))
+        db.add(UserPref(user_id=user_id, key=key, value=value))
     else:
         pref.value = value
     await db.commit()
@@ -102,8 +117,10 @@ async def _write(db: AsyncSession, user_id: int, bucket: str,
 @router.get("", response_model=GroupListOut)
 async def list_groups(
     user: CurrentUser, db: DbSession, bucket: Bucket = "mine",
+    project_id: int | None = Query(alias="projectId", default=None, ge=1),
 ) -> GroupListOut:
-    _, groups = await _read(db, user.id, bucket)
+    key = _bucket_key(bucket, project_id)
+    _, groups = await _read(db, user.id, key)
     return GroupListOut(items=[GroupOut(**g) for g in groups])
 
 
@@ -122,7 +139,8 @@ async def create_group(
             detail={"code": "filters_too_large",
                     "message": f"筛选条件超过 {_MAX_FILTER_BYTES // 1024}KB"})
 
-    pref, groups = await _read(db, user.id, body.bucket)
+    key = _bucket_key(body.bucket, body.project_id)
+    pref, groups = await _read(db, user.id, key)
     idx = next((i for i, g in enumerate(groups) if g["name"] == name), -1)
     if idx < 0 and len(groups) >= MAX_GROUPS:
         raise HTTPException(
@@ -141,19 +159,21 @@ async def create_group(
         groups[idx] = item
     else:
         groups.append(item)
-    await _write(db, user.id, body.bucket, pref, groups)
+    await _write(db, user.id, key, pref, groups)
     return GroupOut(**item)
 
 
 @router.delete("/{bucket}/{group_id}")
 async def delete_group(
     user: CurrentUser, db: DbSession, bucket: Bucket, group_id: str,
+    project_id: int | None = Query(alias="projectId", default=None, ge=1),
 ) -> dict:
-    pref, groups = await _read(db, user.id, bucket)
+    key = _bucket_key(bucket, project_id)
+    pref, groups = await _read(db, user.id, key)
     kept = [g for g in groups if g["id"] != group_id]
     if len(kept) == len(groups):
         raise HTTPException(
             status_code=404,
             detail={"code": "group_not_found", "message": "分组不存在"})
-    await _write(db, user.id, bucket, pref, kept)
+    await _write(db, user.id, key, pref, kept)
     return {"removed": group_id}

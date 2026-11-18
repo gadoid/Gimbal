@@ -217,16 +217,24 @@ async def facets(
     q: str | None = None,
     visibility: str | None = None,
     scope: str = "all",
+    project_id: int | None = None,
 ) -> dict:
     """五维 facets:modules/systems/tags/authors/priorities 的可选值+计数。
 
     system/tags 是 JSONB 数组,用 ``jsonb_array_elements_text`` unnest
     后 GROUP BY(§2.2 方言段钦定的唯一一对 helper 之一)。
+
+    ``project_id``(A 级批次,2026-11-18)= 项目口径:行集收敛到
+    ``project_id`` 快照列,取代 scope/visibility 分桶(与 list_page 的
+    project_id 先例同口径);调用方(路由层)自把项目读门。
     """
     clauses = []
     qc = _q_clause(q)
     if qc is not None:
         clauses.append(qc)
+    if project_id is not None:
+        clauses.append(ComposerScenario.project_id == project_id)
+        return await _facet_groups(db, clauses)
     # S1.9:visibility=public 入参 → 公共项目谓词(列删,0043)
     if visibility == "public":
         from .zone import public_project_id as _ppid
@@ -237,7 +245,10 @@ async def facets(
     vis = visibility_clause(user, viewer_id, scope=scope)
     if vis is not None:
         clauses.append(vis)
+    return await _facet_groups(db, clauses)
 
+
+async def _facet_groups(db: AsyncSession, clauses: list) -> dict:
     async def _group_scalar(col):
         stmt = (
             select(col, func.count())

@@ -22,7 +22,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Executions from '@/views/Executions.vue'
 import ExecutionsList from '@/views/ExecutionsList.vue'
-import { getBatchSummary, listExecutions } from '@/api/executions'
+import { getBatchSummary, getExecutionsSummary, listExecutions } from '@/api/executions'
 import { useExecutionsStore } from '@/stores/executions'
 import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
 import { previewPlateDraft } from '@/api/scenario-composer'
@@ -35,6 +35,12 @@ vi.mock('@/api/executions', async (importOriginal) => {
     ...orig,
     cancelExecution: vi.fn().mockResolvedValue({}),
     listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    // KPI 带(A 级批次:项目维度聚合;默认个人空口径,用例按需覆写)
+    getExecutionsSummary: vi.fn().mockResolvedValue({
+      windowDays: 7, totalExecutions: 0, totalRuns: 0, passedRuns: 0,
+      failedRuns: 0, passRate: null, avgDurationSec: null,
+      repeatFailureScenarios: 0, activeExecutions: 0,
+    }),
     // 行级明细已退役(2026-11-12):rows/artifact/events 消费面移至
     // 报告面板与日志分析页,本文件不再 mock。
     // 场景快照导出:默认无快照(存量行形态),快照用例按需覆写。
@@ -885,6 +891,43 @@ describe('ExecutionsList — B5 批次汇总横幅', () => {
     await w.get('.batch-clear').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="exec-batch-banner"]').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
+describe('ExecutionsList — ?projectId= 项目过滤(A 级批次 2026-11-18)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('项目详情头卡深链:chip 呈现;列表与 KPI 带同口径传 projectId;清除 chip 后不再带参', async () => {
+    vi.mocked(listExecutions).mockResolvedValue({
+      items: [], total: 2, page: 1, pageSize: 10, failedTotal: 1 } as never)
+    vi.mocked(getExecutionsSummary).mockResolvedValue({
+      windowDays: 7, totalExecutions: 2, totalRuns: 6, passedRuns: 5,
+      failedRuns: 1, passRate: 5 / 6, avgDurationSec: 1,
+      repeatFailureScenarios: 0, activeExecutions: 0,
+    })
+    const router = makeRouter()
+    router.push('/executions?projectId=7')
+    await router.isReady()
+    const w = mount(ExecutionsList, { global: { plugins: [router] } })
+    await flushPromises()
+
+    // chip 可见,列表 + KPI 都带项目口径
+    expect(w.get('[data-testid="exec-project-chip"]').text()).toContain('项目 #7')
+    expect(listExecutions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectId: 7, page: 1, pageSize: 10 }))
+    expect(getExecutionsSummary).toHaveBeenCalledWith(7, 7)
+
+    // 清除 chip → 不再带 projectId(回个人 + 我所在项目全量口径)
+    await w.get('[data-testid="exec-project-clear"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="exec-project-chip"]').exists()).toBe(false)
+    expect(listExecutions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1, pageSize: 10 }))
+    expect(vi.mocked(listExecutions).mock.lastCall?.[0]).not.toHaveProperty('projectId')
     w.unmount()
   })
 })

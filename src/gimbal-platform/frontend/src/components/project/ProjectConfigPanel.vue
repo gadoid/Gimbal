@@ -76,7 +76,7 @@
         </p>
         <InstanceCredentialMatchPanel
           :project-id="project.id"
-          :env-id="project.defaultEnvironmentId"
+          :env-id="project.defaultEnvironmentId ?? null"
           :can-manage="canManage"
           @register="goSection('prj-cfg-credentials')"
         />

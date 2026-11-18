@@ -314,8 +314,30 @@ describe('useScenarioListView(服务端化)', () => {
     vi.mocked(groupApi.listFilterGroups).mockResolvedValue([])
     await v.removeGroup('g-1')
     await flushPromises()
-    expect(groupApi.deleteFilterGroup).toHaveBeenCalledWith('mine', 'g-1')
+    expect(groupApi.deleteFilterGroup).toHaveBeenCalledWith('mine', 'g-1', undefined)
     expect(v.groups.value).toEqual([])
     expect(v.activeGroupId.value).toBe('')
+  })
+
+  // ── project 桶(A 级批次 2026-11-18:项目详情场景页签)──────────
+  it('project 桶:params 下推 projectId(无 scope/visibility);starred 只挂 project 桶;facets/分组带 projectId', async () => {
+    mockEnv([item(1)])
+    const v = useScenarioListView('project', { projectId: 7 })
+    await v.load()
+    const p = await lastCallParams()
+    expect(p.projectId).toBe(7)
+    expect(p.scope).toBeUndefined()
+    expect(p.visibility).toBeUndefined()
+    expect(p.starred).toBeUndefined()                 // 默认不关注
+
+    v.starred.value = true
+    await v.load()
+    expect((await lastCallParams()).starred).toBe(true)
+
+    // facets 与分组桶同口径带 projectId
+    expect(
+      vi.mocked(composerApi.fetchScenarioFacets).mock.lastCall?.[0],
+    ).toEqual({ projectId: 7 })
+    expect(groupApi.listFilterGroups).toHaveBeenCalledWith('project', 7)
   })
 })
