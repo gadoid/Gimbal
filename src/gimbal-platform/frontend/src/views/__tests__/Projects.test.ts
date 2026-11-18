@@ -28,13 +28,17 @@ vi.mock('@/api/projects', () => ({
 }))
 vi.mock('@/api/scenario-composer', () => ({
   listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
+  listDataSets: vi.fn().mockResolvedValue([{ datasetId: 'd1' }]),
+  runScenario: vi.fn().mockResolvedValue({ runId: 'r-1' }),
 }))
 vi.mock('@/api/suites', () => ({
-  listSuites: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 }),
+  listSuites: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 12 }),
   createSuite: vi.fn(),
+  runSuite: vi.fn().mockResolvedValue({}),
 }))
 vi.mock('@/api/integration', () => ({
   listIntegrationTasks: vi.fn().mockResolvedValue([]),
+  runIntegrationTask: vi.fn().mockResolvedValue({ result: { status: 'ok', durationMs: 5, error: '' } }),
 }))
 vi.mock('@/api/handoff', () => ({
   getRoster: vi.fn().mockResolvedValue({ items: [] }),
@@ -61,6 +65,12 @@ function makeRouter(): Router {
       { path: '/composer/:scenarioId', component: { template: '<div/>' } },
       { path: '/scenarios/mine', component: { template: '<div/>' } },
       { path: '/suites', component: { template: '<div/>' } },
+      // 头卡「执行历史 / 监控指标」跳转落点(stitch 重建)
+      { path: '/executions', component: { template: '<div/>' } },
+      { path: '/analytics', component: { template: '<div/>' } },
+      { path: '/suites/:rest(.*)', component: { template: '<div/>' } },
+      { path: '/scenarios/:rest(.*)', component: { template: '<div/>' } },
+      { path: '/integrations/:rest(.*)', component: { template: '<div/>' } },
     ],
   })
 }
@@ -190,6 +200,148 @@ describe('ProjectDetailView — 详情页签', () => {
     await router.isReady()
     const w = await mountView(ProjectDetailView, { isAdmin: false, router })
     expect(integrationApi.listIntegrationTasks).toHaveBeenCalledWith(7)
+    w.unmount()
+  })
+})
+
+describe('ProjectDetailView — stitch 重建(2026-11-18)', () => {
+  // ── fixtures:普通项目三页签的行级形态 ──────────────────────────
+  const SCEN = {
+    meta: {
+      scenarioId: 'sc-1', name: '订单创建', description: '下单主链路', module: '订单',
+      priority: 1, author: 'alice', owner: 'alice', tags: [] as string[], system: ['fin'],
+      updateTime: '2026-11-01T10:00:00Z',
+    },
+    dataSetCount: 1, schemeCount: 0, stepCount: 3, varCount: 0,
+    tags: ['回归'], starred: false, visibility: 'private' as const, projectId: 7,
+  }
+  const SUITE = {
+    suiteId: 11, name: '电商主链路', description: '正向交易回归', visibility: 'private',
+    projectId: 7, mode: 'chain', memberCount: 5, rev: 1, isDraft: true,
+    createdAt: null, updatedAt: null, latestRun: { passed: 3, failed: 0 }, ownerName: 'alice',
+  }
+  const TASK = {
+    id: 42, name: '每日凌晨冒烟', ownerId: 1, mine: true, canManage: true,
+    visibility: 'project', projectId: 7, targetType: 'scenario', scenarioId: 'sc-1', suiteId: null,
+    schemeId: null, targetSystem: 'fin', triggerCron: '', cronText: '每天 02:00', resultPolicy: '',
+    cardTemplate: '', removed: false,
+    instance: {
+      state: 'running', enabled: true, lastRunAt: null, lastError: '', pausedReason: '',
+      nextRunAt: '2026-11-19T02:00:00Z', failStreak: 0, runStatus: 'ok', checkStatus: 'none',
+      checkMessage: '', checkChangedAt: null,
+    },
+  }
+
+  async function mountTab(tab: string, mocks: {
+    scen?: unknown; suite?: unknown; task?: unknown[]; project?: unknown;
+  }) {
+    if (mocks.project) vi.mocked(projectsApi.getProject).mockResolvedValue(mocks.project as never)
+    else vi.mocked(projectsApi.getProject).mockResolvedValue(MINE as never)
+    if (mocks.scen !== undefined) {
+      vi.mocked(composerApi.listScenarios).mockResolvedValue(
+        { items: [mocks.scen], total: 1, page: 1, pageSize: 20 } as never)
+    }
+    if (mocks.suite !== undefined) {
+      vi.mocked(suitesApi.listSuites).mockResolvedValue(
+        { items: [mocks.suite], total: 1, page: 1, pageSize: 12 } as never)
+    }
+    if (mocks.task !== undefined) {
+      vi.mocked(integrationApi.listIntegrationTasks).mockResolvedValue(mocks.task as never)
+    }
+    const router = makeRouter()
+    await router.push(`/projects/7?tab=${tab}`)
+    await router.isReady()
+    const w = await mountView(ProjectDetailView, { isAdmin: false, router })
+    return { w, router }
+  }
+
+  it('头卡:统计三格 + 可见性徽章 + 执行历史/监控指标跳转', async () => {
+    const { w, router } = await mountTab('scenarios', { scen: SCEN })
+    expect(w.find('[data-testid="prj-vis-badge"]').text()).toContain('成员可见')
+    const stats = w.find('[data-testid="prj-stats"]').text()
+    expect(stats).toContain('用例场景')
+    expect(stats).toContain('3')       // scenarioCount
+    expect(stats).toContain('1')       // suiteCount
+    expect(stats).toContain('2')       // memberCount
+    await w.find('[data-testid="prj-metrics"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/analytics')
+    w.unmount()
+  })
+
+  it('场景表:星标/优先级/标签/筛选;⋯ 执行走 数据集全集 + 无 schemeId', async () => {
+    const { w } = await mountTab('scenarios', { scen: SCEN })
+    expect(w.find('[data-testid="prj-scen-name-sc-1"]').text()).toBe('订单创建')
+    expect(w.find('.star-btn').exists()).toBe(true)
+    expect(w.find('[data-testid="prj-scen-priority"]').exists()).toBe(true)
+    expect(w.find('[data-testid="prj-scen-starred"]').exists()).toBe(true)
+    expect(w.text()).toContain('P1')
+    expect(w.text()).toContain('回归')
+    // ⋯ 菜单 teleport 到 body:执行 = listDataSets 全集 + runScenario
+    await w.find('[data-testid="prj-scen-more-sc-1"]').trigger('click')
+    await flushPromises()
+    const run = document.body.querySelector('[data-testid="prj-scen-run-sc-1"]') as HTMLElement
+    expect(run).toBeTruthy()
+    run.click()
+    await flushPromises()
+    expect(composerApi.runScenario).toHaveBeenCalledWith(
+      expect.objectContaining({ scenarioId: 'sc-1', dataSetIds: ['d1'] }))
+    w.unmount()
+  })
+
+  it('用例集卡片流:模式/草稿/统计/发布者;执行走 runSuite', async () => {
+    const { w } = await mountTab('suites', { suite: SUITE })
+    const card = w.find('[data-testid="prj-suite-11"]')
+    expect(card.exists()).toBe(true)
+    expect(card.text()).toContain('串联编排')
+    expect(card.text()).toContain('草稿')
+    expect(card.text()).toContain('过 3 / 败 0')
+    expect(card.text()).toContain('alice')
+    await w.find('[data-testid="prj-suite-run-11"]').trigger('click')
+    await flushPromises()
+    expect(suitesApi.runSuite).toHaveBeenCalledWith(11)
+    w.unmount()
+  })
+
+  it('集成任务表:TASK 标识 / Cron 触发徽章 / 下次触发 / 状态', async () => {
+    const { w } = await mountTab('tasks', { task: [TASK] })
+    const row = w.find('[data-testid="prj-task-42"]')
+    expect(row.text()).toContain('TASK-42')
+    expect(row.text()).toContain('定时调度 (Cron)')
+    expect(row.text()).toContain('下次')
+    expect(row.text()).toContain('运行中')
+    w.unmount()
+  })
+
+  it('集成任务:原型 _3 的状态筛选 Tab + 搜索(客户端)', async () => {
+    const paused = { ...TASK, id: 43, name: '契约校对', instance: {
+      ...TASK.instance, state: 'paused', nextRunAt: null,
+    } }
+    const { w } = await mountTab('tasks', { task: [TASK, paused] })
+    expect(w.find('[data-testid="prj-task-filter-all"]').text()).toContain('2')
+    expect(w.find('[data-testid="prj-task-filter-running"]').text()).toContain('1')
+    expect(w.find('[data-testid="prj-task-filter-paused"]').text()).toContain('1')
+
+    await w.find('[data-testid="prj-task-filter-paused"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="prj-task-42"]').exists()).toBe(false)
+    expect(w.find('[data-testid="prj-task-43"]').exists()).toBe(true)
+
+    await w.find('[data-testid="prj-task-filter-all"]').trigger('click')
+    await w.find('[data-testid="prj-task-q"]').setValue('TASK-43')
+    await flushPromises()
+    expect(w.find('[data-testid="prj-task-42"]').exists()).toBe(false)
+    expect(w.find('[data-testid="prj-task-43"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('加入申请 pending → 页签红徽章', async () => {
+    const { w } = await mountTab('scenarios', {
+      project: { ...MINE, pendingPromotions: 2 },
+    })
+    const cnt = w.find('[data-testid="prj-tab-promotions"]').find('.cnt.alert')
+    expect(cnt.exists()).toBe(true)
+    expect(cnt.text()).toBe('2')
     w.unmount()
   })
 })

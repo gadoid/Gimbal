@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"inverse-primary":"#afc6ff","surface-tint":"#0059c7","on-secondary-fixed":"#131b2e","outline":"#727786","error-container":"#ffdad6","on-secondary":"#ffffff","inverse-on-surface":"#eaf1ff","error":"#ba1a1a","tertiary":"#256a00","inverse-surface":"#213145","surface-variant":"#d3e4fe","primary-fixed-dim":"#afc6ff","surface-container-highest":"#d3e4fe","on-error-container":"#93000a","secondary-fixed-dim":"#bec6e0","secondary":"#565e74","on-secondary-container":"#5c647a","on-primary-fixed":"#001a43","primary":"#0057c2","surface-container-low":"#eff4ff","surface":"#f8f9ff","primary-fixed":"#d9e2ff","on-error":"#ffffff","on-primary":"#ffffff","surface-container":"#e5eeff","tertiary-container":"#308600","on-tertiary":"#ffffff","outline-variant":"#c1c6d7","tertiary-fixed-dim":"#6de039","secondary-fixed":"#dae2fd","on-background":"#0b1c30","surface-dim":"#cbdbf5","surface-bright":"#f8f9ff","secondary-container":"#dae2fd","on-tertiary-fixed-variant":"#1a5200","on-surface-variant":"#414755","surface-container-lowest":"#ffffff","on-secondary-fixed-variant":"#3f465c","on-tertiary-fixed":"#062100","background":"#f8f9ff","on-tertiary-container":"#f8ffee","on-surface":"#0b1c30","primary-container":"#006ef2","on-primary-fixed-variant":"#004398","tertiary-fixed":"#88fd54","surface-container-high":"#dce9ff","on-primary-container":"#fefcff"},borderRadius:{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},spacing:{"space-xs":"0.25rem","gutter":"1rem","space-md":"0.75rem","margin":"1.5rem","space-lg":"1.25rem","space-xl":"2rem","space-sm":"0.5rem"},fontFamily:{"body-lg":["Inter"],"headline-md":["Inter"],"label-md":["JetBrains Mono"],"headline-sm":["Inter"],"label-sm":["JetBrains Mono"],"headline-lg":["Inter"],"body-md":["Inter"],"body-sm":["Inter"]},fontSize:{"body-lg":["15px",{lineHeight:"22px",fontWeight:"400"}],"headline-md":["20px",{lineHeight:"28px",fontWeight:"600"}],"label-md":["13px",{lineHeight:"18px",fontWeight:"500"}],"headline-sm":["16px",{lineHeight:"24px",fontWeight:"600"}],"label-sm":["11px",{lineHeight:"16px",fontWeight:"500"}],"headline-lg":["24px",{lineHeight:"32px",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"18px",fontWeight:"400"}]}}}}</script></head><body class="bg-surface text-on-surface font-body-md text-body-md antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-inverse-surface text-inverse-on-surface z-50 flex flex-col justify-between select-none shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col h-full overflow-hidden"><div class="h-14 px-gutter flex items-center justify-between bg-inverse-surface shrink-0"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">Q</div><span class="font-headline-sm text-headline-sm tracking-tight text-surface-container-lowest font-semibold">AutoTest Ops</span></div><button class="text-outline hover:text-surface-container-lowest flex items-center justify-center p-space-xs rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">menu_open</span></button></div><div class="flex-1 overflow-y-auto px-space-sm py-space-sm space-y-space-md"><div class="space-y-space-xs"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="overview-workspace" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">工作台</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="system-notifications" href="#"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="font-body-md text-body-md">通知中心</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="global-config" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-body-md text-body-md">系统配置</span></a></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">项目组资源</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="favorite-projects" href="#"><span class="material-symbols-outlined text-[18px]">star</span><span class="font-body-md text-body-md">我的关注</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="scenarios" href="#"><span class="material-symbols-outlined text-[18px]">account_tree</span><span class="font-body-md text-body-md">测试场景</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="test-suites" href="#"><span class="material-symbols-outlined text-[18px]">folder_copy</span><span class="font-body-md text-body-md">场景集合</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="credentials-vault" href="#"><span class="material-symbols-outlined text-[18px]">key</span><span class="font-body-md text-body-md">凭证管理</span></a></nav></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">服务架构</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="service-profiling" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-body-md text-body-md">服务画像</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="change-adaptation" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-md text-body-md">变更适配</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="service-integrations" href="#"><span class="material-symbols-outlined text-[18px]">cable</span><span class="font-body-md text-body-md">集成服务</span></a></nav></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">执行与分析</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="test-runners" href="#"><span class="material-symbols-outlined text-[18px]">smart_toy</span><span class="font-body-md text-body-md">执行器节点</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="execution-records" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-md text-body-md">执行历史记录</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="data-analytics" href="#"><span class="material-symbols-outlined text-[18px]">monitoring</span><span class="font-body-md text-body-md">效能数据分析</span></a></nav></div></div><div class="p-space-md bg-inverse-surface/80 flex items-center justify-between shrink-0"><div class="flex items-center gap-space-sm overflow-hidden"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col truncate"><span class="font-body-sm text-body-sm text-surface-container-lowest truncate font-medium">Alex Chen</span><span class="font-label-sm text-label-sm text-outline truncate">alex.chen@autoops.internal</span></div></div><a class="text-outline hover:text-error flex items-center justify-center p-space-xs rounded-lg transition-colors" data-path="login" href="#" title="退出登录"><span class="material-symbols-outlined text-[18px]">logout</span></a></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-sm"><nav class="flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm"><a class="hover:text-primary transition-colors" data-path="overview-workspace" href="#">空间列表</a><span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span><span class="text-on-surface font-medium">公共 (Public Project)</span></nav></div><div class="flex items-center gap-gutter"><div class="flex items-center gap-space-xs bg-surface-container-low px-space-md py-space-xs rounded-full text-on-surface-variant"><span class="material-symbols-outlined text-[16px] text-outline">search</span><span class="font-body-sm text-body-sm text-outline">快捷搜索场景、任务 (⌘+K)...</span></div><div class="flex items-center gap-space-sm"><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">history</span></button><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">insights</span></button><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">help_outline</span></button></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><div class="pt-16"><section class="bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] px-margin pt-margin pb-0"><div class="flex flex-col md:flex-row md:items-center justify-between gap-space-lg mb-space-lg"><div class="flex items-start gap-space-lg"><div class="w-12 h-12 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg font-bold shrink-0">P</div><div class="space-y-space-xs"><div class="flex items-center gap-space-sm flex-wrap"><h1 class="font-headline-md text-headline-md text-on-surface font-semibold">公共 (Public Project)</h1><span class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded-full font-label-sm text-label-sm bg-surface-container text-on-secondary-container"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>全员可见</span></div><div class="flex items-center gap-space-lg text-on-surface-variant font-body-sm text-body-sm"><div class="flex items-center gap-space-xs"><span class="text-outline">用例场景:</span><span class="font-label-md text-label-md font-semibold text-on-surface">148</span></div><div class="flex items-center gap-space-xs"><span class="text-outline">用例集:</span><span class="font-label-md text-label-md font-semibold text-on-surface">24</span></div><div class="flex items-center gap-space-xs"><span class="text-outline">运行成功率:</span><span class="font-label-md text-label-md font-semibold text-tertiary">98.6%</span></div></div></div></div><div class="flex items-center gap-space-sm shrink-0"><a class="inline-flex items-center gap-space-xs px-space-lg py-space-xs rounded-lg font-body-md text-body-md text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors" data-path="execution-records" href="#"><span class="material-symbols-outlined text-[16px]">history</span>执行历史</a><a class="inline-flex items-center gap-space-xs px-space-lg py-space-xs rounded-lg font-body-md text-body-md text-on-primary bg-primary hover:bg-primary-container transition-colors" data-path="data-analytics" href="#"><span class="material-symbols-outlined text-[16px]">analytics</span>监控指标</a></div></div><nav class="flex items-center gap-space-xl overflow-x-auto" data-active-classes="text-primary font-semibold border-b-2 border-primary"><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="scenarios" href="#">场景 (用例)<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">148</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="test-suites" href="#">用例集<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">24</span></a><a aria-current="page" class="py-space-md transition-colors flex items-center gap-space-xs text-primary font-semibold border-b-2 border-primary" data-path="scheduled-tasks" href="#">集成任务<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">8</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="membership-approvals" href="#">加入申请<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container">3</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="project-members" href="#">成员列表<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">16</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="project-settings" href="#">项目配置</a></nav></section><main class="w-full p-margin bg-surface"><div class="flex flex-col w-full space-y-space-lg">
+<!-- 提示横幅 (Friendly Context Banner) -->
+<div class="flex items-center justify-between px-space-lg py-space-sm bg-surface-container-low rounded-xl text-on-surface-variant shadow-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">info</span>
+<p class="font-body-sm text-body-sm leading-tight">
+        集成中心创建时选择项目内场景/用例集即可挂载到本项目，亦可在此直接配置自动化调度。已支持流水线 Webhook 门禁卡点与高频探针巡检。
+      </p>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<a class="font-body-sm text-body-sm text-primary hover:underline flex items-center gap-0.5" href="#">
+        查看流水线对接文档
+        <span class="material-symbols-outlined text-[16px]">arrow_outward</span>
+</a>
+<button class="text-outline hover:text-on-surface p-space-xs rounded-lg transition-colors" onclick="this.closest('div.bg-surface-container-low').style.display='none'" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+</div>
+<!-- 核心指标统计卡片 (Metric Bento Grid) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter">
+<!-- 卡片 1: 挂载任务数 -->
+<div class="relative overflow-hidden bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-medium">已挂载集成任务</span>
+<div class="w-8 h-8 rounded-lg bg-surface-container-low text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">hub</span>
+</div>
+</div>
+<div class="mt-space-md flex items-baseline justify-between">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface">4</span>
+<span class="font-body-sm text-body-sm text-outline">/ 12 限额</span>
+</div>
+<span class="inline-flex items-center gap-0.5 font-label-sm text-label-sm text-tertiary bg-surface-container-low px-2 py-0.5 rounded-full font-medium">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span>+1 本周
+        </span>
+</div>
+<div class="w-full bg-surface-container-low h-1 rounded-full mt-space-md overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 33.3%;"></div>
+</div>
+</div>
+<!-- 卡片 2: 今日执行次数 -->
+<div class="relative overflow-hidden bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-medium">今日调度触发</span>
+<div class="w-8 h-8 rounded-lg bg-surface-container-low text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+</div>
+</div>
+<div class="mt-space-md flex items-baseline justify-between">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface">28</span>
+<span class="font-body-sm text-body-sm text-outline">次运行</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">最近触发 14m 前</span>
+</div>
+<!-- Sparkline 趋势迷你图 -->
+<div class="mt-space-md flex items-end gap-1 h-3 w-full">
+<span class="w-full bg-surface-container rounded-sm h-[30%]"></span>
+<span class="w-full bg-surface-container rounded-sm h-[45%]"></span>
+<span class="w-full bg-surface-container rounded-sm h-[60%]"></span>
+<span class="w-full bg-primary/40 rounded-sm h-[80%]"></span>
+<span class="w-full bg-primary/60 rounded-sm h-[50%]"></span>
+<span class="w-full bg-primary rounded-sm h-[100%]"></span>
+</div>
+</div>
+<!-- 卡片 3: 定时调度中 -->
+<div class="relative overflow-hidden bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-medium">定时活跃调度</span>
+<div class="w-8 h-8 rounded-lg bg-surface-container-low text-tertiary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">schedule</span>
+</div>
+</div>
+<div class="mt-space-md flex items-baseline justify-between">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-lg text-headline-lg font-bold text-on-surface">3</span>
+<span class="font-body-sm text-body-sm text-outline">活跃 (1 挂起)</span>
+</div>
+<span class="inline-flex items-center gap-1.5 font-label-sm text-label-sm text-tertiary font-medium">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>正常心跳
+        </span>
+</div>
+<div class="w-full bg-surface-container-low h-1 rounded-full mt-space-md overflow-hidden">
+<div class="bg-tertiary h-full rounded-full" style="width: 75%;"></div>
+</div>
+</div>
+<!-- 卡片 4: 7日运行成功率 -->
+<div class="relative overflow-hidden bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-medium">近 7 日成功率</span>
+<div class="w-8 h-8 rounded-lg bg-surface-container-low text-tertiary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">verified</span>
+</div>
+</div>
+<div class="mt-space-md flex items-baseline justify-between">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-lg text-headline-lg font-bold text-tertiary">99.2%</span>
+<span class="font-body-sm text-body-sm text-outline">稳定</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">总计 196 次</span>
+</div>
+<div class="w-full bg-surface-container-low h-1 rounded-full mt-space-md overflow-hidden">
+<div class="bg-tertiary h-full rounded-full" style="width: 99.2%;"></div>
+</div>
+</div>
+</div>
+<!-- 任务过滤与工具条 (Toolbar & Search Bar) -->
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-space-md bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex flex-wrap items-center gap-space-sm flex-1">
+<!-- 搜索框 -->
+<div class="relative w-full sm:w-80">
+<span class="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="w-full pl-9 pr-space-md py-1.5 bg-surface-container-low rounded-lg text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface focus:ring-2 focus:ring-primary/20 transition-all" placeholder="搜索任务名称、触发源、Cron 或环境..." type="text"/>
+</div>
+<!-- 快速状态过滤 -->
+<div class="flex items-center bg-surface-container-low p-0.5 rounded-lg text-on-surface-variant font-label-sm text-label-sm">
+<button class="px-space-md py-1 rounded bg-surface-container-lowest text-primary font-semibold shadow-xs">全部 (4)</button>
+<button class="px-space-md py-1 rounded hover:text-on-surface transition-colors">运行中 (3)</button>
+<button class="px-space-md py-1 rounded hover:text-on-surface transition-colors">已暂停 (1)</button>
+</div>
+<!-- 触发模式下拉筛选 -->
+<div class="relative">
+<button class="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px] text-outline">tune</span>
+<span>触发类型: 全部</span>
+<span class="material-symbols-outlined text-[16px] text-outline">arrow_drop_down</span>
+</button>
+</div>
+</div>
+<!-- 关联与创建行动按钮 -->
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors font-body-sm text-body-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+<span>批量检查</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-space-lg py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary transition-colors font-body-sm text-body-sm font-medium shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">add_link</span>
+<span>关联集成任务</span>
+</button>
+</div>
+</div>
+<!-- 任务数据表格 (High-Density Integration Tasks Table) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse font-body-md text-body-md">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant text-label-sm font-label-sm font-semibold uppercase tracking-wider select-none">
+<th class="py-space-md px-space-lg w-10">
+<input class="rounded accent-primary w-4 h-4 cursor-pointer" type="checkbox"/>
+</th>
+<th class="py-space-md px-space-md min-w-[220px]">集成任务名称 / 标识</th>
+<th class="py-space-md px-space-md min-w-[170px]">关联场景 / 用例集</th>
+<th class="py-space-md px-space-md min-w-[140px]">触发类型</th>
+<th class="py-space-md px-space-md min-w-[160px]">调度频次 / 下次触发</th>
+<th class="py-space-md px-space-md min-w-[110px]">执行器集群</th>
+<th class="py-space-md px-space-md min-w-[90px] text-center">调度状态</th>
+<th class="py-space-md px-space-md min-w-[140px]">最近执行状态</th>
+<th class="py-space-md px-space-lg text-right min-w-[150px] sticky right-0 bg-surface-container-low">操作</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low text-on-surface">
+<!-- 任务行 1: 核心冒烟 -->
+<tr class="hover:bg-surface/80 transition-colors group">
+<td class="py-space-md px-space-lg">
+<input class="rounded accent-primary w-4 h-4 cursor-pointer" type="checkbox"/>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface hover:text-primary cursor-pointer font-medium">每日凌晨核心回归冒烟</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-label-sm font-bold bg-amber-100 text-amber-800">P0-Blocker</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>TASK-CORE-001</span>
+<span>•</span>
+<span>负责人: Alex Chen</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-outline">folder_copy</span>
+<span class="font-medium text-body-sm">用户中心全生命周期集合</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">包含 18 个测试场景</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+<span>定时调度 (Cron)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<code class="font-label-sm text-label-sm text-primary font-semibold bg-surface-container-low px-1.5 py-0.5 rounded w-fit">0 0 2 * * ?</code>
+<span class="font-body-sm text-body-sm text-outline">明天 02:00 (剩余 8h)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span>Staging-K8s</span>
+</span>
+</td>
+<td class="py-space-md px-space-md text-center">
+<!-- Switch 开关: 启用态 -->
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-body-sm text-body-sm font-semibold text-tertiary">成功 (Pass)</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>耗时 1m 42s</span>
+<span>•</span>
+<span>02:01:42</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-lg text-right sticky right-0 bg-surface-container-lowest group-hover:bg-surface/80 transition-colors">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="p-1 rounded text-primary hover:bg-primary/10 transition-colors" title="立即手动触发一次" type="button">
+<span class="material-symbols-outlined text-[18px]">play_circle</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="查看执行历史" type="button">
+<span class="material-symbols-outlined text-[18px]">history</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="编辑调度规则" type="button">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/20 transition-colors" title="解绑任务" type="button">
+<span class="material-symbols-outlined text-[18px]">link_off</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- 任务行 2: PR自动化门禁卡点检测 -->
+<tr class="hover:bg-surface/80 transition-colors group">
+<td class="py-space-md px-space-lg">
+<input class="rounded accent-primary w-4 h-4 cursor-pointer" type="checkbox"/>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface hover:text-primary cursor-pointer font-medium">PR自动化门禁卡点检测</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-label-sm font-bold bg-blue-100 text-blue-800">CI-Gate</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>TASK-GATE-082</span>
+<span>•</span>
+<span>流水线集成: GitLab CI</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-outline">account_tree</span>
+<span class="font-medium text-body-sm">交易单据核验主链场景</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">核心反向结算与逆向拦截</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[14px]">webhook</span>
+<span>Webhook 事件触发</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">MR / PR 创建触发</span>
+<span class="font-label-sm text-label-sm text-outline">监听分支: main, release/*</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+<span>CI-Runner-04</span>
+</span>
+</td>
+<td class="py-space-md px-space-md text-center">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-body-sm text-body-sm font-semibold text-tertiary">成功 (Pass)</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>耗时 38s</span>
+<span>•</span>
+<span>14分钟前 (PR#492)</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-lg text-right sticky right-0 bg-surface-container-lowest group-hover:bg-surface/80 transition-colors">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="p-1 rounded text-primary hover:bg-primary/10 transition-colors" title="立即模拟触发" type="button">
+<span class="material-symbols-outlined text-[18px]">play_circle</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="查看执行历史" type="button">
+<span class="material-symbols-outlined text-[18px]">history</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="配置 Webhook 密钥" type="button">
+<span class="material-symbols-outlined text-[18px]">key</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/20 transition-colors" title="解绑任务" type="button">
+<span class="material-symbols-outlined text-[18px]">link_off</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- 任务行 3: 生产巡检心跳探针 -->
+<tr class="hover:bg-surface/80 transition-colors group">
+<td class="py-space-md px-space-lg">
+<input class="rounded accent-primary w-4 h-4 cursor-pointer" type="checkbox"/>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface hover:text-primary cursor-pointer font-medium">生产巡检心跳探针 (Heartbeat)</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-label-sm font-bold bg-purple-100 text-purple-800">Probe-HighFreq</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>TASK-PROD-204</span>
+<span>•</span>
+<span>告警对接: 飞书机器人</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-outline">folder_copy</span>
+<span class="font-medium text-body-sm">网关连通与只读鉴权集</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">包含 6 个心跳检测点</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[14px]">shutter_speed</span>
+<span>高频间隔循环</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<code class="font-label-sm text-label-sm text-primary font-semibold bg-surface-container-low px-1.5 py-0.5 rounded w-fit">每 5 分钟</code>
+<span class="font-body-sm text-body-sm text-outline">下次: 14:35:00 (1m 12s)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>Prod-Edge-01</span>
+</span>
+</td>
+<td class="py-space-md px-space-md text-center">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-body-sm text-body-sm font-semibold text-tertiary">成功 (200 OK)</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>耗时 420ms</span>
+<span>•</span>
+<span>14:30:00</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-lg text-right sticky right-0 bg-surface-container-lowest group-hover:bg-surface/80 transition-colors">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="p-1 rounded text-primary hover:bg-primary/10 transition-colors" title="立即巡检" type="button">
+<span class="material-symbols-outlined text-[18px]">play_circle</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="监控波动大盘" type="button">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="编辑频次" type="button">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/20 transition-colors" title="解绑任务" type="button">
+<span class="material-symbols-outlined text-[18px]">link_off</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- 任务行 4: 跨微服务联调契约自动化校验 (暂停状态) -->
+<tr class="hover:bg-surface/80 transition-colors group opacity-85">
+<td class="py-space-md px-space-lg">
+<input class="rounded accent-primary w-4 h-4 cursor-pointer" type="checkbox"/>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface hover:text-primary cursor-pointer font-medium">微服务契约 Schema 变更校对</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-label-sm font-bold bg-surface-container text-outline">Paused</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>TASK-DIFF-311</span>
+<span>•</span>
+<span>负责人: David Lin</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-outline">account_tree</span>
+<span class="font-medium text-body-sm">Proto契约与OpenAPI比对</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline">跨 5 个微服务接口</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+<span>定时调度 (Cron)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<code class="font-label-sm text-label-sm text-outline line-through bg-surface-container-low px-1.5 py-0.5 rounded w-fit">0 30 18 * * 1-5</code>
+<span class="font-body-sm text-body-sm text-outline italic">已暂停调度</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span>UAT-Worker-02</span>
+</span>
+</td>
+<td class="py-space-md px-space-md text-center">
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-body-sm text-body-sm font-semibold text-error">失败 (Diff Mismatch)</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-outline">
+<span>耗时 12s</span>
+<span>•</span>
+<span>前天 18:30:12</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-lg text-right sticky right-0 bg-surface-container-lowest group-hover:bg-surface/80 transition-colors">
+<div class="flex items-center justify-end gap-space-xs">
+<button class="p-1 rounded text-primary hover:bg-primary/10 transition-colors" title="立即单次触发重试" type="button">
+<span class="material-symbols-outlined text-[18px]">replay</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="排查失败日志" type="button">
+<span class="material-symbols-outlined text-[18px]">description</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="编辑配置" type="button">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/20 transition-colors" title="解绑任务" type="button">
+<span class="material-symbols-outlined text-[18px]">link_off</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- 表格底部微分页与状态说明 -->
+<div class="px-space-lg py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-sm text-on-surface-variant font-body-sm text-body-sm">
+<div class="flex items-center gap-space-sm">
+<span class="text-outline">共挂载 4 个集成任务</span>
+<span>•</span>
+<span class="text-outline">已选 0 项</span>
+</div>
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="text-outline">每页:</span>
+<select class="bg-surface-container-lowest text-on-surface text-label-sm font-label-sm rounded px-2 py-1 outline-none">
+<option>10 条/页</option>
+<option selected="">20 条/页</option>
+<option>50 条/页</option>
+</select>
+</div>
+<div class="flex items-center gap-1 font-label-sm text-label-sm">
+<button class="w-7 h-7 flex items-center justify-center rounded bg-surface-container-lowest text-outline hover:text-on-surface disabled:opacity-40" disabled="">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<button class="w-7 h-7 flex items-center justify-center rounded bg-primary text-on-primary font-bold">1</button>
+<button class="w-7 h-7 flex items-center justify-center rounded bg-surface-container-lowest text-outline hover:text-on-surface disabled:opacity-40" disabled="">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- 底部快捷扩展面板 (Integration Trigger Quick-Hooks) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter pt-space-sm">
+<div class="p-space-lg bg-surface-container-lowest rounded-xl shadow-sm flex items-start gap-space-md border-l-4 border-primary">
+<div class="w-10 h-10 rounded-lg bg-surface-container-low text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">terminal</span>
+</div>
+<div class="space-y-1">
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">CLI / 脚本调度调用</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">通过自动化 CLI 工具直接按场景 ID 注入执行变量并异步监听轮询结果。</p>
+<code class="block mt-2 font-label-sm text-label-sm bg-surface-container-low text-primary px-2 py-1 rounded select-all font-mono">
+          autotest run --task-id TASK-CORE-001 --env staging
+        </code>
+</div>
+</div>
+<div class="p-space-lg bg-surface-container-lowest rounded-xl shadow-sm flex items-start gap-space-md border-l-4 border-tertiary">
+<div class="w-10 h-10 rounded-lg bg-surface-container-low text-tertiary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">notifications_active</span>
+</div>
+<div class="space-y-1">
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">企业告警网关分流</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">当关键卡点任务连续失败超过 2 次时，将通过 Webhook 自动呼叫值班人员并创建 Jira 故障单。</p>
+<a class="inline-flex items-center gap-1 text-tertiary font-label-sm text-label-sm font-medium hover:underline mt-1" href="#">
+          配置通知路由策略
+          <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</a>
+</div>
+</div>
+<div class="p-space-lg bg-surface-container-lowest rounded-xl shadow-sm flex items-start gap-space-md border-l-4 border-secondary">
+<div class="w-10 h-10 rounded-lg bg-surface-container-low text-secondary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]">data_thresholding</span>
+</div>
+<div class="space-y-1">
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">全局执行日志下钻</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">查阅跨节点分发执行的毫秒级时序堆栈、测试用例拓扑依赖图及网络抓包请求快照。</p>
+<a class="inline-flex items-center gap-1 text-primary font-label-sm text-label-sm font-medium hover:underline mt-1" href="#">
+          进入执行历史看板
+          <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</a>
+</div>
+</div>
+</div>
+</div></main></div></div></body></html>

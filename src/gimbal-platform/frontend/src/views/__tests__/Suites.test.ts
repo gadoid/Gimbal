@@ -412,7 +412,7 @@ describe('SuitesPublic — 公共用例集(2026-10-10 IA 独立页)', () => {
     // 模式筛选:请求带 mode=aggregate,只剩聚合
     await w.find('[data-testid="suites-public-filter-aggregate"]').trigger('click')
     await flushPromises()
-    expect(w.findAll('tr[data-testid^="public-suite-"]').length).toBe(1)
+    expect(w.findAll('article[data-testid^="public-suite-"]').length).toBe(1)
     expect(w.find('[data-testid="public-suite-8"]').exists()).toBe(true)
     expect(suitesApi.listSuites).toHaveBeenLastCalledWith(
       expect.objectContaining({ mode: 'aggregate' }))
@@ -423,7 +423,7 @@ describe('SuitesPublic — 公共用例集(2026-10-10 IA 独立页)', () => {
     await w.find('[data-testid="suites-public-search"]').setValue('bob')
     await new Promise((r) => setTimeout(r, 350))
     await flushPromises()
-    expect(w.findAll('tr[data-testid^="public-suite-"]').length).toBe(1)
+    expect(w.findAll('article[data-testid^="public-suite-"]').length).toBe(1)
     expect(suitesApi.listSuites).toHaveBeenLastCalledWith(
       expect.objectContaining({ q: 'bob' }))
     w.unmount()
@@ -458,6 +458,22 @@ describe('SuitesPublic — 公共用例集(2026-10-10 IA 独立页)', () => {
     await flushPromises()
     expect(suitesApi.forkPublicSuite).toHaveBeenCalledWith(7)
     expect(push).toHaveBeenCalledWith('/suites/9')
+    w.unmount()
+  })
+
+  it('embedded:项目详情页嵌入态隐藏自身 PageHead,列表照常', async () => {
+    vi.mocked(suitesApi.listSuites).mockResolvedValue({
+      items: [suiteItem({ suiteId: 7, visibility: 'public', name: '公共冒烟集' })],
+      total: 1, page: 1, pageSize: 100,
+    } as never)
+    const w = mount(SuitesPublic, {
+      props: { embedded: true },
+      global: { plugins: [routerWith()], stubs: { RouterLink: linkStub } },
+    })
+    await flushPromises()
+    expect(w.find('.slib-head').exists()).toBe(false)   // 双页头消除
+    expect(w.find('[data-testid="suites-public-search"]').exists()).toBe(true)
+    expect(w.text()).toContain('公共冒烟集')
     w.unmount()
   })
 })

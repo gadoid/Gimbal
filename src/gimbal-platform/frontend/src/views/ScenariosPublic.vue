@@ -1,9 +1,12 @@
 <!-- ScenariosPublic.vue — 场景库 / 公共场景(统一模板库)。
      原 Scenarios.vue「公共编排」tab 拆出独立页:只读浏览 + 复用。
-     无新建入口;操作合并为 ⋯(执行 / 复制到我的)。定义本身只读。 -->
+     无新建入口;操作合并为 ⋯(执行 / 复制到我的)。定义本身只读。
+     2026-11-18:embedded prop —— 项目详情页公共项目场景页签复用本页时
+     隐藏自身 PageHead(消除双页头),独立路由态不变。 -->
 <template>
-  <section class="slib">
+  <section class="slib" :class="{ embedded }">
     <PageHead
+      v-if="!embedded"
       icon="globe"
       title="公共场景"
       :subtitle="pageTip"
@@ -158,6 +161,9 @@ import type { ScenarioListItem } from '@/types/scenario-composer'
 
 const MAX = 3
 
+/** 项目详情页嵌入态:隐藏自身 PageHead(公共项目场景页签复用本页) */
+defineProps<{ embedded?: boolean }>()
+
 const router = useRouter()
 
 /** 页头问号弹层 = 短定位 + 原页脚长说明(逐页收纳批:页脚不再常驻) */
@@ -268,6 +274,8 @@ async function toggleStar(row: ScenarioListItem) {
 
 <style scoped>
 /* 场景表行含描述行(~78px/行):列表卡定高档 ≈ 10.5 行(分页位置轮) */
+/* 嵌入项目详情页页签时去掉页壳垫/最小高/居中,只留列表本体 */
+.slib.embedded { padding: 0; min-height: 0; max-width: none; margin: 0; }
 .slib { --lib-card-max: 53.125rem; }
 .sys-list { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .author { color: #5b6472; }

@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"inverse-primary":"#afc6ff","surface-tint":"#0059c7","on-secondary-fixed":"#131b2e","outline":"#727786","error-container":"#ffdad6","on-secondary":"#ffffff","inverse-on-surface":"#eaf1ff","error":"#ba1a1a","tertiary":"#256a00","inverse-surface":"#213145","surface-variant":"#d3e4fe","primary-fixed-dim":"#afc6ff","surface-container-highest":"#d3e4fe","on-error-container":"#93000a","secondary-fixed-dim":"#bec6e0","secondary":"#565e74","on-secondary-container":"#5c647a","on-primary-fixed":"#001a43","primary":"#0057c2","surface-container-low":"#eff4ff","surface":"#f8f9ff","primary-fixed":"#d9e2ff","on-error":"#ffffff","on-primary":"#ffffff","surface-container":"#e5eeff","tertiary-container":"#308600","on-tertiary":"#ffffff","outline-variant":"#c1c6d7","tertiary-fixed-dim":"#6de039","secondary-fixed":"#dae2fd","on-background":"#0b1c30","surface-dim":"#cbdbf5","surface-bright":"#f8f9ff","secondary-container":"#dae2fd","on-tertiary-fixed-variant":"#1a5200","on-surface-variant":"#414755","surface-container-lowest":"#ffffff","on-secondary-fixed-variant":"#3f465c","on-tertiary-fixed":"#062100","background":"#f8f9ff","on-tertiary-container":"#f8ffee","on-surface":"#0b1c30","primary-container":"#006ef2","on-primary-fixed-variant":"#004398","tertiary-fixed":"#88fd54","surface-container-high":"#dce9ff","on-primary-container":"#fefcff"},borderRadius:{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},spacing:{"space-xs":"0.25rem","gutter":"1rem","space-md":"0.75rem","margin":"1.5rem","space-lg":"1.25rem","space-xl":"2rem","space-sm":"0.5rem"},fontFamily:{"body-lg":["Inter"],"headline-md":["Inter"],"label-md":["JetBrains Mono"],"headline-sm":["Inter"],"label-sm":["JetBrains Mono"],"headline-lg":["Inter"],"body-md":["Inter"],"body-sm":["Inter"]},fontSize:{"body-lg":["15px",{lineHeight:"22px",fontWeight:"400"}],"headline-md":["20px",{lineHeight:"28px",fontWeight:"600"}],"label-md":["13px",{lineHeight:"18px",fontWeight:"500"}],"headline-sm":["16px",{lineHeight:"24px",fontWeight:"600"}],"label-sm":["11px",{lineHeight:"16px",fontWeight:"500"}],"headline-lg":["24px",{lineHeight:"32px",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"18px",fontWeight:"400"}]}}}}</script></head><body class="bg-surface text-on-surface font-body-md text-body-md antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-inverse-surface text-inverse-on-surface z-50 flex flex-col justify-between select-none shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col h-full overflow-hidden"><div class="h-14 px-gutter flex items-center justify-between bg-inverse-surface shrink-0"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">Q</div><span class="font-headline-sm text-headline-sm tracking-tight text-surface-container-lowest font-semibold">AutoTest Ops</span></div><button class="text-outline hover:text-surface-container-lowest flex items-center justify-center p-space-xs rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">menu_open</span></button></div><div class="flex-1 overflow-y-auto px-space-sm py-space-sm space-y-space-md"><div class="space-y-space-xs"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="overview-workspace" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">工作台</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="system-notifications" href="#"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="font-body-md text-body-md">通知中心</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="global-config" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-body-md text-body-md">系统配置</span></a></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">项目组资源</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="favorite-projects" href="#"><span class="material-symbols-outlined text-[18px]">star</span><span class="font-body-md text-body-md">我的关注</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="scenarios" href="#"><span class="material-symbols-outlined text-[18px]">account_tree</span><span class="font-body-md text-body-md">测试场景</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="test-suites" href="#"><span class="material-symbols-outlined text-[18px]">folder_copy</span><span class="font-body-md text-body-md">场景集合</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="credentials-vault" href="#"><span class="material-symbols-outlined text-[18px]">key</span><span class="font-body-md text-body-md">凭证管理</span></a></nav></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">服务架构</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="service-profiling" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-body-md text-body-md">服务画像</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="change-adaptation" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-md text-body-md">变更适配</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="service-integrations" href="#"><span class="material-symbols-outlined text-[18px]">cable</span><span class="font-body-md text-body-md">集成服务</span></a></nav></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">执行与分析</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="test-runners" href="#"><span class="material-symbols-outlined text-[18px]">smart_toy</span><span class="font-body-md text-body-md">执行器节点</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="execution-records" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-md text-body-md">执行历史记录</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="data-analytics" href="#"><span class="material-symbols-outlined text-[18px]">monitoring</span><span class="font-body-md text-body-md">效能数据分析</span></a></nav></div></div><div class="p-space-md bg-inverse-surface/80 flex items-center justify-between shrink-0"><div class="flex items-center gap-space-sm overflow-hidden"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col truncate"><span class="font-body-sm text-body-sm text-surface-container-lowest truncate font-medium">Alex Chen</span><span class="font-label-sm text-label-sm text-outline truncate">alex.chen@autoops.internal</span></div></div><a class="text-outline hover:text-error flex items-center justify-center p-space-xs rounded-lg transition-colors" data-path="login" href="#" title="退出登录"><span class="material-symbols-outlined text-[18px]">logout</span></a></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-sm"><nav class="flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm"><a class="hover:text-primary transition-colors" data-path="overview-workspace" href="#">空间列表</a><span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span><span class="text-on-surface font-medium">公共 (Public Project)</span></nav></div><div class="flex items-center gap-gutter"><div class="flex items-center gap-space-xs bg-surface-container-low px-space-md py-space-xs rounded-full text-on-surface-variant"><span class="material-symbols-outlined text-[16px] text-outline">search</span><span class="font-body-sm text-body-sm text-outline">快捷搜索场景、任务 (⌘+K)...</span></div><div class="flex items-center gap-space-sm"><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">history</span></button><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">insights</span></button><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">help_outline</span></button></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><div class="pt-16"><section class="bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] px-margin pt-margin pb-0"><div class="flex flex-col md:flex-row md:items-center justify-between gap-space-lg mb-space-lg"><div class="flex items-start gap-space-lg"><div class="w-12 h-12 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg font-bold shrink-0">P</div><div class="space-y-space-xs"><div class="flex items-center gap-space-sm flex-wrap"><h1 class="font-headline-md text-headline-md text-on-surface font-semibold">公共 (Public Project)</h1><span class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded-full font-label-sm text-label-sm bg-surface-container text-on-secondary-container"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>全员可见</span></div><div class="flex items-center gap-space-lg text-on-surface-variant font-body-sm text-body-sm"><div class="flex items-center gap-space-xs"><span class="text-outline">用例场景:</span><span class="font-label-md text-label-md font-semibold text-on-surface">148</span></div><div class="flex items-center gap-space-xs"><span class="text-outline">用例集:</span><span class="font-label-md text-label-md font-semibold text-on-surface">24</span></div><div class="flex items-center gap-space-xs"><span class="text-outline">运行成功率:</span><span class="font-label-md text-label-md font-semibold text-tertiary">98.6%</span></div></div></div></div><div class="flex items-center gap-space-sm shrink-0"><a class="inline-flex items-center gap-space-xs px-space-lg py-space-xs rounded-lg font-body-md text-body-md text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors" data-path="execution-records" href="#"><span class="material-symbols-outlined text-[16px]">history</span>执行历史</a><a class="inline-flex items-center gap-space-xs px-space-lg py-space-xs rounded-lg font-body-md text-body-md text-on-primary bg-primary hover:bg-primary-container transition-colors" data-path="data-analytics" href="#"><span class="material-symbols-outlined text-[16px]">analytics</span>监控指标</a></div></div><nav class="flex items-center gap-space-xl overflow-x-auto" data-active-classes="text-primary font-semibold border-b-2 border-primary"><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="scenarios" href="#">场景 (用例)<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">148</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="test-suites" href="#">用例集<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">24</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="scheduled-tasks" href="#">集成任务<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">8</span></a><a aria-current="page" class="py-space-md transition-colors flex items-center gap-space-xs text-primary font-semibold border-b-2 border-primary" data-path="membership-approvals" href="#">加入申请<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container">3</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="project-members" href="#">成员列表<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">16</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="project-settings" href="#">项目配置</a></nav></section><main class="w-full p-margin bg-surface"><div class="flex flex-col w-full">
+<!-- Operational Stats & Guidance Banner -->
+<div class="mb-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md p-space-lg bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="flex items-start gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">verified_user</span>
+</div>
+<div>
+<div class="flex items-center gap-space-sm mb-1">
+<span class="font-headline-sm text-headline-sm text-on-surface">项目权限与协同审批流程</span>
+<span class="px-2 py-0.5 rounded-full font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed font-medium">SLA: 24h</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5 flex-wrap">
+<span>私有项目成员需申请权限，在各私有场景/用例集的</span>
+<code class="px-1.5 py-0.5 bg-surface-container rounded font-label-sm text-label-sm text-primary font-medium">···</code>
+<span>更多操作菜单里可直接发起</span>
+<span class="font-medium text-on-surface">「加入项目」</span>
+<span>。审批通过后系统将自动同步研发态权限并下发凭证通道。</span>
+</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0 self-start md:self-auto">
+<button class="inline-flex items-center gap-space-xs px-space-md py-space-xs rounded-lg font-body-sm text-body-sm text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors" onclick="toggleAuditDrawer(true)" type="button">
+<span class="material-symbols-outlined text-[16px]">manage_history</span>
+<span>完整审计流 (128)</span>
+</button>
+<button class="inline-flex items-center gap-space-xs px-space-md py-space-xs rounded-lg font-body-sm text-body-sm text-primary bg-primary-fixed hover:bg-surface-container-highest transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+<span>权限矩阵规则</span>
+</button>
+</div>
+</div>
+<!-- Metric Badges Row -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-space-md mb-space-lg">
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-outline">待处理申请</span>
+<span class="font-label-md text-label-md text-headline-sm font-bold text-error flex items-center gap-1">2 <span class="font-body-sm text-body-sm text-outline font-normal">笔</span></span>
+</div>
+<div class="w-9 h-9 rounded-lg bg-error-container text-on-error-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">pending_actions</span>
+</div>
+</div>
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-outline">近7天已核准</span>
+<span class="font-label-md text-label-md text-headline-sm font-bold text-tertiary flex items-center gap-1">19 <span class="font-body-sm text-body-sm text-outline font-normal">人次</span></span>
+</div>
+<div class="w-9 h-9 rounded-lg bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+</div>
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-outline">活跃开发者配额</span>
+<span class="font-label-md text-label-md text-headline-sm font-bold text-on-surface">32 / 50</span>
+</div>
+<div class="w-9 h-9 rounded-lg bg-surface-container text-on-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">group_add</span>
+</div>
+</div>
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-outline">平均处理耗时</span>
+<span class="font-label-md text-label-md text-headline-sm font-bold text-primary">1.4 <span class="font-body-sm text-body-sm text-outline font-normal">小时</span></span>
+</div>
+<div class="w-9 h-9 rounded-lg bg-primary-fixed text-on-primary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">speed</span>
+</div>
+</div>
+</div>
+<!-- Status Filter Toolbar & Search Filter Section -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-md mb-space-md">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
+<!-- Tabs Navigation -->
+<div class="flex items-center gap-1 bg-surface-container-low p-1 rounded-lg self-start">
+<button class="tab-btn px-space-md py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1.5" onclick="switchFilterTab(this, 'all')" type="button">
+<span>全部申请</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded-full bg-surface-container text-secondary">24</span>
+</button>
+<button class="tab-btn active px-space-md py-1.5 rounded-lg font-body-sm text-body-sm bg-surface-container-lowest text-primary font-semibold shadow-xs flex items-center gap-1.5" onclick="switchFilterTab(this, 'pending')" type="button">
+<span>待我审批</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded-full bg-error text-on-error animate-pulse">2</span>
+</button>
+<button class="tab-btn px-space-md py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1.5" onclick="switchFilterTab(this, 'approved')" type="button">
+<span>已通过</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded-full bg-surface-container text-secondary">18</span>
+</button>
+<button class="tab-btn px-space-md py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1.5" onclick="switchFilterTab(this, 'rejected')" type="button">
+<span>已驳回</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded-full bg-surface-container text-secondary">4</span>
+</button>
+</div>
+<!-- Search and Secondary Filtering -->
+<div class="flex items-center gap-space-sm flex-wrap">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">search</span>
+<input class="w-full pl-8 pr-3 py-1.5 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest shadow-xs transition-colors placeholder:text-outline" placeholder="按申请人姓名、工号、场景过滤..." type="text"/>
+</div>
+<select class="bg-surface-container-low px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none cursor-pointer">
+<option>全部权限角色</option>
+<option>项目维护者 (Admin)</option>
+<option>核心开发者 (Developer)</option>
+<option>只读观察者 (Guest)</option>
+</select>
+<button class="p-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface-variant rounded-lg transition-colors" title="刷新列表" type="button">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+</button>
+</div>
+</div>
+<!-- Batch Selection Floating Tray (Toggles on Select) -->
+<div class="mt-space-md pt-space-md bg-surface-container-low rounded-lg p-space-sm flex items-center justify-between flex-wrap gap-space-sm" id="batchActionToolbar">
+<div class="flex items-center gap-space-md">
+<label class="inline-flex items-center gap-space-xs cursor-pointer select-none">
+<input class="w-4 h-4 rounded text-primary accent-primary cursor-pointer" id="selectAllCheckbox" onchange="toggleSelectAll(this)" type="checkbox"/>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">全选当前页 (<span id="selectedCount">0</span>/2 选中)</span>
+</label>
+<span class="text-outline font-label-sm text-label-sm">|</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">可对选中的待审批单据进行批量准入处理</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<button class="inline-flex items-center gap-1 px-space-md py-1 bg-tertiary hover:bg-tertiary-container text-on-tertiary font-body-sm text-body-sm rounded-lg shadow-sm transition-colors" onclick="batchApproveAction()" type="button">
+<span class="material-symbols-outlined text-[16px]">done_all</span>
+<span>批量通过 (Approve)</span>
+</button>
+<button class="inline-flex items-center gap-1 px-space-md py-1 bg-surface-container hover:bg-error-container text-on-surface-variant hover:text-on-error-container font-body-sm text-body-sm rounded-lg transition-colors" onclick="batchRejectAction()" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+<span>批量驳回</span>
+</button>
+<button class="inline-flex items-center gap-1 px-space-md py-1 bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-body-sm text-body-sm rounded-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">assignment_ind</span>
+<span>批量指派他人</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Approval Cards List Section -->
+<div class="space-y-space-md">
+<!-- Item 1: Pending (High Priority Scenario) -->
+<div class="approval-card bg-surface-container-lowest rounded-xl p-space-lg shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex flex-col lg:flex-row lg:items-start justify-between gap-space-lg">
+<!-- Main Info -->
+<div class="flex items-start gap-space-md flex-1">
+<div class="pt-0.5">
+<input class="row-checkbox w-4 h-4 rounded text-primary accent-primary cursor-pointer" onchange="updateSelectedCounter()" type="checkbox"/>
+</div>
+<div class="relative shrink-0">
+<div class="w-12 h-12 rounded-full bg-primary-fixed text-primary font-headline-sm text-headline-sm font-bold flex items-center justify-center">
+              张
+            </div>
+<span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-error border-2 border-surface-container-lowest flex items-center justify-center" title="待审批">
+<span class="w-1.5 h-1.5 rounded-full bg-on-error"></span>
+</span>
+</div>
+<div class="flex-1 space-y-space-xs">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">张伟</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container">工号: EMP-88204</span>
+<span class="font-body-sm text-body-sm text-outline">架构研发组 / 支付业务线</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-md bg-error-container text-on-error-container font-semibold">待我审批</span>
+</div>
+<!-- Role requested & target scenario -->
+<div class="flex items-center gap-space-md flex-wrap pt-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">申请角色:</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary text-on-primary font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">code</span>
+                  开发者 (Developer)
+                </span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">申请关联场景:</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px]">account_tree</span>
+                  [SC-9042] 跨境收银台与国际结算主干流水线
+                </span>
+</div>
+<div class="flex items-center gap-1 text-outline font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+<span>28分钟前提交</span>
+</div>
+</div>
+<!-- Reason Description Box -->
+<div class="mt-space-sm p-space-sm bg-surface-container-low rounded-lg text-on-surface font-body-sm text-body-sm flex items-start gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[16px] shrink-0 mt-0.5">format_quote</span>
+<div>
+<span class="font-medium text-on-surface">申请理由：</span>
+<span class="text-on-surface-variant">需要调试跨境支付网关场景并执行 Q3 跨币种自动化联调回归，需授予执行用例集与在线变量重写权限。</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-space-sm shrink-0 pl-10 lg:pl-0">
+<button class="inline-flex items-center gap-1 px-space-lg py-1.5 bg-primary hover:bg-primary-container text-on-primary font-body-md text-body-md rounded-lg shadow-sm transition-colors" onclick="showActionSuccess('已通过 张伟 的开发者准入申请')" type="button">
+<span class="material-symbols-outlined text-[18px]">done</span>
+<span>通过 (Approve)</span>
+</button>
+<button class="inline-flex items-center gap-1 px-space-md py-1.5 bg-surface-container hover:bg-error-container text-on-surface hover:text-on-error-container font-body-md text-body-md rounded-lg transition-colors" onclick="openRejectDialog('张伟')" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+<span>驳回 (Reject)</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors" title="指派给其他管理员" type="button">
+<span class="material-symbols-outlined text-[18px]">swap_horiz</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Item 2: Pending (Project Admin Request) -->
+<div class="approval-card bg-surface-container-lowest rounded-xl p-space-lg shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex flex-col lg:flex-row lg:items-start justify-between gap-space-lg">
+<div class="flex items-start gap-space-md flex-1">
+<div class="pt-0.5">
+<input class="row-checkbox w-4 h-4 rounded text-primary accent-primary cursor-pointer" onchange="updateSelectedCounter()" type="checkbox"/>
+</div>
+<div class="relative shrink-0">
+<div class="w-12 h-12 rounded-full bg-secondary-container text-on-secondary-container font-headline-sm text-headline-sm font-bold flex items-center justify-center">
+              李
+            </div>
+<span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-error border-2 border-surface-container-lowest flex items-center justify-center" title="待审批">
+<span class="w-1.5 h-1.5 rounded-full bg-on-error"></span>
+</span>
+</div>
+<div class="flex-1 space-y-space-xs">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">李沐</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container">工号: EMP-61019</span>
+<span class="font-body-sm text-body-sm text-outline">质量保障部 / 核心自动化平台组</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-md bg-error-container text-on-error-container font-semibold">待我审批</span>
+</div>
+<div class="flex items-center gap-space-md flex-wrap pt-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">申请角色:</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-inverse-surface text-surface-container-lowest font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">shield_person</span>
+                  项目维护者 (Admin)
+                </span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">申请关联场景:</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-primary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[14px]">folder_special</span>
+                  [ALL] 公共场景仓库全局维保权限
+                </span>
+</div>
+<div class="flex items-center gap-1 text-outline font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+<span>2小时前提交</span>
+</div>
+</div>
+<div class="mt-space-sm p-space-sm bg-surface-container-low rounded-lg text-on-surface font-body-sm text-body-sm flex items-start gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[16px] shrink-0 mt-0.5">format_quote</span>
+<div>
+<span class="font-medium text-on-surface">申请理由：</span>
+<span class="text-on-surface-variant">负责搭建自动化回归定时触发工作流与全局环境变量加密配置，需要公共空间的写配置管理权限。</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0 pl-10 lg:pl-0">
+<button class="inline-flex items-center gap-1 px-space-lg py-1.5 bg-primary hover:bg-primary-container text-on-primary font-body-md text-body-md rounded-lg shadow-sm transition-colors" onclick="showActionSuccess('已通过 李沐 的项目维护者权限申请')" type="button">
+<span class="material-symbols-outlined text-[18px]">done</span>
+<span>通过 (Approve)</span>
+</button>
+<button class="inline-flex items-center gap-1 px-space-md py-1.5 bg-surface-container hover:bg-error-container text-on-surface hover:text-on-error-container font-body-md text-body-md rounded-lg transition-colors" onclick="openRejectDialog('李沐')" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+<span>驳回 (Reject)</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors" title="指派给其他管理员" type="button">
+<span class="material-symbols-outlined text-[18px]">swap_horiz</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Item 3: Approved History Card -->
+<div class="approval-card bg-surface-container-lowest/80 rounded-xl p-space-lg shadow-xs opacity-90 hover:opacity-100 transition-opacity">
+<div class="flex flex-col lg:flex-row lg:items-start justify-between gap-space-lg">
+<div class="flex items-start gap-space-md flex-1">
+<div class="w-12 h-12 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-headline-sm text-headline-sm font-bold flex items-center justify-center shrink-0">
+            陈
+          </div>
+<div class="flex-1 space-y-space-xs">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">陈雨菲</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container">工号: EMP-40291</span>
+<span class="font-body-sm text-body-sm text-outline">数据分析中心</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-md bg-tertiary text-on-tertiary font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check</span> 已通过
+              </span>
+</div>
+<div class="flex items-center gap-space-md flex-wrap pt-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">授权角色:</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-secondary-container font-label-sm text-label-sm font-medium">
+                  只读观察者 (Guest)
+                </span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">关联场景:</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-secondary-container font-label-md text-label-md">
+                  [SC-1002] 运营看板实时数据指标下钻
+                </span>
+</div>
+<div class="flex items-center gap-1 text-outline font-label-sm text-label-sm">
+<span>审批人: Alex Chen · 昨日 16:40</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-outline pt-1 italic">
+              "核对业务指标与历史压测执行报表，仅需查阅用例结果与日志。"
+            </p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="inline-flex items-center gap-1 px-space-md py-1.5 bg-surface-container text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm rounded-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+<span>权限变更记录</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Item 4: Rejected History Card -->
+<div class="approval-card bg-surface-container-lowest/80 rounded-xl p-space-lg shadow-xs opacity-80 hover:opacity-100 transition-opacity">
+<div class="flex flex-col lg:flex-row lg:items-start justify-between gap-space-lg">
+<div class="flex items-start gap-space-md flex-1">
+<div class="w-12 h-12 rounded-full bg-surface-container-high text-outline font-headline-sm text-headline-sm font-bold flex items-center justify-center shrink-0">
+            刘
+          </div>
+<div class="flex-1 space-y-space-xs">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">刘浩天</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-secondary-container">工号: EMP-99212</span>
+<span class="font-body-sm text-body-sm text-outline">外包技术支持</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-md bg-outline-variant text-on-surface font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">block</span> 已驳回
+              </span>
+</div>
+<div class="flex items-center gap-space-md flex-wrap pt-1">
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">申请角色:</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-outline font-label-sm text-label-sm">
+                  项目维护者 (Admin)
+                </span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+<span class="text-outline">驳回原因:</span>
+<span class="text-error font-body-sm text-body-sm font-medium">外部协同人员暂不支持直接授予维护者权限，建议转申 Developer 角色。</span>
+</div>
+<div class="flex items-center gap-1 text-outline font-label-sm text-label-sm">
+<span>处理人: Alex Chen · 3天前</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="inline-flex items-center gap-1 px-space-md py-1.5 bg-surface-container text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm rounded-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">restart_alt</span>
+<span>重新发起引导</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Pagination & Total Footer -->
+<div class="mt-space-lg flex flex-col sm:flex-row items-center justify-between gap-space-md p-space-md bg-surface-container-lowest rounded-xl shadow-sm text-on-surface-variant font-body-sm text-body-sm">
+<div class="flex items-center gap-space-sm">
+<span>显示第 1 到 4 条记录，共 24 条申请记录</span>
+<select class="bg-surface-container px-2 py-1 rounded font-body-sm text-body-sm text-on-surface">
+<option>10 条/页</option>
+<option>20 条/页</option>
+<option>50 条/页</option>
+</select>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline hover:text-on-surface transition-colors disabled:opacity-50" disabled="" type="button">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-primary text-on-primary font-medium flex items-center justify-center shadow-xs" type="button">
+        1
+      </button>
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" type="button">
+        2
+      </button>
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" type="button">
+        3
+      </button>
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Side Drawer for Audit Log History (Hidden by default) -->
+<div class="fixed inset-0 z-50 pointer-events-none transition-opacity duration-300 opacity-0" id="auditLogDrawer">
+<div class="absolute inset-0 bg-inverse-surface/40 backdrop-blur-xs transition-opacity" onclick="toggleAuditDrawer(false)"></div>
+<div class="absolute right-0 top-0 h-full w-full max-w-lg bg-surface-container-lowest shadow-2xl flex flex-col pointer-events-auto transform translate-x-full transition-transform duration-300 ease-out" id="auditDrawerPanel">
+<div class="h-16 px-space-lg flex items-center justify-between bg-surface-container-low shrink-0">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">manage_history</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">项目权限流转审计记录</span>
+</div>
+<button class="p-1 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors" onclick="toggleAuditDrawer(false)" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="p-space-lg overflow-y-auto flex-1 space-y-space-md">
+<div class="text-on-surface-variant font-body-sm text-body-sm mb-space-sm">
+          记录近 30 天内所有关于公共空间（Public Project）的人员准入审批与权限降级日志。
+        </div>
+<div class="space-y-space-md relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container">
+<!-- Flow Step 1 -->
+<div class="flex items-start gap-space-md relative">
+<div class="w-6 h-6 rounded-full bg-tertiary text-on-tertiary flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<div class="flex-1 bg-surface-container-low p-space-md rounded-lg">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-md text-label-md font-semibold text-on-surface">准入审批已核准</span>
+<span class="font-label-sm text-label-sm text-outline">昨日 16:40</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Alex Chen 批准了 <b>陈雨菲</b> 的 [Guest] 角色访问申请。</p>
+</div>
+</div>
+<!-- Flow Step 2 -->
+<div class="flex items-start gap-space-md relative">
+<div class="w-6 h-6 rounded-full bg-error text-on-error flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</div>
+<div class="flex-1 bg-surface-container-low p-space-md rounded-lg">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-md text-label-md font-semibold text-on-surface">准入申请已驳回</span>
+<span class="font-label-sm text-label-sm text-outline">3天前 11:20</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">系统管理员驳回了 <b>刘浩天</b> 的 [Admin] 角色申请。原因：外部支持账号需遵从最小权限原则。</p>
+</div>
+</div>
+<!-- Flow Step 3 -->
+<div class="flex items-start gap-space-md relative">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-[14px]">person_add</span>
+</div>
+<div class="flex-1 bg-surface-container-low p-space-md rounded-lg">
+<div class="flex items-center justify-between mb-1">
+<span class="font-label-md text-label-md font-semibold text-on-surface">自动授权同步</span>
+<span class="font-label-sm text-label-sm text-outline">5天前 09:12</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">通过 LDAP 组织架构自动赋予 <b>王建国</b> 项目 [Developer] 权限。</p>
+</div>
+</div>
+</div>
+</div>
+<div class="p-space-md bg-surface-container-low flex items-center justify-end shrink-0">
+<button class="px-space-md py-1.5 bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm rounded-lg transition-colors" onclick="toggleAuditDrawer(false)" type="button">
+          关闭面板
+        </button>
+</div>
+</div>
+</div>
+<!-- Rejection Modal Dialog -->
+<div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-200" id="rejectModal">
+<div class="absolute inset-0 bg-inverse-surface/40 backdrop-blur-xs" onclick="closeRejectDialog()"></div>
+<div class="relative bg-surface-container-lowest rounded-xl shadow-2xl w-full max-w-md p-space-lg pointer-events-auto transform scale-95 transition-transform duration-200">
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex items-center gap-space-xs text-error">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface">驳回申请确认</span>
+</div>
+<button class="text-outline hover:text-on-surface" onclick="closeRejectDialog()" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-space-md">
+        您正在驳回 <span class="font-bold text-on-surface" id="rejectApplicantName">申请人</span> 的项目准入请求，请填写驳回理由以通知申请人：
+      </p>
+<textarea class="w-full p-space-sm bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest placeholder:text-outline mb-space-md" id="rejectReasonInput" placeholder="请输入驳回理由，例如：角色权限过大、建议申请只读权限或说明所属模块..." rows="3"></textarea>
+<div class="flex items-center justify-end gap-space-sm">
+<button class="px-space-md py-1.5 bg-surface-container text-on-surface font-body-md text-body-md rounded-lg hover:bg-surface-container-high transition-colors" onclick="closeRejectDialog()" type="button">
+          取消
+        </button>
+<button class="px-space-md py-1.5 bg-error text-on-error font-body-md text-body-md rounded-lg hover:bg-error-container hover:text-on-error-container transition-colors shadow-sm" onclick="confirmRejectAction()" type="button">
+          确认驳回
+        </button>
+</div>
+</div>
+</div>
+<!-- Toast Notification Container -->
+<div class="fixed bottom-6 right-6 z-50 transform translate-y-12 opacity-0 transition-all duration-300 pointer-events-none" id="toastNotification">
+<div class="flex items-center gap-space-sm px-space-lg py-space-md bg-inverse-surface text-inverse-on-surface rounded-xl shadow-xl font-body-md text-body-md">
+<span class="material-symbols-outlined text-tertiary-fixed text-[20px]" id="toastIcon">check_circle</span>
+<span id="toastMessage">操作已成功执行</span>
+</div>
+</div>
+<script>
+    function toggleSelectAll(masterCheckbox) {
+      const checkboxes = document.querySelectorAll('.row-checkbox');
+      checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+      updateSelectedCounter();
+    }
+
+    function updateSelectedCounter() {
+      const selected = document.querySelectorAll('.row-checkbox:checked').length;
+      document.getElementById('selectedCount').innerText = selected;
+      const allCheckboxes = document.querySelectorAll('.row-checkbox');
+      const selectAll = document.getElementById('selectAllCheckbox');
+      if (allCheckboxes.length > 0) {
+        selectAll.checked = (selected === allCheckboxes.length);
+        selectAll.indeterminate = (selected > 0 && selected < allCheckboxes.length);
+      }
+    }
+
+    function switchFilterTab(button, type) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active', 'bg-surface-container-lowest', 'text-primary', 'font-semibold', 'shadow-xs');
+        btn.classList.add('text-on-surface-variant');
+      });
+      button.classList.add('active', 'bg-surface-container-lowest', 'text-primary', 'font-semibold', 'shadow-xs');
+      button.classList.remove('text-on-surface-variant');
+      
+      showActionSuccess('已切换视图: ' + button.innerText.trim().replace(/\s+/g, ' '));
+    }
+
+    function toggleAuditDrawer(show) {
+      const drawer = document.getElementById('auditLogDrawer');
+      const panel = document.getElementById('auditDrawerPanel');
+      if (show) {
+        drawer.classList.remove('pointer-events-none', 'opacity-0');
+        drawer.classList.add('opacity-100');
+        panel.classList.remove('translate-x-full');
+      } else {
+        panel.classList.add('translate-x-full');
+        drawer.classList.add('opacity-0');
+        setTimeout(() => {
+          drawer.classList.add('pointer-events-none');
+        }, 300);
+      }
+    }
+
+    let targetApplicant = '';
+    function openRejectDialog(name) {
+      targetApplicant = name;
+      document.getElementById('rejectApplicantName').innerText = name;
+      document.getElementById('rejectReasonInput').value = '';
+      const modal = document.getElementById('rejectModal');
+      modal.classList.remove('pointer-events-none', 'opacity-0');
+      modal.querySelector('div.relative').classList.remove('scale-95');
+    }
+
+    function closeRejectDialog() {
+      const modal = document.getElementById('rejectModal');
+      modal.classList.add('opacity-0');
+      modal.querySelector('div.relative').classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('pointer-events-none');
+      }, 200);
+    }
+
+    function confirmRejectAction() {
+      closeRejectDialog();
+      showActionSuccess('已驳回 ' + targetApplicant + ' 的项目准入申请', true);
+    }
+
+    function batchApproveAction() {
+      const count = document.querySelectorAll('.row-checkbox:checked').length;
+      if (count === 0) {
+        showActionSuccess('请先勾选需要批量通过的审批记录', true);
+        return;
+      }
+      showActionSuccess('已批量通过选中的 ' + count + ' 笔成员申请');
+    }
+
+    function batchRejectAction() {
+      const count = document.querySelectorAll('.row-checkbox:checked').length;
+      if (count === 0) {
+        showActionSuccess('请先勾选需要驳回的审批记录', true);
+        return;
+      }
+      openRejectDialog('选中的 ' + count + ' 位申请人');
+    }
+
+    function showActionSuccess(msg, isWarn = false) {
+      const toast = document.getElementById('toastNotification');
+      const msgElem = document.getElementById('toastMessage');
+      const iconElem = document.getElementById('toastIcon');
+      
+      msgElem.innerText = msg;
+      iconElem.innerText = isWarn ? 'info' : 'check_circle';
+      iconElem.className = isWarn ? 'material-symbols-outlined text-error-container text-[20px]' : 'material-symbols-outlined text-tertiary-fixed text-[20px]';
+
+      toast.classList.remove('opacity-0', 'translate-y-12', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-12', 'pointer-events-none');
+      }, 3000);
+    }
+  </script>
+</div></main></div></div></body></html>

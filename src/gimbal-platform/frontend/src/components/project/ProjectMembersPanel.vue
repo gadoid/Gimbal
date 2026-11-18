@@ -3,35 +3,90 @@
      后端 409 兜底,错误内联展示)。2026-11-16 重塑:落 slib 表格 + 添加
      成员收进 Dialog(角色三选带说明);角色仍为行内原生 Select(高频
      快路径);移除走 confirmAction;新增「加入时间」列(addedAt 一直
-     有数据未展示)。 -->
+     有数据未展示)。
+     2026-11-18 按 stitch 原型 _5 重排:顶部四张统计卡(总成员/管理员/
+     开发者/只读 —— 成员列表客户端聚合)+ 角色筛选 Tab + 搜索(纯前端
+     过滤);表格列面:成员(头像字 + 姓名 + 用户名)/ 角色徽章 / 加入
+     时间 / 操作。原型的工号/部门/负责资产数量/最近活跃/CSV 导出/用户
+     组批量导入/四级角色后端无字段,不渲染(排期见
+     docs/project-detail-stitch-plan.md)。 -->
 <template>
   <div class="panel" data-testid="prj-members-panel">
+    <!-- ══ 原型 _5 · 成员统计卡(客户端聚合)═══════════════════ -->
+    <div class="mem-stats" data-testid="prj-mem-stats">
+      <div class="mem-stat">
+        <span class="k">项目总成员</span>
+        <span class="v">{{ members.length }}</span>
+        <span class="d">位协作成员</span>
+      </div>
+      <div class="mem-stat">
+        <span class="k">管理员</span>
+        <span class="v">{{ roleCount('admin') }}</span>
+        <span class="d">成员与配置全量管辖</span>
+      </div>
+      <div class="mem-stat">
+        <span class="k">开发者</span>
+        <span class="v">{{ roleCount('member') }}</span>
+        <span class="d">场景构建与调试</span>
+      </div>
+      <div class="mem-stat">
+        <span class="k">只读</span>
+        <span class="v">{{ roleCount('user') }}</span>
+        <span class="d">查看与执行</span>
+      </div>
+    </div>
+
     <div class="panel-head">
-      <h2>{{ project.name }} · 成员 <span class="muted n">{{ members.length }} 人</span></h2>
+      <div class="role-tabs" data-testid="prj-mem-role-tabs">
+        <button
+          v-for="r in roleFilters"
+          :key="r.key"
+          type="button"
+          class="rtab"
+          :class="{ on: roleFilter === r.key }"
+          :data-testid="`prj-mem-filter-${r.key}`"
+          @click="roleFilter = r.key"
+        >{{ r.label }}<span class="rtn">{{ r.key ? roleCount(r.key as ProjectRole) : members.length }}</span></button>
+      </div>
+      <input
+        v-model="q"
+        class="mem-search"
+        placeholder="按姓名 / 用户名搜索"
+        data-testid="prj-mem-q"
+      />
       <span class="flex-1" />
       <Button size="sm" data-testid="prj-add-open" @click="openAdd">+ 添加成员</Button>
     </div>
 
     <div v-if="!members.length" class="empty-note">还没有成员。</div>
+    <div v-else-if="!shownMembers.length" class="empty-note">没有匹配的成员 — 换个关键词或角色筛选。</div>
     <table v-else class="slib-table">
       <thead>
         <tr>
-          <th>用户</th>
-          <th style="width:9.375rem">角色</th>
+          <th>成员</th>
+          <th style="width:9.375rem">项目角色</th>
           <th style="width:8.75rem">加入时间</th>
           <th style="width:5rem" />
         </tr>
       </thead>
       <tbody>
-        <tr v-for="m in members" :key="m.userId" :data-testid="`prj-member-${m.userId}`">
+        <tr v-for="m in shownMembers" :key="m.userId" :data-testid="`prj-member-${m.userId}`">
           <td>
-            <div class="m-name">{{ m.displayName || m.username }}</div>
-            <div class="m-user mono">{{ m.username }}</div>
+            <div class="m-cell">
+              <span class="m-avatar" aria-hidden="true">{{ memberInitial(m) }}</span>
+              <span>
+                <span class="m-name">{{ m.displayName || m.username }}</span>
+                <span class="m-user mono">{{ m.username }}</span>
+              </span>
+            </div>
           </td>
           <td>
             <!-- 行内改角色 = 快路径(末位管理员保护由后端 409 兜底) -->
+            <span class="role-badge" :class="m.role" :data-testid="`prj-role-badge-${m.userId}`">
+              {{ PROJECT_ROLE_LABEL[m.role] }}
+            </span>
             <select :value="m.role" class="role-select" :data-testid="`prj-role-${m.userId}`"
-                    @change="changeRole(m, $event)">
+                    aria-label="改角色" @change="changeRole(m, $event)">
               <option v-for="r in ROLES" :key="r" :value="r">{{ PROJECT_ROLE_LABEL[r] }}</option>
             </select>
           </td>
@@ -44,7 +99,8 @@
     </table>
     <p v-if="mError" class="err" data-testid="prj-merr">{{ mError }}</p>
 
-    <!-- 添加成员:用户 + 角色(带职责说明) -->
+    <!-- 添加成员:用户 + 角色(带职责说明);原型 _5 的部门多选/通知
+         开关后端无部门与通知配置,不做(排期) -->
     <Dialog :open="addOpen" @update:open="addOpen = $event">
       <DialogContent class="max-w-[27.5rem]">
         <DialogHeader>
@@ -87,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   listMembers, addMember, patchMember, removeMember,
   type ProjectOut, type ProjectMember, type ProjectRole,
@@ -113,6 +169,36 @@ const ROLE_DESC: Record<ProjectRole, string> = {
   admin: '管理成员与配置、签发项目令牌',
   member: '在项目内新建与修改内容',
   user: '只读 + 执行(不能改内容)',
+}
+
+// ── 原型 _5:角色筛选 + 搜索(纯前端过滤)────────────────────────
+const roleFilter = ref('')
+const q = ref('')
+const roleFilters = [
+  { key: '', label: '全部' },
+  { key: 'admin', label: '管理员' },
+  { key: 'member', label: '开发者' },
+  { key: 'user', label: '只读' },
+]
+
+function roleCount(role: ProjectRole): number {
+  return members.value.filter((m) => m.role === role).length
+}
+
+const shownMembers = computed(() => {
+  let out = members.value
+  if (roleFilter.value) out = out.filter((m) => m.role === roleFilter.value)
+  const kw = q.value.trim().toLowerCase()
+  if (kw) {
+    out = out.filter((m) =>
+      (m.displayName || '').toLowerCase().includes(kw)
+      || m.username.toLowerCase().includes(kw))
+  }
+  return out
+})
+
+function memberInitial(m: ProjectMember): string {
+  return (m.displayName || m.username || '?').trim().slice(0, 1).toUpperCase()
 }
 
 const addOpen = ref(false)
@@ -189,14 +275,92 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.panel { display: flex; flex-direction: column; gap: 0.75rem; }
-.panel-head { display: flex; align-items: center; gap: 0.5rem; }
-.panel-head h2 { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--sl-ink); }
-.panel-head .n { font-size: 0.75rem; font-weight: 400; margin-left: 0.25rem; }
+.panel { display: flex; flex-direction: column; gap: 0.875rem; }
 
-.m-name { font-weight: 600; font-size: 0.8125rem; color: var(--sl-ink); }
-.m-user { font-size: 0.6875rem; color: var(--sl-ink-3); }
+/* ── 原型 _5 · 统计卡 ─────────────────────────────────────────── */
+.mem-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.25rem, 1fr));
+  gap: 0.75rem;
+}
+.mem-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.75rem 1rem;
+  background: var(--c-surface);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.625rem;
+}
+.mem-stat .k { font-size: 0.71875rem; color: var(--sl-ink-3); }
+.mem-stat .v { font-size: 1.375rem; font-weight: 600; color: var(--sl-ink); font-variant-numeric: tabular-nums; }
+.mem-stat .d { font-size: 0.6875rem; color: var(--sl-ink-3); }
+
+/* ── 工具条:角色筛选 Tab + 搜索 ───────────────────────────────── */
+.panel-head { display: flex; align-items: center; gap: 0.625rem; flex-wrap: wrap; }
+.role-tabs {
+  display: flex;
+  border: 1px solid var(--sl-line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.rtab {
+  padding: 0.375rem 0.6875rem;
+  font-size: 0.78125rem;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--sl-ink-2);
+  border-right: 1px solid var(--sl-line);
+  white-space: nowrap;
+}
+.rtab:last-child { border-right: none; }
+.rtab:hover { color: var(--sl-ink); }
+.rtab.on { background: var(--sl-accent-soft); color: var(--sl-accent); font-weight: 600; }
+.rtn {
+  margin-left: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--sl-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.rtab.on .rtn { color: var(--sl-accent); }
+.mem-search {
+  width: 14.375rem;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.78125rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--sl-line);
+  background: transparent;
+  color: inherit;
+}
+.mem-search:focus { outline: none; border-color: var(--sl-accent); }
+
+/* ── 成员表 ────────────────────────────────────────────────────── */
+.m-cell { display: flex; align-items: center; gap: 0.5rem; }
+.m-avatar {
+  flex: none;
+  width: 1.875rem; height: 1.875rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 600; color: var(--sl-accent);
+  background: var(--sl-accent-soft);
+  border-radius: 50%;
+}
+.m-name { display: block; font-weight: 600; font-size: 0.8125rem; color: var(--sl-ink); }
+.m-user { display: block; font-size: 0.6875rem; color: var(--sl-ink-3); }
 .muted { color: var(--sl-ink-3); }
+
+.role-badge {
+  display: inline-block;
+  margin-right: 0.375rem;
+  font-size: 0.71875rem;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 62.4375rem;
+  border: 1px solid var(--sl-line);
+  background: var(--soft-neutral-bg);
+  color: var(--sl-ink-2);
+}
+.role-badge.admin { color: var(--sl-accent); border-color: var(--sl-accent-soft-border, var(--sl-accent)); background: var(--sl-accent-soft); }
+.role-badge.member { color: var(--sl-ok); border-color: var(--sl-ok); background: var(--sl-ok-soft); }
 
 .role-select {
   padding: 0.25rem 0.5rem;

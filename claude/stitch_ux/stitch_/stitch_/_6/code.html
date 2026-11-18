@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"inverse-primary":"#afc6ff","surface-tint":"#0059c7","on-secondary-fixed":"#131b2e","outline":"#727786","error-container":"#ffdad6","on-secondary":"#ffffff","inverse-on-surface":"#eaf1ff","error":"#ba1a1a","tertiary":"#256a00","inverse-surface":"#213145","surface-variant":"#d3e4fe","primary-fixed-dim":"#afc6ff","surface-container-highest":"#d3e4fe","on-error-container":"#93000a","secondary-fixed-dim":"#bec6e0","secondary":"#565e74","on-secondary-container":"#5c647a","on-primary-fixed":"#001a43","primary":"#0057c2","surface-container-low":"#eff4ff","surface":"#f8f9ff","primary-fixed":"#d9e2ff","on-error":"#ffffff","on-primary":"#ffffff","surface-container":"#e5eeff","tertiary-container":"#308600","on-tertiary":"#ffffff","outline-variant":"#c1c6d7","tertiary-fixed-dim":"#6de039","secondary-fixed":"#dae2fd","on-background":"#0b1c30","surface-dim":"#cbdbf5","surface-bright":"#f8f9ff","secondary-container":"#dae2fd","on-tertiary-fixed-variant":"#1a5200","on-surface-variant":"#414755","surface-container-lowest":"#ffffff","on-secondary-fixed-variant":"#3f465c","on-tertiary-fixed":"#062100","background":"#f8f9ff","on-tertiary-container":"#f8ffee","on-surface":"#0b1c30","primary-container":"#006ef2","on-primary-fixed-variant":"#004398","tertiary-fixed":"#88fd54","surface-container-high":"#dce9ff","on-primary-container":"#fefcff"},borderRadius:{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},spacing:{"space-xs":"0.25rem","gutter":"1rem","space-md":"0.75rem","margin":"1.5rem","space-lg":"1.25rem","space-xl":"2rem","space-sm":"0.5rem"},fontFamily:{"body-lg":["Inter"],"headline-md":["Inter"],"label-md":["JetBrains Mono"],"headline-sm":["Inter"],"label-sm":["JetBrains Mono"],"headline-lg":["Inter"],"body-md":["Inter"],"body-sm":["Inter"]},fontSize:{"body-lg":["15px",{lineHeight:"22px",fontWeight:"400"}],"headline-md":["20px",{lineHeight:"28px",fontWeight:"600"}],"label-md":["13px",{lineHeight:"18px",fontWeight:"500"}],"headline-sm":["16px",{lineHeight:"24px",fontWeight:"600"}],"label-sm":["11px",{lineHeight:"16px",fontWeight:"500"}],"headline-lg":["24px",{lineHeight:"32px",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",fontWeight:"400"}],"body-sm":["12px",{lineHeight:"18px",fontWeight:"400"}]}}}}</script></head><body class="bg-surface text-on-surface font-body-md text-body-md antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-inverse-surface text-inverse-on-surface z-50 flex flex-col justify-between select-none shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col h-full overflow-hidden"><div class="h-14 px-gutter flex items-center justify-between bg-inverse-surface shrink-0"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">Q</div><span class="font-headline-sm text-headline-sm tracking-tight text-surface-container-lowest font-semibold">AutoTest Ops</span></div><button class="text-outline hover:text-surface-container-lowest flex items-center justify-center p-space-xs rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[18px]">menu_open</span></button></div><div class="flex-1 overflow-y-auto px-space-sm py-space-sm space-y-space-md"><div class="space-y-space-xs"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="overview-workspace" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">工作台</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="system-notifications" href="#"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="font-body-md text-body-md">通知中心</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="global-config" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-body-md text-body-md">系统配置</span></a></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">项目组资源</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="favorite-projects" href="#"><span class="material-symbols-outlined text-[18px]">star</span><span class="font-body-md text-body-md">我的关注</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="scenarios" href="#"><span class="material-symbols-outlined text-[18px]">account_tree</span><span class="font-body-md text-body-md">测试场景</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="test-suites" href="#"><span class="material-symbols-outlined text-[18px]">folder_copy</span><span class="font-body-md text-body-md">场景集合</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="credentials-vault" href="#"><span class="material-symbols-outlined text-[18px]">key</span><span class="font-body-md text-body-md">凭证管理</span></a></nav></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">服务架构</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="service-profiling" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-body-md text-body-md">服务画像</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="change-adaptation" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-md text-body-md">变更适配</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="service-integrations" href="#"><span class="material-symbols-outlined text-[18px]">cable</span><span class="font-body-md text-body-md">集成服务</span></a></nav></div><div><div class="px-space-md py-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">执行与分析</div><nav class="space-y-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-lg"><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="test-runners" href="#"><span class="material-symbols-outlined text-[18px]">smart_toy</span><span class="font-body-md text-body-md">执行器节点</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="execution-records" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-md text-body-md">执行历史记录</span></a><a class="flex items-center gap-space-sm px-space-md py-space-xs rounded-lg text-outline-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="data-analytics" href="#"><span class="material-symbols-outlined text-[18px]">monitoring</span><span class="font-body-md text-body-md">效能数据分析</span></a></nav></div></div><div class="p-space-md bg-inverse-surface/80 flex items-center justify-between shrink-0"><div class="flex items-center gap-space-sm overflow-hidden"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col truncate"><span class="font-body-sm text-body-sm text-surface-container-lowest truncate font-medium">Alex Chen</span><span class="font-label-sm text-label-sm text-outline truncate">alex.chen@autoops.internal</span></div></div><a class="text-outline hover:text-error flex items-center justify-center p-space-xs rounded-lg transition-colors" data-path="login" href="#" title="退出登录"><span class="material-symbols-outlined text-[18px]">logout</span></a></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-sm"><nav class="flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm"><a class="hover:text-primary transition-colors" data-path="overview-workspace" href="#">空间列表</a><span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span><span class="text-on-surface font-medium">公共 (Public Project)</span></nav></div><div class="flex items-center gap-gutter"><div class="flex items-center gap-space-xs bg-surface-container-low px-space-md py-space-xs rounded-full text-on-surface-variant"><span class="material-symbols-outlined text-[16px] text-outline">search</span><span class="font-body-sm text-body-sm text-outline">快捷搜索场景、任务 (⌘+K)...</span></div><div class="flex items-center gap-space-sm"><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">history</span></button><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">insights</span></button><button class="p-space-xs text-on-surface-variant hover:text-on-surface rounded-lg transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">help_outline</span></button></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><div class="pt-16"><section class="bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] px-margin pt-margin pb-0"><div class="flex flex-col md:flex-row md:items-center justify-between gap-space-lg mb-space-lg"><div class="flex items-start gap-space-lg"><div class="w-12 h-12 rounded-xl bg-primary-container text-on-primary-container flex items-center justify-center font-headline-lg text-headline-lg font-bold shrink-0">P</div><div class="space-y-space-xs"><div class="flex items-center gap-space-sm flex-wrap"><h1 class="font-headline-md text-headline-md text-on-surface font-semibold">公共 (Public Project)</h1><span class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded-full font-label-sm text-label-sm bg-surface-container text-on-secondary-container"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>全员可见</span></div><div class="flex items-center gap-space-lg text-on-surface-variant font-body-sm text-body-sm"><div class="flex items-center gap-space-xs"><span class="text-outline">用例场景:</span><span class="font-label-md text-label-md font-semibold text-on-surface">148</span></div><div class="flex items-center gap-space-xs"><span class="text-outline">用例集:</span><span class="font-label-md text-label-md font-semibold text-on-surface">24</span></div><div class="flex items-center gap-space-xs"><span class="text-outline">运行成功率:</span><span class="font-label-md text-label-md font-semibold text-tertiary">98.6%</span></div></div></div></div><div class="flex items-center gap-space-sm shrink-0"><a class="inline-flex items-center gap-space-xs px-space-lg py-space-xs rounded-lg font-body-md text-body-md text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors" data-path="execution-records" href="#"><span class="material-symbols-outlined text-[16px]">history</span>执行历史</a><a class="inline-flex items-center gap-space-xs px-space-lg py-space-xs rounded-lg font-body-md text-body-md text-on-primary bg-primary hover:bg-primary-container transition-colors" data-path="data-analytics" href="#"><span class="material-symbols-outlined text-[16px]">analytics</span>监控指标</a></div></div><nav class="flex items-center gap-space-xl overflow-x-auto" data-active-classes="text-primary font-semibold border-b-2 border-primary"><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="scenarios" href="#">场景 (用例)<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">148</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="test-suites" href="#">用例集<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">24</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="scheduled-tasks" href="#">集成任务<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">8</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="membership-approvals" href="#">加入申请<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container">3</span></a><a class="py-space-md font-body-md text-body-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="project-members" href="#">成员列表<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-secondary-container">16</span></a><a aria-current="page" class="py-space-md transition-colors text-primary font-semibold border-b-2 border-primary" data-path="project-settings" href="#">项目配置</a></nav></section><main class="w-full p-margin bg-surface"><div class="flex flex-col w-full gap-space-lg">
+<!-- Dynamic Script for In-Page Switch, Active Tabs and Modal Simulation -->
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Highlight Configuration Tab in the outer context if possible
+      const tabLinks = document.querySelectorAll('nav a[data-path="project-settings"]');
+      tabLinks.forEach(tab => {
+        tab.classList.add('text-primary', 'font-semibold', 'border-b-2', 'border-primary');
+        tab.classList.remove('text-on-surface-variant');
+      });
+    });
+
+    function toggleRowStatus(btn) {
+      const isChecked = btn.getAttribute('data-checked') === 'true';
+      const dot = btn.querySelector('.switch-dot');
+      const track = btn.querySelector('.switch-track');
+      if (isChecked) {
+        btn.setAttribute('data-checked', 'false');
+        track.classList.remove('bg-primary');
+        track.classList.add('bg-outline-variant/60');
+        dot.classList.remove('translate-x-4');
+        dot.classList.add('translate-x-0.5');
+      } else {
+        btn.setAttribute('data-checked', 'true');
+        track.classList.add('bg-primary');
+        track.classList.remove('bg-outline-variant/60');
+        dot.classList.add('translate-x-4');
+        dot.classList.remove('translate-x-0.5');
+      }
+    }
+
+    function addParamRow() {
+      const tbody = document.getElementById('params-table-body');
+      const tr = document.createElement('tr');
+      tr.className = 'group transition-colors hover:bg-surface-container-low/60 border-none';
+      tr.innerHTML = `
+        <td class="py-space-md pl-space-md pr-space-xs text-center">
+          <span class="material-symbols-outlined text-[16px] text-outline cursor-grab hover:text-on-surface">drag_indicator</span>
+        </td>
+        <td class="py-space-md px-space-xs text-center">
+          <button type="button" onclick="toggleRowStatus(this)" data-checked="true" class="relative inline-flex items-center h-4 w-8 shrink-0 cursor-pointer focus:outline-none">
+            <span class="switch-track w-8 h-4 bg-primary rounded-full transition-colors duration-200 ease-in-out"></span>
+            <span class="switch-dot translate-x-4 inline-block w-3 h-3 transform rounded-full bg-surface-container-lowest shadow-sm transition duration-200 ease-in-out absolute left-0.5"></span>
+          </button>
+        </td>
+        <td class="py-space-md px-space-sm">
+          <input type="text" placeholder="$.headers.Custom-Header" value="$.headers.X-New-Param" class="w-full bg-surface-container-low focus:bg-surface-container-lowest px-space-sm py-1 rounded text-on-surface font-label-md text-label-md outline-none focus:ring-1 focus:ring-primary transition-all"/>
+        </td>
+        <td class="py-space-md px-space-sm">
+          <select class="w-full bg-surface-container-low focus:bg-surface-container-lowest text-on-surface font-body-sm text-body-sm px-space-xs py-1 rounded outline-none cursor-pointer">
+            <option selected>String</option>
+            <option>Dynamic Expression</option>
+            <option>Number</option>
+            <option>JSON Object</option>
+          </select>
+        </td>
+        <td class="py-space-md px-space-sm">
+          <div class="relative flex items-center">
+            <input type="text" placeholder="参数值 或 {{fn:timestamp()}}" value="test_default_value" class="w-full bg-surface-container-low focus:bg-surface-container-lowest pl-space-sm pr-7 py-1 rounded text-on-surface font-label-md text-label-md outline-none focus:ring-1 focus:ring-primary transition-all"/>
+            <span class="material-symbols-outlined text-[14px] text-primary absolute right-2 pointer-events-none">code</span>
+          </div>
+        </td>
+        <td class="py-space-md px-space-sm">
+          <span class="inline-flex items-center gap-1 px-space-xs py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium">全环境通用</span>
+        </td>
+        <td class="py-space-md px-space-sm">
+          <input type="text" placeholder="配置用途说明..." value="自定义公共参数说明" class="w-full bg-transparent border-none text-on-surface-variant focus:text-on-surface font-body-sm text-body-sm outline-none"/>
+        </td>
+        <td class="py-space-md pl-space-sm pr-space-md text-right whitespace-nowrap">
+          <div class="inline-flex items-center gap-space-xs opacity-80 group-hover:opacity-100 transition-opacity">
+            <button type="button" class="p-1 rounded text-outline hover:text-primary hover:bg-surface-container transition-colors" title="快速复制"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+            <button type="button" onclick="this.closest('tr').remove()" class="p-1 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" title="删除"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+          </div>
+        </td>
+      `;
+      tbody.prepend(tr);
+    }
+  </script>
+<!-- Workspace Sub-Layout: Left Config Navigation Tree + Right Settings Surface -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+<!-- Left Configuration Navigation Tree (3 Cols) -->
+<aside class="lg:col-span-3 flex flex-col gap-space-sm bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex items-center justify-between px-space-sm py-space-xs">
+<div class="flex items-center gap-space-xs text-on-surface font-headline-sm text-headline-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">settings_suggest</span>
+<span>项目配置中心</span>
+</div>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">v2.4</span>
+</div>
+<!-- Navigation Hierarchy -->
+<nav class="flex flex-col gap-1 mt-space-xs">
+<!-- Item: Active (Public Project Global Defaults) -->
+<a class="flex items-center justify-between px-space-md py-space-sm rounded-lg bg-primary-fixed/50 text-on-primary-fixed font-semibold transition-all" href="javascript:void(0)">
+<div class="flex items-center gap-space-sm truncate">
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">tune</span>
+<span class="font-body-md text-body-md truncate">全局默认配置 (项目层)</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-primary shrink-0"></span>
+</a>
+<!-- Item: Environment Host Matrix -->
+<a class="flex items-center justify-between px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors group" href="javascript:void(0)">
+<div class="flex items-center gap-space-sm truncate">
+<span class="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">dns</span>
+<span class="font-body-md text-body-md truncate">环境地址与 Host 映射</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline px-1.5 py-0.2 bg-surface-container rounded">4套</span>
+</a>
+<!-- Item: Auth & Tokens Vault -->
+<a class="flex items-center justify-between px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors group" href="javascript:void(0)">
+<div class="flex items-center gap-space-sm truncate">
+<span class="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">key</span>
+<span class="font-body-md text-body-md truncate">认证与凭据凭条 (Auth)</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary bg-tertiary-fixed/30 px-1.5 py-0.5 rounded">活跃</span>
+</a>
+<!-- Item: Data Pools & CSV/JSON Files -->
+<a class="flex items-center justify-between px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors group" href="javascript:void(0)">
+<div class="flex items-center gap-space-sm truncate">
+<span class="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">dataset</span>
+<span class="font-body-md text-body-md truncate">数据池与参数驱动文件</span>
+</div>
+<span class="font-label-sm text-label-sm text-outline px-1.5 py-0.2 bg-surface-container rounded">12</span>
+</a>
+<!-- Item: Alerting & Webhooks -->
+<a class="flex items-center justify-between px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors group" href="javascript:void(0)">
+<div class="flex items-center gap-space-sm truncate">
+<span class="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">notifications_active</span>
+<span class="font-body-md text-body-md truncate">告警与 Webhook 回调</span>
+</div>
+</a>
+<!-- Item: Execution Quota & Policies -->
+<a class="flex items-center justify-between px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors group" href="javascript:void(0)">
+<div class="flex items-center gap-space-sm truncate">
+<span class="material-symbols-outlined text-[18px] text-outline group-hover:text-primary transition-colors">speed</span>
+<span class="font-body-md text-body-md truncate">并发策略与超时熔断</span>
+</div>
+</a>
+</nav>
+<!-- Quick Context Box -->
+<div class="mt-space-md p-space-md bg-surface-container-low rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center gap-space-xs text-on-surface font-body-sm text-body-sm font-semibold">
+<span class="material-symbols-outlined text-[16px] text-primary">verified_user</span>
+<span>参数优先级准则</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          执行参数解析链：单步用例覆写 > 场景级配置 > 服务级画像 > <strong class="text-on-surface">当前项目全局兜底</strong>。
+        </p>
+</div>
+</aside>
+<!-- Right Primary Configuration Workbench (9 Cols) -->
+<section class="lg:col-span-9 flex flex-col gap-space-md bg-surface-container-lowest p-margin rounded-xl shadow-sm">
+<!-- Section Header & Info Strip -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">layers</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">全局默认 (公共项目层)</h2>
+<span class="font-body-sm text-body-sm text-outline">项目标识: project_public_scope_root · 作用域覆盖率 100%</span>
+</div>
+</div>
+<!-- Quick Metrics Spark Card -->
+<div class="flex items-center gap-space-lg px-space-md py-space-xs bg-surface-container-low rounded-lg">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">已生效参数</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface">6 / 6 项</span>
+</div>
+<div class="h-6 w-px bg-outline-variant/50"></div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">最后同步者</span>
+<span class="font-label-md text-label-md font-medium text-on-surface-variant">Alex Chen (32分钟前)</span>
+</div>
+</div>
+</div>
+<!-- Banner / Notice Alert Strip according to blueprint -->
+<div class="flex items-start gap-space-sm px-space-md py-space-sm rounded-lg bg-surface-container-low text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">info</span>
+<div class="flex-1 font-body-sm text-body-sm">
+<span class="font-semibold text-on-surface">注入规约：</span>
+            条目/服务/系统级都未命中时最后生效的兜底层。参数定义中，<span class="font-label-sm text-label-sm bg-surface-container px-1 rounded text-primary font-medium">删除行</span> = 不注入任何 Header 或 Body 键；<span class="font-label-sm text-label-sm bg-surface-container px-1 rounded text-error font-medium">null</span> = 显式向传输报文注入 JSON <code class="font-label-sm text-label-sm text-error">null</code> 值以强制抹除上游默认配置。
+          </div>
+</div>
+</div>
+<!-- Action Toolbar Zone -->
+<div class="flex flex-wrap items-center justify-between gap-space-md pt-space-xs pb-space-xs">
+<div class="flex flex-wrap items-center gap-space-xs">
+<!-- Button Group: CSV & Templates -->
+<div class="inline-flex rounded-lg shadow-sm bg-surface-container p-0.5">
+<button class="inline-flex items-center gap-1 px-space-md py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface hover:bg-surface-container-lowest transition-all" type="button">
+<span class="material-symbols-outlined text-[16px] text-outline">upload_file</span>
+<span>导入 CSV</span>
+</button>
+<button class="inline-flex items-center gap-1 px-space-md py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface hover:bg-surface-container-lowest transition-all" type="button">
+<span class="material-symbols-outlined text-[16px] text-outline">download_for_offline</span>
+<span>下载模板</span>
+</button>
+<button class="inline-flex items-center gap-1 px-space-md py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface hover:bg-surface-container-lowest transition-all" type="button">
+<span class="material-symbols-outlined text-[16px] text-outline">file_download</span>
+<span>导出 CSV</span>
+</button>
+</div>
+<!-- Add Line CTA -->
+<button class="inline-flex items-center gap-1.5 px-space-md py-1.5 rounded-lg font-body-sm text-body-sm font-medium bg-surface-container-high text-primary hover:bg-primary/10 transition-colors" onclick="addParamRow()" type="button">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>+ 加一行 (例 $.headers.X-Trace-Id)</span>
+</button>
+</div>
+<div class="flex items-center gap-space-sm">
+<!-- Filter / Key Search -->
+<div class="relative flex items-center">
+<span class="material-symbols-outlined text-[16px] text-outline absolute left-2.5">search</span>
+<input class="bg-surface-container-low pl-8 pr-3 py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-outline outline-none focus:ring-1 focus:ring-primary w-48 focus:w-60 transition-all" placeholder="过滤参数键名、值..." type="text"/>
+</div>
+<!-- Save Button (Right-aligned prominent CTA) -->
+<button class="inline-flex items-center gap-1.5 px-space-lg py-1.5 rounded-lg font-body-md text-body-md font-medium text-on-primary bg-primary hover:bg-primary-container shadow-sm transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">save</span>
+<span>保存配置</span>
+</button>
+</div>
+</div>
+<!-- Parameter Matrix Table (High-Fidelity) -->
+<div class="overflow-x-auto rounded-lg bg-surface-container-lowest shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<th class="py-space-md pl-space-md pr-space-xs text-center w-8" scope="col">#</th>
+<th class="py-space-md px-space-xs text-center w-12" scope="col">生效</th>
+<th class="py-space-md px-space-sm w-56" scope="col">参数键名 (Key)</th>
+<th class="py-space-md px-space-sm w-36" scope="col">数据类型</th>
+<th class="py-space-md px-space-sm min-w-[220px]" scope="col">注入参数值 (Value)</th>
+<th class="py-space-md px-space-sm w-32" scope="col">环境应用</th>
+<th class="py-space-md px-space-sm" scope="col">说明与兜底备忘</th>
+<th class="py-space-md pl-space-sm pr-space-md text-right w-20" scope="col">操作</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container/60 font-body-sm text-body-sm" id="params-table-body">
+<!-- Row 1: X-Trace-Id (Expression) -->
+<tr class="group transition-colors hover:bg-surface-container-low/60">
+<td class="py-space-md pl-space-md pr-space-xs text-center">
+<span class="material-symbols-outlined text-[16px] text-outline cursor-grab hover:text-on-surface">drag_indicator</span>
+</td>
+<td class="py-space-md px-space-xs text-center">
+<button class="relative inline-flex items-center h-4 w-8 shrink-0 cursor-pointer focus:outline-none" data-checked="true" onclick="toggleRowStatus(this)" type="button">
+<span class="switch-track w-8 h-4 bg-primary rounded-full transition-colors duration-200 ease-in-out"></span>
+<span class="switch-dot translate-x-4 inline-block w-3 h-3 transform rounded-full bg-surface-container-lowest shadow-sm transition duration-200 ease-in-out absolute left-0.5"></span>
+</button>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center gap-1.5 font-label-md text-label-md font-semibold text-primary">
+<span>$.headers.X-Trace-Id</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-secondary font-medium">Dynamic Expr</span>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-1 rounded">
+<code class="font-label-md text-label-md text-tertiary truncate">`trace-${fn:uuid()}`</code>
+<span class="material-symbols-outlined text-[14px] text-outline ml-1 shrink-0">functions</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-space-xs py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium">全环境通用</span>
+</td>
+<td class="py-space-md px-space-sm text-on-surface-variant">全链路分布式跟踪 TraceID 兜底生成器</td>
+<td class="py-space-md pl-space-sm pr-space-md text-right whitespace-nowrap">
+<div class="inline-flex items-center gap-space-xs opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-1 rounded text-outline hover:text-primary hover:bg-surface-container transition-colors" title="快速复制" type="button"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" onclick="this.closest('tr').remove()" title="删除" type="button"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Content-Type (String) -->
+<tr class="group transition-colors hover:bg-surface-container-low/60">
+<td class="py-space-md pl-space-md pr-space-xs text-center">
+<span class="material-symbols-outlined text-[16px] text-outline cursor-grab hover:text-on-surface">drag_indicator</span>
+</td>
+<td class="py-space-md px-space-xs text-center">
+<button class="relative inline-flex items-center h-4 w-8 shrink-0 cursor-pointer focus:outline-none" data-checked="true" onclick="toggleRowStatus(this)" type="button">
+<span class="switch-track w-8 h-4 bg-primary rounded-full transition-colors duration-200 ease-in-out"></span>
+<span class="switch-dot translate-x-4 inline-block w-3 h-3 transform rounded-full bg-surface-container-lowest shadow-sm transition duration-200 ease-in-out absolute left-0.5"></span>
+</button>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center gap-1.5 font-label-md text-label-md font-semibold text-on-surface">
+<span>$.headers.Content-Type</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-secondary font-medium">String</span>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-1 rounded">
+<code class="font-label-md text-label-md text-on-surface truncate">application/json;charset=UTF-8</code>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-space-xs py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium">全环境通用</span>
+</td>
+<td class="py-space-md px-space-sm text-on-surface-variant">默认请求报文结构格式</td>
+<td class="py-space-md pl-space-sm pr-space-md text-right whitespace-nowrap">
+<div class="inline-flex items-center gap-space-xs opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-1 rounded text-outline hover:text-primary hover:bg-surface-container transition-colors" title="快速复制" type="button"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" onclick="this.closest('tr').remove()" title="删除" type="button"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Authorization (Environment Variable Token) -->
+<tr class="group transition-colors hover:bg-surface-container-low/60">
+<td class="py-space-md pl-space-md pr-space-xs text-center">
+<span class="material-symbols-outlined text-[16px] text-outline cursor-grab hover:text-on-surface">drag_indicator</span>
+</td>
+<td class="py-space-md px-space-xs text-center">
+<button class="relative inline-flex items-center h-4 w-8 shrink-0 cursor-pointer focus:outline-none" data-checked="true" onclick="toggleRowStatus(this)" type="button">
+<span class="switch-track w-8 h-4 bg-primary rounded-full transition-colors duration-200 ease-in-out"></span>
+<span class="switch-dot translate-x-4 inline-block w-3 h-3 transform rounded-full bg-surface-container-lowest shadow-sm transition duration-200 ease-in-out absolute left-0.5"></span>
+</button>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center gap-1.5 font-label-md text-label-md font-semibold text-primary">
+<span>$.headers.Authorization</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-secondary font-medium">Vault Reference</span>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-1 rounded">
+<code class="font-label-md text-label-md text-primary font-semibold truncate">Bearer {{VAULT:PUBLIC_GATEWAY_TOKEN}}</code>
+<span class="material-symbols-outlined text-[14px] text-tertiary ml-1 shrink-0">lock</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-space-xs py-0.5 rounded font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed-variant font-medium">测试 / 预发</span>
+</td>
+<td class="py-space-md px-space-sm text-on-surface-variant">通用微服务网关鉴权令牌，自动根据执行集群解密</td>
+<td class="py-space-md pl-space-sm pr-space-md text-right whitespace-nowrap">
+<div class="inline-flex items-center gap-space-xs opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-1 rounded text-outline hover:text-primary hover:bg-surface-container transition-colors" title="快速复制" type="button"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" onclick="this.closest('tr').remove()" title="删除" type="button"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 4: tenant_id (Explicit Default Number) -->
+<tr class="group transition-colors hover:bg-surface-container-low/60">
+<td class="py-space-md pl-space-md pr-space-xs text-center">
+<span class="material-symbols-outlined text-[16px] text-outline cursor-grab hover:text-on-surface">drag_indicator</span>
+</td>
+<td class="py-space-md px-space-xs text-center">
+<button class="relative inline-flex items-center h-4 w-8 shrink-0 cursor-pointer focus:outline-none" data-checked="true" onclick="toggleRowStatus(this)" type="button">
+<span class="switch-track w-8 h-4 bg-primary rounded-full transition-colors duration-200 ease-in-out"></span>
+<span class="switch-dot translate-x-4 inline-block w-3 h-3 transform rounded-full bg-surface-container-lowest shadow-sm transition duration-200 ease-in-out absolute left-0.5"></span>
+</button>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center gap-1.5 font-label-md text-label-md font-semibold text-on-surface">
+<span>$.params.tenant_id</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-secondary font-medium">Number</span>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-1 rounded">
+<code class="font-label-md text-label-md text-on-surface font-semibold">10001</code>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-space-xs py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium">全环境通用</span>
+</td>
+<td class="py-space-md px-space-sm text-on-surface-variant">公共多租户根隔离识别码</td>
+<td class="py-space-md pl-space-sm pr-space-md text-right whitespace-nowrap">
+<div class="inline-flex items-center gap-space-xs opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-1 rounded text-outline hover:text-primary hover:bg-surface-container transition-colors" title="快速复制" type="button"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" onclick="this.closest('tr').remove()" title="删除" type="button"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 5: Null Injection Rule (Showcasing 'null' feature) -->
+<tr class="group transition-colors hover:bg-surface-container-low/60">
+<td class="py-space-md pl-space-md pr-space-xs text-center">
+<span class="material-symbols-outlined text-[16px] text-outline cursor-grab hover:text-on-surface">drag_indicator</span>
+</td>
+<td class="py-space-md px-space-xs text-center">
+<button class="relative inline-flex items-center h-4 w-8 shrink-0 cursor-pointer focus:outline-none" data-checked="true" onclick="toggleRowStatus(this)" type="button">
+<span class="switch-track w-8 h-4 bg-primary rounded-full transition-colors duration-200 ease-in-out"></span>
+<span class="switch-dot translate-x-4 inline-block w-3 h-3 transform rounded-full bg-surface-container-lowest shadow-sm transition duration-200 ease-in-out absolute left-0.5"></span>
+</button>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center gap-1.5 font-label-md text-label-md font-semibold text-error">
+<span>$.headers.X-Mock-Proxy</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded font-label-sm text-label-sm bg-error-container/40 text-on-error-container font-medium">Null Directive</span>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center justify-between bg-error-container/20 px-space-sm py-1 rounded">
+<code class="font-label-md text-label-md text-error font-semibold">null</code>
+<span class="font-label-sm text-label-sm text-error uppercase font-medium">显式抹除</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-space-xs py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium">全环境通用</span>
+</td>
+<td class="py-space-md px-space-sm text-on-surface-variant">禁止使用任何外部代理劫持通道</td>
+<td class="py-space-md pl-space-sm pr-space-md text-right whitespace-nowrap">
+<div class="inline-flex items-center gap-space-xs opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-1 rounded text-outline hover:text-primary hover:bg-surface-container transition-colors" title="快速复制" type="button"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" onclick="this.closest('tr').remove()" title="删除" type="button"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 6: Execution Timeout (Number) -->
+<tr class="group transition-colors hover:bg-surface-container-low/60">
+<td class="py-space-md pl-space-md pr-space-xs text-center">
+<span class="material-symbols-outlined text-[16px] text-outline cursor-grab hover:text-on-surface">drag_indicator</span>
+</td>
+<td class="py-space-md px-space-xs text-center">
+<button class="relative inline-flex items-center h-4 w-8 shrink-0 cursor-pointer focus:outline-none" data-checked="true" onclick="toggleRowStatus(this)" type="button">
+<span class="switch-track w-8 h-4 bg-primary rounded-full transition-colors duration-200 ease-in-out"></span>
+<span class="switch-dot translate-x-4 inline-block w-3 h-3 transform rounded-full bg-surface-container-lowest shadow-sm transition duration-200 ease-in-out absolute left-0.5"></span>
+</button>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center gap-1.5 font-label-md text-label-md font-semibold text-on-surface">
+<span>$.config.timeout_ms</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-secondary font-medium">Number</span>
+</td>
+<td class="py-space-md px-space-sm">
+<div class="flex items-center justify-between bg-surface-container-low px-space-sm py-1 rounded">
+<code class="font-label-md text-label-md text-on-surface font-semibold">15000</code>
+<span class="font-label-sm text-label-sm text-outline">ms</span>
+</div>
+</td>
+<td class="py-space-md px-space-sm">
+<span class="inline-flex items-center px-space-xs py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant font-medium">全环境通用</span>
+</td>
+<td class="py-space-md px-space-sm text-on-surface-variant">HTTP 请求单步超时缺省阈值</td>
+<td class="py-space-md pl-space-sm pr-space-md text-right whitespace-nowrap">
+<div class="inline-flex items-center gap-space-xs opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-1 rounded text-outline hover:text-primary hover:bg-surface-container transition-colors" title="快速复制" type="button"><span class="material-symbols-outlined text-[16px]">content_copy</span></button>
+<button class="p-1 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" onclick="this.closest('tr').remove()" title="删除" type="button"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Quick Add Row Ghost Dropzone -->
+<button class="w-full py-space-md px-space-lg rounded-lg border-dashed border-2 border-outline-variant/60 hover:border-primary/60 hover:bg-primary/5 text-on-surface-variant hover:text-primary transition-all flex items-center justify-center gap-space-sm group" onclick="addParamRow()" type="button">
+<span class="material-symbols-outlined text-[20px] text-outline group-hover:text-primary transition-colors">add</span>
+<span class="font-body-md text-body-md font-medium">点击快速插入新的兜底参数行 (或在表格末尾直接粘贴 CSV 剪贴板内容)</span>
+</button>
+<!-- Footer Info & Version Audit Logs Mini Bar -->
+<div class="flex flex-wrap items-center justify-between gap-space-md pt-space-xs font-body-sm text-body-sm text-outline">
+<div class="flex items-center gap-space-md">
+<span class="inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+            配置哈希已校验一致: <code class="font-label-sm text-label-sm text-on-surface">sha256:d8a2...3f0c</code>
+</span>
+<span class="inline-flex items-center gap-1 hover:text-primary cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[16px]">history</span>
+            查看历史版本快照 (共18个变更)
+          </span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span>当前环境：</span>
+<span class="font-medium text-on-surface">生产与各环境全局根作用域</span>
+</div>
+</div>
+</section>
+</div>
+</div></main></div></div></body></html>

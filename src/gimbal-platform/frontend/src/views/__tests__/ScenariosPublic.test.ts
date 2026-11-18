@@ -163,4 +163,23 @@ describe('ScenariosPublic — 公共场景页', () => {
     expect(composerApi.starScenario).not.toHaveBeenCalled()
     w.unmount()
   })
+
+  it('embedded:项目详情页嵌入态隐藏自身 PageHead,列表照常', async () => {
+    // mountPage 不带 props;这里独立 mount 传 embedded(公共项目场景页签复用)
+    vi.mocked(composerApi.listScenarios).mockResolvedValue(
+      { items: [scen('sc-e1', 'public')], total: 1, page: 1, pageSize: 20 } as never)
+    const r = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/', component: { template: '<div/>' } }],
+    })
+    const w = mount(ScenariosPublic, {
+      props: { embedded: true },
+      global: { plugins: [r] },
+    })
+    await flushPromises()
+    expect(w.find('.slib-head').exists()).toBe(false)   // 双页头消除
+    expect(w.find('[data-testid="pub-search"]').exists()).toBe(true)
+    expect(w.text()).toContain('sc-e1')
+    w.unmount()
+  })
 })
