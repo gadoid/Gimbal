@@ -13,10 +13,60 @@
   <section class="slib">
     <PageHead
       icon="lock"
-      title="凭证管理"
+      title="凭证管理中心"
+      subtitle="系统环境测试授权配置与 Token 自动化注入中心:账户只存一份登录信息,身份条目按 ref 引用,改密一处、所有装载它的条目/场景同时生效"
       :count="rowsTotal ? `${sysCount} 系统 · ${bindCount} 个账户` : undefined"
       :meta="metaText"
-    />
+    >
+      <template #right>
+        <span class="auth-status" data-testid="auths-secure-badge" title="密码 Fernet 加密落库,列表恒掩码、详情按需解密">
+          <i class="auth-status-dot" />加密存储已就绪
+        </span>
+        <button
+          type="button" class="svc-chip" data-testid="auths-refresh"
+          title="重新拉取账户、系统主档与环境字典" @click="refreshAll"
+        >⟳ 刷新</button>
+      </template>
+    </PageHead>
+
+    <!-- ── 统计概览(原型 stat cards;数值全部取自现有读面,不虚构)── -->
+    <section class="stat-grid" data-testid="auths-stats">
+      <div class="stat-card">
+        <div class="stat-top">
+          <span class="stat-label">关联总系统数</span>
+          <span class="stat-ico"><SlibIcon name="network" :size="14" /></span>
+        </div>
+        <div class="stat-num">{{ statSystemCount }}<span class="stat-unit">个系统</span></div>
+        <div class="stat-sub">
+          <template v-if="svcLoaded">已登记主档 {{ statRegCount }} · 未注册 {{ statUnregCount }}</template>
+          <template v-else>主档状态未取到</template>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-top">
+          <span class="stat-label">托管凭证账户</span>
+          <span class="stat-ico"><SlibIcon name="layers" :size="14" /></span>
+        </div>
+        <div class="stat-num">{{ rowsTotal }}<span class="stat-unit">个账户</span></div>
+        <div class="stat-sub">{{ statUnref }} 个未被任何条目/场景引用</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-top">
+          <span class="stat-label">凭证类型分布</span>
+          <span class="stat-ico"><SlibIcon name="key" :size="14" /></span>
+        </div>
+        <div class="stat-num">{{ statTypeCount }}<span class="stat-unit">类认证方式</span></div>
+        <div class="stat-sub" :title="statTypeBreakdown">{{ statTypeBreakdown }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-top">
+          <span class="stat-label">场景及用例引用</span>
+          <span class="stat-ico"><SlibIcon name="share" :size="14" /></span>
+        </div>
+        <div class="stat-num">{{ statRefScenario }}<span class="stat-unit">处场景引用</span></div>
+        <div class="stat-sub">{{ statRefIdentity }} 个身份条目装载本池账户</div>
+      </div>
+    </section>
 
     <div class="slib-toolbar">
       <input
@@ -66,12 +116,12 @@
       <table class="slib-table">
         <thead>
           <tr>
-            <th style="width:11rem">username</th>
+            <th style="width:11rem">USERNAME / 账号</th>
             <th style="width:9.25rem">状态</th>
-            <th style="width:6.75rem">类型</th>
+            <th style="width:7.5rem">凭证类型 (TYPE)</th>
             <th>环境 / 登录地址</th>
-            <th style="width:10rem">引用</th>
-            <th style="width:7.5rem" />
+            <th style="width:10rem">引用依赖 (USAGE)</th>
+            <th style="width:9.5rem" class="th-acts">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -81,7 +131,9 @@
             <tr class="grp" :class="`tone-${g.tone}`" :data-testid="`sys-card-${g.key}`">
               <td colspan="6">
                 <div class="grp-in">
+                  <i class="grp-dot" aria-hidden="true" />
                   <span class="grp-sys"><b class="mono">{{ g.system }}</b></span>
+                  <span class="grp-count">{{ g.binds.length }} 个账户</span>
                   <!-- 未注册主档:登录口/身份条目坐标取不到,提示去服务注册补录 -->
                   <router-link
                     v-if="svcLoaded && !registeredSystems.has(g.system)"
@@ -89,18 +141,18 @@
                     :data-testid="`sys-unreg-${g.key}`"
                     title="主档未登记该系统 — 实例登录口/身份条目坐标取不到;点击去服务注册补录"
                   >未注册</router-link>
-                  <span class="muted grp-n">{{ g.binds.length }} 个账户</span>
-                  <span v-if="g.noDefaultPairs" class="svc-chip warn grp-chip" title="default 型身份条目在该 (系统,环境) 取不到默认账户">{{ g.noDefaultPairs }} 组无默认</span>
+                  <span v-if="svcDescOf(g.system)" class="grp-desc">{{ svcDescOf(g.system) }}</span>
+                  <span v-if="!g.hasDefault" class="svc-chip warn grp-chip" title="该系统没有默认账户 — ref_mode=default 的身份条目取不到行(0059 起默认按系统唯一)">无默认账户</span>
                   <span
                     v-if="g.failCount" class="svc-flag red"
                     :data-testid="`sys-fail-${g.key}`"
                     title="本机记录:该系统存在上次测试失败的账户"
                   >✕{{ g.failCount }} 测败</span>
-                  <span class="flex-1" />
+                  <span class="grp-gap" />
                   <button
                     type="button" class="grp-add" :data-testid="`sys-add-${g.key}`"
                     @click="openCreate(g.system)"
-                  >+ 登记</button>
+                  >+ 登记该系统凭证</button>
                 </div>
               </td>
             </tr>
@@ -114,6 +166,12 @@
                       v-if="row.isDefault" class="svc-chip is-default"
                       :data-testid="`default-chip-${row.id}`"
                       title="default 型身份条目在该 (系统,环境) 的取用行">默认</span>
+                    <!-- 悬浮复制账号(原型 hover 才出现;触屏下也可点) -->
+                    <button
+                      type="button" class="copy-btn" title="复制 username"
+                      :data-testid="`copy-user-${row.id}`"
+                      @click="copyUsername(row.username)"
+                    >⧉</button>
                   </div>
                 </td>
                 <td>
@@ -125,11 +183,6 @@
                       :title="`上次测试:${testMemory[row.id].ok ? '成功' : '失败'} · ${shortDateTime(new Date(testMemory[row.id].at))}(本机记录)`"
                     >{{ testMemory[row.id].ok ? '✓ 测通' : '✗ 测败' }} {{ shortDateTime(new Date(testMemory[row.id].at)) }}</span>
                     <span v-else class="muted">—</span>
-                    <!-- 独占 (system,env) 组(全池仅此一账户)→ 无默认时行内直示 -->
-                    <span
-                      v-if="!row.isDefault && soloPairs.has(pairKey(row))"
-                      class="svc-chip warn grp-chip"
-                      title="该 (系统,环境) 没有默认账户 — default 型身份条目取不到行">无默认</span>
                   </div>
                 </td>
                 <td>
@@ -173,6 +226,11 @@
                       :data-testid="`auth-test-inline-${row.id}`"
                       @click="runTest(row)"
                     >测试</button>
+                    <button
+                      type="button" class="svc-link muted-link"
+                      :data-testid="`auth-edit-inline-${row.id}`"
+                      @click="openEdit(row)"
+                    >编辑</button>
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         class="more-btn"
@@ -209,6 +267,15 @@
           </template>
         </tbody>
       </table>
+      <!-- 计数脚条(原型分页位):分组聚合需全量在端上,不做行分页,只报计数 -->
+      <div class="auth-foot">
+        <span data-testid="auths-foot-count">
+          显示 {{ filteredRows.length }} 条 · 共 {{ rowsTotal }} 条凭证记录<template v-if="statSystemCount">（覆盖 {{ statSystemCount }} 个系统）</template>
+        </span>
+        <span v-if="rowsTotal > 200" class="auth-foot-warn" data-testid="auths-foot-cap">
+          超过 200 条取数上限,仅展示前 200 条 — 请用搜索/筛选缩小范围
+        </span>
+      </div>
     </div>
 
     <div v-else-if="rowsLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
@@ -331,7 +398,14 @@
                 <FormItem>
                   <FormLabel>expires_in（秒）</FormLabel>
                   <FormControl>
-                    <Input v-bind="componentField" type="number" :min="0" :max="86400" class="w-[8.75rem]" data-testid="f-expires" />
+                    <div class="relative w-[8.75rem]">
+                      <Input v-bind="componentField" type="number" :min="0" :max="86400"
+                        class="pr-12" data-testid="f-expires" />
+                      <span
+                        v-if="expiresHintText" class="expires-hint"
+                        :data-testid="'f-expires-hint'"
+                      >{{ expiresHintText }}</span>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -339,9 +413,32 @@
             </div>
           </div>
 
-          <DialogFooter class="mt-1">
-            <Button type="button" variant="outline" @click="createOpen = false">取消</Button>
-            <Button type="submit" :disabled="submitting">{{ editingId ? '保存' : '创建' }}</Button>
+          <DialogFooter class="mt-1 flex items-center justify-between gap-2 sm:justify-between">
+            <!-- 连通性验证(原型弹窗脚):只对已落库账户可用 —— 拨测走
+                 实例 login_url + 存量密码;新建态保存后再验 -->
+            <span class="modal-test">
+              <button
+                type="button" class="modal-test-btn"
+                data-testid="modal-test-btn"
+                :disabled="!editingId || modalTestPhase === 'testing'"
+                :title="editingId
+                  ? '用实例登录口 + 库存密码拨测(未保存的密码修改不参与)'
+                  : '保存后可验证'"
+                @click="runModalTest"
+              >{{ modalTestPhase === 'testing' ? '验证中…' : '⚡ 连通性验证' }}</button>
+              <span
+                v-if="modalTestPhase === 'ok'" class="modal-test-msg ok"
+                data-testid="modal-test-ok"
+              >✓ {{ modalTestMsg }}</span>
+              <span
+                v-else-if="modalTestPhase === 'fail'" class="modal-test-msg fail"
+                data-testid="modal-test-fail"
+              >✕ {{ modalTestMsg }}</span>
+            </span>
+            <span class="flex items-center gap-2">
+              <Button type="button" variant="outline" @click="createOpen = false">取消</Button>
+              <Button type="submit" :disabled="submitting">{{ editingId ? '保存' : '创建' }}</Button>
+            </span>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -467,6 +564,7 @@ import { listEnvironments } from '@/api/environments'
 import { listServices } from '@/api/services'
 import { shortDateTime } from '@/utils/datetime'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import CredentialTestDialog from '@/components/credential/CredentialTestDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -557,7 +655,8 @@ interface SysGroup {
   collapsible: boolean
   hiddenCount: number
   failCount: number
-  noDefaultPairs: number // (system, env) 组内无默认账户的组数
+  /** 该系统是否有默认账户(§8.3/0059:默认按 system 唯一,不看 (system,env)) */
+  hasDefault: boolean
   tone: 'bad' | 'warn' | 'ok'
 }
 
@@ -576,19 +675,7 @@ function envName(envId: number | null | undefined): string {
   return hit ? hit.name : `环境#${envId}`
 }
 
-function pairKey(r: AuthSession): string {
-  return `${r.system}::${r.envId}`
-}
 
-/** 独占 (system,env) 组(全池仅此一账户)→ 无默认时行内直示该隐患。 */
-const soloPairs = computed<Set<string>>(() => {
-  const n = new Map<string, number>()
-  for (const r of filteredRows.value) {
-    const k = pairKey(r)
-    n.set(k, (n.get(k) ?? 0) + 1)
-  }
-  return new Set([...n.entries()].filter(([, c]) => c === 1).map(([k]) => k))
-})
 
 /** 组序:问题组(测败 ∨ 无默认组)排前,其余字典序;
  *  组内账户平铺:默认在前 → username。 */
@@ -607,16 +694,10 @@ const sysGroups = computed<SysGroup[]>(() => {
       Number(y.isDefault ?? false) - Number(x.isDefault ?? false)
         || x.username.localeCompare(y.username))
     const open = expandedSys.value.has(key)
-    // 组级聚合:(system,env) 是 default 型条目的取用坐标,无默认即取用隐患
-    const byPair = new Map<string, AuthSession[]>()
-    for (const r of ordered) {
-      const k = pairKey(r)
-      const arr = byPair.get(k)
-      if (arr) arr.push(r)
-      else byPair.set(k, [r])
-    }
-    const noDefaultPairs = [...byPair.values()].filter(
-      (b) => !b.some((r) => r.isDefault)).length
+    // 组级聚合:默认账户按 system 唯一(0059;ref_mode=default 取用行),
+    // 系统无默认才是取用隐患 —— (system,env) 维的「本组无默认」是旧
+    // 语义残留(非默认环境天然无默认,属正常),不再上报
+    const hasDefault = ordered.some((r) => r.isDefault)
     const failCount = ordered.filter((r) => testMemory.value[r.id]?.ok === false).length
     groups.push({
       key, system,
@@ -624,12 +705,12 @@ const sysGroups = computed<SysGroup[]>(() => {
       visible: open ? ordered : ordered.slice(0, BIND_CAP),
       collapsible: ordered.length > BIND_CAP,
       hiddenCount: Math.max(0, ordered.length - BIND_CAP),
-      failCount, noDefaultPairs,
-      tone: failCount ? 'bad' : noDefaultPairs ? 'warn' : 'ok',
+      failCount, hasDefault,
+      tone: failCount ? 'bad' : !hasDefault ? 'warn' : 'ok',
     })
   }
   const weight = (g: SysGroup) =>
-    (g.failCount ? 2 : 0) + (g.noDefaultPairs ? 1 : 0)
+    (g.failCount ? 2 : 0) + (!g.hasDefault ? 1 : 0)
   const kept = problemOnly.value ? groups.filter((g) => weight(g) > 0) : groups
   return kept.sort((x, y) =>
     weight(y) - weight(x) || x.key.localeCompare(y.key))
@@ -654,6 +735,66 @@ function formatExpires(seconds: number): string {
   return `${seconds}s`
 }
 
+// ── 统计概览(原型 stat cards;取值全部来自现有读面,不虚构)──────────
+const statSystemCount = computed(() =>
+  new Set(rows.value.map((r) => r.system).filter(Boolean)).size)
+const statRegCount = computed(() => {
+  if (!svcLoaded.value) return 0
+  const reg = registeredSystems.value
+  return [...new Set(rows.value.map((r) => r.system).filter(Boolean))]
+    .filter((s) => reg.has(s)).length
+})
+const statUnregCount = computed(() => Math.max(0, statSystemCount.value - statRegCount.value))
+const statUnref = computed(() => rows.value.filter(
+  (a) => !a.identityRefCount && !a.scenarioRefCount).length)
+const statTypeCount = computed(() => Object.keys(tokenTypeCounts.value).length)
+const statTypeBreakdown = computed(() => {
+  const parts = Object.entries(tokenTypeCounts.value)
+    .filter(([, n]) => n > 0)
+    .map(([t, n]) => `${t} ${n}`)
+  return parts.length ? parts.join(' · ') : '暂无账户'
+})
+const statRefScenario = computed(() =>
+  rows.value.reduce((n, r) => n + (r.scenarioRefCount ?? 0), 0))
+const statRefIdentity = computed(() =>
+  rows.value.reduce((n, r) => n + (r.identityRefCount ?? 0), 0))
+
+/** 系统主档描述(组头副文案;主档不可达/未填 → 空)。 */
+function svcDescOf(system: string): string {
+  return svcDesc.value[system] ?? ''
+}
+
+/** 悬浮复制 username(纯客户端;内网 http 非安全上下文走 execCommand 降级)。 */
+async function copyUsername(name: string): Promise<void> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(name)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = name
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      ta.remove()
+    }
+    toast.success(`已复制 ${name}`)
+  } catch {
+    toast.error('复制失败 — 请手动选择')
+  }
+}
+
+/** 弹窗内 expires_in 人类可读提示("2 小时")。 */
+const expiresHintText = computed(() => {
+  const n = Number((formValues as Record<string, unknown>).expires_in)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  if (n % 86400 === 0) return `${n / 86400} 天`
+  if (n % 3600 === 0) return `${n / 3600} 小时`
+  if (n % 60 === 0) return `${n / 60} 分钟`
+  return `${n} 秒`
+})
+
 // ── create / edit(定稿范式;password 条件必填在 submit 内补判)──
 const createOpen = ref(false)
 const editingId = ref<number | null>(null)
@@ -673,7 +814,7 @@ const schema = toTypedSchema(z.object({
   expires_in: z.coerce.number().int('整数秒').min(0).max(86400, '最大 86400'),
 }))
 
-const { handleSubmit, resetForm, setFieldError } = useForm({
+const { handleSubmit, resetForm, setFieldError, values: formValues } = useForm({
   validationSchema: schema,
   initialValues: {
     system: '', envId: '',
@@ -688,6 +829,8 @@ const accountFields = ref<Array<{ key: string; value: string }>>([])
 
 // ── 系统主档读面(C1 收口):系统选项来自主档,不再自由文本 ─────────
 const svcSystems = ref<string[]>([])
+/** system → 主档描述(组头副文案;首条非空即取) */
+const svcDesc = ref<Record<string, string>>({})
 /** 主档不可达时不判「未注册」(避免全员误报),选项退化为行取值并集 */
 const svcLoaded = ref(false)
 const registeredSystems = computed<Set<string>>(() => new Set(svcSystems.value))
@@ -725,6 +868,8 @@ function accountFieldsToObject(): Record<string, string> {
 function openCreate(system = '', envId = '') {
   editingId.value = null
   accountFields.value = []
+  modalTestPhase.value = 'idle'
+  modalTestMsg.value = ''
   // 预填系统可能不在主档(深链/未注册存量)→ 并入选项,保证回显不落空
   systemExtra.value = system
   // 高级区:无实体键预填时保持收起
@@ -752,6 +897,8 @@ async function makeDefault(row: AuthSession) {
 function openEdit(row: AuthSession) {
   editingId.value = row.id
   accountFields.value = accountFieldsFromRow(row)
+  modalTestPhase.value = 'idle'
+  modalTestMsg.value = ''
   // 编辑行的系统可能是主档外存量 — 并入选项(锁定态回显不落空)
   systemExtra.value = row.system
   // 编辑态:高级项有非缺省值时自动展开,一眼看到全部存量
@@ -843,6 +990,27 @@ async function runTest(row: AuthSession) {
   }
   // 终态回写本机记忆(行内 chip / 组头聚合;仅本浏览器,不落库)
   rememberTest(row.id, testPhase.value === 'success')
+}
+
+// ── 弹窗内连通性验证(原型弹窗脚;复用 /auths/{id}/test)─────────────
+// 仅编辑态可用:拨测 = 实例 login_url + 库存密码,未保存的改密不参与。
+const modalTestPhase = ref<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+const modalTestMsg = ref('')
+
+async function runModalTest(): Promise<void> {
+  if (!editingId.value || modalTestPhase.value === 'testing') return
+  modalTestPhase.value = 'testing'
+  modalTestMsg.value = ''
+  try {
+    const res = await store.testConnection(editingId.value)
+    modalTestPhase.value = res.ok ? 'ok' : 'fail'
+    modalTestMsg.value = res.message
+    // 结果同步行内状态记忆(与行内「测试」同一事实源)
+    rememberTest(editingId.value, res.ok)
+  } catch (e) {
+    modalTestPhase.value = 'fail'
+    modalTestMsg.value = (e as Error).message || '请求失败'
+  }
 }
 
 // ── 测试结果本机记忆(状态优先:列表回答"哪些还能用")─────────────
@@ -971,6 +1139,33 @@ async function submitDelete() {
 }
 
 // ── init ───────────────────────────────────────────────────────
+/** 环境字典(表单/筛选下拉共用)。 */
+function loadEnvs(): Promise<void> {
+  return listEnvironments()
+    .then((rows) => { envs.value = rows.map((e) => ({ id: e.id, name: e.name })) })
+    .catch(() => { /* 表单环境下拉退化为空 */ })
+}
+
+/** 系统主档(svcLoaded 未达前不判「未注册」;描述供组头副文案)。 */
+function loadServiceCatalog(): Promise<void> {
+  return listServices()
+    .then((out) => {
+      svcSystems.value = [...new Set(out.services.map((s) => s.system).filter(Boolean))]
+      const desc: Record<string, string> = {}
+      for (const s of out.services) {
+        if (s.system && s.description && !desc[s.system]) desc[s.system] = s.description
+      }
+      svcDesc.value = desc
+      svcLoaded.value = true
+    })
+    .catch(() => { /* 主档不可达 — 系统选项退化为主档∪行并集,不判未注册 */ })
+}
+
+/** 页头「刷新」:账户 + 环境字典 + 系统主档三路并发重取。 */
+async function refreshAll(): Promise<void> {
+  await Promise.allSettled([loadEnvs(), loadServiceCatalog(), reloadList()])
+}
+
 onMounted(async () => {
   loadTestMemory()
   // 深链补 system/envId 预填(?system=&envId=);旧 ?newSlot= 槽概念
@@ -980,16 +1175,8 @@ onMounted(async () => {
     : (typeof q.newSlot === 'string' ? q.newSlot : '')
   const qEnv = typeof q.envId === 'string' ? q.envId : ''
   if (qSystem || qEnv) openCreate(qSystem, qEnv)
-  // 环境选项给表单下拉;系统选项自主档(svcLoaded 未达前不判「未注册」)
-  listEnvironments()
-    .then((rows) => { envs.value = rows.map((e) => ({ id: e.id, name: e.name })) })
-    .catch(() => { /* 表单环境下拉退化为空 */ })
-  listServices()
-    .then((out) => {
-      svcSystems.value = [...new Set(out.services.map((s) => s.system).filter(Boolean))]
-      svcLoaded.value = true
-    })
-    .catch(() => { /* 主档不可达 — 系统选项退化为主档∪行并集,不判未注册 */ })
+  void loadEnvs()
+  void loadServiceCatalog()
   try {
     await reloadList()
   } catch {
@@ -1058,6 +1245,161 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .grp-add:hover { text-decoration: underline; }
+
+/* ── 统计概览卡(原型四卡;数值全部来自现有读面)───────────────── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.625rem;
+  margin-bottom: 0.875rem;
+}
+@media (max-width: 1100px) {
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: 0.6875rem 0.75rem;
+  background: var(--c-surface, #fff);
+  border: 1px solid var(--sl-line);
+  border-radius: 0.75rem;
+}
+.stat-top { display: flex; align-items: center; justify-content: space-between; gap: 0.375rem; }
+.stat-label { font-size: 0.71875rem; color: var(--sl-ink-2); white-space: nowrap; }
+.stat-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.5rem;
+  color: var(--sl-accent);
+  background: var(--sl-accent-soft);
+}
+.stat-num {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--sl-ink);
+}
+.stat-unit { font-size: 0.65625rem; font-weight: 400; color: var(--sl-ink-3); white-space: nowrap; }
+.stat-sub {
+  font-size: 0.65625rem;
+  color: var(--sl-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 页头右槽:加密存储状态 + 刷新 */
+.auth-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  color: var(--sl-ok);
+  background: var(--sl-ok-soft);
+  white-space: nowrap;
+}
+.auth-status-dot { width: 0.375rem; height: 0.375rem; border-radius: 9999px; background: var(--sl-ok); }
+
+/* 组头(原型:色点 + 系统名 + 计数胶囊 + 描述 + 右置登记) */
+.grp-dot { width: 0.5rem; height: 0.5rem; border-radius: 0.125rem; background: var(--sl-divider); flex: none; }
+.grp.tone-ok .grp-dot { background: var(--sl-ok); }
+.grp.tone-warn .grp-dot { background: var(--sl-warn); }
+.grp.tone-bad .grp-dot { background: var(--sl-bad); }
+.grp-count {
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+  min-height: 1.125rem;
+  padding: 0 0.375rem;
+  border-radius: 9999px;
+  font-size: 0.65625rem;
+  color: var(--sl-ink-2);
+  background: var(--sl-divider);
+  white-space: nowrap;
+}
+.grp-desc {
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65625rem;
+  color: var(--sl-ink-3);
+}
+.grp-gap { flex: 1; }
+
+/* 行内复制钮:悬浮行才显形 */
+.copy-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 0.6875rem;
+  color: var(--sl-ink-3);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.auth-row:hover .copy-btn,
+.copy-btn:focus-visible { opacity: 1; }
+.copy-btn:hover { color: var(--sl-accent); }
+.muted-link { color: var(--sl-ink-2); }
+.th-acts { text-align: right; }
+
+/* 计数脚条(原型分页位:分组需全量,不做行分页) */
+.auth-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--sl-line);
+  font-size: 0.6875rem;
+  color: var(--sl-ink-3);
+}
+.auth-foot-warn { color: var(--sl-warn); }
+
+/* 弹窗:expires 人类可读提示 + 连通性验证 */
+.expires-hint {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.65625rem;
+  color: var(--sl-ink-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.modal-test { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.modal-test-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 0.71875rem;
+  color: var(--sl-accent);
+  white-space: nowrap;
+}
+.modal-test-btn:hover:not(:disabled) { text-decoration: underline; }
+.modal-test-btn:disabled { color: var(--sl-ink-3); opacity: 0.55; cursor: default; }
+.modal-test-msg {
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65625rem;
+}
+.modal-test-msg.ok { color: var(--sl-ok); }
+.modal-test-msg.fail { color: var(--sl-bad); }
 
 .auth-row:hover td { background: var(--sl-row-hover); }
 .cell-alias { display: flex; align-items: center; gap: 0.375rem; min-width: 0; flex-wrap: wrap; }

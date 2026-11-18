@@ -54,7 +54,8 @@ const SERVICES: ServiceRow[] = [
     description: '', createdAt: null, updatedAt: null },
 ]
 const INSTANCES: InstanceRow[] = [
-  { system: 'fin', envId: 1, envName: '测试', loginUrl: 'http://fin/auth',
+  { system: 'fin', envId: 1, envName: '测试', groupId: 'g-fin-1',
+    tags: ['测试'], loginUrl: 'http://fin/auth',
     line: '1.0', note: '联调用', updatedAt: null },
 ]
 const DEPS = [
@@ -187,8 +188,13 @@ describe('ServiceAdmin — 指标条与差异横幅', () => {
     w.unmount()
   })
 
-  it('筛选:搜索 / 分类页签 / 环境快切', async () => {
+  it('筛选:搜索 / 分类页签 / 环境下拉(默认全部)', async () => {
     const w = await mountPage()
+    // 环境下拉:默认「全部环境」,选项带已登记服务数
+    const sel = w.get('[data-testid="dep-env-select"]').element as HTMLSelectElement
+    expect(sel.value).toBe('')
+    expect([...sel.options].map((o) => o.textContent?.trim()))
+      .toEqual(['全部环境', '测试(2)', '预发(0)'])
     await w.get('[data-testid="svc-search"]').setValue('wms')
     await flushPromises()
     expect(w.findAll('[data-testid^="mx-row-"]')).toHaveLength(1)
@@ -200,10 +206,10 @@ describe('ServiceAdmin — 指标条与差异横幅', () => {
     expect(w.find('[data-testid="mx-row-wms-service"]').exists()).toBe(true)
     await w.get('[data-testid="tab-all"]').trigger('click')
     await flushPromises()
-    // 环境快切:只显该环境缺地址的服务(fin-service 在 env1 有地址 → 隐去)
-    await w.get('[data-testid="dep-env-1"]').trigger('click')
-    expect(w.find('[data-testid="mx-row-fin-service"]').exists()).toBe(false)
-    expect(w.find('[data-testid="mx-row-wms-service"]').exists()).toBe(true)
+    // 环境筛选 = 正向下钻:只显该标签下有登记(地址 ∨ 系统实例)的服务
+    await w.get('[data-testid="dep-env-select"]').setValue('1')
+    expect(w.find('[data-testid="mx-row-fin-service"]').exists()).toBe(true)
+    expect(w.find('[data-testid="mx-row-wms-service"]').exists()).toBe(false)
     w.unmount()
   })
 })
@@ -264,7 +270,7 @@ describe('ServiceAdmin — 服务卡片', () => {
 
 // ══ 实例表(展开)═══════════════════════════════════════════════
 describe('ServiceAdmin — 实例表', () => {
-  it('展开:一环境一行 + 就绪度 + 槽位 + Tag 过滤', async () => {
+  it('展开:一环境一行 + 就绪度 + 槽位;服务内无 Tag 过滤,筛选只在外层', async () => {
     const w = await mountPage()
     await expand(w, 'fin-service')
     expect(w.get('[data-testid="inst-row-fin-service-1"]').text()).toContain('fin-service-测试')
@@ -274,11 +280,18 @@ describe('ServiceAdmin — 实例表', () => {
     expect(w.get('[data-testid="inst-slots-fin-service-1"]').text()).toContain('ref merchant-b')
     // env2 缺地址/登录口;条目不在此环境(admin 属于 env2,但条目加载后按 env 过滤)
     expect(w.get('[data-testid="inst-row-fin-service-2"]').text()).toContain('缺地址')
-    // Tag 过滤:只显 env2
-    await w.get('[data-testid="tag-fin-service-2"]').trigger('click')
+    // 服务内部不再提供 Tag 过滤条(筛选轴只在外层筛选矩阵)
+    expect(w.find('[data-testid="tag-fin-service-1"]').exists()).toBe(false)
+    // 外层聚焦标签 = 正向下钻:只看该标签下有登记的服务
+    await w.get('[data-testid="dep-env-select"]').setValue('2')
     await flushPromises()
-    expect(w.find('[data-testid="inst-row-fin-service-1"]').exists()).toBe(false)
-    expect(w.find('[data-testid="inst-row-fin-service-2"]').exists()).toBe(true)
+    expect(w.find('[data-testid="mx-row-fin-service"]').exists()).toBe(false)
+    // 聚焦 env1 → fin 在列,实例表只显 env1 一行
+    await w.get('[data-testid="dep-env-select"]').setValue('1')
+    await flushPromises()
+    expect(w.find('[data-testid="mx-row-fin-service"]').exists()).toBe(true)
+    expect(w.find('[data-testid="inst-row-fin-service-1"]').exists()).toBe(true)
+    expect(w.find('[data-testid="inst-row-fin-service-2"]').exists()).toBe(false)
     w.unmount()
   })
 
@@ -357,7 +370,8 @@ describe('ServiceAdmin — 配置管理抽屉', () => {
 
   it('实例配置与说明 → putInstance;底部保存合并 url+实例', async () => {
     vi.spyOn(svcApi, 'putInstance').mockResolvedValue({
-      system: 'fin', envId: 1, envName: '测试', loginUrl: 'http://fin/auth2',
+      system: 'fin', envId: 1, envName: '测试', groupId: 'g-fin-1',
+      tags: ['测试'], loginUrl: 'http://fin/auth2',
       line: '2.0', note: '新说明', updatedAt: null,
     })
     const w = await mountPage()
@@ -465,17 +479,68 @@ describe('ServiceAdmin — 配置管理抽屉', () => {
 
 // ══ 接入新实例 / 主档登记 ═══════════════════════════════════════
 describe('ServiceAdmin — 接入与登记', () => {
-  it('接入新实例:选服务+环境 → 打开配置抽屉', async () => {
+  it('接入新实例:勾选已存在标签 → 直接打开配置抽屉(不登记)', async () => {
+    const resolveSpy = vi.spyOn(envApi, 'resolveEnvironment')
     const w = await mountPage()
     await w.get('[data-testid="svc-access-global"]').trigger('click')
     await flushPromises()
     // reka Dialog teleport 到 body
     await bodyEl('[data-testid="access-form-service"]').setValue('wms-service')
-    await bodyEl('[data-testid="access-form-env"]').setValue('2')
+    await bodyEl('[data-testid="access-tag-box"]').trigger('click')
+    await flushPromises()
+    await bodyEl('[data-testid="access-tag-opt-预发"]').trigger('change')
     await bodyEl('[data-testid="access-form-save"]').trigger('click')
     await flushPromises()
+    expect(resolveSpy).not.toHaveBeenCalled()
     expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(true)
     expect(w.get('[data-testid="cfg-drawer"]').text()).toContain('wms-service-预发')
+    w.unmount()
+  })
+
+  it('标签即环境:新标签 → resolve 自动登记并打开抽屉', async () => {
+    const created = { id: 3, name: 'UAT', description: '', lines: {},
+      owner_id: null, is_default: false }
+    vi.spyOn(envApi, 'resolveEnvironment').mockResolvedValue(created)
+    vi.spyOn(envApi, 'listEnvironments')
+      .mockResolvedValueOnce(ENVS)            // 挂载时:新标签尚不存在
+      .mockResolvedValue([...ENVS, created])  // resolve 后刷新:标签已登记
+    const w = await mountPage()
+    await w.get('[data-testid="svc-access-global"]').trigger('click')
+    await flushPromises()
+    await bodyEl('[data-testid="access-form-service"]').setValue('wms-service')
+    await bodyEl('[data-testid="access-tag-box"]').trigger('click')
+    await bodyEl('[data-testid="access-tag-new"]').setValue('UAT')
+    await bodyEl('[data-testid="access-tag-new"]').trigger('keyup.enter')
+    await bodyEl('[data-testid="access-form-save"]').trigger('click')
+    await flushPromises()
+    expect(envApi.resolveEnvironment).toHaveBeenCalledWith('UAT')
+    expect(w.get('[data-testid="cfg-drawer"]').text()).toContain('wms-service-UAT')
+    w.unmount()
+  })
+
+  it('多标签接入:resolve 后整组挂标签(putInstance + putInstanceTags)', async () => {
+    const created = { id: 3, name: 'UAT', description: '', lines: {},
+      owner_id: null, is_default: false }
+    vi.spyOn(envApi, 'resolveEnvironment').mockResolvedValue(created)
+    vi.spyOn(envApi, 'listEnvironments')
+      .mockResolvedValueOnce(ENVS)
+      .mockResolvedValue([...ENVS, created])
+    vi.spyOn(svcApi, 'putInstance').mockResolvedValue(INSTANCES[0])
+    vi.spyOn(svcApi, 'putInstanceTags').mockResolvedValue({
+      ...INSTANCES[0], envId: 3, envName: 'UAT', tags: ['预发', 'UAT'],
+    })
+    const w = await mountPage()
+    await w.get('[data-testid="svc-access-global"]').trigger('click')
+    await flushPromises()
+    await bodyEl('[data-testid="access-form-service"]').setValue('wms-service')
+    await bodyEl('[data-testid="access-tag-box"]').trigger('click')
+    await bodyEl('[data-testid="access-tag-opt-预发"]').trigger('change')
+    await bodyEl('[data-testid="access-tag-new"]').setValue('UAT')
+    await bodyEl('[data-testid="access-tag-new"]').trigger('keyup.enter')
+    await bodyEl('[data-testid="access-form-save"]').trigger('click')
+    await flushPromises()
+    expect(svcApi.putInstance).toHaveBeenCalledWith('wms', 2, {})
+    expect(svcApi.putInstanceTags).toHaveBeenCalledWith('wms', 2, ['预发', 'UAT'])
     w.unmount()
   })
 
@@ -526,39 +591,82 @@ describe('ServiceAdmin — 接入与登记', () => {
 
 // ══ 环境管理 ═══════════════════════════════════════════════════
 describe('ServiceAdmin — 环境管理', () => {
-  it('环境快切条 + 新建环境 → POST 后聚焦', async () => {
-    const created = { id: 3, name: 'UAT', description: '预发验收', lines: {},
-      owner_id: null, is_default: false }
-    vi.spyOn(envApi, 'createEnvironment').mockResolvedValue(created)
-    vi.spyOn(envApi, 'listEnvironments')
-      .mockResolvedValueOnce(ENVS)
-      .mockResolvedValueOnce([...ENVS, created])
-    const w = await mountPage()
-    await w.get('[data-testid="dep-env-new"]').trigger('click')
-    await w.get('[data-testid="dep-env-name"]').setValue('UAT')
-    await w.get('[data-testid="dep-env-desc"]').setValue('预发验收')
-    await w.get('[data-testid="dep-env-add-line"]').trigger('click')
-    await w.get('[data-testid="dep-env-sys-0"]').setValue('fin')
-    await w.get('[data-testid="dep-env-line-0"]').setValue('2.0')
-    await w.get('[data-testid="dep-env-save"]').trigger('click')
-    await flushPromises()
-    expect(envApi.createEnvironment).toHaveBeenCalledWith(
-      { name: 'UAT', description: '预发验收', lines: { fin: '2.0' } })
-    expect(w.get('[data-testid="dep-env-3"]').classes()).toContain('on')
-    w.unmount()
-  })
-
   it('删除环境:两步确认 → DELETE 后退出聚焦', async () => {
     vi.spyOn(envApi, 'deleteEnvironment').mockResolvedValue(undefined)
     const w = await mountPage()
-    await w.get('[data-testid="dep-env-1"]').trigger('click')
+    await w.get('[data-testid="dep-env-select"]').setValue('1')
+    await flushPromises()
     await w.get('[data-testid="dep-env-del"]').trigger('click')
     expect(envApi.deleteEnvironment).not.toHaveBeenCalled()
-    expect(w.text()).toContain('实例配置将一并删除')
+    expect(w.text()).toContain('身份条目将一并删除')
     await w.get('[data-testid="dep-env-del-ok"]').trigger('click')
     await flushPromises()
     expect(envApi.deleteEnvironment).toHaveBeenCalledWith(1)
     expect(w.find('[data-testid="dep-current"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('编辑环境:名称可改(环境降级为轻量标签)→ PUT 带 name', async () => {
+    vi.spyOn(envApi, 'updateEnvironment').mockResolvedValue({
+      ...ENVS[0], name: '测试二', description: '', lines: {},
+    })
+    const w = await mountPage()
+    await w.get('[data-testid="dep-env-select"]').setValue('1')
+    await flushPromises()
+    await w.get('[data-testid="dep-env-edit"]').trigger('click')
+    await w.get('[data-testid="dep-env-name"]').setValue('测试二')
+    await w.get('[data-testid="dep-env-save"]').trigger('click')
+    await flushPromises()
+    expect(envApi.updateEnvironment).toHaveBeenCalledWith(
+      1, { name: '测试二', description: '', lines: {} })
+    w.unmount()
+  })
+})
+
+// ══ 实例改标签 / 移除实例(环境降级交互补齐)════════════════════
+describe('ServiceAdmin — 实例标签交互', () => {
+  it('实例标签:双击标签框多选标签 → 整组提交;冲突 409 上屏', async () => {
+    const moved = { system: 'fin', envId: 1, envName: '测试',
+      groupId: 'g-fin-1', tags: ['测试', '预发'],
+      loginUrl: 'http://fin/auth', line: '1.0', note: '联调用', updatedAt: null }
+    vi.spyOn(svcApi, 'putInstanceTags').mockResolvedValue(moved)
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    // 无独立「改标签」按钮:双击选框打开
+    expect(w.find('[data-testid="cfg-move-env"]').exists()).toBe(false)
+    await w.get('[data-testid="cfg-tag-box"]').trigger('click')
+    await flushPromises()
+    await w.get('[data-testid="cfg-tag-opt-预发"]').trigger('change')
+    await flushPromises()
+    expect(svcApi.putInstanceTags).toHaveBeenCalledWith(
+      'fin', 1, ['测试', '预发'])
+    expect(w.get('[data-testid="cfg-drawer"]').text()).toContain('预发')
+    w.unmount()
+
+    // 目标标签被别的实例组占用:后端 409 → 抽屉错误条
+    vi.spyOn(svcApi, 'putInstanceTags').mockRejectedValue({
+      response: { data: { detail: { code: 'instance_tag_conflict',
+        message: '目标标签已属于该系统的其它实例' } } },
+    })
+    const w2 = await mountPage()
+    await openDrawer(w2, 'fin-service', 1)
+    await w2.get('[data-testid="cfg-tag-box"]').trigger('click')
+    await flushPromises()
+    await w2.get('[data-testid="cfg-tag-opt-预发"]').trigger('change')
+    await flushPromises()
+    expect(w2.get('[data-testid="cfg-err"]').text()).toContain('目标标签已属于')
+    w2.unmount()
+  })
+
+  it('移除实例:两步确认 → DELETE 实例行(不动地址/条目)', async () => {
+    vi.spyOn(svcApi, 'deleteInstance').mockResolvedValue(undefined)
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    await w.get('[data-testid="cfg-inst-del"]').trigger('click')
+    expect(svcApi.deleteInstance).not.toHaveBeenCalled()
+    await w.get('[data-testid="cfg-inst-del-ok"]').trigger('click')
+    await flushPromises()
+    expect(svcApi.deleteInstance).toHaveBeenCalledWith('fin', 1)
     w.unmount()
   })
 })

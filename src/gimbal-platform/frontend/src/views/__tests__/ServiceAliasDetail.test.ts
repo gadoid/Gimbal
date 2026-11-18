@@ -292,7 +292,8 @@ describe('ServiceAliasDetail — 条目模式', () => {
       { id: 1, baseService: 'fin-service', envId: 1, baseUrl: 'https://fin.example/api' },
     ] as never)
     vi.spyOn(servicesApi, 'listInstances').mockResolvedValue([
-      { system: 'fin', envId: 1, envName: '测试',
+      { system: 'fin', envId: 1, envName: '测试', groupId: 'g-fin-1',
+        tags: ['测试'],
         loginUrl: 'https://fin.example/auth', line: '1.0', note: '', updatedAt: null },
     ])
     const { w } = await mountAt('/service-admin/fin-service-uat')

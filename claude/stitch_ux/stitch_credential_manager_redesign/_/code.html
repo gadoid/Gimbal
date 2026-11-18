@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-slate-900" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>凭证管理 - 自动化测试协同平台</title>
+<!-- Tailwind CSS CDN v3 with plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Phosphor Icons for sleek modern UI icons -->
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<script data-purpose="tailwind-config">
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+            },
+            sidebar: '#0d1117',
+            cardbg: '#161b22',
+            borderdark: '#30363d'
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-scrollbars">
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0d1117;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #484f58;
+    }
+  </style>
+<style data-purpose="modal-backdrop-blur">
+    .modal-backdrop {
+      background-color: rgba(1, 4, 9, 0.72);
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body class="h-full text-slate-200 antialiased flex overflow-hidden font-sans">
+<!-- BEGIN: LeftSidebar -->
+<aside class="w-64 bg-sidebar border-r border-slate-800 flex flex-col justify-between shrink-0 select-none z-20" data-purpose="sidebar-navigation">
+<div>
+<!-- Brand Logo / Workspace Switcher -->
+<div class="h-14 px-4 flex items-center justify-between border-b border-slate-800/80">
+<div class="flex items-center gap-2.5">
+<div class="w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]"></div>
+<span class="font-bold tracking-tight text-white text-base">platform</span>
+<span class="text-xs px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">v2.4</span>
+</div>
+<button class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition">
+<i class="ph ph-caret-left text-sm"></i>
+</button>
+</div>
+<!-- Navigation Links -->
+<div class="py-3 px-2 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)]">
+<!-- Main Group -->
+<nav class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-house text-lg"></i>
+<span>工作台</span>
+</a>
+<a class="flex items-center justify-between px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<div class="flex items-center gap-3">
+<i class="ph ph-bell text-lg"></i>
+<span>通知</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-rose-500"></span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-sliders-horizontal text-lg"></i>
+<span>配置</span>
+</a>
+</nav>
+<!-- Group: Mine -->
+<div>
+<span class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">我的</span>
+<nav class="mt-1.5 space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-star text-lg"></i>
+<span>关注</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-calendar-blank text-lg"></i>
+<span>场景</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-stack text-lg"></i>
+<span>场景集</span>
+</a>
+<!-- Active Credential Menu -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 text-white shadow-sm border-l-2 border-brand-500" href="#">
+<i class="ph ph-lock-key text-lg text-brand-500"></i>
+<span>凭证管理</span>
+</a>
+</nav>
+</div>
+<!-- Group: Project & Services -->
+<div>
+<span class="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">服务画像与测试</span>
+<nav class="mt-1.5 space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-app-window text-lg"></i>
+<span>服务画像</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-git-branch text-lg"></i>
+<span>变更适配</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition" href="#">
+<i class="ph ph-play-circle text-lg"></i>
+<span>执行器 (Runner)</span>
+</a>
+</nav>
+</div>
+</div>
+</div>
+<!-- User Profile & System Status Footer -->
+<div class="p-3 border-t border-slate-800 bg-slate-900/60">
+<div class="flex items-center justify-between px-2 py-1.5 rounded-lg bg-slate-800/40 border border-slate-700/50">
+<div class="flex items-center gap-2 overflow-hidden">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm">
+            AD
+          </div>
+<div class="truncate">
+<div class="text-xs font-semibold text-slate-200 truncate">Administrator</div>
+<span class="inline-block text-[10px] px-1 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">super_admin</span>
+</div>
+</div>
+<button class="p-1.5 text-slate-400 hover:text-rose-400 rounded-md hover:bg-slate-700/50 transition" title="安全登出">
+<i class="ph ph-sign-out text-base"></i>
+</button>
+</div>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: MainContentArea -->
+<main class="flex-1 flex flex-col h-full bg-[#0a0e14] overflow-hidden">
+<!-- Top Action & Navigation Header -->
+<header class="h-14 border-b border-slate-800/80 bg-slate-900/40 px-6 flex items-center justify-between shrink-0" data-purpose="top-header">
+<div class="flex items-center gap-3">
+<div class="w-7 h-7 rounded bg-brand-500/10 text-brand-400 flex items-center justify-center">
+<i class="ph ph-shield-check text-lg"></i>
+</div>
+<h1 class="text-base font-semibold text-white">凭证管理中心</h1>
+<span class="text-slate-500 text-sm">/</span>
+<span class="text-xs text-slate-400">系统环境测试授权密匙与Token自动化注入中心</span>
+</div>
+<!-- Quick Actions -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700/60">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span>KMIP 加密存储已就绪</span>
+</div>
+<button class="px-2.5 py-1 rounded text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 flex items-center gap-1 transition">
+<i class="ph ph-arrows-clockwise"></i>
+          刷新
+        </button>
+</div>
+</header>
+<!-- Main Workspace Scrollable Container -->
+<div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+<!-- BEGIN: StatOverviewCards -->
+<section class="grid grid-cols-1 md:grid-cols-4 gap-4" data-purpose="metrics-summary"><div class="p-4 rounded-xl bg-cardbg/80 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition"><div class="flex items-center justify-between"><span class="text-xs font-medium text-slate-400">关联总系统数</span><span class="p-1.5 rounded-lg bg-blue-500/10 text-blue-400"><i class="ph ph-tree-structure text-base"></i></span></div><div class="mt-2 flex items-baseline gap-2"><span class="text-2xl font-bold text-white tracking-tight">3</span><span class="text-xs text-slate-400">个已接入微服务</span></div><div class="mt-2 text-[11px] text-slate-500">覆盖 fin-service, user-center, pay-gateway</div></div><div class="p-4 rounded-xl bg-cardbg/80 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition"><div class="flex items-center justify-between"><span class="text-xs font-medium text-slate-400">托管凭证账户</span><span class="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400"><i class="ph ph-users-three text-base"></i></span></div><div class="mt-2 flex items-baseline gap-2"><span class="text-2xl font-bold text-emerald-400 tracking-tight">6</span><span class="text-xs text-slate-400">个活跃测试账户</span></div><div class="mt-2 text-[11px] text-emerald-500/80 flex items-center gap-1"><i class="ph ph-check-circle"></i> 全部通过有效性心跳与鉴权验证</div></div><div class="p-4 rounded-xl bg-cardbg/80 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition"><div class="flex items-center justify-between"><span class="text-xs font-medium text-slate-400">凭证类型分布</span><span class="p-1.5 rounded-lg bg-purple-500/10 text-purple-400"><i class="ph ph-key text-base"></i></span></div><div class="mt-2 flex items-baseline gap-2"><span class="text-2xl font-bold text-white tracking-tight">4</span><span class="text-xs text-slate-400">类主流认证协议</span></div><div class="mt-2 text-[11px] text-slate-500">3 Authorization · 2 Bearer · 1 Cookie</div></div><div class="p-4 rounded-xl bg-cardbg/80 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition"><div class="flex items-center justify-between"><span class="text-xs font-medium text-slate-400">场景用例关联引用</span><span class="p-1.5 rounded-lg bg-amber-500/10 text-amber-400"><i class="ph ph-link-simple text-base"></i></span></div><div class="mt-2 flex items-baseline gap-2"><span class="text-2xl font-bold text-amber-400 tracking-tight">42</span><span class="text-xs text-slate-400">条目与自动化场景</span></div><div class="mt-2 text-[11px] text-slate-500">6条集成测试用例正在持续集成调度中</div></div></section>
+<!-- END: StatOverviewCards -->
+<!-- BEGIN: FilterToolbar -->
+<section class="p-4 rounded-xl bg-cardbg/60 border border-slate-800 space-y-3.5" data-purpose="credential-filters">
+<div class="flex flex-wrap items-center justify-between gap-3">
+<!-- Search & Filter Tags Row -->
+<div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[320px]">
+<!-- Search Bar -->
+<div class="relative w-72">
+<i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+<input class="w-full pl-9 pr-3 py-1.5 bg-slate-900/90 border border-slate-700/80 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500 transition" placeholder="搜索 username / system / 描述..." type="text" value="fin-service"/>
+</div>
+<!-- Fast Filter Type Chips -->
+<div class="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-700/60 text-xs">
+<button class="px-2.5 py-1 rounded bg-brand-600 text-white font-medium shadow-sm transition">全部类型</button>
+<button class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition">Bearer</button>
+<button class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition">Basic</button>
+<button class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition">Cookie</button>
+<button class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition">Authorization</button>
+</div>
+<!-- Dropdown: Systems -->
+<select class="bg-slate-900/90 border border-slate-700/80 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-brand-500 focus:outline-none"><option>全部系统 (3)</option><option selected="">fin-service (金融系统)</option><option>user-center (用户中心)</option><option>pay-gateway (支付网关)</option></select>
+<!-- Dropdown: Environments -->
+<select class="bg-slate-900/90 border border-slate-700/80 text-slate-300 text-xs rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-brand-500 focus:outline-none">
+<option>全部环境</option>
+<option selected="">测试环境 (Test)</option>
+<option>开发环境 (Dev)</option>
+<option>预发布 (Staging)</option>
+<option>生产环境 (Prod)</option>
+</select>
+<!-- Only Issues Switch -->
+<label class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 cursor-pointer ml-1 select-none">
+<input class="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-0" type="checkbox"/>
+<span>只看问题</span>
+</label>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded-lg flex items-center gap-1.5 transition">
+<i class="ph ph-upload-simple"></i>
+              批量导入
+            </button>
+<button class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg shadow-sm flex items-center gap-1.5 transition" id="openModalBtn">
+<i class="ph ph-plus-bold"></i>
+              新增账户
+            </button>
+</div>
+</div>
+</section>
+<!-- END: FilterToolbar -->
+<!-- BEGIN: CredentialListGroup -->
+<section class="border border-slate-800 rounded-xl bg-cardbg overflow-hidden shadow-lg" data-purpose="credential-table-group"><div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="bg-slate-900/60 border-b border-slate-800 text-slate-400 select-none"><tr><th class="py-3.5 px-4 w-10 text-center"><input class="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-0 cursor-pointer" type="checkbox"/></th><th class="py-3.5 px-4 font-medium">所属系统 / 服务</th><th class="py-3.5 px-4 font-medium">账号 / USERNAME</th><th class="py-3.5 px-3 font-medium">状态</th><th class="py-3.5 px-4 font-medium">凭证类型 (TYPE)</th><th class="py-3.5 px-4 font-medium">环境 / 登录地址</th><th class="py-3.5 px-4 font-medium">引用依赖 (USAGE)</th><th class="py-3.5 px-4 text-right font-medium">操作</th></tr></thead><tbody class="divide-y divide-slate-800/60"><tr class="hover:bg-slate-800/40 transition group"><td class="py-3.5 px-4 text-center"><input class="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-0 cursor-pointer" type="checkbox"/></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span><span class="font-mono font-medium text-slate-200">fin-service</span></div><span class="text-[11px] text-slate-500 block mt-0.5">金融核心服务组</span></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="font-mono text-slate-100 font-semibold text-sm">18180789650</span><span class="px-1.5 py-0.2 text-[10px] font-medium bg-slate-800 text-slate-300 rounded border border-slate-700">默认</span><button class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white transition p-0.5" title="复制账号"><i class="ph ph-copy"></i></button></div></td><td class="py-3.5 px-3"><span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>有效</span></td><td class="py-3.5 px-4"><div class="space-y-1"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">Authorization</span><div class="text-[11px] text-slate-400 font-mono flex items-center gap-1"><i class="ph ph-clock"></i> 2h (7200s)</div></div></td><td class="py-3.5 px-4"><div class="space-y-0.5"><div class="flex items-center gap-1.5"><span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">测试环境</span></div><a class="text-slate-400 hover:text-brand-400 flex items-center gap-1 font-mono text-[11px] truncate max-w-xs transition" href="https://fin-tidb.21eflag.com/" target="_blank">https://fin-tidb.21eflag.com/<i class="ph ph-arrow-square-out text-xs"></i></a></div></td><td class="py-3.5 px-4"><div class="flex items-center gap-1.5"><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 2 个条目用例">2 条目</span><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 1 个自动化场景">1 场景</span></div></td><td class="py-3.5 px-4 text-right"><div class="flex items-center justify-end gap-2"><button class="px-2 py-1 text-xs text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 rounded font-medium transition flex items-center gap-1"><i class="ph ph-broadcast"></i> 测试</button><button class="px-2 py-1 text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 rounded font-medium transition flex items-center gap-1 editRowBtn"><i class="ph ph-pencil-simple"></i> 编辑</button><button class="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-700/50 transition"><i class="ph ph-dots-three-vertical text-base"></i></button></div></td></tr><tr class="hover:bg-slate-800/40 transition group"><td class="py-3.5 px-4 text-center"><input class="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-0 cursor-pointer" type="checkbox"/></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span><span class="font-mono font-medium text-slate-200">fin-service</span></div><span class="text-[11px] text-slate-500 block mt-0.5">金融核心服务组</span></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="font-mono text-slate-100 font-semibold text-sm">18180789652</span><button class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white transition p-0.5" title="复制账号"><i class="ph ph-copy"></i></button></div></td><td class="py-3.5 px-3"><span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>有效</span></td><td class="py-3.5 px-4"><div class="space-y-1"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">Authorization</span><div class="text-[11px] text-slate-400 font-mono flex items-center gap-1"><i class="ph ph-clock"></i> 2h (7200s)</div></div></td><td class="py-3.5 px-4"><div class="space-y-0.5"><div class="flex items-center gap-1.5"><span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">测试环境</span></div><a class="text-slate-400 hover:text-brand-400 flex items-center gap-1 font-mono text-[11px] truncate max-w-xs transition" href="https://fin-tidb.21eflag.com/" target="_blank">https://fin-tidb.21eflag.com/<i class="ph ph-arrow-square-out text-xs"></i></a></div></td><td class="py-3.5 px-4"><div class="flex items-center gap-1.5"><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 1 个条目用例">1 条目</span><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 19 个自动化场景">19 场景</span></div></td><td class="py-3.5 px-4 text-right"><div class="flex items-center justify-end gap-2"><button class="px-2 py-1 text-xs text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 rounded font-medium transition flex items-center gap-1"><i class="ph ph-broadcast"></i> 测试</button><button class="px-2 py-1 text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 rounded font-medium transition flex items-center gap-1 editRowBtn"><i class="ph ph-pencil-simple"></i> 编辑</button><button class="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-700/50 transition"><i class="ph ph-dots-three-vertical text-base"></i></button></div></td></tr><tr class="hover:bg-slate-800/40 transition group"><td class="py-3.5 px-4 text-center"><input class="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-0 cursor-pointer" type="checkbox"/></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span><span class="font-mono font-medium text-slate-200">user-center</span></div><span class="text-[11px] text-slate-500 block mt-0.5">用户中心与权限服务</span></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="font-mono text-slate-100 font-semibold text-sm">qa_admin_ops</span><span class="px-1.5 py-0.2 text-[10px] font-medium bg-slate-800 text-slate-300 rounded border border-slate-700">管理员</span><button class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white transition p-0.5" title="复制账号"><i class="ph ph-copy"></i></button></div></td><td class="py-3.5 px-3"><span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>有效</span></td><td class="py-3.5 px-4"><div class="space-y-1"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">Bearer</span><div class="text-[11px] text-slate-400 font-mono flex items-center gap-1"><i class="ph ph-clock"></i> 24h (86400s)</div></div></td><td class="py-3.5 px-4"><div class="space-y-0.5"><div class="flex items-center gap-1.5"><span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">预发布环境</span></div><span class="text-slate-400 font-mono text-[11px] truncate max-w-xs block">https://iam-staging.21eflag.com</span></div></td><td class="py-3.5 px-4"><div class="flex items-center gap-1.5"><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 5 个用例">5 条目</span><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 8 个自动化场景">8 场景</span></div></td><td class="py-3.5 px-4 text-right"><div class="flex items-center justify-end gap-2"><button class="px-2 py-1 text-xs text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 rounded font-medium transition flex items-center gap-1"><i class="ph ph-broadcast"></i> 测试</button><button class="px-2 py-1 text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 rounded font-medium transition flex items-center gap-1 editRowBtn"><i class="ph ph-pencil-simple"></i> 编辑</button><button class="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-700/50 transition"><i class="ph ph-dots-three-vertical text-base"></i></button></div></td></tr><tr class="hover:bg-slate-800/40 transition group"><td class="py-3.5 px-4 text-center"><input class="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-0 cursor-pointer" type="checkbox"/></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span><span class="font-mono font-medium text-slate-200">user-center</span></div><span class="text-[11px] text-slate-500 block mt-0.5">用户中心与权限服务</span></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="font-mono text-slate-100 font-semibold text-sm">test_customer_01</span><button class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white transition p-0.5" title="复制账号"><i class="ph ph-copy"></i></button></div></td><td class="py-3.5 px-3"><span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>有效</span></td><td class="py-3.5 px-4"><div class="space-y-1"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">Cookie</span><div class="text-[11px] text-slate-400 font-mono flex items-center gap-1"><i class="ph ph-clock"></i> 7d 会话存活</div></div></td><td class="py-3.5 px-4"><div class="space-y-0.5"><div class="flex items-center gap-1.5"><span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">开发环境</span></div><span class="text-slate-400 font-mono text-[11px] truncate max-w-xs block">https://dev-portal.internal.net</span></div></td><td class="py-3.5 px-4"><div class="flex items-center gap-1.5"><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 4 个用例">4 条目</span><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 3 个场景">3 场景</span></div></td><td class="py-3.5 px-4 text-right"><div class="flex items-center justify-end gap-2"><button class="px-2 py-1 text-xs text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 rounded font-medium transition flex items-center gap-1"><i class="ph ph-broadcast"></i> 测试</button><button class="px-2 py-1 text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 rounded font-medium transition flex items-center gap-1 editRowBtn"><i class="ph ph-pencil-simple"></i> 编辑</button><button class="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-700/50 transition"><i class="ph ph-dots-three-vertical text-base"></i></button></div></td></tr><tr class="hover:bg-slate-800/40 transition group"><td class="py-3.5 px-4 text-center"><input class="rounded bg-slate-800 border-slate-700 text-brand-600 focus:ring-0 cursor-pointer" type="checkbox"/></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-400 shrink-0"></span><span class="font-mono font-medium text-slate-200">pay-gateway</span></div><span class="text-[11px] text-slate-500 block mt-0.5">聚合支付网关 · 银行专线</span></td><td class="py-3.5 px-4"><div class="flex items-center gap-2"><span class="font-mono text-slate-100 font-semibold text-sm">merchant_gw_sandbox</span><button class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white transition p-0.5" title="复制账号"><i class="ph ph-copy"></i></button></div></td><td class="py-3.5 px-3"><span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>有效</span></td><td class="py-3.5 px-4"><div class="space-y-1"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">Authorization</span><div class="text-[11px] text-slate-400 font-mono flex items-center gap-1"><i class="ph ph-clock"></i> 4h (14400s)</div></div></td><td class="py-3.5 px-4"><div class="space-y-0.5"><div class="flex items-center gap-1.5"><span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">沙箱测试</span></div><span class="text-slate-400 font-mono text-[11px] truncate max-w-xs block">https://pay-sandbox.21eflag.com/api</span></div></td><td class="py-3.5 px-4"><div class="flex items-center gap-1.5"><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 3 个用例">3 条目</span><span class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer border border-slate-700 transition" title="关联 6 个自动化场景">6 场景</span></div></td><td class="py-3.5 px-4 text-right"><div class="flex items-center justify-end gap-2"><button class="px-2 py-1 text-xs text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 rounded font-medium transition flex items-center gap-1"><i class="ph ph-broadcast"></i> 测试</button><button class="px-2 py-1 text-xs text-slate-300 hover:text-white hover:bg-slate-700/60 rounded font-medium transition flex items-center gap-1 editRowBtn"><i class="ph ph-pencil-simple"></i> 编辑</button><button class="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-700/50 transition"><i class="ph ph-dots-three-vertical text-base"></i></button></div></td></tr></tbody></table></div><div class="p-3 bg-slate-900/60 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400"><span>显示 1 至 5 条，共 5 条凭证记录 (覆盖 3 个系统)</span><div class="flex items-center gap-2"><button class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-500 cursor-not-allowed">上一页</button><span class="px-2.5 py-1 rounded bg-brand-600 text-white font-medium">1</span><button class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-500 cursor-not-allowed">下一页</button></div></div></section>
+<!-- END: CredentialListGroup -->
+</div>
+</main>
+<!-- END: MainContentArea -->
+<!-- BEGIN: EditCredentialModal -->
+<!-- Interactive Modal as captured in snapshot https://lh3.googleusercontent.com/aida-public/AB6AXuD91ZKmdYvh6OOWXV9nhXTa7js0NsTUWcfNMwI6XA-ymo5XxYDqWZKnBBAzeP_k51DaTXPu1oxWPt97KccL0eUvPzpZTzp1nqUu6bjapFwdYRT4PsgHGlVsNxPpgsagCzme42s-BAY6GyfNsQmVekY7y_wYeKBrQfHWsWERaLN5rqw9pmNYl8_nhn-PaKLsRa8BptZsdnP84UVfApyaAu0B-SydJpoM7FJoi081JXpHUBoaficd1esxkw -->
+<!-- END: EditCredentialModal -->
+<!-- BEGIN: InteractiveHandlers -->
+<script data-purpose="modal-and-form-interactivity">
+    document.addEventListener('DOMContentLoaded', () => {
+      const modal = document.getElementById('credentialModal');
+      const openModalBtn = document.getElementById('openModalBtn');
+      const closeModalBtn = document.getElementById('closeModalBtn');
+      const cancelModalBtn = document.getElementById('cancelModalBtn');
+      const saveBtn = document.getElementById('saveCredentialBtn');
+      const editButtons = document.querySelectorAll('.editRowBtn');
+
+      // Open Modal Logic
+      const showModal = () => {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      };
+
+      // Hide Modal Logic
+      const hideModal = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      };
+
+      if (openModalBtn) openModalBtn.addEventListener('click', showModal);
+      if (closeModalBtn) closeModalBtn.addEventListener('click', hideModal);
+      if (cancelModalBtn) cancelModalBtn.addEventListener('click', hideModal);
+
+      editButtons.forEach(btn => {
+        btn.addEventListener('click', showModal);
+      });
+
+      // Close on Backdrop Click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          hideModal();
+        }
+      });
+
+      // Toggle Password Visibility
+      const passwordInput = document.getElementById('passwordInput');
+      const togglePasswordBtn = document.getElementById('togglePasswordVisibility');
+      if (togglePasswordBtn && passwordInput) {
+        togglePasswordBtn.addEventListener('click', () => {
+          const isPassword = passwordInput.getAttribute('type') === 'password';
+          passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+          togglePasswordBtn.innerHTML = isPassword 
+            ? '<i class="ph ph-eye-slash text-base"></i>' 
+            : '<i class="ph ph-eye text-base"></i>';
+        });
+      }
+
+      // Advanced Section Collapse Toggle
+      const toggleAdvanced = document.getElementById('toggleAdvancedSection');
+      const advancedSection = document.getElementById('advancedSection');
+      const advancedArrowIcon = document.getElementById('advancedArrowIcon');
+      if (toggleAdvanced && advancedSection) {
+        toggleAdvanced.addEventListener('click', () => {
+          const isHidden = advancedSection.classList.contains('hidden');
+          if (isHidden) {
+            advancedSection.classList.remove('hidden');
+            advancedArrowIcon.classList.remove('-rotate-90');
+          } else {
+            advancedSection.classList.add('hidden');
+            advancedArrowIcon.classList.add('-rotate-90');
+          }
+        });
+      }
+
+      // Add Custom Slot Field Dynamically
+      const addFieldBtn = document.getElementById('addFieldBtn');
+      const slotContainer = document.getElementById('slotFieldsContainer');
+      if (addFieldBtn && slotContainer) {
+        addFieldBtn.addEventListener('click', () => {
+          const fieldRow = document.createElement('div');
+          fieldRow.className = 'flex items-center gap-2 animate-in fade-in duration-150';
+          fieldRow.innerHTML = `
+            <input type="text" placeholder="Key (如: tenantId)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono">
+            <input type="text" placeholder="Value (如: T-1002)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono">
+            <button type="button" class="p-1.5 text-slate-500 hover:text-rose-400 rounded transition" onclick="this.parentElement.remove()">
+              <i class="ph ph-trash text-sm"></i>
+            </button>
+          `;
+          slotContainer.appendChild(fieldRow);
+        });
+      }
+
+      // Save Feedback
+      if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+          const originalText = saveBtn.innerHTML;
+          saveBtn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> 保存中...';
+          setTimeout(() => {
+            saveBtn.innerHTML = '<i class="ph ph-check"></i> 已保存';
+            setTimeout(() => {
+              saveBtn.innerHTML = originalText;
+              hideModal();
+            }, 600);
+          }, 500);
+        });
+      }
+    });
+  </script>
+<!-- END: InteractiveHandlers -->
+</body></html>

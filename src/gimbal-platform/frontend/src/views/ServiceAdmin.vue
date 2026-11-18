@@ -122,16 +122,15 @@
           <input v-model="svcSearch" class="slib-search flex-1"
                  placeholder="搜索服务标识、系统、说明…"
                  data-testid="svc-search" />
-          <span class="env-strip" data-testid="dep-envs">
+          <span class="env-pick" data-testid="dep-envs">
             <span class="env-label">环境:</span>
-            <button type="button" class="env-chip" :class="{ on: focusedEnv === null }"
-                    data-testid="dep-env-all" @click="focusedEnv = null">全部</button>
-            <button v-for="e in envs" :key="e.id" type="button" class="env-chip"
-                    :class="{ on: focusedEnv === e.id }"
-                    :data-testid="`dep-env-${e.id}`" @click="toggleFocus(e.id)">
-              {{ e.name }}
-              <span v-if="missingInEnv(e.id)" class="chip weak">{{ missingInEnv(e.id) }}</span>
-            </button>
+            <select v-model="envSelect" class="sort-select env-select"
+                    data-testid="dep-env-select">
+              <option value="">全部环境</option>
+              <option v-for="e in envs" :key="e.id" :value="String(e.id)">
+                {{ e.name }}({{ boundInEnvCount(e.id) }})
+              </option>
+            </select>
           </span>
         </div>
         <div class="filter-row second">
@@ -162,19 +161,18 @@
             </select>
             <Button variant="outline" size="sm" data-testid="svc-new"
                     @click="openCreateSvc()">+ 登记服务</Button>
-            <Button variant="outline" size="sm" data-testid="dep-env-new"
-                    @click="openCreateEnv">+ 新建环境</Button>
             <Button variant="outline" size="sm" data-testid="svc-profile-index"
                     @click="router.push('/services')">服务画像 ↗</Button>
           </span>
         </div>
       </div>
 
-      <!-- 环境表单(新建/编辑;版本线落 (system, env) 实例)-->
-      <div v-if="envFormOpen" class="svc-panel" :data-testid="`dep-env-form-${envFormMode}`">
+      <!-- 环境编辑表单(标签即环境:新建由实例标签自动登记,这里只编辑
+           名称/描述/版本线)-->
+      <div v-if="envFormOpen" class="svc-panel" data-testid="dep-env-form-edit">
         <div class="svc-panel-head">
           <span class="svc-panel-title">
-            {{ envFormMode === 'create' ? '新建环境' : `编辑环境:${focusedCurrent?.name}` }}
+            编辑环境:{{ focusedCurrent?.name }}
           </span>
           <span class="svc-panel-desc">
             版本线 = 每个系统部署的版本(落环境×系统实例;执行期按此解析版本;
@@ -182,19 +180,17 @@
           </span>
         </div>
         <div class="form-grid">
-          <template v-if="envFormMode === 'create'">
-            <label class="lb">名称</label>
-            <Input v-model="envForm.name" placeholder="如 SIT / UAT"
-                   data-testid="dep-env-name" />
-          </template>
+          <label class="lb">名称</label>
+          <input v-model="envForm.name" class="field-input" placeholder="如 SIT / UAT"
+                 data-testid="dep-env-name" />
           <label class="lb">描述</label>
-          <Input v-model="envForm.description" placeholder="可选"
+          <input v-model="envForm.description" class="field-input" placeholder="可选"
                  data-testid="dep-env-desc" />
         </div>
         <div v-for="(r, i) in lineRows" :key="i" class="line-row">
-          <Input v-model="r.sys" class="flex-1" placeholder="系统名"
+          <input v-model="r.sys" class="field-input flex-1" placeholder="系统名"
                  :data-testid="`dep-env-sys-${i}`" />
-          <Input v-model="r.line" class="flex-1" placeholder="版本线,如 1.0"
+          <input v-model="r.line" class="field-input flex-1" placeholder="版本线,如 1.0"
                  :data-testid="`dep-env-line-${i}`" />
           <button type="button" class="svc-link danger" :data-testid="`dep-env-rm-${i}`"
                   @click="lineRows.splice(i, 1)">移除</button>
@@ -227,7 +223,7 @@
                   data-testid="dep-env-del" @click="envDelArmed = true">删除环境</Button>
         </template>
         <template v-else>
-          <span class="svc-flag red">该环境的 API 地址/实例配置将一并删除</span>
+          <span class="svc-flag red">该环境的 API 地址、实例配置与身份条目将一并删除(账户不级联;仍有账户引用时后端会拦截)</span>
           <Button variant="destructive" size="sm" data-testid="dep-env-del-ok"
                   @click="delEnv">确认删除</Button>
           <Button variant="outline" size="sm" @click="envDelArmed = false">取消</Button>
@@ -327,8 +323,8 @@
           <!-- 收起态:部署节点预览条 -->
           <div v-if="!expanded.has(svc.name)" class="preview-ribbon">
             <span class="preview-label">部署节点预览:</span>
-            <template v-if="deploymentsOf(svc.name).length">
-              <button v-for="d in deploymentsOf(svc.name)" :key="d.id" type="button"
+            <template v-if="previewDeployments(svc).length">
+              <button v-for="d in previewDeployments(svc)" :key="d.id" type="button"
                       class="preview-chip" :data-testid="`mx-prev-${svc.name}-${d.envId}`"
                       :title="`点击配置管理:${envNameOf(d.envId)}`"
                       @click="openDrawer(svc, d.envId)">
@@ -338,33 +334,20 @@
             <span v-else class="chip weak">暂无部署节点 —— 点「接入实例」登记地址</span>
             <span class="flex-1" />
             <span class="preview-hint mono">
-              实例 {{ deploymentsOf(svc.name).length }}/{{ envs.length }} · 条目 {{ aliasesOf(svc.name).length }}
+              实例 {{ previewDeployments(svc).length }}/{{ envsOf(svc).length }} · 条目 {{ aliasesOf(svc.name).length }}
             </span>
           </div>
 
           <!-- ══ 展开态:实例表(原型 _2)═════════════════════════ -->
           <div v-else class="inst-panel" :data-testid="`svc-insts-${svc.name}`">
             <div class="inst-banner">
-              <span class="inst-banner-title">当前服务挂载实例:{{ envs.length }} 个</span>
+              <span class="inst-banner-title">
+                当前服务实例:{{ systemInstanceCount(svc) }} 个(标签行 {{ envsOf(svc).length }})
+              </span>
               <span class="muted">一环境一行(实例 = 服务 × 环境)</span>
               <span class="sep">·</span>
               <span class="muted">点击「服务配置管理」在右侧抽屉配置端点/身份/登录口</span>
-            </div>
-            <!-- 分组 Tag(环境)过滤 -->
-            <div class="tag-bar">
-              <span class="tag-label">部署环境 / 业务分组 Tag:</span>
-              <button type="button" class="tag-chip" :class="{ on: tagEnvOf(svc.name) === null }"
-                      :data-testid="`tag-${svc.name}-all`"
-                      @click="setTagEnv(svc.name, null)">
-                全部 ({{ envs.length }})
-              </button>
-              <button v-for="e in envs" :key="e.id" type="button" class="tag-chip"
-                      :class="{ on: tagEnvOf(svc.name) === e.id }"
-                      :data-testid="`tag-${svc.name}-${e.id}`"
-                      @click="setTagEnv(svc.name, e.id)">
-                <span class="dot" :class="depOf(svc.name, e.id) ? 'ok' : 'warn'" />
-                {{ e.name }} ({{ depOf(svc.name, e.id) ? 1 : 0 }})
-              </button>
+              <!-- Tag 筛选只在外层筛选矩阵提供;服务内部不再重复过滤轴 -->
               <span class="flex-1" />
               <Button variant="outline" size="sm" :data-testid="`svc-access-inline-${svc.name}`"
                       @click="openAccessFor(svc)">+ 接入新实例</Button>
@@ -444,9 +427,9 @@
                 </tr>
                 <tr v-if="!instEnvsPaged(svc).length">
                   <td colspan="6" class="c-center muted">
-                    {{ tagEnvOf(svc.name) == null
+                    {{ focusedEnv == null
                       ? '该服务还没有可展示的环境'
-                      : '该标签下没有实例 —— 切换 Tag 或「接入新实例」' }}
+                      : '该标签下没有登记 —— 取消外层筛选或「接入新实例」' }}
                   </td>
                 </tr>
               </tbody>
@@ -462,12 +445,12 @@
               <button type="button" class="pager-btn"
                       :disabled="instPageOf(svc.name) <= 1"
                       :data-testid="`inst-page-prev-${svc.name}`"
-                      @click="setInstPage(svc.name, instPageOf(svc.name) - 1)">‹</button>
+                      @click="setInstPage(svc, instPageOf(svc.name) - 1)">‹</button>
               <span class="pager-num">{{ instPageOf(svc.name) }} / {{ instPageCount(svc) }}</span>
               <button type="button" class="pager-btn"
                       :disabled="instPageOf(svc.name) >= instPageCount(svc)"
                       :data-testid="`inst-page-next-${svc.name}`"
-                      @click="setInstPage(svc.name, instPageOf(svc.name) + 1)">›</button>
+                      @click="setInstPage(svc, instPageOf(svc.name) + 1)">›</button>
             </div>
           </div>
         </div>
@@ -572,17 +555,24 @@
             </select>
           </label>
           <label class="field">
-            <span class="field-label">环境</span>
-            <select v-model.number="accessForm.envId" class="field-input" data-testid="access-form-env">
-              <option v-for="e in envs" :key="e.id" :value="e.id">{{ e.name }}</option>
-            </select>
+            <span class="field-label">实例标签(环境)</span>
+            <TagMultiSelect
+              v-model="accessTags" :options="envNames"
+              placeholder="选择或输入标签,如 SIT / 生产"
+              testid-prefix="access-tag"
+            />
           </label>
-          <p class="muted">实例 = 服务 × 环境;确认后在右侧抽屉登记地址/登录口。</p>
+          <p class="muted" data-testid="access-tag-hint">
+            标签即环境:不存在的标签确认时自动登记;一个实例可挂多枚标签(组内共享登录口/版本线/说明)。
+          </p>
+          <p v-if="accessError" class="err" data-testid="access-err">{{ accessError }}</p>
           <DialogFooter class="mt-1">
             <Button type="button" variant="outline" @click="accessOpen = false">取消</Button>
             <Button type="button" data-testid="access-form-save"
-                    :disabled="!accessForm.service || accessForm.envId == null"
-                    @click="confirmAccess">打开配置</Button>
+                    :disabled="!accessForm.service || !accessTags.length || accessSaving"
+                    @click="confirmAccess">
+              {{ accessSaving ? '打开中…' : '打开配置' }}
+            </Button>
           </DialogFooter>
         </div>
       </DialogContent>
@@ -686,13 +676,31 @@
                     :disabled="savingDrawer" @click="saveDrawerConfig">保存说明与实例配置</button>
           </div>
 
-          <!-- 实例绑定标签(§8.2:环境即部署标签;系统为账户/实例维度) -->
+          <!-- 实例绑定标签(§8.2 标签即环境;一实例可多枚标签,组内配置共享)。
+               点击标签框即展开修改(无独立按钮);点空白处/Esc 收起。 -->
           <div class="instance-tags">
             <span class="env-label">实例绑定标签:</span>
-            <span class="chip mono tag-env">[{{ drawerEnvName }}]</span>
+            <TagMultiSelect
+              :model-value="drawerTags" :options="envNames"
+              :placeholder="`选择标签(当前:${drawerEnvName})`"
+              testid-prefix="cfg-tag"
+              @change="saveDrawerTags"
+            />
             <span class="chip mono">{{ drawer.svc.system }}</span>
             <span v-if="focusedCurrentEnv(drawer.envId)?.is_default" class="chip ok">默认环境</span>
+            <span class="flex-1" />
+            <template v-if="!instDelArmed">
+              <Button variant="outline" size="sm" class="text-signal-failed"
+                      data-testid="cfg-inst-del" @click="instDelArmed = true">移除实例</Button>
+            </template>
+            <template v-else>
+              <span class="svc-flag red">仅移除登录口/版本线/说明;API 地址与身份条目不动</span>
+              <Button variant="destructive" size="sm" data-testid="cfg-inst-del-ok"
+                      :disabled="instDeleting" @click="removeInstance">确认移除</Button>
+              <Button variant="outline" size="sm" @click="instDelArmed = false">取消</Button>
+            </template>
           </div>
+          <p class="move-hint" data-testid="cfg-tag-hint">点击标签框修改;新增标签不存在时自动登记为环境定义。</p>
         </section>
 
         <!-- ② 调用身份与凭据槽位 -->
@@ -889,6 +897,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import TagMultiSelect from '@/components/service/TagMultiSelect.vue'
 import {
   listDeployments, createDeployment, updateDeployment, deleteDeployment,
   pingDeployment,
@@ -896,12 +905,12 @@ import {
 } from '@/api/deployments'
 import {
   listEnvironments, setDefaultEnvironment, unsetDefaultEnvironment,
-  createEnvironment, updateEnvironment, deleteEnvironment,
+  resolveEnvironment, updateEnvironment, deleteEnvironment,
   type EnvironmentRow,
 } from '@/api/environments'
 import {
   listServices, createService, patchService, deleteService,
-  listInstances, putInstance, importCatalog,
+  listInstances, putInstance, putInstanceTags, deleteInstance, importCatalog,
   type ServiceRow, type InstanceRow,
 } from '@/api/services'
 import {
@@ -1088,11 +1097,18 @@ function addrCount(svc: ServiceRow): number {
 function loginCount(svc: ServiceRow): number {
   return envs.value.filter((e) => instOf(svc.system, e.id)?.loginUrl).length
 }
-function missingInEnv(envId: number): number {
-  const hit = new Set(deployments.value
-    .filter((d) => d.envId === envId)
-    .map((d) => d.baseService))
-  return services.value.filter((s) => !hit.has(s.name)).length
+/** 某标签下的登记口径(外层聚焦下钻与徽章同源):地址行 ∨ 系统实例行。 */
+function boundInEnv(svc: ServiceRow, envId: number): boolean {
+  return !!depOf(svc.name, envId) || !!instOf(svc.system, envId)
+}
+function boundInEnvCount(envId: number): number {
+  return services.value.filter((s) => boundInEnv(s, envId)).length
+}
+/** 预览条按聚焦标签收窄(未聚焦 → 全量)。 */
+function previewDeployments(svc: ServiceRow): Deployment[] {
+  const all = deploymentsOf(svc.name)
+  return focusedEnv.value == null
+    ? all : all.filter((d) => d.envId === focusedEnv.value)
 }
 const gapServiceCount = computed(() =>
   services.value.filter((s) => envs.value.some((e) => !pairReady(s, e.id))).length)
@@ -1137,6 +1153,11 @@ function kindMeta(svc: ServiceRow): string {
 // ── 筛选 / 排序 / 分页(原型 _1 Filter Matrix Bar)──────────────
 const svcSearch = ref('')
 const focusedEnv = ref<number | null>(null)
+/** 环境下拉(默认「全部环境」;聚焦态由 focusedEnv 承载) */
+const envSelect = computed({
+  get: () => (focusedEnv.value == null ? '' : String(focusedEnv.value)),
+  set: (v: string) => { focusedEnv.value = v ? Number(v) : null },
+})
 const kindTab = ref<'all' | 'plate' | 'external' | 'integration'>('all')
 const sortBy = ref<'updated' | 'name' | 'gap'>('updated')
 const reconOpen = ref(true)
@@ -1155,10 +1176,6 @@ const drifted = computed(() => plateReachable.value
 const focusedCurrent = computed(() =>
   envs.value.find((e) => e.id === focusedEnv.value) ?? null)
 
-function toggleFocus(id: number): void {
-  focusedEnv.value = focusedEnv.value === id ? null : id
-}
-
 const filteredServices = computed<ServiceRow[]>(() => {
   const q = svcSearch.value.trim().toLowerCase()
   let list = services.value.filter((s) => !q
@@ -1169,7 +1186,8 @@ const filteredServices = computed<ServiceRow[]>(() => {
   else if (kindTab.value === 'integration') list = list.filter((s) => s.kind === 'integration')
   if (focusedEnv.value != null) {
     const envId = focusedEnv.value
-    list = list.filter((s) => !depOf(s.name, envId))
+    // 聚焦标签 = 正向下钻:只看该标签下有登记(地址行或系统实例)的服务
+    list = list.filter((s) => boundInEnv(s, envId))
   }
   const gapOf = (s: ServiceRow) => envs.value.length - addrCount(s)
   if (sortBy.value === 'name') {
@@ -1196,7 +1214,7 @@ watch(filteredServices, () => {
   if (page.value > pageCount.value) page.value = pageCount.value
 })
 
-// ── 卡片展开态 / 实例表分页 / Tag 过滤 ────────────────────────
+// ── 卡片展开态 / 实例表分页(筛选只在外层筛选矩阵提供)──────────
 const expanded = ref<Set<string>>(new Set())
 function toggleExpand(name: string): void {
   const next = new Set(expanded.value)
@@ -1206,18 +1224,22 @@ function toggleExpand(name: string): void {
 }
 const INST_PAGE_SIZE = 5
 const instPageMap = ref<Record<string, number>>({})
-const tagEnvMap = ref<Record<string, number | null>>({})
 
-function tagEnvOf(name: string): number | null {
-  return tagEnvMap.value[name] ?? null
+/** 实例表可见环境行:外层聚焦了某个环境 → 只显该行;否则全环境。 */
+function envsOf(_svc: ServiceRow): EnvironmentRow[] {
+  return focusedEnv.value == null
+    ? envs.value
+    : envs.value.filter((e) => e.id === focusedEnv.value)
 }
-function setTagEnv(name: string, envId: number | null): void {
-  tagEnvMap.value = { ...tagEnvMap.value, [name]: envId }
-  instPageMap.value = { ...instPageMap.value, [name]: 1 }
-}
-function envsOf(svc: ServiceRow): EnvironmentRow[] {
-  const t = tagEnvOf(svc.name)
-  return t == null ? envs.value : envs.value.filter((e) => e.id === t)
+/** 当前系统在可见行里已登记的实例数(登录口/版本线/说明落库过的行)。 */
+function systemInstanceCount(svc: ServiceRow): number {
+  // 一实例多标签:按 groupId 去重计数(标签行数另由 envsOf 长度给出)
+  const groups = new Set<string>()
+  for (const e of envsOf(svc)) {
+    const inst = instOf(svc.system, e.id)
+    if (inst?.groupId) groups.add(inst.groupId)
+  }
+  return groups.size
 }
 function instPageOf(name: string): number {
   return instPageMap.value[name] ?? 1
@@ -1225,11 +1247,10 @@ function instPageOf(name: string): number {
 function instPageCount(svc: ServiceRow): number {
   return Math.max(1, Math.ceil(envsOf(svc).length / INST_PAGE_SIZE))
 }
-function setInstPage(name: string, p: number): void {
-  const max = Math.max(1, Math.ceil((tagEnvOf(name) == null
-    ? envs.value.length : 1) / INST_PAGE_SIZE))
+function setInstPage(svc: ServiceRow, p: number): void {
+  const max = instPageCount(svc)
   instPageMap.value = {
-    ...instPageMap.value, [name]: Math.min(max, Math.max(1, p)),
+    ...instPageMap.value, [svc.name]: Math.min(max, Math.max(1, p)),
   }
 }
 function instEnvsPaged(svc: ServiceRow): EnvironmentRow[] {
@@ -1351,34 +1372,62 @@ async function doImportCatalog(names: string[] = []): Promise<void> {
   }
 }
 
-// ── 接入新实例(选服务 + 环境)────────────────────────────────
+// ── 接入新实例(选服务 + 实例标签;标签即环境,可多枚)────────────
 const accessOpen = ref(false)
-const accessForm = ref<{ service: string; envId: number | null }>({
-  service: '', envId: null,
+const accessForm = ref<{ service: string }>({
+  service: '',
 })
+/** 已选标签(多枚;确认时逐枚 resolve → 组内登记) */
+const accessTags = ref<string[]>([])
+const accessSaving = ref(false)
+const accessError = ref('')
+/** 标签选择器候选 = 环境字典名 */
+const envNames = computed(() => envs.value.map((e) => e.name))
 function openAccess(svcName = ''): void {
   accessForm.value = {
     service: svcName || services.value[0]?.name || '',
-    envId: envs.value[0]?.id ?? null,
   }
+  accessTags.value = []
+  accessError.value = ''
   accessOpen.value = true
 }
+/** 卡片内「+ 接入新实例」:预填服务,标签由用户填写(不再先建环境)。 */
 function openAccessFor(svc: ServiceRow): void {
-  const env = envs.value.find((e) => !depOf(svc.name, e.id)) ?? envs.value[0]
-  if (!env) { toast.warning('先建一个环境'); return }
-  void openDrawer(svc, env.id)
+  openAccess(svc.name)
 }
-function confirmAccess(): void {
+async function confirmAccess(): Promise<void> {
+  accessError.value = ''
   const svc = services.value.find((s) => s.name === accessForm.value.service)
-  const envId = accessForm.value.envId
-  if (!svc || envId == null) return
-  accessOpen.value = false
-  void openDrawer(svc, envId)
+  const tags = accessTags.value.map((t) => t.trim()).filter(Boolean)
+  if (!svc || !tags.length) return
+  accessSaving.value = true
+  try {
+    // 已有同名标签 → 直接用;新标签 → 自动登记为环境定义
+    const resolved: EnvironmentRow[] = []
+    for (const tag of tags) {
+      let env = envs.value.find((e) => e.name === tag)
+      if (!env) env = await resolveEnvironment(tag)
+      resolved.push(env)
+    }
+    envs.value = await listEnvironments()
+    // 多标签:先确保实例行存在,再整组挂标签(组内共享配置)
+    const first = resolved[0]
+    if (resolved.length > 1) {
+      await putInstance(svc.system, first.id, {})
+      await putInstanceTags(svc.system, first.id, tags)
+    }
+    accessOpen.value = false
+    void openDrawer(svc, first.id)
+  } catch (e) {
+    accessError.value = msg(e)
+  } finally {
+    accessSaving.value = false
+  }
 }
 
-// ── 环境管理(聚焦态环境条 + 表单)────────────────────────────
+// ── 环境管理(聚焦态环境条 + 编辑表单;标签即环境:新建由实例标签
+//    自动登记,不再有独立「新建环境」入口)──────────────────────
 const envFormOpen = ref(false)
-const envFormMode = ref<'create' | 'edit'>('create')
 const envForm = ref({ name: '', description: '' })
 const lineRows = ref<Array<{ sys: string; line: string }>>([])
 const envDelArmed = ref(false)
@@ -1393,17 +1442,9 @@ async function clearDefault(): Promise<void> {
   await unsetDefaultEnvironment(focusedEnv.value)
   await refreshAll()
 }
-function openCreateEnv(): void {
-  envFormMode.value = 'create'
-  envForm.value = { name: '', description: '' }
-  lineRows.value = []
-  envDelArmed.value = false
-  envFormOpen.value = true
-}
 function openEditEnv(): void {
   const cur = focusedCurrent.value
   if (!cur) return
-  envFormMode.value = 'edit'
   envForm.value = { name: cur.name, description: cur.description }
   lineRows.value = Object.entries(cur.lines ?? {})
     .map(([sys, line]) => ({ sys, line }))
@@ -1426,28 +1467,18 @@ async function saveEnv(): Promise<void> {
     return
   }
   try {
-    if (envFormMode.value === 'create') {
-      if (!envForm.value.name.trim()) {
-        error.value = '环境名不能为空'
-        return
-      }
-      const created = await createEnvironment({
-        name: envForm.value.name.trim(),
-        description: envForm.value.description.trim(),
-        lines: linesOf(),
-      })
-      envFormOpen.value = false
-      await refreshAll()
-      focusedEnv.value = created.id
-    } else {
-      if (focusedEnv.value == null) return
-      await updateEnvironment(focusedEnv.value, {
-        description: envForm.value.description.trim(),
-        lines: linesOf(),
-      })
-      envFormOpen.value = false
-      await refreshAll()
+    if (focusedEnv.value == null) return
+    if (!envForm.value.name.trim()) {
+      error.value = '环境名不能为空'
+      return
     }
+    await updateEnvironment(focusedEnv.value, {
+      name: envForm.value.name.trim(),
+      description: envForm.value.description.trim(),
+      lines: linesOf(),
+    })
+    envFormOpen.value = false
+    await refreshAll()
   } catch (e) { error.value = msg(e) }
 }
 async function delEnv(): Promise<void> {
@@ -1496,6 +1527,7 @@ async function openDrawer(svc: ServiceRow, envId: number): Promise<void> {
   pingResult.value = null
   probeState.value = {}
   testAllResult.value = ''
+  instDelArmed.value = false
   aliasForm.value = {
     open: false, editing: null, aliasName: '', refMode: 'default',
     refUsername: '', display: '', error: '', saving: false,
@@ -1507,6 +1539,51 @@ async function openDrawer(svc: ServiceRow, envId: number): Promise<void> {
 function closeDrawer(): void {
   drawer.value = null
   drawerError.value = ''
+  instDelArmed.value = false
+}
+
+// ── 实例标签(多枚;双击编辑) / 移除实例(2026-11-18)──────────────
+const instDelArmed = ref(false)
+const instDeleting = ref(false)
+/** 当前实例的标签集(同组行聚合;抽屉双击编辑的数据源) */
+const drawerTags = computed(() => {
+  const d = drawer.value
+  if (!d) return []
+  return instOf(d.svc.system, d.envId)?.tags ?? []
+})
+
+async function saveDrawerTags(tags: string[]): Promise<void> {
+  const d = drawer.value
+  const next = tags.map((t) => t.trim()).filter(Boolean)
+  if (!d || !next.length) return
+  drawerError.value = ''
+  try {
+    const moved = await putInstanceTags(d.svc.system, d.envId, next)
+    // 当前标签可能被移除 → 抽屉跟到组内代表行
+    drawer.value = { svc: d.svc, envId: moved.envId }
+    await refreshAll()
+    toast.success(`实例标签已更新:${moved.tags.join(' / ')}`)
+  } catch (e) {
+    drawerError.value = msg(e)
+  }
+}
+
+async function removeInstance(): Promise<void> {
+  const d = drawer.value
+  if (!d) return
+  instDeleting.value = true
+  drawerError.value = ''
+  try {
+    await deleteInstance(d.svc.system, d.envId)
+    instDelArmed.value = false
+    instForm.value = { ...instForm.value, loginUrl: '', line: '', note: '' }
+    await refreshAll()
+    toast.success('实例配置已移除')
+  } catch (e) {
+    drawerError.value = msg(e)
+  } finally {
+    instDeleting.value = false
+  }
 }
 function startUrlEdit(): void {
   const d = drawer.value
@@ -1863,16 +1940,9 @@ onMounted(async () => {
 }
 .filter-row { display: flex; align-items: center; gap: 0.625rem; flex-wrap: wrap; }
 .filter-row.second { border-top: 1px dashed var(--sl-divider); padding-top: 0.5rem; }
-.env-strip { display: inline-flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
+.env-pick { display: inline-flex; align-items: center; gap: 0.375rem; }
 .env-label { font-size: 0.6875rem; color: var(--sl-ink-3); }
-.env-chip {
-  border: 1px solid transparent; background: none; cursor: pointer;
-  padding: 0.1875rem 0.5rem; border-radius: 0.375rem;
-  font-size: 0.6875rem; color: var(--sl-ink-3); display: inline-flex;
-  align-items: center; gap: 0.25rem;
-}
-.env-chip:hover { background: var(--sl-canvas); }
-.env-chip.on { background: var(--c-surface); border-color: var(--sl-line); color: var(--sl-accent); font-weight: 600; }
+.env-select { min-width: 8.5rem; }
 .tab-strip { display: inline-flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
 .tab {
   border: 1px solid transparent; background: none; cursor: pointer;
@@ -1985,23 +2055,6 @@ onMounted(async () => {
 }
 .inst-banner-title { font-weight: 600; color: var(--sl-ink); }
 .inst-banner .sep { color: var(--sl-line-strong, #cbd5e1); }
-.tag-bar {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 0.375rem;
-  padding: 0.375rem 1rem; background: var(--c-surface);
-  border-top: 1px dashed var(--sl-line); border-bottom: 1px solid var(--sl-line);
-}
-.tag-label { font-size: 0.6875rem; font-weight: 600; color: var(--sl-ink-2, #334155); }
-.tag-chip {
-  border: 1px solid transparent; background: none; cursor: pointer;
-  padding: 0.125rem 0.5rem; border-radius: 62.4375rem;
-  font-size: 0.65625rem; color: var(--sl-ink-3);
-  display: inline-flex; align-items: center; gap: 0.25rem;
-}
-.tag-chip:hover { background: var(--sl-canvas); }
-.tag-chip.on { background: var(--sl-accent); color: #fff; font-weight: 600; }
-.tag-chip .dot { width: 0.3125rem; height: 0.3125rem; border-radius: 50%; }
-.tag-chip .dot.ok { background: #10b981; }
-.tag-chip .dot.warn { background: #f59e0b; }
 .inst-table { background: var(--c-surface); }
 .inst-row { cursor: pointer; }
 .inst-id-row { display: flex; align-items: center; gap: 0.25rem; }
@@ -2088,6 +2141,7 @@ onMounted(async () => {
 .ping-line.ok { color: #047857; }
 .ping-line.bad { color: #b91c1c; }
 .instance-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.625rem; }
+.instance-tags :deep(.tms) { width: 17.5rem; max-width: 100%; }
 .count-badge {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 1.125rem; height: 1.125rem; padding: 0 0.25rem;
@@ -2146,6 +2200,30 @@ onMounted(async () => {
 }
 .field-input:focus { border-color: var(--sl-accent); }
 .field-input:disabled { opacity: 0.6; cursor: not-allowed; }
+/* 原生 select 统一成设计系统形制:去系统箭头,右侧自绘小 chevron ——
+   与 ui/Select 的视觉一致,避免各浏览器原生样式漂移(页面所有原生
+   下拉共用这一处)。 */
+select.field-input,
+.sort-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 1.75rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.625rem center;
+  background-size: 0.75rem;
+}
+.sort-select {
+  padding-right: 1.5rem;
+  background-position: right 0.4375rem center;
+  background-size: 0.6875rem;
+}
+.move-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.65625rem;
+  color: var(--sl-ink-3);
+}
 .field-area { height: auto; padding: 0.5rem 0.625rem; resize: vertical; }
 .err { color: var(--sl-bad); font-size: 0.78125rem; margin: 0; }
 .recon-note { margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--sl-ink-3); }

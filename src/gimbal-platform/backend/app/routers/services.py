@@ -11,6 +11,7 @@ lines 视图与本端点同表 upsert(line 字段双写路径,一致性由 upser
 """
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -97,6 +98,9 @@ class InstanceOut(BaseModel):
     system: str
     env_id: int = Field(alias="envId")
     env_name: str = Field(default="", alias="envName")
+    # 标签组:同组行 = 一个实例的多枚标签(配置共享)
+    group_id: str = Field(default="", alias="groupId")
+    tags: list[str] = Field(default_factory=list)
     login_url: str = Field(default="", alias="loginUrl")
     line: str = ""
     note: str = ""
@@ -110,6 +114,83 @@ class InstancePut(BaseModel):
                                   alias="loginUrl")
     line: str | None = Field(default=None, max_length=64)
     note: str | None = Field(default=None, max_length=256)
+
+
+class InstanceMove(BaseModel):
+    """实例改标签(2026-11-18 环境降级交互补齐;标签即环境)。
+
+    目标环境二选一:``envId``(既有环境)或 ``envTag``(自由标签,不存在
+    则自动登记为环境定义)。登录口/版本线/说明随行;API 地址
+    (deployments)与身份条目按各自环境维护,不随搬移。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    env_id: int | None = Field(default=None, ge=1, alias="envId")
+    env_tag: str | None = Field(default=None, max_length=64, alias="envTag")
+
+
+class InstanceTagsIn(BaseModel):
+    """实例标签集合(多枚;整组一次提交)。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    tags: list[str] = Field(min_length=1, max_length=30)
+
+
+async def _find_or_create_env_by_tag(db: Any, tag: str, user: Any) -> Any:
+    """标签 → 环境行(不存在则登记;幂等)。写面与其它环境写门同源:
+    调用方已过 MemberUser(ops.write)。"""
+    from ..models.environment import Environment as Env
+
+    name = tag.strip()
+    if not name:
+        raise HTTPException(422, "environment tag must not be blank")
+    env = (await db.execute(
+        select(Env).where(Env.name == name))).scalar_one_or_none()
+    if env is None:
+        env = Env(name=name, description="", owner_id=user.id)
+        db.add(env)
+        await db.flush()
+        from ..services import audit as audit_svc
+
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="environment.write", resource_type="environment",
+            resource_id=str(env.id), resource_name=env.name,
+            detail={"op": "create", "source": "instance_tag"})
+    return env
+
+
+async def _tags_by_group(db: Any, group_ids: set[str]) -> dict[str, list[str]]:
+    """组 id → 该实例的标签名集(一实例多标签;按组内行聚合)。"""
+    if not group_ids:
+        return {}
+    from ..models.environment import Environment as Env
+
+    rows = (await db.execute(
+        select(SystemEnvInstance.group_id, Env.name).join(
+            Env, Env.id == SystemEnvInstance.env_id).where(
+            SystemEnvInstance.group_id.in_(group_ids)))).all()
+    out: dict[str, list[str]] = {}
+    for gid, name in rows:
+        out.setdefault(gid, []).append(name)
+    return {gid: sorted(names) for gid, names in out.items()}
+
+
+async def _instance_out(db: Any, inst: SystemEnvInstance) -> InstanceOut:
+    """行 → 对外视图(带同组标签集;登录口/版本线/说明为组共享值)。"""
+    from ..models.environment import Environment as Env
+
+    env_name = (await db.execute(
+        select(Env.name).where(Env.id == inst.env_id))).scalar() or ""
+    tags = (await _tags_by_group(db, {inst.group_id})).get(inst.group_id, [])
+    return InstanceOut(
+        system=inst.system, env_id=inst.env_id, env_name=env_name,
+        group_id=inst.group_id, tags=tags,
+        login_url=inst.login_url, line=inst.line, note=inst.note,
+        updated_at=(inst.updated_at.isoformat()
+                    if inst.updated_at else None))
 
 
 @router.get("", response_model=ServiceListOut)
@@ -308,17 +389,24 @@ async def list_instances(
     user: CurrentUser, db: DbSession,
     env_id: Annotated[int | None, Query(alias="envId", ge=1)] = None,
 ) -> list[InstanceOut]:
-    """实例列表(可按环境过滤;环境配置页数据源)。"""
+    """实例列表(可按环境过滤;环境配置页数据源)。
+
+    一实例多标签:每个 (system, env) 行回带同组标签集(tags),前端按
+    标签聚合展示。"""
     from ..models.environment import Environment as Env
 
     stmt = select(SystemEnvInstance, Env.name).join(
         Env, Env.id == SystemEnvInstance.env_id)
     if env_id is not None:
         stmt = stmt.where(SystemEnvInstance.env_id == env_id)
-    rows = (await db.execute(
-        stmt.order_by(SystemEnvInstance.system))).all()
+    rows = (await db.execute(stmt.order_by(
+        SystemEnvInstance.system, SystemEnvInstance.env_id))).all()
+    tags_by_group = await _tags_by_group(
+        db, {inst.group_id for inst, _ in rows})
     return [InstanceOut(
         system=inst.system, env_id=inst.env_id, env_name=env_name,
+        group_id=inst.group_id,
+        tags=tags_by_group.get(inst.group_id, []),
         login_url=inst.login_url, line=inst.line, note=inst.note,
         updated_at=(inst.updated_at.isoformat()
                     if inst.updated_at else None))
@@ -332,7 +420,9 @@ async def put_instance(
     user: MemberUser, db: DbSession,
 ) -> InstanceOut:
     """维护实例(ops.write;upsert):登录口/版本线/说明 —— 环境配置页
-    的落库面;``environments`` 的 lines 视图与本端点同表(line 字段)。"""
+    的落库面;``environments`` 的 lines 视图与本端点同表(line 字段)。
+
+    一实例多标签:写入同步到同一 group_id 的全部标签行(组共享配置)。"""
     from ..models.environment import Environment as Env
 
     if await db.get(Env, env_id) is None:
@@ -343,18 +433,24 @@ async def put_instance(
             SystemEnvInstance.system == system,
             SystemEnvInstance.env_id == env_id))).scalar_one_or_none()
     if inst is None:
-        inst = SystemEnvInstance(system=system, env_id=env_id)
+        inst = SystemEnvInstance(system=system, env_id=env_id,
+                                 group_id=uuid.uuid4().hex)
         db.add(inst)
-    if body.login_url is not None:
-        inst.login_url = body.login_url
-    if body.line is not None:
-        inst.line = body.line
-    if body.note is not None:
-        inst.note = body.note
+        group_rows = [inst]
+    else:
+        group_rows = (await db.execute(
+            select(SystemEnvInstance).where(
+                SystemEnvInstance.system == system,
+                SystemEnvInstance.group_id == inst.group_id))).scalars().all()
+    for row in group_rows:
+        if body.login_url is not None:
+            row.login_url = body.login_url
+        if body.line is not None:
+            row.line = body.line
+        if body.note is not None:
+            row.note = body.note
     await db.commit()
     await db.refresh(inst)
-    env_name = (await db.execute(
-        select(Env.name).where(Env.id == env_id))).scalar() or ""
     from ..services import audit as audit_svc
 
     await audit_svc.record(
@@ -362,8 +458,177 @@ async def put_instance(
         action="service_registry.write", resource_type="instance",
         resource_id=f"{system}/{env_id}",
         detail={"fn": "put", "loginUrl": inst.login_url, "line": inst.line})
-    return InstanceOut(system=inst.system, env_id=inst.env_id,
-                       env_name=env_name, login_url=inst.login_url,
-                       line=inst.line, note=inst.note,
-                       updated_at=(inst.updated_at.isoformat()
-                                   if inst.updated_at else None))
+    return await _instance_out(db, inst)
+
+
+@router.put("/instances/{system}/{env_id}/tags", response_model=InstanceOut)
+async def put_instance_tags(
+    system: str, env_id: int, body: InstanceTagsIn,
+    user: MemberUser, db: DbSession,
+) -> InstanceOut:
+    """实例标签编辑(ops.write):整组标签一次提交(双击编辑落点)。
+
+    标签不存在 → 自动登记为环境定义;组内行增/删;新增行复制当前实例
+    配置(登录口/版本线/说明),共享语义随组。最少保留一枚标签。
+    目标环境已被该系统的**其它实例组**占用 → 409 instance_tag_conflict。"""
+    inst = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.env_id == env_id))).scalar_one_or_none()
+    if inst is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"instance not found: {system}/{env_id}")
+    names: list[str] = []
+    for t in body.tags:
+        n = t.strip()
+        if n and n not in names:
+            names.append(n)
+    if not names:
+        raise HTTPException(422, "at least one tag is required")
+    envs = [await _find_or_create_env_by_tag(db, n, user) for n in names]
+    target_ids = {e.id for e in envs}
+
+    group_rows = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.group_id == inst.group_id))).scalars().all()
+    by_env = {r.env_id: r for r in group_rows}
+
+    # 冲突:目标标签已有该系统的行,但属于别的实例组
+    missing = target_ids - set(by_env)
+    if missing:
+        clash = (await db.execute(
+            select(SystemEnvInstance).where(
+                SystemEnvInstance.system == system,
+                SystemEnvInstance.env_id.in_(missing)))).scalars().all()
+        if clash:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                {"code": "instance_tag_conflict",
+                 "message": "目标标签已属于该系统的其它实例 —— "
+                            "请先从那边移除该标签再挂到这里"})
+
+    # 增:新标签行复制当前实例配置(组内共享)
+    for e in envs:
+        if e.id not in by_env:
+            db.add(SystemEnvInstance(
+                system=system, env_id=e.id, group_id=inst.group_id,
+                login_url=inst.login_url, line=inst.line, note=inst.note))
+    # 减:组内不再保留的行删除
+    for old_env, row in by_env.items():
+        if old_env not in target_ids:
+            await db.delete(row)
+    await db.commit()
+
+    # 代表行:当前 env 仍在组里则用当前行,否则取组内第一枚标签
+    rep = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.group_id == inst.group_id).order_by(
+            SystemEnvInstance.id).limit(1))).scalar_one_or_none()
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id, actor_name=user.display_name or user.username,
+        action="service_registry.write", resource_type="instance",
+        resource_id=f"{system}/{env_id}",
+        detail={"fn": "tags", "tags": names})
+    return await _instance_out(db, rep)
+
+
+@router.patch("/instances/{system}/{env_id}", response_model=InstanceOut)
+async def move_instance(
+    system: str, env_id: int, body: InstanceMove,
+    user: MemberUser, db: DbSession,
+) -> InstanceOut:
+    """实例改标签(ops.write;单行搬移,兼容口)。
+
+    多标签编辑的主入口是 PUT /instances/{system}/{env_id}/tags;本端点
+    把该行搬到目标标签:目标行同组 → 合并(删源行);目标行属别的组 →
+    409;目标不存在 → 改 env_id。"""
+    from ..models.environment import Environment as Env
+
+    has_id = body.env_id is not None
+    has_tag = bool((body.env_tag or "").strip())
+    if has_id == has_tag:
+        raise HTTPException(
+            422, "exactly one of envId / envTag is required")
+    inst = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.env_id == env_id))).scalar_one_or_none()
+    if inst is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"instance not found: {system}/{env_id}")
+    if has_tag:
+        target_env = await _find_or_create_env_by_tag(db, body.env_tag, user)
+        target_id = target_env.id
+    else:
+        assert body.env_id is not None
+        if await db.get(Env, body.env_id) is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"environment not found: {body.env_id}")
+        target_id = body.env_id
+    rep = inst
+    if target_id != env_id:
+        target = (await db.execute(
+            select(SystemEnvInstance).where(
+                SystemEnvInstance.system == system,
+                SystemEnvInstance.env_id == target_id))).scalar_one_or_none()
+        if target is not None and target.group_id != inst.group_id:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                {"code": "instance_target_exists",
+                 "message": f"该系统在目标环境已有实例({system}/"
+                            f"{target_id});请先处理目标实例再搬移"})
+        from_env = inst.env_id
+        if target is not None:
+            # 同组合并:源行删除,目标行承接
+            await db.delete(inst)
+            rep = target
+        else:
+            inst.env_id = target_id
+        await db.commit()
+        await db.refresh(rep)
+        from ..services import audit as audit_svc
+
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="service_registry.write", resource_type="instance",
+            resource_id=f"{system}/{target_id}",
+            detail={"fn": "move", "fromEnvId": from_env,
+                    "toEnvId": target_id})
+    return await _instance_out(db, rep)
+
+
+@router.delete("/instances/{system}/{env_id}", status_code=204)
+async def delete_instance(
+    system: str, env_id: int, user: MemberUser, db: DbSession,
+) -> None:
+    """移除实例(ops.write):删除该实例**全部标签行**(登录口/版本线/
+    说明);部署地址与身份条目按各自环境独立维护,不受影响。"""
+    inst = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.env_id == env_id))).scalar_one_or_none()
+    if inst is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"instance not found: {system}/{env_id}")
+    rows = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.group_id == inst.group_id))).scalars().all()
+    for row in rows:
+        await db.delete(row)
+    await db.commit()
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id, actor_name=user.display_name or user.username,
+        action="service_registry.write", resource_type="instance",
+        resource_id=f"{system}/{env_id}", detail={"fn": "delete"})

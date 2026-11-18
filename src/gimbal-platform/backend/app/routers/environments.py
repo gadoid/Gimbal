@@ -36,8 +36,18 @@ class EnvironmentCreate(BaseModel):
 
 
 class EnvironmentUpdate(BaseModel):
+    # 环境降级为轻量标签后,name 只是展示标签(2026-11-18):允许改名,
+    # 唯一性由本路由校验(重名 409);id 引用面(实例/部署/账户/条目)
+    # 全部按 id 挂靠,改名不触碰任何外键。
+    name: str | None = Field(default=None, min_length=1, max_length=64)
     description: str | None = None
     lines: dict[str, str] | None = None
+
+
+class EnvironmentResolveIn(BaseModel):
+    """标签 → 环境定义(2026-11-18「标签即环境」)。"""
+
+    name: str = Field(..., min_length=1, max_length=64)
 
 
 class EnvironmentView(BaseModel):
@@ -148,6 +158,38 @@ async def get_environment(
     return await _view(db, env)
 
 
+@router.post("/resolve", response_model=EnvironmentView)
+async def resolve_environment(
+    body: EnvironmentResolveIn,
+    user: MemberUser, db: DbSession,
+) -> Any:
+    """标签 → 环境定义:按名精确查找,不存在则登记并返回(2026-11-18)。
+
+    实例标签/改标签等写面用它把用户自由填写的标签落成环境字典行;
+    已存在即返回同一行(幂等,不重名不报错)。写门与其它环境写面同门
+    (ops.write)。"""
+    tag = body.name.strip()
+    if not tag:
+        raise HTTPException(422, "environment name must not be blank")
+    env = (await db.execute(
+        select(Environment).where(Environment.name == tag)
+    )).scalar_one_or_none()
+    if env is None:
+        env = Environment(name=tag, description="", owner_id=user.id)
+        db.add(env)
+        await db.commit()
+        await db.refresh(env)
+        from ..services import audit as audit_svc
+
+        await audit_svc.record(
+            db, actor_id=user.id,
+            actor_name=user.display_name or user.username,
+            action="environment.write", resource_type="environment",
+            resource_id=str(env.id), resource_name=env.name,
+            detail={"op": "create", "source": "tag_resolve"})
+    return await _view(db, env)
+
+
 @router.put("/{env_id}", response_model=EnvironmentView)
 async def update_environment(
     env_id: int,
@@ -157,6 +199,19 @@ async def update_environment(
     env = await db.get(Environment, env_id)
     if not env:
         raise HTTPException(404, "environment not found")
+    if body.name is not None:
+        new_name = body.name.strip()
+        if not new_name:
+            raise HTTPException(422, "environment name must not be blank")
+        if new_name != env.name:
+            dup = (await db.execute(
+                select(Environment).where(
+                    Environment.name == new_name,
+                    Environment.id != env_id))).scalar_one_or_none()
+            if dup is not None:
+                raise HTTPException(
+                    409, f"environment '{new_name}' already exists")
+            env.name = new_name
     if body.description is not None:
         env.description = body.description
     if body.lines is not None:
@@ -171,7 +226,7 @@ async def update_environment(
         actor_name=user.display_name or user.username,
         action="environment.write", resource_type="environment",
         resource_id=str(env.id), resource_name=env.name,
-        detail={"op": "update",
+        detail={"op": "update", "name": body.name,
                 "description": body.description, "lines": body.lines})
     return await _view(db, env)
 

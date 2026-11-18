@@ -380,30 +380,37 @@ describe('Auths — 状态优先(组头聚合 · 只看问题)', () => {
     w.unmount()
   })
 
-  it('(system,env) 无默认算问题:组头聚合徽章;问题组排前,健康组滤除', async () => {
+  it('系统无默认算问题(0059 口径):组头徽章;非默认环境不误报;问题组排前', async () => {
     vi.spyOn(api, 'list').mockResolvedValue({
       items: [
         { ...sample, id: 2, username: 'b', isDefault: true, system: 'svc-b', envId: 3 },
         { ...sample, id: 1, username: 'a', isDefault: false, system: 'svc-a', envId: 3 },
+        // svc-c:默认账户在 env 3,env 4 的同系统账户无默认 —— 旧 (system,env)
+        // 语义会误报,0059 起属正常(默认按 system 唯一)
+        { ...sample, id: 3, username: 'c1', isDefault: true, system: 'svc-c', envId: 3 },
+        { ...sample, id: 4, username: 'c2', isDefault: false, system: 'svc-c', envId: 4 },
       ],
-      total: 2, page: 1, pageSize: 20, tokenTypeCounts: {},
+      total: 4, page: 1, pageSize: 20, tokenTypeCounts: {},
     } as never)
     const w = mountPage()
     await flushPromises()
     const cards = w.findAll('[data-testid^="sys-card-"]')
-    // 问题组(svc-a 无默认)排前
+    const byId = new Map(cards.map((c) => [c.attributes('data-testid'), c]))
+    // 问题组(svc-a 系统无默认)排前
     expect(cards[0].attributes('data-testid')).toBe('sys-card-svc-a')
-    expect(cards[1].attributes('data-testid')).toBe('sys-card-svc-b')
-    // 组头聚合:1 组无默认(琥珀);健康组绿
-    expect(cards[0].text()).toContain('1 组无默认')
-    expect(cards[0].classes()).toContain('tone-warn')
-    expect(cards[1].classes()).toContain('tone-ok')
-    // 独占 (system,env) 组无默认 → 行内也直示
-    expect(w.find('[data-testid="auth-row-1"]').text()).toContain('无默认')
+    // 组头聚合:svc-a 无默认账户(琥珀);svc-b/svc-c 有默认(绿)
+    expect(byId.get('sys-card-svc-a')!.text()).toContain('无默认账户')
+    expect(byId.get('sys-card-svc-a')!.classes()).toContain('tone-warn')
+    expect(byId.get('sys-card-svc-b')!.classes()).toContain('tone-ok')
+    expect(byId.get('sys-card-svc-c')!.classes()).toContain('tone-ok')
+    expect(byId.get('sys-card-svc-c')!.text()).not.toContain('无默认')
+    // 行内不再按 (system,env) 标「无默认」
+    expect(w.find('[data-testid="auth-row-4"]').text()).not.toContain('无默认')
     await w.find('[data-testid="problem-filter"]').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="sys-card-svc-a"]').exists()).toBe(true)
     expect(w.find('[data-testid="sys-card-svc-b"]').exists()).toBe(false)
+    expect(w.find('[data-testid="sys-card-svc-c"]').exists()).toBe(false)
     w.unmount()
   })
 

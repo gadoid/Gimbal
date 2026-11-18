@@ -42,10 +42,18 @@ export function createEnvironment(
     .then(({ data }) => data)
 }
 
-/** 改环境(Admin+)—— name 不可改,只有 description / lines */
+/** 标签 → 环境定义(标签即环境,2026-11-18):按名精确查找,不存在则
+ *  自动登记(幂等)。实例标签/改标签等写面用它落地自由标签。 */
+export function resolveEnvironment(name: string): Promise<EnvironmentRow> {
+  return http.post<EnvironmentRow>('/environments/resolve', { name })
+    .then(({ data }) => data)
+}
+
+/** 改环境(Admin+)—— 2026-11-18 环境降级后 name 是轻量标签,可改名
+ *  (后端校验重名 409;id 引用面不受影响) */
 export function updateEnvironment(
   id: number,
-  body: Partial<Pick<EnvironmentCreateInput, 'description' | 'lines'>>,
+  body: Partial<Pick<EnvironmentCreateInput, 'name' | 'description' | 'lines'>>,
 ): Promise<EnvironmentRow> {
   return http.put<EnvironmentRow>(`/environments/${id}`, body)
     .then(({ data }) => data)

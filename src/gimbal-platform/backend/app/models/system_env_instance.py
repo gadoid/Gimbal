@@ -4,6 +4,11 @@
 也是环境配置页的配置面单元。**实例唯一 + 配置 overlay**(决策 4):
 差异化走多身份条目与配置值分层,不并排多实例;部署真有多套 → 拆环境。
 
+2026-11-18「一实例多标签」:同一部署事实可挂多枚环境标签(标签即环境)。
+``group_id`` 标识"同一个实例"的标签行组 —— 组内各 (system, env) 行共享
+登录口/版本线/说明(写一处同步全组);组内每行仍独立参与 (system, env)
+唯一键与各消费面(登录口按账户 env 查、部署按服务×env 查)。
+
 * ``login_url`` = 登录口(上提自原凭证行 url;拨测 = login_url +
   账户 secret;缺席 = 配置缺失,预检明确报,不回退业务地址);
 * ``line`` = 版本线(迁自 environments.lines JSON —— 版本线收口到
@@ -14,6 +19,7 @@ env) → base_url),系统层只做聚合呈现。
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import ForeignKey, String, UniqueConstraint, text
@@ -26,7 +32,7 @@ from ._types import UtcDateTime
 class SystemEnvInstance(Base):
     __tablename__ = "system_env_instances"
     __table_args__ = (
-        # 实例唯一(决策 4):(system, env) 恰一行
+        # 实例唯一(决策 4):(system, env) 恰一行;多标签 = 多行同 group_id
         UniqueConstraint("system", "env_id", name="uq_instance_system_env"),
     )
 
@@ -36,6 +42,10 @@ class SystemEnvInstance(Base):
     env_id: Mapped[int] = mapped_column(
         ForeignKey("environments.id", ondelete="CASCADE"),
         nullable=False, index=True)
+    # 标签组:同组行 = 一个实例的多枚标签,配置(login_url/line/note)同步
+    group_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True,
+        default=lambda: uuid.uuid4().hex)
     login_url: Mapped[str] = mapped_column(
         String(512), nullable=False, default="", server_default=text("''"))
     # 版本线(迁自 environments.lines;空 = 未声明)

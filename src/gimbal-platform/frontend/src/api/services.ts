@@ -94,6 +94,9 @@ export interface InstanceRow {
   system: string
   envId: number
   envName: string
+  /** 标签组:同组行 = 一个实例的多枚标签(配置共享) */
+  groupId: string
+  tags: string[]
   loginUrl: string
   line: string
   note: string
@@ -106,8 +109,11 @@ export interface InstancePutIn {
   note?: string
 }
 
-export function listInstances(): Promise<InstanceRow[]> {
-  return http.get<InstanceRow[]>('/services/instances').then(({ data }) => data)
+/** 实例列表(envId = 按标签切片;缺省 = 全部标签行)。 */
+export function listInstances(envId?: number): Promise<InstanceRow[]> {
+  return http.get<InstanceRow[]>('/services/instances', {
+    params: envId != null ? { envId } : undefined,
+  }).then(({ data }) => data)
 }
 
 /** upsert:不存在则建、存在则覆写给出的字段(loginUrl/line/note)。 */
@@ -118,4 +124,40 @@ export function putInstance(
     .put<InstanceRow>(
       `/services/instances/${encodeURIComponent(system)}/${envId}`, payload)
     .then(({ data }) => data)
+}
+
+/** 实例改标签(标签即环境,2026-11-18):目标 = 既有 envId 或自由 envTag
+ *  (不存在则后端自动登记为环境定义)。目标已有该系统实例 → 409。
+ *  只搬登录口/版本线/说明;API 地址与身份条目按各自环境维护。 */
+export function moveInstance(
+  system: string, envId: number,
+  target: { envId: number } | { envTag: string },
+): Promise<InstanceRow> {
+  const body = 'envId' in target
+    ? { envId: target.envId }
+    : { envTag: target.envTag }
+  return http
+    .patch<InstanceRow>(
+      `/services/instances/${encodeURIComponent(system)}/${envId}`, body)
+    .then(({ data }) => data)
+}
+
+/** 实例标签编辑(整组一次提交;至少一枚;不存在自动登记;冲突 409)。 */
+export function putInstanceTags(
+  system: string, envId: number, tags: string[],
+): Promise<InstanceRow> {
+  return http
+    .put<InstanceRow>(
+      `/services/instances/${encodeURIComponent(system)}/${envId}/tags`,
+      { tags })
+    .then(({ data }) => data)
+}
+
+/** 删除实例配置(只删登录口/版本线/说明;部署地址与条目不受影响)。 */
+export function deleteInstance(
+  system: string, envId: number,
+): Promise<void> {
+  return http
+    .delete(`/services/instances/${encodeURIComponent(system)}/${envId}`)
+    .then(() => undefined)
 }

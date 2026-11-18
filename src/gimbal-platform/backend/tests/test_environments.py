@@ -72,3 +72,67 @@ async def test_environment_delete_cascades_deployments(
     assert r.status_code == 204
     r = await client.get("/api/deployments", headers=admin)
     assert all(d["envId"] != env_id for d in r.json())
+
+
+async def test_environment_rename(client, fresh_db):
+    """环境降级为轻量标签(2026-11-18):name 可改;重名 409;空名 422。
+
+    id 引用面(实例/部署/账户/条目)全部按 id 挂靠,改名不触碰外键。"""
+    await register_and_login(client, "envrename", "pw123456")
+    admin = await register_and_login(client, "envrename", "pw123456")
+
+    r = await client.post("/api/environments", headers=admin,
+                          json={"name": "SIT", "description": ""})
+    assert r.status_code == 201, r.text
+    env_id = r.json()["id"]
+    r = await client.post("/api/environments", headers=admin,
+                          json={"name": "UAT"})
+    assert r.status_code == 201, r.text
+
+    # 改名成功
+    r = await client.put(f"/api/environments/{env_id}", headers=admin,
+                         json={"name": "SIT-2"})
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "SIT-2"
+
+    # 撞另一环境名 → 409
+    r = await client.put(f"/api/environments/{env_id}", headers=admin,
+                         json={"name": "UAT"})
+    assert r.status_code == 409
+
+    # 空名 → 422(模型 min_length 拦截) / 全空白 → 422(路由 strip 后)
+    r = await client.put(f"/api/environments/{env_id}", headers=admin,
+                         json={"name": "  "})
+    assert r.status_code == 422
+
+    # 只改描述不传 name → 名字不动
+    r = await client.put(f"/api/environments/{env_id}", headers=admin,
+                         json={"description": "只改说明"})
+    assert r.status_code == 200 and r.json()["name"] == "SIT-2"
+
+
+async def test_environment_resolve_tag(client, fresh_db):
+    """标签即环境(2026-11-18):/resolve 按名幂等登记 → 实例标签落地。"""
+    await register_and_login(client, "envtag", "pw123456")
+    admin = await register_and_login(client, "envtag", "pw123456")
+
+    r = await client.post("/api/environments/resolve", headers=admin,
+                          json={"name": "SIT-2"})
+    assert r.status_code == 200, r.text
+    env = r.json()
+    assert env["name"] == "SIT-2"
+    # 已存在 → 幂等返回同一行
+    r = await client.post("/api/environments/resolve", headers=admin,
+                          json={"name": "SIT-2"})
+    assert r.status_code == 200 and r.json()["id"] == env["id"]
+
+    # 空白标签 → 422
+    r = await client.post("/api/environments/resolve", headers=admin,
+                          json={"name": "  "})
+    assert r.status_code == 422
+
+    # 写门:普通用户 403
+    member = await register_and_login(client, "envtag2", "pw123456")
+    r = await client.post("/api/environments/resolve", headers=member,
+                          json={"name": "UAT"})
+    assert r.status_code == 403
