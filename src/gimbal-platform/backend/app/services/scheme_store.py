@@ -37,11 +37,16 @@ def normalized(payload: dict | None) -> dict:
     """
     p = dict(payload or {})
     out = dict(_EMPTY_PAYLOAD)
+    out.update({k: v for k, v in p.items() if k in out})
+    # 旧形状兼容:只有 dataSetIds(整库语义)而无行级选择时,合成
+    # dataSetSelection(spec v3 §4 权威键;rowIndexes 空 = 整库)。
+    # 合成必须放 update 之后 —— 路由层模型 dump 恒带显式空
+    # dataSetSelection([]),先合成会被它盖回,经 /run-schemes 创建的
+    # 旧形状方案将静默丢数据集(2026-11-20 审计追修)。
     if not p.get("dataSetSelection") and p.get("dataSetIds"):
         out["dataSetSelection"] = [
             {"datasetId": d, "rowIndexes": []} for d in p["dataSetIds"]
         ]
-    out.update({k: v for k, v in p.items() if k in out})
     # authz M2a S6:绑定 = 服务键 → {alias};存量形态的 url/authAlias
     # 读面剥离(0047 已清洗落库值,此处兜底防旧行漏网)
     from ..schemas.scenario_composer import scrub_retired_bindings

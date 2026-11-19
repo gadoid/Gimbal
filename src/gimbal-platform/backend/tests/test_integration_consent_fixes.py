@@ -100,6 +100,61 @@ async def _inst(tpl_id: int, holder: int) -> IntegrationTask | None:
             IntegrationTask.holder_id == holder))).scalar()
 
 
+async def test_fingerprint_covers_row_account_columns(client, plate_mock):
+    """CFG-02 回归钉(2026-11-20 审计):数据集首行 ``@slot`` 账号列的
+    绑定 id 进订阅指纹 —— 此前 ``_slot_bindings_of`` 读 PickedIdentity
+    不存在的 ``.id``,行级绑定一命中即 AttributeError,订阅摘要直接
+    500(订阅摘要/订阅比对/定时执行闸三路径全断)。修复后摘要 200,
+    且换行级绑定(qa1 → qa2 账户)指纹翻转 = 绑定值确实参与指纹。
+    """
+    from .test_authz_m2b_q3_dataset_accounts import _binding
+    from .test_authz_s8_project_credentials import _STEP, _seed_registry_base
+
+    u1 = await register_and_login(client, "fp_row_a", "pw123456")
+    await _seed_registry_base()
+    owner = await _user_id("fp_row_a")
+    await _binding(owner=owner, alias="qa1", org="acct-a")
+    await _binding(owner=owner, alias="qa2", org="acct-b")
+
+    r = await client.post("/api/scenarios", headers=u1,
+                          json=make_draft("sc-fp-row", steps=[_STEP],
+                                          system=["fin"]))
+    assert r.status_code in (200, 201), r.text
+    from .inbound_fixtures import publish_scenario
+    await publish_scenario("sc-fp-row")
+
+    seq = iter((1, 2))
+
+    async def _fp_for(row: dict) -> str:
+        n = next(seq)
+        ds = await client.post("/api/scenarios/sc-fp-row/data-sets",
+                               headers=u1,
+                               json={"name": f"acct-{n}", "rows": [row]})
+        assert ds.status_code in (200, 201), ds.text
+        sch = await client.post("/api/scenarios/sc-fp-row/run-schemes",
+                                headers=u1,
+                                json={"name": f"s-{n}", "dataSetIds":
+                                      [ds.json()["datasetId"]]})
+        assert sch.status_code == 201, sch.text
+        # 带 schemeId 的任务引用原件(方案/数据集挂原件;-public 副本
+        # 恒剥离,方案归属校验会 422 scheme_not_owned)
+        tid = (await client.post(
+            "/api/integration/tasks", headers=u1,
+            json=_task_body("sc-fp-row", visibility="private",
+                            scenarioId="sc-fp-row",
+                            schemeId=sch.json()["schemeId"]))
+        ).json()["id"]
+        summary = await client.get(
+            f"/api/integration/tasks/{tid}/subscription-summary", headers=u1)
+        assert summary.status_code == 200, summary.text
+        return summary.json()["fingerprint"]
+
+    fp_qa1 = await _fp_for({"@slot.qa1": "qa1"})
+    fp_qa2 = await _fp_for({"@slot.qa1": "qa2"})
+    assert fp_qa1 and fp_qa2 and fp_qa1 != fp_qa2, (
+        "行级绑定 id 未参与指纹(或摘要失败)")
+
+
 async def test_summary_fetches_binding_for_anchored_steps(
     client, plate_mock,
 ):

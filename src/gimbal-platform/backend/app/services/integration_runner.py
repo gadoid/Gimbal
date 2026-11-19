@@ -568,7 +568,10 @@ async def _slot_bindings_of(db, tpl: IntegrationTask,
             cred_project_id=cred_pid)
         for slot, alias in refs.items():
             b = hit.get((slot, alias))
-            out = {**out, slot: b.id if b is not None else -1}
+            # PickedIdentity 的绑定标识是 account_id(与 run_dispatcher
+            # 同类修复 —— 此前读不存在的 .id,首行含 @slot 列且命中即
+            # AttributeError,打击订阅摘要/比对/定时执行三路径)。
+            out = {**out, slot: b.account_id if b is not None else -1}
     return out
 
 

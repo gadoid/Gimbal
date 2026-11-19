@@ -22,6 +22,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loguru import logger
+
 from ..core.config import settings
 from ..core import db as db_module
 from ..models.composer_scenario import ComposerScenario
@@ -122,8 +124,8 @@ async def resolve_graph_units(
             "unit": unit,
             "scenario_row": scen,
             "composed": composed,
-            # S2.1:单元方案的环境(环境链第二位)
-            "scheme_env": (scheme or {}).get("environmentId"),
+            # (方案环境链位已随 §8.2 退役 —— 此前的 scheme_env 只写
+            # 不读,2026-11-20 审计 CFG-03 清除)
         })
     return resolved
 
@@ -270,7 +272,11 @@ async def materialize_graph(
         except EnvMixed as e:
             raise GraphDispatchError(
                 f"单元 {ref} {e}") from None
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — CFG-03:降级必须可见(此前静默
+            # None/{},与 prepare_exec 同位置已有 warning 的口径对齐)
+            logger.opt(exception=True).warning(
+                "graph_dispatch: 单元 {} 标签/地址解析失败 → "
+                "env=None + 空地址表(该单元执行将缺地址)", ref)
             unit_envs[ref] = None
             unit_urls[ref] = {}
     # §8.3:取用不校验标签 —— 无环境位(此前曾漏传 env 导致编排链
