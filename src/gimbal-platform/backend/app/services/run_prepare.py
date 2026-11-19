@@ -795,8 +795,9 @@ async def prepare_exec(
 class EffectiveConfig:
     """一次执行的**将生效**配置(逐值带来源;不含任何明文凭证)。
 
-    与执行链复用同一份子构建器(注入清单/取用绑定/地址③/carry tier)
-    —— 预览与执行结构上不可能漂移。"""
+    与执行链复用同一份子构建器(注入清单/取用绑定/地址③;carry 键序
+    同走 ``carry_injection.merge_carry_tiers`` 单源函数)—— 预览与
+    执行结构上不可能漂移。"""
     env: dict | None                       # {environmentId, environmentSource}
     services: dict[str, dict]              # svc → {url, source, alias?}
     auths: dict[str, dict]                 # 槽名 → {bindingId, system, envId, isDefault, source}
@@ -825,7 +826,7 @@ async def resolve_effective_config(
     裁)—— 预览逐值带来源:被覆盖条目标 ``slotSource='exec_config'``,
     carry 覆盖值标 ``source='exec_config'``(§5 守则「自证每个值的来路」)。"""
     from . import carry_store, service_aliases
-    from .carry_injection import _step_service
+    from .carry_injection import _step_service, merge_carry_tiers
     from .env_chain import EnvChoice
     from .run_materialize import (referenced_services,
                                   resolve_service_sources)
@@ -884,8 +885,8 @@ async def resolve_effective_config(
     # 分层②:执行配置覆盖层压在层序之上(场景显式在 carry_face 已先行);
     # 分层⑥:个人层已收编为默认执行配置(决策 8),user_id 不再构成 tier。
     # §8.9 实例档:键序 条目 > 实例(system, 执行标签 env) > 服务 >
-    # 层默认(粗先细后,字段级覆盖;预览与执行链同序 —— 此前预览漏
-    # 粗档,本批补齐)。来源标注:`...:instance:{envId}`
+    # 层默认 —— 与执行链**同一函数**(carry_injection.merge_carry_tiers,
+    # 单源不漂移);来源标注:`...:instance:{envId}` / `exec_config`
     from sqlalchemy import select as sa_select
 
     from ..models.service import Service as DBService
@@ -912,31 +913,12 @@ async def resolve_effective_config(
     for raw, base in base_of.items():
         if base is None:
             continue
-        alias_key = service_aliases.effective_alias(raw, bindings)
-        instance_key = system_of.get(base) or None
-        merged: dict[str, dict] = {}
-        for t in tiers:
-            t_base = await carry_store.get_bindings(db, base, t)
-            t_inst = (await carry_store.get_instance_bindings(
-                db, instance_key, carry_env, t)
-                if instance_key and carry_env is not None else {})
-            t_alias = (await carry_store.get_bindings(db, alias_key, t)
-                       if alias_key and alias_key != base else {})
-            for path in set(t_base) | set(t_inst) | set(t_alias):
-                if path in t_alias:
-                    merged[path] = {"value": t_alias[path],
-                                    "source": f"{t[0]}:{t[1]}:alias"}
-                elif path in t_inst:
-                    merged[path] = {"value": t_inst[path],
-                                    "source": f"{t[0]}:{t[1]}:instance:{carry_env}"}
-                else:
-                    merged[path] = {"value": t_base[path],
-                                    "source": f"{t[0]}:{t[1]}:base"}
-        ov = (exec_carry_overrides or {}).get(base)
-        if ov:
-            for path, value in ov.items():
-                merged[path] = {"value": value, "source": "exec_config"}
-        carry_out[raw] = merged
+        carry_out[raw] = await merge_carry_tiers(
+            db, tiers, base=base,
+            alias_key=service_aliases.effective_alias(raw, bindings),
+            instance_key=system_of.get(base) or None,
+            env_id=carry_env,
+            exec_overrides=(exec_carry_overrides or {}).get(base))
     defaults_out: dict[str, dict] = {}
     for t in tiers:
         t_rows = await carry_store.get_defaults(db, t)

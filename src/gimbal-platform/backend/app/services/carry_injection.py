@@ -63,6 +63,52 @@ def _step_service(step: dict) -> Any:
     return call.get("service") if isinstance(call, dict) else None
 
 
+async def merge_carry_tiers(
+    db: AsyncSession,
+    tiers: list[tuple[str, int]],
+    *,
+    base: str,
+    alias_key: str | None,
+    instance_key: str | None,
+    env_id: int | None,
+    exec_overrides: dict[str, str | None] | None = None,
+) -> dict[str, dict]:
+    """§8.9 键域**单源**合并(执行链 build_carry_context 与预览
+    resolve_effective_config 共用 —— 同一函数,链序不可能漂移)。
+
+    层内(细压粗):条目(alias_key)> 实例(system × 执行标签 env_id)
+    > 服务(base);层间(tiers 序,粗先细后,字段级覆盖):公共 < 项目;
+    最顶:执行配置覆盖层(``exec_overrides``,null = 显式注入 JSON null,
+    与值表语义同型)。逐 path 返回 ``{"value", "source"}``,source 形如
+    ``{scope}:{scopeId}:alias`` / ``:instance:{envId}`` / ``:base`` /
+    ``exec_config`` —— 执行链只取 value,预览消费全部(§5 守则
+    「自证每个值的来路」)。``env_id=None``(标签链全空/导入析出)
+    → 实例档跳过,不猜环境。
+    """
+    merged: dict[str, dict] = {}
+    for t in tiers:
+        t_base = await carry_store.get_bindings(db, base, t)
+        t_inst = (await carry_store.get_instance_bindings(
+            db, instance_key, env_id, t)
+            if instance_key and env_id is not None else {})
+        t_alias = (await carry_store.get_bindings(db, alias_key, t)
+                   if alias_key and alias_key != base else {})
+        for path in set(t_base) | set(t_inst) | set(t_alias):
+            if path in t_alias:
+                merged[path] = {"value": t_alias[path],
+                                "source": f"{t[0]}:{t[1]}:alias"}
+            elif path in t_inst:
+                merged[path] = {"value": t_inst[path],
+                                "source": f"{t[0]}:{t[1]}:instance:{env_id}"}
+            else:
+                merged[path] = {"value": t_base[path],
+                                "source": f"{t[0]}:{t[1]}:base"}
+    if exec_overrides:
+        for path, value in exec_overrides.items():
+            merged[path] = {"value": value, "source": "exec_config"}
+    return merged
+
+
 async def build_carry_context(
     db: AsyncSession, definition: dict,
     ui_field_states: dict | None = None,
@@ -173,33 +219,17 @@ async def build_carry_context(
                 "step 跳过 carry 填充", raw)
             service_bindings[raw] = None
         else:
-            # 层内键域(§8.9 细到粗,粗先 merge 细后覆盖,字段级):
-            # 服务键 < 实例键(system × 执行标签 env)< 条目键
-            # (alias_key = 方案选定的生效条目)。env_id=None → 实例档
-            # 跳过(无执行标签上下文,不猜环境)
-            alias_key = effective_alias(raw, bindings)
-            instance_key = system_of.get(base) or None
-            rows: dict[str, str | None] = {}
-            for t in tiers:
-                rows_t: dict[str, str | None] = {}
-                override = await carry_store.get_bindings(db, base, t)
-                if override:
-                    rows_t = {**rows_t, **override}
-                if instance_key and env_id is not None:
-                    inst = await carry_store.get_instance_bindings(
-                        db, instance_key, env_id, t)
-                    if inst:
-                        rows_t = {**rows_t, **inst}
-                if alias_key and alias_key != base:
-                    alias_ov = await carry_store.get_bindings(db, alias_key, t)
-                    if alias_ov:
-                        rows_t = {**rows_t, **alias_ov}
-                rows = {**rows, **rows_t}
-            # 分层②:执行配置覆盖(目录服务键;null = 显式注入 null)
-            ov = (exec_overrides or {}).get(base)
-            if ov:
-                rows = {**rows, **ov}
-            service_bindings[raw] = rows
+            # 键域单源合并(§8.9,merge_carry_tiers 与预览共用):
+            # 条目 > 实例(system × 执行标签 env)> 服务 + 执行配置
+            # 覆盖压顶 —— 执行链只取 value(来源标注是预览面的诉求)
+            merged = await merge_carry_tiers(
+                db, tiers, base=base,
+                alias_key=effective_alias(raw, bindings),
+                instance_key=system_of.get(base) or None,
+                env_id=env_id,
+                exec_overrides=(exec_overrides or {}).get(base))
+            service_bindings[raw] = {
+                path: m["value"] for path, m in merged.items()}
 
     return CarryContext(step_fields=step_fields,
                         service_bindings=service_bindings,
