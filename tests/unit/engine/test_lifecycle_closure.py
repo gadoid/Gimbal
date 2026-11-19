@@ -22,7 +22,7 @@ from gimbal.core.hooks import HookRegistry
 from gimbal.core.runner import Configuration, Engine
 from gimbal.events.bus import InMemoryEventBus
 from gimbal.plugins import PluginRegistry
-from gimbal.schema import Call, Config as SC, Meta, Scenario, Step
+from gimbal.schema import Call, Config as SC, Meta, Scenario, Setup, Step
 from gimbal.strategy.dispatcher import build_default_dispatcher
 
 
@@ -84,3 +84,32 @@ def test_preprocessor_failure_still_closes_scenario_lifecycle() -> None:
     # 场景有归档且 status=error
     ctx = archive.get_scenario("lc-prep")
     assert ctx is not None and ctx.status == "error"
+
+
+def test_lifecycle_entries_get_real_step_context_and_finalize() -> None:
+    """CFG-01 回归钉(2026-11-20 审计):lifecycle 条目必须拿到真实
+    StepContext 并走 finalize_step 归档 —— 此前 derive_step_context
+    漏传 resolved_vars 致 TypeError 被吞(恒 _NullView)、finalize 又因
+    StepStatus 误导入 ImportError 被吞(归档永不发生)。两条接缝都以
+    「step 出现在归档且状态正确」为判据:任一断裂本用例即红。
+    """
+    engine, archive, _bus = _engine()
+    scenario = _scenario("lc-ctx")
+    scenario.config.setup = [
+        Setup(key="warm", kind="sleep", params={"seconds": 0})]
+    scenario.config.teardown = [
+        Setup(key="cool", kind="sleep", params={"seconds": 0})]
+    engine.run(scenario)
+
+    for step_id, expected in (("setup:sleep:warm", "passed"),
+                              ("teardown:sleep:cool", "passed")):
+        step_ctx = archive.get_step(step_id, scenario_id="lc-ctx")
+        assert step_ctx is not None, (
+            f"lifecycle 条目 {step_id} 未归档 —— 上下文创建/finalize 接缝断裂")
+        status = getattr(step_ctx.outcome, "status", None)
+        assert getattr(status, "value", status) == expected
+    # 场景 step_refs 登记 lifecycle 条目(NullView 路径不会登记)
+    scenario_ctx = archive.get_scenario("lc-ctx")
+    refs = {r.step_id if hasattr(r, "step_id") else str(r)
+            for r in (scenario_ctx.step_refs or [])}
+    assert "setup:sleep:warm" in refs and "teardown:sleep:cool" in refs

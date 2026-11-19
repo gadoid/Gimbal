@@ -678,27 +678,42 @@ class ScenarioRunner:
         for entry in entries:
             step_id = f"{label}:{entry.kind}:{entry.key or '-'}"
             try:
+                # resolved_vars 与 _run_body 同约定(空集;变量经 channels 流动,
+                # spec 由预处理器展开)——此前漏传必填参致 TypeError 被吞,
+                # lifecycle 恒走 _NullView(2026-11-20 审计 CFG-01 修复)。
                 step_ctx = self._ctx_manager.derive_step_context(
                     scenario_ctx, step_id=step_id,
                     step_name=step_id, strategy_kind=entry.kind,
                     strategy_spec=dict(entry.params or {}),
+                    resolved_vars={},
                 )
             except Exception:  # noqa: BLE001 — 上下文设施缺失时退化为无 ctx 分派
+                logger.warning(
+                    "[ScenarioRunner] lifecycle 上下文创建失败,退化为无 ctx 分派: "
+                    "step_id={}", step_id, exc_info=True)
                 step_ctx = None
             spec = type("_LifecycleSpec", (), {
                 "kind": entry.kind, "name": step_id, "phase": None, "order": 0,
                 "enabled": True, "onFailure": FailurePolicy.ABORT, "tags": [],
                 **dict(entry.params or {}),
             })()
-            result = self._dispatcher.dispatch(spec, step_ctx.view if step_ctx else _NullView())
+            # CFG-01 第三断:StepContext 无 .view 属性 —— 正常步骤(:203)用
+            # StepContextAdapter 包装,lifecycle 同款(此前 step_ctx 恒 None
+            # 走 _NullView,该断点从未被执行到)。
+            result = self._dispatcher.dispatch(
+                spec, StepContextAdapter(step_ctx) if step_ctx else _NullView())
             if step_ctx is not None:
-                from gimbal.statemachine.states import StepStatus
+                # StepStatus 用模块顶 gimbal.context.step 的导入;此处曾从
+                # statemachine.states(只定义 StepState)误导入 → ImportError
+                # 被吞、finalize_step 永不执行(CFG-01 修复)。
                 try:
                     self._ctx_manager.finalize_step(
                         step_ctx,
                         StepStatus.PASSED if result.passed else StepStatus.FAILED)
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception:  # noqa: BLE001 — 归档失败不改变条目判定
+                    logger.warning(
+                        "[ScenarioRunner] lifecycle finalize_step 失败(归档缺失,"
+                        "判定不变): step_id={}", step_id, exc_info=True)
             if result.failed:
                 return StepRunResult(
                     step_id=step_id, status="failed",
