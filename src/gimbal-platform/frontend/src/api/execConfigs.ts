@@ -11,9 +11,12 @@
  */
 import http from '@/api/http'
 
-/** 按系统的子配置:bindings = {身份面(别名全名): 条目名} */
+/** 按系统的子配置:aliases = 本配置采用的调用身份条目名(声明侧;管理
+ *  范围语义 —— 圈定就绪度/拨测/凭证引导范围,执行链不消费 §8.10;
+ *  可选 = 存量行未圈定,前端按 bindings 声明键推导);bindings = {身份面: 条目名} */
 export interface SystemSubConfig {
   service: string
+  aliases?: string[]
   bindings: Record<string, string>
   /** null = 显式注入 JSON null(删键 = 不覆盖,走层序合成) */
   carryOverrides: Record<string, string | null>
@@ -23,12 +26,17 @@ export interface ExecConfigRow {
   id: number
   name: string
   isDefault: boolean
+  /** 配置级元信息(v7,列表识别用;执行链不消费) */
+  description?: string
+  tags?: string[]
   systems: SystemSubConfig[]
   scope?: 'user' | 'project'
 }
 
 export interface ExecConfigCreateInput {
   name: string
+  description?: string
+  tags?: string[]
   systems?: SystemSubConfig[]
   isDefault?: boolean
   /** ⑧ 组级批次:project scope(项目变体;与 projectId 成对)。
@@ -39,6 +47,9 @@ export interface ExecConfigCreateInput {
 
 export interface ExecConfigUpdateInput {
   name?: string
+  /** None/缺省 = 不改;"" / [] = 显式清空 */
+  description?: string
+  tags?: string[]
   systems?: SystemSubConfig[]
 }
 

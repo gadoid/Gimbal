@@ -208,6 +208,34 @@ async def test_summary_project_scope_and_gate(client: AsyncClient) -> None:
     assert r.status_code == 404, r.text
 
 
+async def test_summary_public_project_visible_to_all(client: AsyncClient) -> None:
+    """公共项目例外(2026-11-19 复核补,与 get_project/facets 同口径):
+    公共项目无成员行,非 Admin+ 普通用户也能读项目口径 summary ——
+    项目详情页头卡「运行成功率」对普通访客可见(此前恒 404 显「—」)。"""
+    from app.core.db import SessionLocal
+    from sqlalchemy import select as _sel
+
+    from app.models.project import Project
+
+    alice_auth = await _register_and_login(client, "alice", "alicepass123")
+    guest_auth = await _register_and_login(client, "guest", "guestpass123")
+    alice = await _uid("alice")
+    # 公共项目全库恰一行(conftest 种子;uq_projects_public_kind)
+    async with SessionLocal() as db:
+        pid = (await db.execute(_sel(Project.id).where(
+            Project.kind == "public"))).scalar_one()
+    now = datetime.utcnow()
+    await _insert_execution(owner_id=alice, project_id=pid, status="done",
+                            total_runs=4, passed=4, failed=0,
+                            created_at=now - timedelta(days=1))
+    # 非成员(亦非 Admin+)普通用户:公共项目 → 200
+    r = await client.get("/api/executions/summary",
+                         params={"projectId": pid}, headers=guest_auth)
+    assert r.status_code == 200, r.text
+    assert r.json()["totalExecutions"] == 1
+    assert abs(r.json()["passRate"] - 1.0) < 1e-6
+
+
 async def test_list_project_id_filter(client: AsyncClient) -> None:
     """列表 projectId 过滤:只回项目行(failedTotal 同口径)。"""
     alice_auth = await _register_and_login(client, "alice", "alicepass123")

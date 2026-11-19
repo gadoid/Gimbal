@@ -1,0 +1,621 @@
+<!DOCTYPE html><html class="h-full bg-slate-50" lang="zh-CN"><head><style>body {transition: opacity ease-in 0.2s; } 
+body[unresolved] {opacity: 0; display: block; overflow: hidden; position: relative; } 
+</style>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>场景执行环境套件配置 - 自动化编排平台</title>
+<!-- Tailwind CSS CDN with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#1e3a8a',
+            },
+            sidebar: '#0d1117',
+            sidebarActive: '#1f2937'
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+<!-- Phosphor Icons for Crisp UI Visuals -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/phosphor-icons/1.4.2/src/css/icons.min.css" rel="stylesheet">
+<style data-purpose="custom-scrollbars">
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+<style data-purpose="interactive-states">
+    .card-transition {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .badge-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+  </style>
+</head>
+<body class="h-full flex overflow-hidden text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900">
+<!-- BEGIN: LeftSidebar -->
+<!-- 左侧全局导航栏（保持原有暗黑主题与平台层级结构） -->
+<aside class="w-64 bg-[#090d16] text-slate-300 flex flex-col flex-shrink-0 z-20 border-r border-slate-800">
+<!-- 顶部平台标识 -->
+<div class="h-14 flex items-center justify-between px-4 border-b border-slate-800/80 bg-[#090d16]">
+<div class="flex items-center space-x-2.5">
+<div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+<i class="ph-cube-bold text-base"></i>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-semibold tracking-wide text-white leading-tight">platform</span>
+<span class="text-[10px] text-slate-400 font-mono">Mesh &amp; Test Engine</span>
+</div>
+</div>
+<button class="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" title="收起导航">
+<i class="ph-caret-left text-xs"></i>
+</button>
+</div>
+<!-- 导航菜单列表 -->
+<div class="flex-1 overflow-y-auto px-3 py-3 space-y-6 text-xs">
+<!-- 基础导航 -->
+<div class="space-y-1">
+<a class="flex items-center px-2.5 py-2 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100 transition-colors group" href="javascript:void(0)">
+<i class="ph-house mr-2.5 text-base group-hover:text-blue-400"></i>
+<span>工作台</span>
+</a>
+<a class="flex items-center px-2.5 py-2 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100 transition-colors group" href="javascript:void(0)">
+<i class="ph-bell mr-2.5 text-base group-hover:text-blue-400"></i>
+<span class="flex-1">通知中心</span>
+<span class="px-1.5 py-0.2 bg-blue-900/60 text-blue-300 rounded text-[10px]">3</span>
+</a>
+<!-- 高亮项：配置 (已升级为场景执行套件) -->
+<a class="flex items-center px-2.5 py-2 rounded-md bg-blue-600/15 border-l-2 border-blue-500 text-white font-medium shadow-sm transition-colors" href="javascript:void(0)">
+<i class="ph-sliders-horizontal mr-2.5 text-base text-blue-400"></i>
+<span class="flex-1">配置套件</span>
+<span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+</a>
+</div>
+<!-- 分组: 我的业务域 -->
+<div>
+<div class="px-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">我的</div>
+<div class="space-y-0.5">
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-star mr-2.5 text-sm"></i>
+<span>关注套件</span>
+</a>
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-browsers mr-2.5 text-sm"></i>
+<span>场景 (Scenarios)</span>
+</a>
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-stack mr-2.5 text-sm"></i>
+<span>场景集</span>
+</a>
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-key mr-2.5 text-sm"></i>
+<span>凭证管理</span>
+</a>
+</div>
+</div>
+<!-- 分组: 服务与适配 -->
+<div>
+<div class="px-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">服务 &amp; 适配</div>
+<div class="space-y-0.5">
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-squares-four mr-2.5 text-sm"></i>
+<span>服务画像 (Catalog)</span>
+</a>
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-git-diff mr-2.5 text-sm"></i>
+<span>变更适配</span>
+</a>
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-plug mr-2.5 text-sm"></i>
+<span>集成服务</span>
+</a>
+</div>
+</div>
+<!-- 分组: 执行引擎 -->
+<div>
+<div class="px-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">执行引擎</div>
+<div class="space-y-0.5">
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-play-circle mr-2.5 text-sm"></i>
+<span>执行器集群</span>
+</a>
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-tree-structure mr-2.5 text-sm"></i>
+<span>字段来源分析</span>
+</a>
+<a class="flex items-center px-2.5 py-1.5 rounded-md hover:bg-slate-800/60 text-slate-400 hover:text-slate-100" href="javascript:void(0)">
+<i class="ph-clock-counter-clockwise mr-2.5 text-sm"></i>
+<span>执行记录与回放</span>
+</a>
+</div>
+</div>
+</div>
+<!-- 底部管理员身份与快捷状态 -->
+<div class="p-3 border-t border-slate-800 bg-[#070a10]">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2 min-w-0">
+<div class="w-8 h-8 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-xs">
+            AD
+          </div>
+<div class="truncate">
+<div class="flex items-center space-x-1.5">
+<span class="text-xs font-medium text-slate-200 truncate">Administrator</span>
+<span class="px-1 py-0.2 bg-amber-400/20 text-amber-300 text-[9px] font-mono rounded">super_admin</span>
+</div>
+<p class="text-[10px] text-slate-500 truncate">uat-cluster-sg02</p>
+</div>
+</div>
+<button class="text-slate-400 hover:text-rose-400 p-1.5 rounded" title="退出登录">
+<i class="ph-sign-out text-sm"></i>
+</button>
+</div>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: MainContentWrapper -->
+<!-- 主操作区容器，包含顶部全局面包屑与两栏操作区 -->
+<div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-slate-100">
+<!-- BEGIN: TopBar -->
+<!-- 顶部导航与环境上下文选择 -->
+<header class="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between flex-shrink-0 z-10">
+<div class="flex items-center space-x-3 text-sm">
+<span class="text-slate-400">编排控制台</span>
+<i class="ph-caret-right text-slate-400 text-xs"></i>
+<span class="font-medium text-slate-700">场景执行配置套件 (Execution Profiles)</span>
+<span class="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200/70 text-xs rounded-full font-mono font-medium">14 套已就绪</span>
+</div>
+<!-- 右侧操作组：环境空间/全局操作 -->
+<div class="flex items-center space-x-3">
+<!-- 运行环境切换 -->
+<div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+<button class="px-3 py-1 bg-white shadow-xs rounded-md text-slate-800 font-medium border border-slate-200/50">UAT 联调</button>
+<button class="px-3 py-1 text-slate-600 hover:text-slate-900 font-normal">STG 预发</button>
+<button class="px-3 py-1 text-slate-600 hover:text-slate-900 font-normal">PROD-沙箱</button>
+</div>
+<div class="h-4 w-px bg-slate-200"></div>
+<button class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-xs">
+<i class="ph-git-fork mr-1.5 text-slate-500"></i>
+          版本对比
+        </button>
+<button class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors shadow-xs shadow-blue-500/20">
+<i class="ph-plus-bold mr-1.5"></i>
+          新建配置套件
+        </button>
+</div>
+</header>
+<!-- END: TopBar -->
+<!-- BEGIN: WorkspaceBody -->
+<!-- 主界面双栏分工：左侧套件检索与列表 / 右侧配置编排工作台 -->
+<div class="flex-1 flex overflow-hidden">
+<!-- 左侧：套件选择侧边栏 -->
+<div class="w-80 border-r border-slate-200 bg-white flex flex-col flex-shrink-0">
+<!-- 搜索与筛选 -->
+<div class="p-3 border-b border-slate-200 space-y-2">
+<div class="relative">
+<i class="ph-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+<input class="w-full pl-9 pr-3 py-1.5 text-xs rounded-md border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="搜索套件名称/业务链路..." type="text">
+</div>
+<div class="flex items-center justify-between text-[11px] text-slate-500 px-1">
+<span>活跃套件 (4)</span>
+<div class="flex space-x-2">
+<span class="hover:text-blue-600 cursor-pointer">最近更新</span>
+<span>·</span>
+<span class="hover:text-blue-600 cursor-pointer">按场景数</span>
+</div>
+</div>
+</div>
+<!-- 套件卡片列表 -->
+<div class="flex-1 overflow-y-auto divide-y divide-slate-100">
+<!-- 选中项 -->
+<div class="p-3.5 bg-blue-50/70 border-l-4 border-blue-600 cursor-pointer transition-colors relative">
+<div class="flex items-center justify-between mb-1">
+<span class="text-xs font-semibold text-slate-900 truncate">商户B端交易链路@UAT</span>
+<span class="text-[10px] bg-emerald-100 text-emerald-800 font-mono px-1.5 py-0.2 rounded font-medium">Active</span>
+</div>
+<p class="text-[11px] text-slate-500 line-clamp-2 mb-2 leading-relaxed">
+              核心支撑B端商户收款与清结算链路，含fin-service与pay-gateway的鉴权与字段映射。
+            </p>
+<div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+<span class="flex items-center text-slate-600">
+<i class="ph-stack mr-1 text-slate-400"></i> 3 个系统挂载
+              </span>
+<span class="text-slate-400">v1.4.2 · 已锁定</span>
+</div>
+</div>
+<!-- 普通项 1 -->
+<div class="p-3.5 hover:bg-slate-50 cursor-pointer transition-colors border-l-4 border-transparent">
+<div class="flex items-center justify-between mb-1">
+<span class="text-xs font-semibold text-slate-800 truncate">跨境聚合收单结算流@PRE</span>
+<span class="text-[10px] bg-slate-100 text-slate-600 font-mono px-1.5 py-0.2 rounded">Draft</span>
+</div>
+<p class="text-[11px] text-slate-500 line-clamp-1 mb-2">多币种路由及防洗钱合规风控系统透传链...</p>
+<div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+<span><i class="ph-stack mr-1"></i> 5 个系统挂载</span>
+<span class="text-slate-400">草稿未发布</span>
+</div>
+</div>
+<!-- 普通项 2 -->
+<div class="p-3.5 hover:bg-slate-50 cursor-pointer transition-colors border-l-4 border-transparent">
+<div class="flex items-center justify-between mb-1">
+<span class="text-xs font-semibold text-slate-800 truncate">会员积分抵扣链路@TEST</span>
+<span class="text-[10px] bg-emerald-100 text-emerald-800 font-mono px-1.5 py-0.2 rounded">Active</span>
+</div>
+<p class="text-[11px] text-slate-500 line-clamp-1 mb-2">营销中心、积分核心与CRM系统执行参数套件</p>
+<div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+<span><i class="ph-stack mr-1"></i> 2 个系统挂载</span>
+<span class="text-slate-400">v0.9.6 · 运行中</span>
+</div>
+</div>
+</div>
+<!-- 列表底部快速入口 -->
+<div class="p-3 border-t border-slate-200 bg-slate-50/60 text-xs flex justify-between items-center text-slate-500">
+<span>共收录 14 个套件</span>
+<button class="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center">
+<i class="ph-folder-simple mr-1"></i> 查看回收站
+          </button>
+</div>
+</div>
+<!-- 右侧：当前套件配置编排工作区 -->
+<main class="flex-1 flex flex-col overflow-hidden bg-slate-50">
+<!-- BEGIN: SuiteHeader -->
+<!-- 套件基础元数据横幅 -->
+<div class="bg-white border-b border-slate-200 p-5 shrink-0 shadow-xs">
+<div class="flex items-start justify-between">
+<div class="space-y-1.5 max-w-3xl">
+<div class="flex items-center space-x-3">
+<span class="px-2 py-0.5 bg-blue-100 text-blue-800 font-mono text-[11px] rounded font-semibold">PROFILE-UAT-9021</span>
+<h1 class="text-lg font-bold text-slate-900 tracking-tight flex items-center">
+                  商户B端交易链路@UAT自动化回归配置
+                  <i class="ph-pencil-simple ml-2 text-slate-400 hover:text-blue-600 cursor-pointer text-sm"></i>
+</h1>
+<span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-800 flex items-center">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> 生产就绪 (v1.4.2)
+                </span>
+</div>
+<p class="text-xs text-slate-500 leading-normal">
+                子配置按被测系统分组声明。包含被测服务条目解析、凭证令牌注入、Carry上下文层序合成以及测试商户虚拟账号池。
+              </p>
+</div>
+<!-- 场景生效快捷联动 -->
+<div class="flex items-center space-x-2"><span class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded text-xs font-medium flex items-center"><i class="ph-plugs-connected mr-1.5 text-slate-500"></i>独立环境配置资产</span><button class="px-3 py-1.5 border border-slate-300 rounded-md bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 flex items-center shadow-xs"><i class="ph-graph mr-1.5 text-slate-500"></i>架构拓扑</button></div>
+</div>
+<!-- 全局配置快捷属性栏 -->
+<div class="grid grid-cols-4 gap-4 mt-4 pt-3.5 border-t border-slate-100 text-xs">
+<div>
+<span class="text-slate-400 block text-[11px]">链路标识 (Biz Chain)</span>
+<span class="font-mono font-medium text-slate-700">trade.merchant.settlement.v2</span>
+</div>
+<div>
+<span class="text-slate-400 block text-[11px]">透传模式 (Carry Rule)</span>
+<span class="text-slate-700 font-medium">层序动态合成 (覆盖模式)</span>
+</div>
+<div>
+<span class="text-slate-400 block text-[11px]">最后维护者</span>
+<span class="text-slate-700">Administrator (2026-03-30 14:22)</span>
+</div>
+<div>
+<span class="text-slate-400 block text-[11px]">系统节点数</span>
+<span class="text-slate-700 font-medium">3 个微服务单元 (全部健康)</span>
+</div>
+</div>
+</div>
+<!-- END: SuiteHeader -->
+<!-- BEGIN: ConfigEditorArea -->
+<!-- 配置编排矩阵核心区 (滚动体) -->
+<div class="flex-1 overflow-y-auto p-6 space-y-5">
+<!-- 提示条：使用指南规范 -->
+<div class="bg-slate-800 text-slate-300 px-4 py-2.5 rounded-lg text-xs flex items-center justify-between border border-slate-700/80 shadow-inner">
+<div class="flex items-center space-x-2">
+<i class="ph-info text-blue-400 text-base"></i>
+<span><strong>编排机制说明：</strong> 绑定 = 声明条目 → 换用条目 (覆盖条目解析的配置层)；carry 覆盖 = 该系统带出的业务参数 (副行 = 不覆盖、按层序合成；值留空 = 注入空串)</span>
+</div>
+<a class="text-blue-400 hover:text-blue-300 text-[11px] underline" href="javascript:void(0)">配置字典文档</a>
+</div>
+<!-- 系统节点 1: fin-service -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden card-transition hover:border-slate-300">
+<!-- 节点头部卡片 -->
+<div class="bg-slate-50/80 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">1</span>
+<div>
+<div class="flex items-center space-x-2">
+<h3 class="text-sm font-bold text-slate-900">fin-service</h3>
+<span class="text-xs text-slate-500 font-normal">财务账单与清结算服务</span>
+<span class="px-2 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] rounded font-mono">200 OK · Cluster Active</span>
+</div>
+<p class="text-[11px] text-slate-400 font-mono mt-0.5">节点地址: uat-fin-01.internal.billing.net:8080</p>
+</div>
+</div>
+<!-- 右侧快捷控制 -->
+<div class="flex items-center space-x-2">
+<button class="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100" title="克隆该系统配置">
+<i class="ph-copy text-sm"></i>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100" title="展开/收起">
+<i class="ph-caret-up text-sm"></i>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50" title="移除该系统">
+<i class="ph-trash text-sm"></i>
+</button>
+</div>
+</div>
+<!-- 节点配置内部网格 (4大核心维度分栏收纳) -->
+<div class="p-5 space-y-4">
+<!-- 维度 1: 凭证与鉴权注入 (Credentials) -->
+<div class="rounded-lg bg-slate-50 border border-slate-200/80 p-3.5">
+<div class="flex items-center justify-between mb-2.5">
+<div class="flex items-center space-x-2">
+<i class="ph-shield-check text-blue-600 text-sm"></i>
+<span class="text-xs font-semibold text-slate-800">凭证与鉴权套件 (Credentials &amp; Security)</span>
+<span class="text-[10px] text-slate-400">已装配 2 套密钥凭证</span>
+</div>
+<button class="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center">
+<i class="ph-plus text-[10px] mr-1"></i> 关联凭证
+                  </button>
+</div>
+<div class="grid grid-cols-2 gap-3 text-xs">
+<div class="bg-white p-2.5 rounded border border-slate-200 flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-blue-500"></span>
+<span class="font-medium text-slate-800">商户B端专用RSA2048私钥</span>
+<span class="text-[10px] text-slate-400 font-mono">id: cred-sec-8841</span>
+</div>
+<span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">Payload Header</span>
+</div>
+<div class="bg-white p-2.5 rounded border border-slate-200 flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-purple-500"></span>
+<span class="font-medium text-slate-800">OAuth2.0 Token 自动刷新池</span>
+<span class="text-[10px] text-slate-400 font-mono">Bearer Dynamic</span>
+</div>
+<span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">Auto Refresh</span>
+</div>
+</div>
+</div>
+<!-- 维度 2: 字段绑定与条目覆写 (Field Binding) -->
+<div class="rounded-lg bg-slate-50 border border-slate-200/80 p-3.5">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-2">
+<i class="ph-swap text-indigo-600 text-sm"></i>
+<span class="text-xs font-semibold text-slate-800">字段映射与覆盖条目 (Field Overrides &amp; Binding)</span>
+<span class="text-[10px] text-slate-400">执行时动态从上游或指定变量池重写入参</span>
+</div>
+<button class="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center">
+<i class="ph-plus text-[10px] mr-1"></i> 添加绑定条目
+                  </button>
+</div>
+<!-- 绑定条目表 -->
+<div class="overflow-hidden border border-slate-200 rounded-md bg-white">
+<table class="w-full text-left text-xs">
+<thead class="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-medium">
+<tr>
+<th class="py-2 px-3 font-normal">声明目标条目 (Target Path)</th>
+<th class="py-2 px-3 font-normal w-6 text-center"></th>
+<th class="py-2 px-3 font-normal">解析/换用条目 (Binding Value / Expr)</th>
+<th class="py-2 px-3 font-normal w-32">解析层模式</th>
+<th class="py-2 px-3 font-normal w-12 text-right">操作</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 font-mono text-[11px]">
+<tr>
+<td class="py-2 px-3 text-slate-800">req.header.x-tenant-id</td>
+<td class="py-2 px-3 text-slate-400 text-center"><i class="ph-arrow-right"></i></td>
+<td class="py-2 px-3 text-blue-600">${global.tenant_current}</td>
+<td class="py-2 px-3 text-slate-500">动态变量解析</td>
+<td class="py-2 px-3 text-right">
+<button class="text-slate-400 hover:text-rose-600"><i class="ph-x"></i></button>
+</td>
+</tr>
+<tr>
+<td class="py-2 px-3 text-slate-800">req.body.merchant_order_no</td>
+<td class="py-2 px-3 text-slate-400 text-center"><i class="ph-arrow-right"></i></td>
+<td class="py-2 px-3 text-blue-600 font-mono">${pay-gateway.output.statement_no}</td>
+<td class="py-2 px-3 text-slate-500">链路前序输出绑定</td>
+<td class="py-2 px-3 text-right">
+<button class="text-slate-400 hover:text-rose-600"><i class="ph-x"></i></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- 维度 3 & 4: Carry透传参数与虚拟用户池并排 -->
+<div class="grid grid-cols-2 gap-4">
+<!-- Carry 字段管理 -->
+<div class="rounded-lg bg-slate-50 border border-slate-200/80 p-3.5 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-1.5">
+<i class="ph-arrow-square-out text-purple-600 text-sm"></i>
+<span class="text-xs font-semibold text-slate-800">Carry 上下文透传字段</span>
+</div>
+<button class="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center">
+<i class="ph-plus text-[10px] mr-1"></i> 添加 carry
+                      </button>
+</div>
+<div class="space-y-1.5">
+<div class="flex items-center space-x-2 bg-white px-2.5 py-1.5 rounded border border-slate-200 text-xs">
+<span class="font-mono text-slate-600 font-medium">carry_trace_id:</span>
+<input class="flex-1 text-xs border-0 p-0 text-slate-800 font-mono focus:ring-0" type="text" value="GEN_UUID_V4()">
+<span class="text-[10px] text-slate-400">注入空串</span>
+</div>
+<div class="flex items-center space-x-2 bg-white px-2.5 py-1.5 rounded border border-slate-200 text-xs">
+<span class="font-mono text-slate-600 font-medium">carry_sub_mch_type:</span>
+<input class="flex-1 text-xs border-0 p-0 text-slate-800 font-mono focus:ring-0" type="text" value="ENTERPRISE_PREMIUM">
+<span class="text-[10px] text-emerald-600 font-medium">按层序覆盖</span>
+</div>
+</div>
+</div>
+<div class="text-[10px] text-slate-400 mt-2">副行模式：不覆盖 / 留空则系统注入空字符串</div>
+</div>
+<!-- 虚拟用户/Mock商户池 -->
+<div class="rounded-lg bg-slate-50 border border-slate-200/80 p-3.5 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-1.5">
+<i class="ph-users text-amber-600 text-sm"></i>
+<span class="text-xs font-semibold text-slate-800">挂载测试账号池 (Mock Users)</span>
+</div>
+<button class="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center">
+<i class="ph-plus text-[10px] mr-1"></i> 添加账号
+                      </button>
+</div>
+<div class="flex flex-wrap gap-1.5">
+<span class="inline-flex items-center px-2 py-1 rounded bg-white border border-slate-200 text-xs font-mono text-slate-700">
+                        mch_882910_vip
+                        <button class="ml-1 text-slate-400 hover:text-rose-500"><i class="ph-x text-[10px]"></i></button>
+</span>
+<span class="inline-flex items-center px-2 py-1 rounded bg-white border border-slate-200 text-xs font-mono text-slate-700">
+                        mch_994102_sandbox
+                        <button class="ml-1 text-slate-400 hover:text-rose-500"><i class="ph-x text-[10px]"></i></button>
+</span>
+<span class="inline-flex items-center px-2 py-1 rounded bg-white border border-slate-200 text-xs font-mono text-slate-700">
+                        settle_auto_tester
+                        <button class="ml-1 text-slate-400 hover:text-rose-500"><i class="ph-x text-[10px]"></i></button>
+</span>
+</div>
+</div>
+<div class="text-[10px] text-slate-400 mt-2">多并发场景下将自动根据权重轮询选用测试账户</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 系统节点 2: pay-core -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden card-transition hover:border-slate-300">
+<!-- 节点头部卡片 -->
+<div class="bg-slate-50/80 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">2</span>
+<div>
+<div class="flex items-center space-x-2">
+<h3 class="text-sm font-bold text-slate-900">pay-core</h3>
+<span class="text-xs text-slate-500 font-normal">聚合支付核心引擎</span>
+<span class="px-2 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] rounded font-mono">200 OK · Cluster Active</span>
+</div>
+<p class="text-[11px] text-slate-400 font-mono mt-0.5">节点地址: uat-pay-cluster-node2.internal:9001</p>
+</div>
+</div>
+<!-- 右侧快捷控制 -->
+<div class="flex items-center space-x-2">
+<button class="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100" title="克隆该系统配置">
+<i class="ph-copy text-sm"></i>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100" title="展开/收起">
+<i class="ph-caret-up text-sm"></i>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50" title="移除该系统">
+<i class="ph-trash text-sm"></i>
+</button>
+</div>
+</div>
+<!-- 紧凑收起预览 -->
+<div class="px-5 py-3 text-xs text-slate-600 flex items-center justify-between bg-white">
+<div class="flex items-center space-x-4">
+<span class="flex items-center"><i class="ph-shield-check text-blue-500 mr-1.5"></i> 1 凭证组 (网关双向TLS)</span>
+<span class="flex items-center"><i class="ph-swap text-indigo-500 mr-1.5"></i> 4 字段绑定条目</span>
+<span class="flex items-center"><i class="ph-arrow-square-out text-purple-500 mr-1.5"></i> 2 Carry参数</span>
+</div>
+<button class="text-blue-600 hover:text-blue-800 text-xs font-medium">展开详细编排</button>
+</div>
+</div>
+<!-- 系统节点 3: user-auth (鉴权中心) -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden card-transition hover:border-slate-300">
+<!-- 节点头部卡片 -->
+<div class="bg-slate-50/80 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+<div class="flex items-center space-x-3">
+<span class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">3</span>
+<div>
+<div class="flex items-center space-x-2">
+<h3 class="text-sm font-bold text-slate-900">user-auth</h3>
+<span class="text-xs text-slate-500 font-normal">统一商户鉴权与权限中心</span>
+<span class="px-2 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] rounded font-mono">200 OK · Cluster Active</span>
+</div>
+<p class="text-[11px] text-slate-400 font-mono mt-0.5">节点地址: uat-iam-auth.internal:443</p>
+</div>
+</div>
+<!-- 右侧快捷控制 -->
+<div class="flex items-center space-x-2">
+<button class="p-1.5 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100" title="克隆该系统配置">
+<i class="ph-copy text-sm"></i>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100" title="展开/收起">
+<i class="ph-caret-up text-sm"></i>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50" title="移除该系统">
+<i class="ph-trash text-sm"></i>
+</button>
+</div>
+</div>
+<!-- 紧凑收起预览 -->
+<div class="px-5 py-3 text-xs text-slate-600 flex items-center justify-between bg-white">
+<div class="flex items-center space-x-4">
+<span class="flex items-center"><i class="ph-shield-check text-blue-500 mr-1.5"></i> JWT Session Pool</span>
+<span class="flex items-center"><i class="ph-swap text-indigo-500 mr-1.5"></i> 1 字段绑定条目</span>
+<span class="flex items-center"><i class="ph-users text-amber-500 mr-1.5"></i> 10 预设超级租户</span>
+</div>
+<button class="text-blue-600 hover:text-blue-800 text-xs font-medium">展开详细编排</button>
+</div>
+</div>
+<!-- 添加新系统节点按钮卡片 (替代原先单调的小按钮) -->
+<div class="border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center justify-center bg-white/50 hover:bg-white hover:border-blue-400 transition-colors cursor-pointer group py-6">
+<div class="w-10 h-10 rounded-full bg-blue-50 group-hover:bg-blue-100 text-blue-600 flex items-center justify-center mb-2">
+<i class="ph-plus-bold text-lg"></i>
+</div>
+<span class="text-xs font-semibold text-slate-700 group-hover:text-blue-600">追加被测微服务节点 (Add System Matrix)</span>
+<span class="text-[11px] text-slate-400 mt-0.5">从服务注册中心选择服务如 settle-gateway, risk-radar...</span>
+</div>
+</div>
+<!-- END: ConfigEditorArea -->
+<!-- BEGIN: MountPanelFooter -->
+<!-- 底部一键装载到场景 (Mount to Scenarios) & 状态栏操作 -->
+<footer class="bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 shadow-lg">
+<!-- 快捷挂载状态指示 -->
+<div class="flex items-center space-x-2 text-xs text-slate-500"><i class="ph-info text-blue-500 text-sm"></i><span>提示：配置套件作为独立资产管理，保存发布后可在各测试场景编排中直接按需引用。</span></div>
+<!-- 右侧操作提交按钮 -->
+<div class="flex items-center space-x-3">
+<button class="px-3.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 transition-colors flex items-center">
+<i class="ph-lightning mr-1.5"></i>
+              测试全链路联通性 (Ping All)
+            </button>
+<button class="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors">
+              另存为模板
+            </button>
+<button class="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors flex items-center">
+<i class="ph-check mr-1.5"></i>
+              保存并发布新版本 (v1.4.3)
+            </button>
+</div>
+</footer>
+<!-- END: MountPanelFooter -->
+</main>
+</div>
+<!-- END: WorkspaceBody -->
+</div>
+<!-- END: MainContentWrapper -->
+
+
+<yd-floating-ball id="yd-floating-ball-host" class="notranslate" translate="no" style="border: 0px !important; display: block !important; height: 0px !important; inset: auto !important; margin: 0px !important; opacity: 1 !important; overflow: visible !important; padding: 0px !important; pointer-events: auto !important; position: fixed !important; transform: none !important; visibility: visible !important; width: 0px !important; z-index: 2147483647 !important;"></yd-floating-ball><yd-mg-icon id="yd-mg-icon-host" style="position: fixed; z-index: 2147483647;"></yd-mg-icon><yd-mg-block-icon id="yd-mg-block-icon-host" class="notranslate" translate="no"></yd-mg-block-icon><yd-image-ocr id="yd-image-ocr-host" style="z-index: 2147483647;"></yd-image-ocr><yd-mg-huaci id="yd-mg-huaci-host" class="notranslate" translate="no" style="position: fixed; z-index: 2147483647;"></yd-mg-huaci></body></html>

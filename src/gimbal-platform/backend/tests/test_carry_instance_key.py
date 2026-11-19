@@ -292,7 +292,9 @@ def test_migration_0063_drops_system_rows_keeps_service_rows():
 
     with temp_schema() as (_schema, sync_url):
         _upgrade_to(sync_url, "0062_executions_project_id_index")
-        eng_sql = f"postgresql+psycopg2://{sync_url.split('://', 1)[1]}"
+        # temp_schema 的 sync_url 已是 postgresql+psycopg(v3)同步 URL
+        # —— 仓库依赖无 psycopg2,勿改写驱动名
+        eng_sql = sync_url
         from sqlalchemy import create_engine
 
         eng = create_engine(eng_sql)

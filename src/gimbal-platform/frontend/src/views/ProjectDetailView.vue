@@ -275,13 +275,16 @@
         :project-id="project.id"
         :can-manage="!!project.canManage"
       />
+      <!-- 内容区与 visibleTabs 同门(A-1:导航层过滤挡不住 ?tab= 直达,
+           无权挂载只会收到 403/404 假空态) -->
       <ProjectMembersPanel
-        v-else-if="tab === 'members' && project"
+        v-else-if="tab === 'members' && project && project.canManage"
         :project="project"
         @changed="refreshDetail"
       />
       <ProjectTokensPanel
-        v-else-if="tab === 'tokens' && project"
+        v-else-if="tab === 'tokens' && project
+          && project.myRole === 'admin' && !isPublic"
         :project="project"
         :can-manage="project.myRole === 'admin'"
       />
@@ -303,7 +306,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProject, deleteProject, type ProjectOut } from '@/api/projects'
 import { getExecutionsSummary } from '@/api/executions'
@@ -486,6 +489,8 @@ watch(suiteQ, () => {
   clearTimeout(suiteQTimer)
   suiteQTimer = setTimeout(() => void loadSuites(1), 300)
 })
+// 离开页面 300ms 内的输入不再触发已卸载组件的加载
+onBeforeUnmount(() => clearTimeout(suiteQTimer))
 watch(suiteMode, () => void loadSuites(1))
 watch(suitePageSize, () => void loadSuites(1))
 

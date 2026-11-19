@@ -177,6 +177,27 @@ describe('ServiceAdmin — 指标条与差异横幅', () => {
     w.unmount()
   })
 
+  it('plate 不可达:不把「暂时失联」呈现成漂移/目录缺席(回归钉)', async () => {
+    // 不可达时后端把全部 plate 行置 inCatalog=false —— 守卫前卡片会
+    // 显示「漂移」chip、「Plate(目录缺席)」,页签计数清零
+    setupBase({
+      plateReachable: false,
+      services: SERVICES.map((s) =>
+        s.kind === 'plate' ? { ...s, inCatalog: false } : s),
+    })
+    const w = await mountPage()
+    expect(w.get('[data-testid="sync-bar"]').text())
+      .toContain('plate 目录不可达')
+    // 漂移 chip 不出(对账暂停,不给结论)
+    expect(w.find('[data-testid="mx-drift-fin-service"]').exists()).toBe(false)
+    // 接入态 = 「同步状态未知」弱态,不冒充「目录缺席」
+    expect(w.get('[data-testid="mx-row-fin-service"]').text())
+      .toContain('Plate · 同步状态未知')
+    // 「Plate 已同步」页签计数不因失联清零
+    expect(w.get('[data-testid="metric-services"]').text()).toContain('3')
+    w.unmount()
+  })
+
   it('全局「导入 Plate 服务定义」→ importCatalog([]);plate 不可达时禁用', async () => {
     vi.spyOn(svcApi, 'importCatalog').mockResolvedValue({
       created: ['order-service'], skipped: [], unregistered: [], plateReachable: true,
@@ -386,6 +407,32 @@ describe('ServiceAdmin — 配置管理抽屉', () => {
     expect(svcApi.putInstance).toHaveBeenCalledWith('fin', 1, {
       loginUrl: 'http://fin/auth2', line: '2.0', note: '新说明',
     })
+    w.unmount()
+  })
+
+  it('条目卡凭据就绪(§8.3 口径):跨标签唯一默认账户命中,不误报缺账户', async () => {
+    // fin-service.admin 改挂 env 1(default ref),唯一默认账户 102 在
+    // env 2 —— 后端 _pick_one 语义:同标签无 → system 内唯一默认回落
+    // 命中(0059 默认按 (池, system) 唯一,跨标签共用是正常形态)。
+    // 旧实现按「条目 env == 账户 env」严判,此布景会误报「缺账户」。
+    const shifted = ALIASES.map((a) => a.aliasName === 'fin-service.admin'
+      ? { ...a, envId: 1 } : a)
+    vi.mocked(aliasApi.listAliases).mockImplementation((params?: {
+      base?: string; q?: string; page?: number; page_size?: number
+    }) => {
+      const base = params?.base
+      const items = base ? shifted.filter((a) => a.baseService === base) : shifted
+      return Promise.resolve({
+        items, total: items.length, page: 1, pageSize: params?.page_size ?? 100,
+      })
+    })
+    const w = await mountPage()
+    await openDrawer(w, 'fin-service', 1)
+    expect(w.get('[data-testid="face-card-fin-service.admin"]').text())
+      .toContain('鉴权有效')
+    // 同标签命中不受影响(username ref,账户 101 在 env 1)
+    expect(w.get('[data-testid="face-card-fin-service.merchant-b"]').text())
+      .toContain('鉴权有效')
     w.unmount()
   })
 
@@ -621,15 +668,51 @@ describe('ServiceAdmin — 环境管理', () => {
       1, { name: '测试二', description: '', lines: {} })
     w.unmount()
   })
+
+  it('环境表单取打开时快照:表单开着切聚焦,保存不误写其它环境(回归钉)', async () => {
+    vi.spyOn(envApi, 'updateEnvironment').mockResolvedValue({
+      ...ENVS[0], name: '测试二', description: '', lines: {},
+    })
+    const w = await mountPage()
+    await w.get('[data-testid="dep-env-select"]').setValue('1')
+    await flushPromises()
+    await w.get('[data-testid="dep-env-edit"]').trigger('click')
+    // 表单打开期间切聚焦到 env 2 —— 旧实现保存取「保存时聚焦」会改名
+    // env 2 并按 env 1 的行覆写其版本线;快照口径仍写 env 1
+    await w.get('[data-testid="dep-env-select"]').setValue('2')
+    await flushPromises()
+    await w.get('[data-testid="dep-env-name"]').setValue('测试二')
+    await w.get('[data-testid="dep-env-save"]').trigger('click')
+    await flushPromises()
+    expect(envApi.updateEnvironment).toHaveBeenCalledWith(
+      1, { name: '测试二', description: '', lines: {} })
+    w.unmount()
+  })
+
+  it('删除环境两步确认随聚焦复位:装配后切聚焦,确认钮撤下', async () => {
+    vi.spyOn(envApi, 'deleteEnvironment').mockResolvedValue(undefined)
+    const w = await mountPage()
+    await w.get('[data-testid="dep-env-select"]').setValue('1')
+    await flushPromises()
+    await w.get('[data-testid="dep-env-del"]').trigger('click')
+    expect(w.find('[data-testid="dep-env-del-ok"]').exists()).toBe(true)
+    // 切聚焦 → armed 复位(确认的对象已不是装配时的环境)
+    await w.get('[data-testid="dep-env-select"]').setValue('2')
+    await flushPromises()
+    expect(w.find('[data-testid="dep-env-del-ok"]').exists()).toBe(false)
+    expect(envApi.deleteEnvironment).not.toHaveBeenCalled()
+    w.unmount()
+  })
 })
 
 // ══ 实例改标签 / 移除实例(环境降级交互补齐)════════════════════
 describe('ServiceAdmin — 实例标签交互', () => {
   it('实例标签:双击标签框多选标签 → 整组提交;冲突 409 上屏', async () => {
-    const moved = { system: 'fin', envId: 1, envName: '测试',
-      groupId: 'g-fin-1', tags: ['测试', '预发'],
-      loginUrl: 'http://fin/auth', line: '1.0', note: '联调用', updatedAt: null }
+    const moved = { system: 'fin', envId: 2, envName: '预发',
+      groupId: 'g-fin-2', tags: ['预发'],
+      loginUrl: 'http://fin/auth2', line: '2.0', note: '搬移后', updatedAt: null }
     vi.spyOn(svcApi, 'putInstanceTags').mockResolvedValue(moved)
+    vi.spyOn(svcApi, 'putInstance').mockResolvedValue(moved)
     const w = await mountPage()
     await openDrawer(w, 'fin-service', 1)
     // 无独立「改标签」按钮:双击选框打开
@@ -641,6 +724,16 @@ describe('ServiceAdmin — 实例标签交互', () => {
     expect(svcApi.putInstanceTags).toHaveBeenCalledWith(
       'fin', 1, ['测试', '预发'])
     expect(w.get('[data-testid="cfg-drawer"]').text()).toContain('预发')
+    // 搬移后表单坐标跟移:后续「保存配置变更」写**新** env(回归钉 ——
+    // 旧实现 instForm 仍持 env 1,PUT 会重建刚删的旧标签行)
+    await w.get('[data-testid="inst-form-url"]').setValue('http://fin/auth2')
+    await w.get('[data-testid="cfg-save"]').trigger('click')
+    await flushPromises()
+    expect(svcApi.putInstance).toHaveBeenCalledWith('fin', 2, {
+      loginUrl: 'http://fin/auth2', line: '2.0', note: '搬移后',
+    })
+    expect(svcApi.putInstance).not.toHaveBeenCalledWith('fin', 1,
+      expect.anything())
     w.unmount()
 
     // 目标标签被别的实例组占用:后端 409 → 抽屉错误条
@@ -658,7 +751,7 @@ describe('ServiceAdmin — 实例标签交互', () => {
     w2.unmount()
   })
 
-  it('移除实例:两步确认 → DELETE 实例行(不动地址/条目)', async () => {
+  it('移除实例:两步确认 → DELETE 实例行并关抽屉(防陈旧坐标重建)', async () => {
     vi.spyOn(svcApi, 'deleteInstance').mockResolvedValue(undefined)
     const w = await mountPage()
     await openDrawer(w, 'fin-service', 1)
@@ -667,6 +760,8 @@ describe('ServiceAdmin — 实例标签交互', () => {
     await w.get('[data-testid="cfg-inst-del-ok"]').trigger('click')
     await flushPromises()
     expect(svcApi.deleteInstance).toHaveBeenCalledWith('fin', 1)
+    // 抽屉主体已删 → 关闭(停留会让任一 upsert 保存钮静默重建该行)
+    expect(w.find('[data-testid="cfg-drawer"]').exists()).toBe(false)
     w.unmount()
   })
 })

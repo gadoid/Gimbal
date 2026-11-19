@@ -183,6 +183,30 @@ async def test_load_choice_flatten_and_isolation(client, fresh_db):
         assert await load_choice(s, b, None) is None
 
 
+# ── ②·5 §8.10:aliases(圈定调用身份)管理范围语义 —— 不进摊平 ──────
+
+async def test_aliases_not_flattened_into_choice(client, fresh_db):
+    """§8.10:aliases 只圈定配置页就绪度/拨测/凭证引导范围,执行链零消费
+    —— _flatten 只取 bindings/carryOverrides,ExecConfigChoice 无该位。"""
+    await register_and_login(client, "ec_al", "pw123456")
+    uid = await _uid("ec_al")
+    async with db_module.SessionLocal() as s:
+        row = ExecConfig(
+            scope="user", scope_id=uid, name="圈定套", is_default=False,
+            payload={"systems": [{"service": _BASE, "aliases": [_ALIAS],
+                                  "bindings": {_ALIAS: "merchant-b"}}]})
+        s.add(row)
+        await s.commit()
+        cid = row.id
+
+    async with db_module.SessionLocal() as s:
+        ch = await load_choice(s, uid, cid)
+        assert ch is not None and ch.explicit
+        # 摊平值对象无 aliases 位;bindings 照常
+        assert not hasattr(ch, "aliases")
+        assert ch.bindings == {_ALIAS: "merchant-b"}
+
+
 # ── ③ 决策 9:carry 覆盖的区规则 ───────────────────────────────────
 
 async def test_carry_overrides_zone_rule(client, fresh_db):

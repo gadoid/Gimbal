@@ -44,6 +44,32 @@ async def test_list_initially_empty(client) -> None:
     assert r.json()["items"] == []
 
 
+async def test_list_q_matches_identity_alias(client) -> None:
+    """q 第三命中面(2026-11-19):**身份条目名** —— 缺凭证角标
+    (FunctionCard)与导入对话框的修复深链发的是条目名,账户化后
+    条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。
+    命中口径 = 条目名 → base 服务 → 该系统的本人账户。"""
+    auth = await register_and_login(client)
+    uid = (await client.get("/api/auth/me", headers=auth)).json()["user"]["id"]
+    factory = db_module.SessionLocal
+    async with factory() as db:
+        await seed_identity_fixture(
+            db, alias="fin-service.qa9", username="alice", password="pw123456",
+            service="fin-service", owner_id=uid)
+    # 条目名(全名/子串)经 条目→base→system 命中
+    body = (await client.get("/api/auths", headers=auth,
+                             params={"q": "fin-service.qa9"})).json()
+    assert body["total"] == 1
+    assert body["items"][0]["username"] == "alice"
+    # 原 username / system 两路命中不受影响;无命中仍空
+    assert (await client.get("/api/auths", headers=auth,
+                             params={"q": "alice"})).json()["total"] == 1
+    assert (await client.get("/api/auths", headers=auth,
+                             params={"q": "fin-service"})).json()["total"] == 1
+    assert (await client.get("/api/auths", headers=auth,
+                             params={"q": "nope"})).json()["total"] == 0
+
+
 async def test_create_requires_known_environment(client) -> None:
     """env 必填收紧(§1.4):环境不存在 → 404 code=environment_not_found。"""
     auth = await register_and_login(client)

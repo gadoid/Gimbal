@@ -162,11 +162,20 @@ async def list_promotions(
     status: Annotated[str | None, _Q(pattern="^(pending|approved|rejected|"
                                               "withdrawn)$")] = None,
 ) -> dict:
-    """项目管理员(∨ Admin+)见全部;成员见自己的申请。"""
-    await require_member(db, project_id, user.id)
+    """项目管理员(∨ Admin+)见全部;成员见自己的申请。Admin+ 非成员
+    亦可见全部(2026-11-19 复核补 —— 与下方 sees_all/裁决门
+    require_project_admin 同口径;此前 require_member 对其 404,页面
+    渲染了裁决按钮却拉不到列表)。"""
+    from ._ownership import has_capability
+
+    try:
+        await require_member(db, project_id, user.id)
+    except PromotionError as e:
+        # 仅放行「非成员 404 × Admin+」;公共项目 422 等其余原样
+        if e.status_code != 404 or not has_capability(user, "ops.write"):
+            raise
     stmt = select(ProjectPromotion).where(
         ProjectPromotion.project_id == project_id)
-    from ._ownership import has_capability
 
     sees_all = has_capability(user, "ops.write") or user.id in \
         await project_admin_ids(db, project_id)

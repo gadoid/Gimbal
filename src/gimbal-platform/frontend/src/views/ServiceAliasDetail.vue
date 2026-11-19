@@ -58,7 +58,7 @@
           :class="row!.refMode === 'default' ? 'green' : 'blue'"
           data-testid="ref-mode-badge"
           :title="row!.refMode === 'default'
-            ? '取 (执行者池, system, env) 的默认账户(is_default)'
+            ? '取执行者池内该 system 的默认账户(0059 起按 (池, 系统) 唯一)'
             : '取同坐标下指定用户名的账户'"
         >{{ row!.refMode === 'default' ? 'ref 默认' : `ref 用户名·${row!.refUsername ?? '?'}` }}</span>
         <span class="flex-1" />
@@ -133,7 +133,7 @@
                 <tr v-if="isAliasMode"><th>账户装载</th>
                     <td data-testid="ref-line">
                       <template v-if="row!.refMode === 'default'">
-                        ref 默认 — 取 (执行者池, {{ systemOf ?? '?' }}, {{ row!.envId ? envNameOf(row!.envId) : '?' }}) 的默认账户
+                        ref 默认 — 取执行者池内系统 {{ systemOf ?? '?' }} 的默认账户(按系统唯一,跨环境共用)
                       </template>
                       <template v-else>
                         ref 用户名 — 取 username = <code class="mono">{{ row!.refUsername || '?' }}</code> 的账户
@@ -280,7 +280,7 @@
                   <td>
                     <span
                       v-if="a.refMode === 'default'" class="svc-flag green"
-                      title="取 (执行者池, system, env) 的默认账户(is_default)"
+                      title="取执行者池内该 system 的默认账户(0059 起按 (池, 系统) 唯一)"
                     >默认账户</span>
                     <span
                       v-else class="mono"
@@ -460,11 +460,23 @@ const pageSubtitle = computed(() =>
     ? `绑定键 = 条目名;运行时解析:精确命中本条目 → ${baseService.value} 服务级默认 → 全局默认 → 无行 = 不注入`
     : '绑定键 = 服务名(服务级默认层);运行时解析:精确命中本服务 → 全局默认 → 无行 = 不注入')
 
-const activeTab = ref(
-  route.query.tab === 'credential' ? 'credential'
-  : route.query.tab === 'faces' ? 'faces'
-  // fields tab 按能力收起:无 ops.write 的深链回落概览,不落空 tab
-  : route.query.tab === 'fields' && auth.can('ops.write') ? 'fields' : 'overview')
+/** query.tab → tab 值(fields 按能力收起:无 ops.write 的深链回落概览) */
+function tabFromQuery(): string {
+  const t = String(route.query.tab ?? '')
+  if (t === 'credential') return 'credential'
+  if (t === 'faces') return 'faces'
+  if (t === 'fields' && auth.can('ops.write')) return 'fields'
+  return 'overview'
+}
+
+/** credential tab 只在条目模式有内容(v-if=isAliasMode)—— 键切到
+ *  服务模式(浏览器返回等)时停在 credential 会整屏空白 */
+function tabValidForMode(t: string): boolean {
+  return t !== 'credential' || isAliasMode.value
+}
+
+const activeTab = ref(tabFromQuery())
+if (!tabValidForMode(activeTab.value)) activeTab.value = 'overview'
 
 // ── 服务说明(主档 description;子页是说明的自然编辑位)──────────
 const svcDesc = ref('')
@@ -692,6 +704,13 @@ onMounted(async () => {
 
 // 键变化(同页在 条目行详情 ↔ 服务模式 之间跳)→ 旁路面重置
 watch(key, () => { void loadServiceSides() })
+// query.tab 深链在同组件内变化也生效,且按当前键模式兜底(收尾 5a:
+// 此前仅在 mount 求值一次 —— 键切回服务模式后 activeTab 停在
+// credential,其内容 v-if=isAliasMode → 整屏空白无兜底)
+watch([key, () => route.query.tab], () => {
+  const t = tabFromQuery()
+  activeTab.value = tabValidForMode(t) ? t : 'overview'
+})
 // 首次切到身份条目 tab 且未加载过 → 取数
 watch(activeTab, (v) => {
   if (v === 'faces' && !isAliasMode.value && !faces.loaded) void loadFaces()

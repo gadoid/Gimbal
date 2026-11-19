@@ -10,13 +10,14 @@ Endpoints(前缀 ``/projects/{project_id}/credentials``):
 - POST                新建 —— 项目管理员(``_manage_gate``);(system,
                       env, username) 唯一;密码 ≥6 位(r6 掩码阈值)
 - PATCH  /{cid}       修改 —— 同上;一处改密处处生效(条目 ref 共享)
-- POST   /{cid}/default  同 (system, env) 原子换默认 —— 同上
+- POST   /{cid}/default  同 system 原子换默认(0059 起默认按
+  (池, system) 唯一,清旧默认不看 env)—— 同上
 - DELETE /{cid}       删除 —— 同上(依赖它的项目源实例下次执行暂停)
 - POST   /{cid}/test  拨测 —— 实例 login_url + 账户凭据(§4.3)
 
 公共项目:409 ``public_project_no_credentials``。明文唯一出口 = 拨测。
 登录地址(url)已上提实例(system_env_instances.login_url)—— 账户
-表单不再收,「改址须重录密码」防护随口径迁移至实例面(环境配置页
+表单不再收,「改址须重录密码」防护随口径迁移至实例面(服务注册页
 由 ops.write 治理)。写面审计 ``project.credential.write``;写后复活
 该项目凭证源暂停的集成实例。
 """
@@ -297,8 +298,9 @@ async def test_project_credential(
             SystemEnvInstance.env_id == a.env_id))).scalar()
     if not login_url:
         return TestResult(
-            ok=False, message="实例未配置登录口 —— 请在环境配置页为"
-            f"「{a.system} × 环境#{a.env_id}」维护登录地址后再拨测")
+            ok=False, message="实例未配置登录口 —— 请在服务注册页"
+            f"「{a.system} × 环境#{a.env_id}」的实例配置中维护登录地址"
+            "后再拨测")
     try:
         password = fernet_decrypt(a.password_enc)
     except ValueError as e:

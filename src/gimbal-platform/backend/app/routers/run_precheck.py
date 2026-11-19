@@ -524,12 +524,6 @@ async def precheck_hard_gate(
             "执行标签不可解析:场景用到身份条目,但 条目标签 > 项目默认"
             " > 平台默认 均未命中 —— 请为条目设置标签,或建/设项目或"
             "平台默认环境", {"aliases": sorted(set(folded))})
-    if cls["identity_missing"]:
-        raise PrecheckGateError(
-            GATE_IDENTITY_MISSING,
-            "以下身份条目未登记或已悬空,请先在服务注册页登记: "
-            + "、".join(cls["identity_missing"]),
-            {"aliases": cls["identity_missing"]})
     if cls["account_missing"]:
         _proj = cred_project_id is not None
         raise PrecheckGateError(

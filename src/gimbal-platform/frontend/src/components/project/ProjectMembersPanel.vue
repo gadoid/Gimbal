@@ -62,7 +62,11 @@
       <Button size="sm" data-testid="prj-add-open" @click="openAdd">+ 添加成员</Button>
     </div>
 
-    <div v-if="!members.length" class="empty-note">还没有成员。</div>
+    <div v-if="loadError" class="empty-note" data-testid="prj-mem-error">
+      成员列表加载失败:{{ loadError }}
+      <button type="button" class="svc-link" @click="reload">重试</button>
+    </div>
+    <div v-else-if="!members.length" class="empty-note">还没有成员。</div>
     <div v-else-if="!shownMembers.length" class="empty-note">没有匹配的成员 — 换个关键词或角色筛选。</div>
     <table v-else class="slib-table">
       <thead>
@@ -156,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import Papa from 'papaparse'
 import {
   listMembers, addMember, patchMember, removeMember,
@@ -228,16 +232,35 @@ function openAdd(): void {
   addOpen.value = true
 }
 
+/** 首载/刷新:失败显式呈现(此前裸 await → unhandled rejection +
+ *  「还没有成员」假空态,403/网络错与真空池不可区分) */
+const loadError = ref('')
+
 async function load(): Promise<void> {
-  members.value = await listMembers(props.project.id)
+  try {
+    members.value = await listMembers(props.project.id)
+    loadError.value = ''
+  } catch (e) {
+    loadError.value = String((e as Error)?.message ?? e)
+  }
+}
+
+async function reload(): Promise<void> {
+  await load()
+}
+
+/** CSV 公式注入防护:以 = + - @ 或制表符/回车开头的单元格前缀单引号
+ *  (Excel/Sheets 会把这类值当公式执行;姓名/用户名是用户可控串) */
+function csvSafe(v: string): string {
+  return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
 }
 
 /** 权限清单 CSV(A 级批次 2026-11-18):导出全量成员(不受前端角色/
  *  搜索筛选影响 —— 筛选是浏览态,清单是台账);BOM 头保 Excel 中文。 */
 function exportCsv(): void {
   const rows = members.value.map((m) => ({
-    姓名: m.displayName || m.username,
-    用户名: m.username,
+    姓名: csvSafe(m.displayName || m.username),
+    用户名: csvSafe(m.username),
     项目角色: projectRoleLabel(m.role) || m.role,
     场景数: m.scenarioCount ?? 0,
     用例集数: m.suiteCount ?? 0,
@@ -300,12 +323,17 @@ async function rm(m: ProjectMember): Promise<void> {
   }
 }
 
-onMounted(async () => {
+async function loadAll(): Promise<void> {
   await load()
   try {
     roster.value = (await getRoster()).items
   } catch { roster.value = [] }
-})
+}
+
+onMounted(loadAll)
+// 跨项目直达(同路由复用组件,如浏览器回退 /projects/1?tab=members →
+// /projects/2)→ 重载,不再展示上一项目的成员/名册
+watch(() => props.project.id, () => void loadAll())
 </script>
 
 <style scoped>

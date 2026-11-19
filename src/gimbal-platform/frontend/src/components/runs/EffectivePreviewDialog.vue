@@ -4,11 +4,12 @@
      透传上下文)。不含明文凭证(后端契约)。registry C2b:装载表口径自
      槽位切条目(行 = 条目名 → 池内账户行,bindingId = 账户 id)。 -->
 <template>
-  <div v-if="open" class="overlay" @click.self="$emit('close')">
-    <div class="dialog wide" data-testid="preview-dialog">
+  <div v-if="open" :class="inline ? 'inline-host' : 'overlay'"
+       @click.self="inline ? undefined : $emit('close')">
+    <div class="dialog wide" :class="{ inline }" data-testid="preview-dialog">
       <header class="d-head">
         <h3>生效预览</h3>
-        <button type="button" class="x" @click="$emit('close')">✕</button>
+        <button v-if="!inline" type="button" class="x" @click="$emit('close')">✕</button>
       </header>
 
       <div class="body">
@@ -122,7 +123,7 @@
 
       <footer class="d-foot">
         <button type="button" class="btn" data-testid="preview-rerun" :disabled="loading" @click="run">重新解析</button>
-        <button type="button" class="btn primary" @click="$emit('close')">关闭</button>
+        <button v-if="!inline" class="btn primary" @click="$emit('close')">关闭</button>
       </footer>
     </div>
   </div>
@@ -144,6 +145,8 @@ import {
 
 const props = defineProps<{
   open: boolean
+  /** 内嵌模式(执行配置页「生效预览」页签):去遮罩/关闭钮,贴页展示 */
+  inline?: boolean
   /** 固定场景(run 面板形态);缺省 = pickable(项目配置页形态) */
   scenarioId?: string
   scenarios?: Array<{ id: string; name: string }>
@@ -238,7 +241,10 @@ watch(() => props.scenarioId, (sid) => {
 
 <style scoped>
 .overlay { position: fixed; inset: 0; background: rgb(15 23 42 / 45%); display: flex; align-items: center; justify-content: center; z-index: 60; }
+/* 内嵌模式:不遮屏、不限高、无浮层阴影(页签内平铺) */
+.inline-host { display: block; }
 .dialog { background: var(--color-bg, #fff); border-radius: 0.625rem; width: min(35rem, calc(100vw - 2rem)); max-height: min(80vh, 45rem); display: flex; flex-direction: column; box-shadow: 0 20px 50px rgb(15 23 42 / 25%); }
+.dialog.inline { width: 100%; max-height: none; border: 1px solid var(--sl-line); box-shadow: none; }
 .dialog.wide { width: min(45rem, calc(100vw - 2rem)); }
 .d-head { display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.1rem; border-bottom: 1px solid var(--color-border-tertiary); }
 .d-head h3 { margin: 0; font-size: 1rem; }

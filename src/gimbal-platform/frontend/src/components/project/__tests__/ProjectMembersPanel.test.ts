@@ -79,6 +79,24 @@ describe('ProjectMembersPanel — 资产计数 + CSV 导出(A 级批次)', () =>
     w.unmount()
   })
 
+  it('CSV 公式注入防护:= + - @ 开头的姓名/用户名前缀单引号', async () => {
+    vi.spyOn(projectsApi, 'listMembers').mockResolvedValue([
+      { ...members[0]!, displayName: '=HYPERLINK("x")', username: 'alice' },
+      { ...members[1]!, displayName: '+SUM(1,1)', username: '-dash' },
+    ] as never)
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('[data-testid="prj-mem-export"]').trigger('click')
+    const content = vi.mocked(downloadFile).mock.calls[0]![1]
+    // 前缀单引号存在(papaparse 对含引号/逗号单元格再包一层 CSV 引号)
+    expect(content).toContain("'=HYPERLINK")
+    expect(content).toContain("'+SUM(1,1)")
+    expect(content).toContain("'-dash")
+    // 普通值不加前缀
+    expect(content).toContain(',alice,')
+    w.unmount()
+  })
+
   it('无成员时不渲染导出按钮', async () => {
     vi.spyOn(projectsApi, 'listMembers').mockResolvedValue([])
     const w = mountPanel()

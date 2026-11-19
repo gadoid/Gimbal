@@ -83,13 +83,16 @@ def _to_out(a: AuthAccount, *, login_url: str = "",
 async def _login_urls_of(
     session: AsyncSession, accounts: list[AuthAccount],
 ) -> dict[int, str]:
-    """账户行回显实例登录口((system, env) → login_url;缺席 = '')。"""
+    """账户行回显实例登录口((system, env) → login_url;缺席 = '')。
+    按账户涉及的 system 收窄查询(此前无 WHERE 全表扫,list 分页
+    每页都拉全部实例行)。"""
     pairs = {(a.system, a.env_id) for a in accounts}
     if not pairs:
         return {}
     rows = (await session.execute(
         select(SystemEnvInstance.system, SystemEnvInstance.env_id,
-               SystemEnvInstance.login_url))).all()
+               SystemEnvInstance.login_url).where(
+            SystemEnvInstance.system.in_({s for s, _ in pairs})))).all()
     by_pair = {(s, e): u for s, e, u in rows}
     return {a.id: by_pair.get((a.system, a.env_id), "") for a in accounts}
 
@@ -135,12 +138,23 @@ async def list_auths(
     """Page 信封 + 服务端过滤(M4,§6.3):``q``(username/system 子串;
     username 账户化后为明文,可检索)、``token_type`` 精确。双计数 =
     ref 条目数 + 条目聚合场景数(auth_references.account_ref_counts)。
+
+    ``q`` 第三命中面(2026-11-19):**身份条目名** —— 缺凭证角标
+    (FunctionCard)与导入对话框的修复深链发的是条目名,账户化后
+    条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。
+    命中口径 = 条目名所在系统的全部本人账户(哪条装载由条目 ref
+    决定,列表按系统呈现即修复引导)。
     """
     base = select(AuthAccount).where(AuthAccount.owner_id == user.id)
     if q:
+        from ..models.service_identity import ServiceIdentity
+
+        ident_systems = select(ServiceIdentity.base_service).where(
+            ServiceIdentity.alias_name.ilike(f"%{q}%")).scalar_subquery()
         base = base.where(or_(
             AuthAccount.username.ilike(f"%{q}%"),
             AuthAccount.system.ilike(f"%{q}%"),
+            AuthAccount.system.in_(ident_systems),
         ))
     if token_type:
         base = base.where(AuthAccount.token_type == token_type)
@@ -392,8 +406,9 @@ async def test_auth(
             SystemEnvInstance.env_id == a.env_id))).scalar()
     if not login_url:
         return TestResult(
-            ok=False, message="实例未配置登录口 —— 请在环境配置页为"
-            f"「{a.system} × 环境#{a.env_id}」维护登录地址后再拨测")
+            ok=False, message="实例未配置登录口 —— 请在服务注册页"
+            f"「{a.system} × 环境#{a.env_id}」的实例配置中维护登录地址"
+            "后再拨测")
     try:
         password = fernet_decrypt(a.password_enc)
     except ValueError as e:

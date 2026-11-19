@@ -4,7 +4,8 @@
      url/slot 已退役:登录地址在环境×系统实例(只读回显),装载关系在
      身份条目(ref 引用账户,反查可数)。浏览组织 = 按 system 分组、
      组内账户平铺(默认在前 → username);组级状态由分组头 3px 左缘
-     色带承载:红=有测败、琥珀=有 (system,env) 无默认、绿=健康;问题组
+     色带承载:红=有测败、琥珀=系统无默认账户(0059 起默认按系统唯一,
+     default 型条目取不到行)、绿=健康;问题组
      排前,「只看问题」一键滤出。取数单一链路(200 封顶),搜索(q 打
      username/system)/类型过滤下推服务端。创建/编辑(渐进披露)/删除
      (username 硬确认 + 引用预取内联警示)/测试弹框(共享
@@ -110,8 +111,8 @@
     </div>
 
     <!-- 按 system 分组的账户表格:账户行 = 管理主体(组内平铺,无容器层)。
-         (system, env) 无默认是取用隐患(default 型条目取不到行),聚合到
-         组头徽章计数 -->
+         0059 起默认按 (池, system) 唯一,组内无默认 = 该系统 default 型
+         条目取不到行(旧 (system,env) 聚合口径已随环境降级退役) -->
     <div v-if="sysGroups.length" class="lib-card auth-table" data-testid="auth-board">
       <table class="slib-table">
         <thead>
@@ -165,7 +166,7 @@
                     <span
                       v-if="row.isDefault" class="svc-chip is-default"
                       :data-testid="`default-chip-${row.id}`"
-                      title="default 型身份条目在该 (系统,环境) 的取用行">默认</span>
+                      title="default 型身份条目取用该系统的默认账户(0059 起按 (池, 系统) 唯一,跨环境共用)">默认</span>
                     <!-- 悬浮复制账号(原型 hover 才出现;触屏下也可点) -->
                     <button
                       type="button" class="copy-btn" title="复制 username"
@@ -194,7 +195,7 @@
                 <td>
                   <div class="tgt-env">{{ envName(row.envId) }}</div>
                   <div
-                    class="mono muted tgt-url" :title="row.loginUrl || '实例未配置登录地址(环境×系统实例页维护)'"
+                    class="mono muted tgt-url" :title="row.loginUrl || '实例未配置登录地址(服务注册页「实例配置」维护)'"
                   >{{ row.loginUrl || '— 实例未配置' }}</div>
                 </td>
                 <td>
@@ -280,7 +281,10 @@
 
     <div v-else-if="rowsLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
     <div v-else class="empty-cta" data-testid="auths-empty">
-      <p>暂无账户 — 按系统登记登录账号</p>
+      <!-- 区分「没搜到」与「真空池」:带检索条件时空态不伪装成无数据
+           (缺凭证深链 q= 条目名曾落到这里,看似「没有数据」) -->
+      <p v-if="hasActiveFilter">没有匹配的账户 — 换个关键词或清除筛选</p>
+      <p v-else>暂无账户 — 按系统登记登录账号</p>
       <Button variant="outline" size="sm" @click="openCreate()">+ 新增账户</Button>
     </div>
 
@@ -314,8 +318,10 @@
                 <FormLabel>环境<span class="required-dot">*</span></FormLabel>
                 <FormControl>
                   <!-- 原生 select(P1-8):jsdom 可测 + 键盘可达;Phase 2 页面
-                       重做时统一 ui/Select -->
-                  <select v-bind="componentField" class="native-select" data-testid="f-env">
+                       重做时统一 ui/Select。编辑态锁定(envId 是实体键第四位;
+                       patch 载荷本就不发 envId,不锁会被「已保存」静默丢弃) -->
+                  <select v-bind="componentField" class="native-select"
+                    :disabled="!!editingId" data-testid="f-env">
                     <option value="" disabled>选择环境</option>
                     <option v-for="e in envs" :key="e.id" :value="String(e.id)">
                       {{ e.name }}
@@ -617,6 +623,10 @@ async function reloadList(): Promise<void> {
     tokenTypeCounts.value = env.tokenTypeCounts ?? {}
     rows.value = env.items
     rowsTotal.value = env.total
+  } catch (e) {
+    // 防抖/保存后/删除后的刷新失败不再裸冒 unhandled rejection
+    // (列表停留旧数据时至少给出可见信号)
+    toast.error(`账户列表刷新失败:${(e as Error)?.message ?? e}`)
   } finally {
     rowsLoading.value = false
   }
@@ -642,6 +652,12 @@ const systemOptions = computed(() =>
 const filteredRows = computed(() => rows.value.filter((r) =>
   (systemFilter.value === 'all' || r.system === systemFilter.value)
   && (envFilter.value === 'all' || String(r.envId) === envFilter.value)))
+/** 空态区分:有检索/筛选条件时空 = 「没搜到」,不伪装成「没有数据」 */
+const hasActiveFilter = computed(() =>
+  searchQuery.value.trim() !== ''
+  || tokenTypeFilter.value !== 'all'
+  || systemFilter.value !== 'all'
+  || envFilter.value !== 'all')
 const bindCount = computed(() => filteredRows.value.length)
 
 // ── 按 system 分组的账户列表(账户是一等公民)────────────────────
@@ -883,7 +899,8 @@ function openCreate(system = '', envId = '') {
   createOpen.value = true
 }
 
-/** 置为 (system, env) 默认账户(default 型条目的取用行;后端原子清除旧默认)。 */
+/** 置为 system 默认账户(default 型条目的取用行;0059 起按
+ * (池, system) 唯一,后端原子清除旧默认)。 */
 async function makeDefault(row: AuthSession) {
   try {
     await apiSetDefault(row.id)

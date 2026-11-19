@@ -93,7 +93,9 @@ async def executions_summary(
 
     ``projectId``(项目详情 A 级批次,2026-11-18)= 项目维度聚合:
     行集 = executions.project_id 快照列(全员发起,跨 owner);门 =
-    项目成员 ∨ Admin+,非成员 404(不泄露存在性,与 get_project 同口径)。"""
+    项目成员 ∨ 公共项目 ∨ Admin+(公共项目例外与 get_project/facets
+    同口径 —— 项目详情页头卡对普通访客可见;2026-11-19 复核补),
+    非成员 404(不泄露存在性)。"""
     if project_id is not None:
         from ..models.project import Project, ProjectMember
 
@@ -105,7 +107,7 @@ async def executions_summary(
             my_role = (await session.execute(select(ProjectMember.role).where(
                 ProjectMember.project_id == project_id,
                 ProjectMember.user_id == user.id))).scalar_one_or_none()
-        if proj is None or (my_role is None
+        if proj is None or (my_role is None and proj.kind != "public"
                             and not has_capability(user, "ops.write")):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -15,6 +15,7 @@ async def test_exec_config_crud_roundtrip(client, fresh_db):
 
     systems = [{
         "service": "fin-service",
+        "aliases": ["fin-service.merchant-b", "fin-service.sit"],
         "bindings": {"fin-service.merchant-b": "merchant-b"},
         "carryOverrides": {"merchant.grade": "B", "flag.null": None},
     }]
@@ -26,6 +27,7 @@ async def test_exec_config_crud_roundtrip(client, fresh_db):
     row = r.json()
     assert row["name"] == "商户B视角" and row["isDefault"] is True
     assert "environmentId" not in row
+    # §8.10:aliases(圈定调用身份,管理范围)随 systems 持久化回读
     assert row["systems"] == systems
 
     cid = row["id"]
@@ -173,6 +175,122 @@ async def test_exec_config_copy(client, fresh_db):
     r = await client.post(f"/api/exec-configs/{src['id']}/copy", headers=u,
                           json={"name": "基线-变体"})
     assert r.status_code == 409
+
+
+async def test_exec_config_meta_description_tags(client, fresh_db):
+    """v7:说明/标签 = 配置级元信息(payload 顶层)。roundtrip / PATCH 合并不
+    丢元信息(回归钉)/ 显式清空 / 换行截断去重 / copy 携带 / 约束 422。"""
+    await register_and_login(client, "cfgmeta", "pw123456")
+    u = await register_and_login(client, "cfgmeta", "pw123456")
+
+    row = (await client.post("/api/exec-configs", headers=u, json={
+        "name": "元信息套",
+        "description": "商户B端回归主配置",
+        "tags": ["UAT", " 核心 ", "UAT", ""],
+        "systems": [{"service": "fin", "bindings": {}}],
+    })).json()
+    # strip / 去空 / 去重
+    assert row["description"] == "商户B端回归主配置"
+    assert row["tags"] == ["UAT", "核心"]
+    cid = row["id"]
+
+    # 回归钉:只传 systems 的 PATCH 不得抹掉说明/标签(旧客户端/节点保存路径)
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=u, json={
+        "systems": [{"service": "crm", "bindings": {}}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["description"] == "商户B端回归主配置"
+    assert r.json()["tags"] == ["UAT", "核心"]
+    assert r.json()["systems"][0]["service"] == "crm"
+
+    # 显式清空
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=u, json={
+        "description": "", "tags": []})
+    assert r.status_code == 200
+    assert r.json()["description"] == "" and r.json()["tags"] == []
+
+    # 超长标签截断(20 字),空标签丢弃
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=u, json={
+        "tags": ["x" * 30, ""]})
+    assert r.status_code == 200
+    assert r.json()["tags"] == ["x" * 20]
+
+    # 说明超限 422
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=u, json={
+        "description": "d" * 2049})
+    assert r.status_code == 422
+
+    # copy 携带元信息(deepcopy)
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=u, json={
+        "description": "基线", "tags": ["PRE"]})
+    assert r.status_code == 200
+    dup = (await client.post(f"/api/exec-configs/{cid}/copy", headers=u,
+                             json={"name": "元信息副本"})).json()
+    assert dup["description"] == "基线" and dup["tags"] == ["PRE"]
+
+
+async def test_exec_config_aliases_scope_semantics(client, fresh_db):
+    """§8.10:aliases = 圈定本配置采用的调用身份条目(管理范围)——
+    持久化回读 / 缺省 [](存量未圈定)/ 整体替换式 PATCH / 非法 422。"""
+    await register_and_login(client, "cfgal", "pw123456")
+    u = await register_and_login(client, "cfgal", "pw123456")
+
+    # 缺省(存量形态):省键 → 回读补 []
+    row = (await client.post("/api/exec-configs", headers=u, json={
+        "name": "存量", "systems": [{"service": "fin", "bindings": {"fin.a": "a"}}]
+        })).json()
+    assert row["systems"][0]["aliases"] == []
+
+    # roundtrip:圈定集合原样回读
+    r = await client.patch(f"/api/exec-configs/{row['id']}", headers=u, json={
+        "systems": [{"service": "fin", "aliases": ["fin.a", "fin.b"],
+                     "bindings": {"fin.a": "a"}}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["systems"][0]["aliases"] == ["fin.a", "fin.b"]
+
+    # 整体替换:再次 PATCH 不带 aliases → 清空(替换式,非合并)
+    r = await client.patch(f"/api/exec-configs/{row['id']}", headers=u, json={
+        "systems": [{"service": "fin", "bindings": {}}]})
+    assert r.status_code == 200
+    assert r.json()["systems"][0]["aliases"] == []
+
+    # 空串条目名 → 422(_SlotName min_length=1)
+    r = await client.post("/api/exec-configs", headers=u, json={
+        "name": "bad", "systems": [{"service": "fin", "aliases": [""]}]})
+    assert r.status_code == 422
+
+    # copy 携带 aliases(deepcopy)
+    r = await client.patch(f"/api/exec-configs/{row['id']}", headers=u, json={
+        "systems": [{"service": "fin", "aliases": ["fin.a"]}]})
+    assert r.status_code == 200
+    dup = (await client.post(f"/api/exec-configs/{row['id']}/copy", headers=u,
+                             json={"name": "副本"})).json()
+    assert dup["systems"][0]["aliases"] == ["fin.a"]
+
+
+async def test_exec_config_entry_name_domain_128(client, fresh_db):
+    """条目名域 = service_identities.alias_name String(128)(2026-11-19
+    订正):65–128 字符条目名进 aliases 与 bindings 值不再 422 —— 旧
+    _SlotName(64) 系退役 slot 列口径,与注册表创建域(max_length=128)
+    不一致曾致长条目名「能进 bindings、进圈定即 422」。"""
+    await register_and_login(client, "cfgdom", "pw123456")
+    u = await register_and_login(client, "cfgdom", "pw123456")
+
+    long_name = "fin." + "x" * 100          # 104 字符:> 64 且 ≤ 128
+    declared = "decl." + "y" * 100          # 105 字符声明键
+    r = await client.post("/api/exec-configs", headers=u, json={
+        "name": "长条目名", "systems": [{
+            "service": "fin", "aliases": [long_name],
+            "bindings": {declared: long_name}}]})
+    assert r.status_code == 201, r.text
+    s = r.json()["systems"][0]
+    assert s["aliases"] == [long_name]
+    assert s["bindings"][declared] == long_name
+
+    # 超 128 仍 422(对齐注册表创建域)
+    r = await client.post("/api/exec-configs", headers=u, json={
+        "name": "超限", "systems": [{"service": "fin",
+                                     "aliases": ["z" * 129]}]})
+    assert r.status_code == 422
 
 
 async def test_exec_config_payload_shape_validation(client, fresh_db):

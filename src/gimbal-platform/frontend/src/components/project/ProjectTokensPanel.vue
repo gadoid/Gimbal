@@ -172,7 +172,7 @@
  * api/project_tokens:列表 / 候选 / 签发 / 续期 / 重新生成 / 范围 / 吊销 /
  * 换绑(本人立即,他人待确认)/ 接任确认。门由后端把(_require_manage)。
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   acceptProjectTokenHolder, createProjectToken, declineProjectTokenHolder,
   getProjectScopeCandidates, getProjectToken, listProjectTokens, putProjectTokenScope,
@@ -402,6 +402,8 @@ async function decline(t: ProjectTokenItem): Promise<void> {
 }
 
 onMounted(load)
+// 跨项目直达(同路由复用组件)→ 令牌列表随项目重载
+watch(() => props.project.id, () => void load())
 </script>
 
 <style scoped>

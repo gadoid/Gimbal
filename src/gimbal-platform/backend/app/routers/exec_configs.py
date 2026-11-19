@@ -23,7 +23,7 @@ from copy import deepcopy
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,9 +39,33 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 # 引用键长度对齐既有列口径:别名全名 String(128)、条目名 String(64)、
 # carry 字段 String(255);carry 值 Text(不限,业务参数)。
+# 条目名域订正(2026-11-19):条目名 = service_identities.alias_name
+# String(128) —— bindings 值(换用条目名)与 §8.10 aliases 同域;
+# 旧「条目名 String(64)」系退役 slot 列口径。
 _AliasName = Annotated[str, Field(min_length=1, max_length=128)]
-_SlotName = Annotated[str, Field(min_length=1, max_length=64)]
+_SlotName = Annotated[str, Field(min_length=1, max_length=128)]
 _CarryField = Annotated[str, Field(min_length=1, max_length=255)]
+# 配置级元信息(v7):说明/标签 —— 帮助在列表里快速识别/选择配置。
+# 存 payload 顶层(JSON 列零迁移);上限对齐 scenario_composer 的
+# description(2048)/ tags(32 × 20)。
+_Description = Annotated[str, Field(max_length=2048)]
+_Tag = Annotated[str, Field(min_length=1, max_length=20)]
+
+
+def _dedupe_tags(v: list[str]) -> list[str]:
+    """strip / 去空 / 截断 20 / 去重(同 scenario_composer._clean_tags 口径)。"""
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in v:
+        t = (t or "").strip()
+        if not t:
+            continue
+        t = t[:20]
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
 
 
 class SystemSubConfig(BaseModel):
@@ -49,6 +73,14 @@ class SystemSubConfig(BaseModel):
 
     service: str = Field(..., min_length=1, max_length=128,
                          description="目录服务名(分组键)")
+    # §8.10(2026-11-19):圈定本配置采用的调用身份条目(声明侧)。管理
+    # 范围语义 —— 圈定配置页就绪度/拨测/凭证引导的展示范围,**执行链
+    # 不消费**(services/exec_config._flatten 只取 bindings/carryOverrides,
+    # 场景声明条目仍按原链解析)。存量行缺键 → default [] = 未圈定,
+    # 前端按 bindings 声明键推导展示。
+    aliases: list[_SlotName] = Field(
+        default_factory=list, max_length=64,
+        description="本配置采用的调用身份条目名(声明侧;管理范围,执行链不消费)")
     bindings: dict[_AliasName, _SlotName] = Field(
         default_factory=dict, max_length=64,
         description="{身份面(别名全名): 条目名} —— 覆盖条目解析序的配置层")
@@ -60,6 +92,9 @@ class SystemSubConfig(BaseModel):
 
 class ExecConfigCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
+    # 配置级元信息(v7):说明 + 标签(列表识别信息,执行链不消费)
+    description: _Description = ""
+    tags: list[_Tag] = Field(default_factory=list, max_length=32)
     # §8.2(2026-11-17):environmentId 链位退役 —— 字段删除,旧客户端
     # 多发该键被 pydantic 静默忽略
     systems: list[SystemSubConfig] = Field(default_factory=list,
@@ -70,10 +105,23 @@ class ExecConfigCreate(BaseModel):
     projectId: int | None = Field(default=None, ge=1,
                                   alias="projectId")
 
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _clean_tags(cls, v: list[str]) -> list[str]:
+        return _dedupe_tags(v)
+
 
 class ExecConfigUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
+    # None = 不改;""/[] = 显式清空(与 systems 的「整体替换式」同读法)
+    description: _Description | None = None
+    tags: list[_Tag] | None = None
     systems: list[SystemSubConfig] | None = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _clean_tags(cls, v: list[str] | None) -> list[str] | None:
+        return None if v is None else _dedupe_tags(v)
 
 
 class ExecConfigCopyIn(BaseModel):
@@ -84,15 +132,20 @@ class ExecConfigView(BaseModel):
     id: int
     name: str
     isDefault: bool
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
     systems: list[SystemSubConfig]
     scope: str = "user"
 
 
 def _view(row: ExecConfig) -> ExecConfigView:
-    systems = (row.payload or {}).get("systems") or []
+    payload = row.payload or {}
     return ExecConfigView(
         id=row.id, name=row.name, isDefault=row.is_default,
-        systems=systems, scope=row.scope)
+        description=payload.get("description") or "",
+        tags=payload.get("tags") or [],
+        systems=payload.get("systems") or [],
+        scope=row.scope)
 
 
 async def _project_gate(db: AsyncSession, user, project_id: int | None,
@@ -179,7 +232,11 @@ async def create_exec_config(
     row = ExecConfig(
         scope=scope, scope_id=scope_id,
         name=body.name, is_default=body.isDefault,
-        payload={"systems": [s.model_dump() for s in body.systems]},
+        payload={
+            "systems": [s.model_dump() for s in body.systems],
+            "description": body.description,
+            "tags": body.tags,
+        },
     )
     db.add(row)
     try:
@@ -210,8 +267,18 @@ async def patch_exec_config(
     row = await _access(db, config_id, user, write=True)
     if body.name is not None:
         row.name = body.name
+    # payload 合并式更新(v7):只传 systems 的旧客户端不得抹掉说明/标签;
+    # description/tags 显式给值(含 ""/[])则覆盖,None = 保持。
+    payload = dict(row.payload or {})
     if body.systems is not None:
-        row.payload = {"systems": [s.model_dump() for s in body.systems]}
+        payload["systems"] = [s.model_dump() for s in body.systems]
+    if body.description is not None:
+        payload["description"] = body.description
+    if body.tags is not None:
+        payload["tags"] = body.tags
+    if body.systems is not None or body.description is not None \
+            or body.tags is not None:
+        row.payload = payload  # 整体赋值(JSON 列需赋值触发变更)
     try:
         await db.commit()
     except IntegrityError as e:

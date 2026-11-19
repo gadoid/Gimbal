@@ -31,6 +31,22 @@ async def _mk_project(name: str, *, members: dict[str, str]) -> int:
         return proj.id
 
 
+async def test_list_gate_admin_plus_non_member(client: AsyncClient):
+    """列表门 ∨ Admin+(2026-11-19 复核补,与 docstring/裁决门对齐):
+    Admin+ 非成员可见全部(空列表也是 200,不再 404 —— 此前页面渲染
+    了裁决按钮却拉不到列表);普通非成员仍 404(不泄露存在性)。"""
+    h_m = await role_headers(client, "s72_lm", role="user")
+    h_adm = await role_headers(client, "s72_la", role="admin")
+    h_x = await role_headers(client, "s72_lx", role="user")
+    pid = await _mk_project("s72-list", members={"s72_lm": "member"})
+    r = await client.get(f"/api/projects/{pid}/promotions", headers=h_m)
+    assert r.status_code == 200 and r.json()["items"] == []
+    r = await client.get(f"/api/projects/{pid}/promotions", headers=h_adm)
+    assert r.status_code == 200 and r.json()["items"] == []
+    r = await client.get(f"/api/projects/{pid}/promotions", headers=h_x)
+    assert r.status_code == 404
+
+
 async def _put_carry(
     client: AsyncClient, headers: dict, scope: str, service: str,
     entries: dict, *, project_id: int | None = None,

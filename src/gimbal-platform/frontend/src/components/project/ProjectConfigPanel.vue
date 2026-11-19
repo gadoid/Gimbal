@@ -171,10 +171,15 @@
             data-testid="prj-config-preview-go" @click="previewOpen = true"
           >预览</button>
         </div>
+        <p v-if="scenCapped" class="hint">
+          场景超过 {{ scenOptions.length }} 条,下拉仅列前 {{ scenOptions.length }} 条 —— 用场景名精确定位或在场景列表发起预览。
+        </p>
       </section>
 
-      <!-- ⑥ carry 同步(项目层 vs plate;手写退场后项目层值的唯一写入口) -->
-      <section v-if="!isPublic" id="prj-cfg-drift" class="cfg-section">
+      <!-- ⑥ carry 同步(项目层 vs plate;手写退场后项目层值的唯一写入口)。
+           写面门 = 项目管理员(canManage;后端 drift 端点走 write 门,
+           普通成员拉取必 403 —— 前端渲染面与之对齐,不再恒弹错误) -->
+      <section v-if="canManage && !isPublic" id="prj-cfg-drift" class="cfg-section">
         <h2>carry 同步(项目层 ← plate)</h2>
         <p class="hint">
           本项目层绑定值 vs plate 字段面的三类 diff;勾选生成的值表批只作用于项目层(公共层/个人层互不影响)—— 手写编辑退场后,这里是项目层值的维护入口。
@@ -317,10 +322,34 @@ const slotLoading = ref(true)
 
 // ── ⑤ 生效预览 ───────────────────────────────────────────────────
 const scenOptions = ref<Array<{ id: string; name: string }>>([])
+/** 翻页上限外还有场景(>1000)时提示 —— 下拉是选择面不是台账,截断可接受 */
+const scenCapped = ref(false)
 const previewScenario = ref('')
 const previewOpen = ref(false)
 
-onMounted(async () => {
+/** 预览场景候选:翻页取全(收尾 5b —— 此前只拉首页 100 条,场景多于
+ *  100 的项目后排场景在下拉里选不到);上限 10 页,超出提示。 */
+async function loadScenOptions(pid: number): Promise<void> {
+  const out: Array<{ id: string; name: string }> = []
+  let total = Infinity
+  let page = 1
+  while (out.length < total && page <= 10) {
+    const env = await listScenarios({ projectId: pid, page, page_size: 100 })
+    total = env.total
+    if (!env.items.length) break
+    out.push(...env.items.map((s) => ({
+      id: s.meta.scenarioId,
+      name: s.meta.name || s.meta.scenarioId,
+    })))
+    page += 1
+  }
+  scenOptions.value = out
+  scenCapped.value = total > out.length
+}
+
+async function loadAll(): Promise<void> {
+  // 跨项目重载时清上一项目的预览选区(场景 id 属于旧项目)
+  previewScenario.value = ''
   const jobs: Promise<void>[] = [
     listEnvironments().then((rows) => { envs.value = rows }),
     loadDefaults(),
@@ -330,14 +359,10 @@ onMounted(async () => {
       getSlotStatus(props.project.id)
         .then((r) => { slots.value = r.slots })
         .catch(() => { slots.value = [] }),
-      listScenarios({ projectId: props.project.id, page_size: 100 })
-        .then((env) => {
-          scenOptions.value = env.items.map((s) => ({
-            id: s.meta.scenarioId,
-            name: s.meta.name || s.meta.scenarioId,
-          }))
-        })
-        .catch(() => { scenOptions.value = [] }),
+      loadScenOptions(props.project.id).catch(() => {
+        scenOptions.value = []
+        scenCapped.value = false
+      }),
     )
   }
   try {
@@ -347,7 +372,11 @@ onMounted(async () => {
   } finally {
     slotLoading.value = false
   }
-})
+}
+
+onMounted(loadAll)
+// 跨项目直达(同路由复用组件)→ 各分区随项目重载
+watch(() => props.project.id, () => void loadAll())
 </script>
 
 <style scoped>

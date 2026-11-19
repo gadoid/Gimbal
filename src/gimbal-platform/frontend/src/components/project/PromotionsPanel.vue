@@ -39,6 +39,10 @@
     </div>
 
     <p v-if="loading" class="muted">加载中…</p>
+    <div v-else-if="loadError" class="empty-cta" data-testid="promo-load-error">
+      <p>申请列表加载失败:{{ loadError }}
+        <button type="button" class="svc-link" @click="load">重试</button></p>
+    </div>
     <div v-else-if="shownItems.length" class="promo-list">
       <article
         v-for="p in shownItems" :key="p.id" class="promo-card"
@@ -187,10 +191,15 @@ const decisions = ref<Record<string, 'source' | 'project'>>({})
 const rejecting = ref<PromotionOut | null>(null)
 const rejectReason = ref('')
 
+/** 首载失败显式呈现(此前 try/finally 无 catch → unhandled rejection
+ *  + 「暂无加入申请」假空态);详情失败仍不阻塞列表。 */
+const loadError = ref('')
+
 async function load(): Promise<void> {
   loading.value = true
   try {
     items.value = (await listPromotions(props.projectId)).items
+    loadError.value = ''
     // pending 行拉详情补 sourceChangedSinceApplication
     await Promise.all(items.value
       .filter((p) => p.status === 'pending')
@@ -200,6 +209,8 @@ async function load(): Promise<void> {
           p.sourceChangedSinceApplication = d.sourceChangedSinceApplication
         } catch { /* 详情失败不阻塞列表 */ }
       }))
+  } catch (e) {
+    loadError.value = String((e as Error)?.message ?? e)
   } finally {
     loading.value = false
   }

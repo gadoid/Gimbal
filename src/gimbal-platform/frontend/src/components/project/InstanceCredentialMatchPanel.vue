@@ -132,6 +132,8 @@ function rowLabel(r: MatchRow): string {
 }
 
 watch(() => props.envId, () => void load())
+// 跨项目直达(同路由复用组件)→ 匹配表随项目重载(此前只 watch envId)
+watch(() => props.projectId, () => void load())
 onMounted(() => void load())
 </script>
 

@@ -52,10 +52,13 @@ class ExecConfig(Base):
     is_default: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"))
     # {"systems": [{"service": 目录服务名,
+    #               "aliases": [圈定调用身份条目名],
     #               "bindings": {身份面(别名全名): 条目名},
-    #               "carryOverrides": {字段: 值}}]}
+    #               "carryOverrides": {字段: 值}}],
+    #  "description": 说明文本(≤2048), "tags": [标签(≤20 字,≤32 个)]}
     # (bindings 覆盖条目解析序的配置层;carryOverrides 值内联,
-    #  null = 显式注入 JSON null,与 carry_store 语义同型)
+    #  null = 显式注入 JSON null,与 carry_store 语义同型;
+    #  description/tags 为配置级元信息(v7,列表识别用),执行链不消费)
     payload: Mapped[dict[str, Any]] = mapped_column(
         JsonVar, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(

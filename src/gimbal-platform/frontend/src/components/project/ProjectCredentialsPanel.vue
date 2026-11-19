@@ -50,7 +50,7 @@
               <span class="muted tgt-ctx">{{ envName(c.envId) }}</span>
             </td>
             <td v-if="canManage">
-              <div class="mono muted tgt-url" :title="c.loginUrl || '实例未配置(环境×系统实例页维护)'">
+              <div class="mono muted tgt-url" :title="c.loginUrl || '实例未配置(服务注册页「实例配置」维护)'">
                 {{ c.loginUrl || '—' }}
               </div>
             </td>

@@ -914,6 +914,304 @@ P1(均为「链统一了,喂进链的参数/快照错位」),先行修复:
   执行,列/五键约束/236 行保留(238−2:开发库原有 2 条系统键行按守卫
   删除,属设计内行为)。
 
+#### v4 原型改造:左栏列表 + 节点卡工作台 + Ping All(2026-11-19,用户拍板,🟢 完成)
+
+以 stitch 原型 `claude/stitch_ux/stitch_scenario_environment_profile_manager/`
+为蓝本评估后改造(用户两决策:信息架构照原型、.slib 基座;Ping All 纳入本批,
+版本化/回收站不做)。**纯前端,api 层与后端零改动**;fillForm/payloadOf/
+save/深链/就绪度派生函数全部原样迁移,布局层重构 + Ping All 一件新增。
+
+- **评估结论(原型四块与既定口径冲突,不采纳)**:顶部环境切换 Tab
+  (§8.2 配置去 env)、节点级「凭证与鉴权套件」独立维度(凭证内聚身份条目
+  ref)、节点内 carry 透传编辑(v3 刚退场)、「挂载测试账号池」(账户在
+  凭证管理按 (system, env) ref 维护)。原型等价物(身份表换用 select、
+  装载就绪深链)当前页已比原型更先进。
+- **布局**(全用现成基座类,零新全局 CSS):`.svc-split`(15.5rem+1fr,
+  ≤1180 折单列)+ `.svc-rail`(sticky 内滚)左栏套件列表(搜索/默认徽章/
+  副行 N 服务·M 换用/`ec-list-row-{id}`)替代 chip 行;右工作台 = 套件头卡
+  (名称+元信息行 N 服务·M 换用·K 缺装载+原动作条迁入)→ 机制说明横幅
+  (`.svc-banner`)→ **节点卡 × N**(逐服务 `svc-panel`,序号+服务 select+
+  描述+摘要徽章「条目 N·换用 M·缺装载 K」;展开态=v3 表单原样,收起态
+  摘要行+「展开详细编排」)→ 虚线「追加被测服务节点」大卡(替代小钮)
+  → 枢纽四面板原样 → **sticky 底栏**(`position:sticky bottom:0` 令牌化,
+  CaseComposer footer 先例):提示句 | Ping All | 取消 | 保存。
+- **Ping All(测试全链路联通性)**:① 配置内全部服务的部署行地址 ping
+  (`pingDeployment`);② 换用绑定条目解析到的个人池账户登录拨测
+  (`testConnection`;authRows 本地类型补 id)。口径:场景声明条目不在
+  本页知识范围,不测(写进按钮 title)。串行 for-await(ServiceAdmin
+  `testAllSlots` 范式)、catch 前端合成失败计入、汇总 chip「ok/n 正常」
+  + toast;结果就地渲染 —— 枢纽①矩阵行 `ec-dep-ping-{service}-{envId}`
+  徽章(`200 · 45ms`/`不可达`)、枢纽②装载行 `ec-slot-probe-{slot}`
+  (拨测通过/失败);拨测 30s/条时长提示进底栏。切换配置即清上一套结果。
+- **实现要点**:节点展开态 `expanded: Record<number, boolean>`(默认全展开,
+  fillForm 复位、追加节点强制展开);`accountRowOf` 统一「条目→个人池账户行」
+  解析(resolvedAccount/entryLoaded/Ping All 拨测目标三处共用同实现);
+  空态左栏+右侧 `.slib-empty` 双落;暗色主题全令牌化零额外工作。
+- **testid**:ec-chip-*/ec-actions 退役;新增 ec-list / ec-list-row-{id} /
+  ec-list-search / ec-list-default-{id} / ec-node-{i} / ec-node-toggle-{i} /
+  ec-node-collapsed-{i} / ec-node-add-card / ec-ping-all / ec-ping-all-result /
+  ec-dep-ping-{service}-{envId} / ec-slot-probe-{slot} / ec-foot / ec-mech /
+  ec-head-meta;深链与就绪度语义 testid 全部不变。
+- **测试**:21→**25 用例** —— mock 基建补 `pingDeployment`/`testConnection`
+  /`@/utils/toast` 三笔;chip 断言改 ec-list-row(选中态 .on);新增 4 用例:
+  左栏列表渲染+搜索过滤+点击切换、节点收起态摘要数字+展开切换、Ping All
+  成功/失败混合路径(1/2 汇总+行内徽章+toast)、Ping All 无目标不发检测。
+- **验证**:vitest **172 文件 / 1471 用例 0 failed**(对照 v3 基线 +4~5)+
+  vue-tsc 0 + eslint 0;build 后沿部署惯例替换 `/opt/gimbal-platform/
+  frontend/dist`(备份 `dist.bak-20261119-1104`),8188 下发新 hash
+  `index-DQhXkgnH.js` 核验通过。注:vitest 需 node v22(nvm
+  v22.23.3;v18 的 `require(esm)` 不支持 jsdom 29)。
+
+#### v4.1 交互加固(2026-11-19,样式/交互复核,🟢 完成)
+
+v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务逻辑零改动):
+
+- **操作反馈**:保存/删除/复制/设默认成功均补 toast(此前静默刷新,
+  用户无成功确认);错误仍走 `ec-err` 内联。
+- **脏检查**:`snapshotOf()` = 名称 + `payloadOf()` 快照;`fillForm`/
+  `openCreate` 落快照,左栏切换(`pick`)与新建(`openCreate`)前比对,
+  有改动 → `confirmAction`(warning/danger,取消则不动);保存/复制/
+  删除/设默认后的内部刷新走 `selectConfig`(绕过检查,避免保存后被
+  自己的确认弹窗打断)。实例过滤/节点展开态不入 payload,不算改动。
+- **移除服务节点确认**:节点有绑定或 carry 覆盖时 `confirmAction`
+  点名将丢弃的数量;空节点直接移除。
+- **Ping All 竞态守卫**:启动时记录 `configId`,循环每步校验
+  `selectedId` 未变(变了 break),结果写入与汇总均过 `stale()` 判定
+  —— 运行中切配置不再串台。
+- **摘要语义修正**:节点摘要按 `nodeLoadState` 三态 —— 加载中显
+  「条目加载中…」、注册表为空显「未登记条目」(不再误报「装载齐」);
+  收起态同口径。空节点(未选服务)展开态补引导文案。
+- **样式**:左栏内部分滚(`.svc-rail` scoped flex + `.rail-rows` 滚动,
+  标题/搜索/新建固定);底栏 `flex-wrap` + 提示句省略(窄屏不再溢出);
+  节点徽章横排(`flex-wrap`);搜索框 `type=search`(原生清空);
+  枢纽②「个人池」列 5.625→8.125rem(装载 + 拨测双徽章不挤压)。
+- **测试**:25→**28 用例**(mock 补 `@/utils/confirmAction`):保存成功
+  toast 断言、脏检查拦截/放行、无改动不拦截、移除节点确认取消/确认;
+- **验证**:vitest **172 文件 / 1474 用例 0 failed** + vue-tsc 0 +
+  eslint 0;build 部署(dist 备份 `dist.bak-20261119-1117`,8188 下发
+  `index-cNWxL2QZ.js`)。
+
+#### v4.2 工作台页签(2026-11-19,用户决策,🟢 完成)
+
+用户复核:编辑配置 / 服务列表 / 关联与就绪度 / 生效预览四块**面向的体验
+不同**,一页平铺互相稀释焦点 → 拆四页签。纯前端;后端零改动。
+
+- **页签分配**(`activeTab: edit|services|readiness|preview`):
+  - **编辑配置**(写):机制横幅 + 节点卡编辑区 + 虚线追加节点(原内容);
+  - **服务列表**(读):服务装载概况表 —— 服务/系统/说明/条目/换用/装载
+    (缺 N/齐/未登记)+「去编辑」定位节点 + 身份条目子页深链(原枢纽
+    「服务接入」面板升级,并入节点摘要统计);
+  - **关联与就绪度**(诊断):地址矩阵 + 装载就绪两面板 + **Ping All
+    (自底栏迁入)**,结果就地渲染;页签角标 = 缺口数(缺地址行 +
+    缺账户绑定,0 不显,红色 alert 丸);
+  - **生效预览**(验证):`EffectivePreviewDialog` 新增 `inline` 模式
+    (去遮罩/关闭钮/限高,贴页平铺;双宿主默认弹窗行为不变),
+    选场景 → 逐值带来源。
+- **状态规则**:新建模式隐页签(恒编辑);切配置/新建复位到编辑页签;
+  表单态跨页签保留(保存路径不因切页签而断);页签角标仅就绪度有。
+- **底栏**:Ping All 移出,保留 提示 + 取消/保存(跨页签常驻)。
+- **测试**:28→**30 用例**(新增页签默认/角标/服务列表联动/切页签保表单态/
+  新建无页签;原枢纽用例前置 readiness 页签;预览用例改 preview 页签内嵌;
+  服务接入用例迁 services 页签)。
+- **验证**:vitest **172 文件 / 1476 用例 0 failed** + vue-tsc 0 +
+  eslint 0;build 部署(dist 备份 `dist.bak-20261119-1130`,8188 下发
+  `index-mCIa5yoZ.js`)。
+- **后续(同日)**:左栏栏宽 15.5rem → **20rem**(原型 w-80 口径,配置名/
+  副行更从容),右栏按 `minmax(0,1fr)` 自适应;scoped 覆盖 grid 列定义后
+  **同步补 ≤1180px 折单列媒体查询**(否则特异性压掉基座断点);右栏表
+  长等宽串 `word-break: break-all` + 宽表横向滚动兜底。dist 备份
+  `dist.bak-20261119-1136`(下发 `index-zH9ELSp6.js`)。
+
+#### v5 §8.10 圈定调用身份:全量摊开 → 勾选圈定(2026-11-19,用户决策,🟢 完成)
+
+用户复核:选实例后身份条目表把注册表**全量行摊开**,只有「换用为」一个
+动作,配置不记录"用了哪些调用身份"——不符合实际使用场景。定稿 redesign
+**§8.10**(两决策:集合 = 管理范围,执行链零消费;字段配置 = 只读概览
++ 深链,延续 v3 退场)。
+
+- **后端**:`routers/exec_configs.py` `SystemSubConfig` 加
+  `aliases: list[_SlotName]`(声明侧条目名,管理范围;payload JSON 列
+  **零迁移**,create/patch model_dump 自动持久化、copy deepcopy 携带);
+  `_flatten` 不取该键 —— 执行链天然零感知(链路测试钉死)。
+- **前端(ExecConfigsView v5)**:
+  - 身份条目表首列「纳入」checkbox(`ec-use-{i}-{alias}`):勾选 = 本
+    配置采用该调用身份;**取消纳入一并移除换用 bind**(不用即不换);
+    未勾行灰显只余条目名/坐标;换用/装载控件只挂勾选行;未圈定时
+    引导文案(`ec-use-hint`);
+  - `fillForm` 存量推导(缺省 aliases → bindings 声明键),`payloadOf`
+    写回勾选集 ∪ 存量绑定声明键(存量绑定 ∉ 注册表,恒视为已纳入);
+  - **口径统一(表单态勾选集)**:就绪度装载面板行 = 所选条目(取用 =
+    换用后;**未换用的所选行也进面板** —— 修复此前只看换用绑定的盲区),
+    列改 所选/取用/坐标/装载/操作,深链取 use 行自身坐标;节点摘要/
+    头卡元信息/服务列表概况(圈定/条目 N/M)/Ping All 拨测目标/就绪度
+    角标全部换勾选集口径;摘要新增「未圈选身份」态(不再误报装载齐)。
+- **测试**:后端 +2(`test_exec_configs` aliases roundtrip/422/替换/copy;
+  `test_exec_config_chain` 摊平不含 aliases 钉弱语义),精确相等断言按
+  含 aliases 形态更新;前端 30→**32**(勾选纳入-换用-载荷、取消纳入
+  移除换用、未换用所选行进面板 + 勾选回显;装载列断言改声明行口径
+  —— 勾选集是声明侧,换用目标行不单独圈定)。
+- **验证**:后端 exec-configs 域 21 用例绿 + **全量 2090 passed /
+  2 skipped**(顺手修 602332a8 遗留环境笔误:`test_carry_instance_key`
+  迁移重放用例把 temp_schema 的 `+psycopg`(v3)URL 改写成 `+psycopg2`
+  —— 仓库依赖无 psycopg2,本机单跑即挂;还原 helper URL 后 8/8 绿);
+  前端 vitest **172 文件 / 1478 用例 0 failed** + vue-tsc 0 + eslint 0;
+  build 部署(dist 备份 `dist.bak-20261119-1352`,8188 下发
+  `index-D5uwTvdF.js`;**后端有改动 → 重启 gimbal-platform**,
+  `/api/health` ok)。
+
+#### v6 交互重构:三页签 + 节点卡两态 + 身份选择器(2026-11-19,用户决策,🟢 完成)
+
+用户复核三点:①「服务列表」页签冗余(内容已被节点卡摘要/只读列表覆盖);
+②节点卡希望更醒目、区分只读/编辑;③身份全量罗列在注册表变大后不友好。
+**纯前端;api/后端零改动。**
+
+- **① 三页签**:编辑配置 / 关联与就绪度 / 生效预览(服务列表撤下);说明/
+  系统回显在节点卡头,「服务子页 ↗」深链移入卡头(能力不丢);删
+  `svcListRows`/`editNode`。
+- **② 节点卡两态**:`editing` 状态(默认只读;`addNode` 即编辑;`fillForm`
+  复位)。只读态 = 已选调用身份紧凑表(条目/取用/坐标/装载,零控件;复用
+  `slotRowsOf`)+ 未圈定提示;编辑态 = 原写面。视觉升级:左侧 3px 状态色条
+  (编辑中 accent + 描边强调)、序号圆章加大、服务名 0.875rem/600、系统
+  tag 芯片、操作区(编辑/完成 `ec-node-edit` + 收起/展开 + 移除)。
+- **③ 身份选择器(已选列表 + 搜索加入)**:编辑态顶部 = 搜索框
+  (`ec-pick-q`) + 候选下拉(`ec-pick`,选项 = 注册表行 − 已选 − 搜索词 −
+  实例过滤,optgroup 按环境;选中即加入);已选明细表只列已选行(调用
+  身份/取用/坐标/装载/换用/移除 `ec-unuse`),**表格规模只随圈定数增长**;
+  注册表 >200 未全量载入 → 提示去服务子页管理;移除一并移除换用。
+  `SysRow.pickQuery` 表单态;`aliasTotal` 记录注册表总量用于截断提示。
+- **测试**:32→**34 例**(新增 `enterEdit`/`pickAlias` 辅助 —— 节点写面
+  控件仅编辑态渲染;服务列表 2 例删/并(卡头深链归位断言);新增搜索加入
+  → 载荷、注册表截断提示;实例过滤断言改候选集;移除已选替代取消勾选;
+  页签用例改三页签)。
+- **验证**:vitest **172 文件 / 1480 用例 0 failed** + vue-tsc 0 +
+  eslint 0;build 部署(dist 备份 `dist.bak-20261119-1423`,8188 下发
+  `index-s4V9BBdD.js`;纯前端不重启后端)。
+
+#### v7 套件头卡两态 + 配置级说明/标签(2026-11-19,用户决策,🟢 完成)
+
+用户复核:套件头卡(名称+动作)一直处于编辑态,缺少只读态;且缺「说明/标签」
+这类帮助快速识别选择配置的信息。定稿:新增配置级 `description`(≤2048)与
+`tags`(≤32 × ≤20 字)两个元信息,头卡只读/编辑两态,左栏同步展示。
+
+- **后端(零迁移,payload 顶层)**:
+  - `SystemSubConfig` 同级新增 schema 字段;`ExecConfigView`/`_view` 回填
+    (缺键兜底 ""/[]);create 写入;`copy` deepcopy 自动携带;
+  - **PATCH 改合并式**(关键风险点):原实现把 payload 整体替换为
+    `{"systems": ...}` —— 任何只传 systems 的保存都会抹掉说明/标签;
+    现改为 `{**payload, ...}` 按键更新,description/tags `None`=不改 /
+    `""`/`[]`=显式清空;
+  - tags `mode="before"` 校验器 strip/去空/截断 20/去重(同
+    scenario_composer `_clean_tags` 口径);说明超限 422;
+  - 模型 payload 形状注释同步(description/tags 为元信息,执行链不消费)。
+- **前端**:
+  - `form` 扩 `{name, description, tags}`;`fillForm`/`openCreate` 回填/
+    重置;`snapshotOf` 纳入两字段(脏检查);`save()` body 全量写;
+  - **头卡两态**:只读 = 名称(0.9375rem bold)+ 默认徽章 + 标签 chips
+    (TagPill)+ 说明行(空则引导)+ 元信息行 + 动作(设默认/复制/删除);
+    编辑 = 名称/说明 Input + 标签 TagInput(复用既有组件)+ 保存
+    (`ec-meta-save`,与底栏同一全量保存路径)/取消(`ec-meta-cancel`,
+    只回滚元信息保留节点编辑);新建恒编辑态;
+  - **左栏**:行内前 2 枚标签 chip(+N 溢出)+ 说明副行(省略);搜索扩
+    到 名称 ∪ 说明 ∪ 标签。
+- **测试**:前端 34→**37**(新增头卡两态/取消/左栏标签与搜索;读名用例
+  前置 `enterMetaEdit`;7 处载荷断言补 description/tags);后端 +1
+  (`test_exec_config_meta_description_tags`:roundtrip/换行去重/
+  **PATCH 只传 systems 不丢元信息回归钉**/显式清空/截断/copy/422)。
+- **验证**:后端 exec-config 域 **22 passed**;前端 vitest
+  **172 文件 / 1483 用例 0 failed** + vue-tsc 0 + eslint 0;build 部署
+  (dist 备份 `dist.bak-20261119-1452`,8188 下发 `index-Dka4G-1O.js`;
+  后端有改动 → 重启 gimbal-platform,`/api/health` ok)。
+
+#### v8 状态归位 + 功能说明收进问号帮助(2026-11-19,用户决策,🟢 完成)
+
+- **状态归位**:节点卡状态徽章组整体从右侧徽章区移到**服务选框之后**
+  (`.node-status`:未圈选身份 `ec-node-unpicked-{i}` / 条目·换用·装载 /
+  加载中 / 未登记 —— 所有状态同一展示位,与系统 tag 并排);右侧仅留
+  操作(编辑/收起/移除);收起态摘要行撤下「未圈选」分支(单一位置)。
+  (v8 初版只移「未圈选」,用户指出同族状态应同位置,v8.1 整组迁移。)
+- **功能说明收拢**:删除页内机制横幅(`ec-mech`)、底栏提示句、头卡说明
+  三处散落文案,统一收进**页头问号帮助**(PageHead subtitle → QTip,
+  支持 \n\n 分段):圈定调用身份语义/绑定与换用/carry 与凭证维护位置/
+  配置不固化环境/三页签职责/保存与脏检查/Ping All 语义与时长。
+- **测试**:37→**38**(新增「未圈选身份贴选框」;新建用例改断
+  `ec-mech` 不存在 + 名称输入可用)。
+- **验证**:vitest **172 文件 / 1484 用例 0 failed** + vue-tsc 0 +
+  eslint 0;build 部署(dist 备份 `dist.bak-20261119-1501`,8188 下发
+  `index-nJSx15w8.js`;纯前端不重启后端)。
+- **v8.2 动作归位(同日)**:底部常驻 sticky 条撤下 —— 取消/保存并入
+  「配置信息」卡动作行(配置级动作居左、取消/保存右对齐,`.head-acts-fill`);
+  头卡编辑态的重复「保存/取消」改为单个「完成」收起(`ec-meta-done`);
+  取消语义统一为「放弃全部未保存改动」(`ec-cancel` 走 fillForm)。
+  测试:meta-save/meta-cancel 用例改走统一入口,取消用例改断头卡与节点
+  同回只读态。验证:vitest **172 文件 / 1484 用例 0 failed** + vue-tsc 0 +
+  eslint 0;dist 备份 `dist.bak-20261119-1533`(下发 `index-BeDdQAc3.js`)。
+
+#### 一致性修复轮(2026-11-19 第二轮,四批次;两动线全面复核产物)
+
+对 plate-s1..HEAD 全轮(41 提交 + 工作区 v5–v8)按两条动线复核 —— ① 多功能
+前端交互/权限路径,② 场景执行前的配置装载链 —— 后端装载链亲读核验
+(标签链/凭证解析/carry 键序/数据集行绑定/注入,与 §8.2/§8.3/§8.9/§8.10
+逐条对上,无歧义路径);缺陷集中在前端交互面,按四批次修复:
+
+- **批次 1(口径/门,3 项)**:
+  - `SystemSubConfig.aliases` 长度域 64→**128**(条目名 = alias_name
+    String(128);旧 `_SlotName(64)` 系退役 slot 列口径 —— 长条目名能进
+    bindings、进圈定即 422);
+  - `/executions/summary?projectId=` 门补**公共项目例外**(与
+    get_project/facets 同口径 —— 公共项目详情页头卡成功率对普通访客
+    此前恒 404 显「—」);
+  - **装载判定改后端口径**:ServiceAdmin.accountOf / ExecConfigsView
+    .accountRowOf 此前各绑「账户 env == 条目 env」等式,与 §8.3
+    (default=system 唯一、跨标签回落)相反 → 系统性假「缺账户」且
+    就绪度页签与生效预览互相矛盾;两处统一改 `_pick_one` 同口径
+    (批次 4 再收敛为单源 util)。
+- **批次 2(状态机,5 项)**:抽屉标签搬移后 `instForm` 坐标跟移并按新
+  行重定基线(旧实现会在旧标签 upsert 重建刚删的行,静默撤销搬移);
+  移除实例后关抽屉(防陈旧坐标重建);环境编辑表单/删除取**打开/装配
+  时快照**(表单开着切聚焦不再改错/删错环境,armed 随聚焦复位);
+  ExecConfigs 设默认/复制补脏检查守卫(收尾整表单回填此前静默丢改动);
+  removeNode 后 editing/expanded 索引重排(后继节点不再原位继承写面);
+  顺手修新建取消死分支(createReturnId 回选,不再落空白工作台)。
+- **批次 3(深链/权限门/守卫,8 项)**:`/auths?q=` 扩**条目名**命中面
+  (缺凭证角标/导入深链发的条目名此前恒 0 命中落假空态;命中口径 =
+  条目→base→system 的本人账户),Auths 空态区分「没搜到/真空池」;
+  promotions 列表门 ∨Admin+(与 sees_all/裁决门对齐,Admin+ 非成员
+  不再 404);项目配置页 carry 同步分区按 canManage 显隐(普通成员
+  不再恒弹 403);项目详情 members/tokens 面板内容区与 visibleTabs
+  同门(?tab= 直达不再挂载无权面板);Members/Promotions 首载补
+  catch(显式错误态 + 重试,不再假空态);ServiceAdmin plate 不可达
+  守卫(漂移 chip/「目录缺席」/页签计数不把失联冒充结论);Auths
+  编辑态 env select 锁定(envId 是实体键第四位,patch 不发,不锁被
+  「已保存」静默丢弃)。
+- **批次 4(收敛/记档)**:新增 `utils/identityResolve.ts`
+  `pickAccountLikeBackend`(条目→账户前端单源,镜像 run_prepare
+  ._pick_one)—— ServiceAdmin/ExecConfigsView 两处装载判定/拨测目标/
+  摘要计数收敛共用;后端推解析端点留作后续可选增强。redesign §8.9
+  补跨服务换用时实例档坐标取步骤 base 服务 system 的边界记档。
+- **验证**:后端 test_exec_configs(+1 长度域)/test_execution_refactor
+  (+1 公共项目 summary)/test_auth_sessions(+1 q 条目名)/
+  test_authz_s72(+1 列表门)全绿;前端 ServiceAdmin(+3)/
+  ExecConfigsView(+3)/Auths(+1 env 锁断言)全绿,vue-tsc 0 错误。
+- **收尾批(同日,复核报告遗留 P3 清账)**:
+  - ServiceAliasDetail `query.tab` 深链在同组件内变化也生效,且按键
+    模式兜底(credential tab 内容 v-if=条目模式 —— 键切回服务模式后
+    停留该 tab 会整屏空白);
+  - 项目配置页预览场景下拉**翻页取全**(此前只拉首页 100 条,>100 的
+    项目后排场景选不到;上限 10 页 + 超限提示);
+  - 项目四个子面板(配置/成员/令牌/实例×凭证)补 `watch(projectId)`
+    重载 —— 同路由复用组件的跨项目直达不再展示上一项目数据;
+  - 成员 CSV **公式注入防护**(= + - @ 开头的姓名/用户名前缀单引号);
+  - 后端 `_login_urls_of` 按账户涉及的 system 收窄查询(此前无
+    WHERE 全表扫,list 分页每页都拉全部实例行);
+  - 顺手清:run_precheck 硬门 identity_missing 重复判定死代码删除;
+    ExecConfigsView 帮助文案对齐 v8.2(底栏撤下/勾选→搜索加入);
+    默认账户措辞全面切「(池, system) 唯一」(Auths tooltip+注释/
+    api 注释/project_credentials docstring/ServiceAliasDetail 三处);
+    登录口维护指引三处统一指向服务注册页「实例配置」(此前「环境
+    配置页」「环境×系统实例页」混用);Auths `reloadList` 补 catch
+    (刷新失败 toast,不再 unhandled rejection);ProjectDetailView
+    套件搜索防抖定时器卸载清理。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。

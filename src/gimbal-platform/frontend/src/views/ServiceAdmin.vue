@@ -220,7 +220,7 @@
                 @click="openEditEnv">编辑环境</Button>
         <template v-if="!envDelArmed">
           <Button variant="outline" size="sm" class="text-signal-failed"
-                  data-testid="dep-env-del" @click="envDelArmed = true">删除环境</Button>
+                  data-testid="dep-env-del" @click="armEnvDel">删除环境</Button>
         </template>
         <template v-else>
           <span class="svc-flag red">该环境的 API 地址、实例配置与身份条目将一并删除(账户不级联;仍有账户引用时后端会拦截)</span>
@@ -254,7 +254,7 @@
                   <span class="chip" :class="kindTone(svc)" :title="kindTitle(svc)">
                     {{ kindLabel(svc) }}
                   </span>
-                  <span v-if="svc.kind === 'plate' && !svc.inCatalog"
+                  <span v-if="plateReachable && svc.kind === 'plate' && !svc.inCatalog"
                         class="chip danger" :data-testid="`mx-drift-${svc.name}`"
                         title="主档 plate 行已不在 plate 目录(漂移)">漂移</span>
                   <span v-if="aliasCountOf(svc) == null" class="chip weak">条目…</span>
@@ -930,6 +930,7 @@ import {
   type AuthSession, type TestResult,
 } from '@/api/auth_sessions'
 import { confirmAction } from '@/utils/confirmAction'
+import { pickAccountLikeBackend } from '@/utils/identityResolve'
 import { toast } from '@/utils/toast'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import { Button } from '@/components/ui/button'
@@ -1032,12 +1033,11 @@ function aliasCountOf(svc: ServiceRow): number | null {
 function envAliases(svc: ServiceRow, envId: number): ServiceAliasRow[] {
   return aliasesOf(svc.name).filter((a) => a.envId === envId)
 }
+/** 条目 → 本人池账户(前端单源 pickAccountLikeBackend,镜像后端
+ *  run_prepare._pick_one;§8.3 引用不校验标签,默认账户跨标签共用
+ *  正常 —— 2026-11-19 前两页各写一份且多绑 env 等式,系统性误报)。 */
 function accountOf(svc: ServiceRow, a: ServiceAliasRow): AuthSession | undefined {
-  return accounts.value.find((acc) => acc.system === svc.system
-    && acc.envId === a.envId
-    && (a.refMode === 'username'
-      ? acc.username === a.refUsername
-      : acc.isDefault === true))
+  return pickAccountLikeBackend(accounts.value, svc.system, a)
 }
 /** 「设为默认」只在条目已装载、且默认位仍是它时隐藏。 */
 function hasNonDefaultAccount(svc: ServiceRow, a: ServiceAliasRow): boolean {
@@ -1140,16 +1140,21 @@ function toneOf(svc: ServiceRow): string {
 function kindLabel(svc: ServiceRow): string {
   if (svc.kind === 'external') return '第三方接入'
   if (svc.kind === 'integration') return '集成件'
+  // plate 不可达时后端把全部 plate 行置 inCatalog=false —— 「目录
+  // 缺席/漂移」是对账结论,不可达只是暂时失联,不冒充结论(D2)
+  if (!plateReachable.value) return 'Plate · 同步状态未知'
   return svc.inCatalog ? 'Plate 已同步' : 'Plate(目录缺席)'
 }
 function kindTone(svc: ServiceRow): string {
   if (svc.kind === 'external') return 'info'
   if (svc.kind === 'integration') return 'violet'
+  if (!plateReachable.value) return 'weak'
   return svc.inCatalog ? 'ok' : 'warn'
 }
 function kindTitle(svc: ServiceRow): string {
   if (svc.kind === 'external') return 'external:第三方接入,不经 plate 目录对账'
   if (svc.kind === 'integration') return 'integration:plate 集成件'
+  if (!plateReachable.value) return 'plate:目录暂不可达,同步状态未知'
   return `plate:目录受管${svc.inCatalog ? '(已同步)' : '(目录缺席)'}`
 }
 function kindMeta(svc: ServiceRow): string {
@@ -1172,7 +1177,8 @@ const reconOpen = ref(true)
 
 const tabCounts = computed(() => ({
   all: services.value.length,
-  plate: services.value.filter((s) => s.kind === 'plate' && s.inCatalog).length,
+  plate: services.value.filter((s) => s.kind === 'plate'
+    && (plateReachable.value ? s.inCatalog : true)).length,
   external: services.value.filter((s) => s.kind === 'external').length,
   integration: services.value.filter((s) => s.kind === 'integration').length,
 }))
@@ -1189,7 +1195,12 @@ const filteredServices = computed<ServiceRow[]>(() => {
   let list = services.value.filter((s) => !q
     || s.name.toLowerCase().includes(q)
     || s.system.toLowerCase().includes(q))
-  if (kindTab.value === 'plate') list = list.filter((s) => s.kind === 'plate' && s.inCatalog)
+  if (kindTab.value === 'plate') {
+    // 不可达时 inCatalog 恒 false(后端降级),按「状态未知」放行全部
+    // plate 行 —— 页签清空会把「暂时失联」误读成「没有已同步服务」
+    list = list.filter((s) => s.kind === 'plate'
+      && (plateReachable.value ? s.inCatalog : true))
+  }
   else if (kindTab.value === 'external') list = list.filter((s) => s.kind === 'external')
   else if (kindTab.value === 'integration') list = list.filter((s) => s.kind === 'integration')
   if (focusedEnv.value != null) {
@@ -1439,6 +1450,13 @@ const envFormOpen = ref(false)
 const envForm = ref({ name: '', description: '' })
 const lineRows = ref<Array<{ sys: string; line: string }>>([])
 const envDelArmed = ref(false)
+// 表单/删除的目标环境 = **打开/装配时快照**(2026-11-19 复核修复):
+// 筛选矩阵的环境下拉在表单打开期间仍可操作,保存/确认若取「保存时
+// 聚焦」会把 A 的数据写到 B 上(改名/版本线覆写/删错环境)。
+const envEditId = ref<number | null>(null)
+const envDelTargetId = ref<number | null>(null)
+
+watch(focusedEnv, () => { envDelArmed.value = false })
 
 async function makeDefault(): Promise<void> {
   if (focusedEnv.value == null) return
@@ -1456,8 +1474,15 @@ function openEditEnv(): void {
   envForm.value = { name: cur.name, description: cur.description }
   lineRows.value = Object.entries(cur.lines ?? {})
     .map(([sys, line]) => ({ sys, line }))
+  envEditId.value = cur.id
   envDelArmed.value = false
   envFormOpen.value = true
+}
+function armEnvDel(): void {
+  const cur = focusedCurrent.value
+  if (!cur) return
+  envDelTargetId.value = cur.id
+  envDelArmed.value = true
 }
 function linesOf(): Record<string, string> {
   const out: Record<string, string> = {}
@@ -1469,18 +1494,19 @@ function linesOf(): Record<string, string> {
 }
 async function saveEnv(): Promise<void> {
   error.value = ''
+  const target = envEditId.value
+  if (target == null) return
   const sysList = lineRows.value.map((r) => r.sys.trim()).filter(Boolean)
   if (new Set(sysList).size !== sysList.length) {
     error.value = '版本线里系统名重复'
     return
   }
+  if (!envForm.value.name.trim()) {
+    error.value = '环境名不能为空'
+    return
+  }
   try {
-    if (focusedEnv.value == null) return
-    if (!envForm.value.name.trim()) {
-      error.value = '环境名不能为空'
-      return
-    }
-    await updateEnvironment(focusedEnv.value, {
+    await updateEnvironment(target, {
       name: envForm.value.name.trim(),
       description: envForm.value.description.trim(),
       lines: linesOf(),
@@ -1490,10 +1516,11 @@ async function saveEnv(): Promise<void> {
   } catch (e) { error.value = msg(e) }
 }
 async function delEnv(): Promise<void> {
-  if (!focusedCurrent.value) return
+  const target = envDelTargetId.value
+  if (target == null) return
   error.value = ''
   try {
-    await deleteEnvironment(focusedCurrent.value.id)
+    await deleteEnvironment(target)
     envDelArmed.value = false
     focusedEnv.value = null
     await refreshAll()
@@ -1567,8 +1594,16 @@ async function saveDrawerTags(tags: string[]): Promise<void> {
   drawerError.value = ''
   try {
     const moved = await putInstanceTags(d.svc.system, d.envId, next)
-    // 当前标签可能被移除 → 抽屉跟到组内代表行
+    // 当前标签可能被移除 → 抽屉跟到组内代表行;实例表单坐标同拍跟移
+    // 并按新行重定基线(2026-11-19 复核修复:instForm 若仍持旧 envId,
+    // 后续「保存实例配置」会在旧标签上 upsert 重建刚删的行,静默撤销
+    // 搬移;旧坐标的未存草稿也不得写进新坐标)。
     drawer.value = { svc: d.svc, envId: moved.envId }
+    instForm.value = {
+      system: d.svc.system, envId: moved.envId,
+      loginUrl: moved.loginUrl ?? '', line: moved.line ?? '',
+      note: moved.note ?? '',
+    }
     await refreshAll()
     toast.success(`实例标签已更新:${moved.tags.join(' / ')}`)
   } catch (e) {
@@ -1587,6 +1622,9 @@ async function removeInstance(): Promise<void> {
     instForm.value = { ...instForm.value, loginUrl: '', line: '', note: '' }
     await refreshAll()
     toast.success('实例配置已移除')
+    // 抽屉主体((system, env) 实例行)已删:关闭抽屉 —— 停留会留着
+    // 陈旧坐标,任一保存钮(upsert 语义)都会静默重建刚删的行。
+    drawer.value = null
   } catch (e) {
     drawerError.value = msg(e)
   } finally {
@@ -1824,7 +1862,8 @@ async function makeDefaultAccount(a: ServiceAliasRow): Promise<void> {
   try {
     await setDefaultAuth(acc.id)
     await refreshAccounts()
-    toast.success('已设为该 (系统, 环境) 的默认账户')
+    // 0059 起默认按 (池, system) 唯一 —— 跨标签共用同一个默认账户
+    toast.success('已设为该系统的默认账户(本系统内跨标签共用)')
   } catch (e) { drawerError.value = msg(e) }
 }
 

@@ -117,7 +117,8 @@ export function remove(id: number) {
   return http.delete(`/auths/${id}`).then(() => undefined)
 }
 
-/** 置为该 (system, env) 的默认账户(同组旧默认原子清除)。 */
+/** 置为该 system 的默认账户(0059 起默认按 (池, system) 唯一,
+ * 同 system 旧默认原子清除 —— 跨环境共用同一个默认账户)。 */
 export function setDefault(id: number) {
   return http.post<AuthSession>(`/auths/${id}/default`).then((r) => r.data)
 }

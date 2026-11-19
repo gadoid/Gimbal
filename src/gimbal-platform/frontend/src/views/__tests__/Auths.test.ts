@@ -199,8 +199,11 @@ describe('Auths — 创建 / 编辑 / 删除', () => {
 
     const sys = q('[data-testid="f-system"]').element as HTMLInputElement
     const uname = q('[data-testid="f-username"]').element as HTMLInputElement
+    const env = q('[data-testid="f-env"]').element as HTMLSelectElement
     expect(sys.disabled).toBe(true)      // 实体键不可改
     expect(uname.disabled).toBe(true)
+    expect(env.disabled).toBe(true)      // envId 同为实体键(2026-11-19 补:
+                                          // patch 不发 envId,不锁会被静默丢弃)
     expect(sys.value).toBe('pay')
     expect(uname.value).toBe('u')
 
