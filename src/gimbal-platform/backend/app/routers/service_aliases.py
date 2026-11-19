@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..schemas.page import PageOut
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
@@ -64,6 +64,16 @@ class AliasCreate(BaseModel):
     ref_mode: Literal["default", "username"] = "default"
     ref_username: str = Field(default="", max_length=128, alias="refUsername")
     display: str = Field(default="", max_length=128)
+
+    @model_validator(mode="after")
+    def _username_ref_requires_name(self) -> "AliasCreate":
+        """FE-04(2026-11-20 审计):refMode=username 必须带 refUsername ——
+        此前该组合可入库,后端执行回落默认账户、前端按空名过滤报缺,
+        单源镜像在边缘值上分叉。写面拒绝,存量旧值仍按回落语义解析。"""
+        if self.ref_mode == "username" and not self.ref_username.strip():
+            raise ValueError(
+                "ref_username_required: refMode=username 必须填写引用用户名")
+        return self
 
 
 class AliasPatch(BaseModel):

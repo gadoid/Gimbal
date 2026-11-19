@@ -281,6 +281,10 @@ async def patch_alias(
         row.ref_username = ref_username
     if display is not None:
         row.display = display
+    # FE-04:patch 按合并后的**生效组合**校验(与创建面同规则)
+    if row.ref_mode == "username" and not (row.ref_username or "").strip():
+        raise ValueError(
+            "ref_username_required: refMode=username 必须填写引用用户名")
     await db.commit()
     await db.refresh(row)
     return identity_out(row, kind=svc_kind)

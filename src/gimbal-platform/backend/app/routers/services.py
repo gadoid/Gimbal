@@ -12,7 +12,7 @@ lines 视图与本端点同表 upsert(line 字段双写路径,一致性由 upser
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
