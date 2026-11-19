@@ -38,6 +38,9 @@
 <template>
   <section class="slib">
     <p v-if="notFound" class="empty">项目不存在或无权访问。<router-link to="/projects">返回项目列表</router-link></p>
+    <!-- FE-08j(2026-11-20 审计):加载失败与 404 分离 —— 此前网络失败/5xx
+         也落到「项目不存在」,误导排障。 -->
+    <p v-else-if="loadFailed" class="empty">项目加载失败(网络或服务异常),请稍后重试。<router-link to="/projects">返回项目列表</router-link></p>
     <template v-else-if="project">
       <!-- ══ 原型 _1.._6 · 项目信息区(头卡)═════════════════════ -->
       <header class="prj-head" data-testid="prj-head">
@@ -309,6 +312,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProject, deleteProject, type ProjectOut } from '@/api/projects'
+import { httpStatusOf } from '@/api/http'
 import { getExecutionsSummary } from '@/api/executions'
 import { useAuthStore } from '@/stores/auth'
 import { projectRoleLabel } from '@/utils/projectRole'
@@ -340,6 +344,8 @@ const formatTime = shortDateTime
 
 const project = ref<ProjectOut | null>(null)
 const notFound = ref(false)
+/** FE-08j:加载失败 ≠ 不存在(httpStatusOf 区分;404/403 才算 notFound) */
+const loadFailed = ref(false)
 
 // ── 头卡(原型项目信息区)─────────────────────────────────────────
 const projectInitial = computed(() => (project.value?.name?.trim()?.[0] ?? 'P').toUpperCase())
@@ -596,12 +602,16 @@ function taskStateLabel(t: IntegrationTaskItem): string {
 // ── 装载:详情 + 当前页签数据(tab 切换按需拉) ──────────────────
 async function loadDetail(): Promise<void> {
   notFound.value = false
+  loadFailed.value = false
   const id = Number(route.params.id)
   if (!Number.isInteger(id) || id <= 0) { notFound.value = true; return }
   try {
     project.value = await getProject(id)
-  } catch {
-    notFound.value = true
+  } catch (e) {
+    // FE-08j:404/403 = 真不存在/无权;其余(网络/5xx)= 加载失败
+    const st = httpStatusOf(e)
+    if (st === 404 || st === 403) notFound.value = true
+    else loadFailed.value = true
     return
   }
   void loadPassRate()   // 头卡成功率软失败,不阻断页签数据

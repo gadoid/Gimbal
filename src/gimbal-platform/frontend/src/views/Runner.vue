@@ -523,6 +523,11 @@ async function launchQueue() {
   launching.value = true
   const batchId = genBatchId()
   const failures: string[] = []
+  // FE-08i(2026-11-20 审计):只移除**已成功发起**的队列项 —— 此前
+  // clearQueue() 无条件清空,发起失败(409 硬门等)的条也被清走,与
+  // 「留在队列等修复」的注释/文案矛盾。
+  const launchedKeys = new Set<string>()
+  const keyOf = (q: QueueItem) => `${q.scenarioId}:${q.schemeId}`
   let done = 0
   for (const item of [...targets]) {
     done += 1
@@ -551,6 +556,7 @@ async function launchQueue() {
         ...(execConfigId.value ? { execConfigId: Number(execConfigId.value) } : {}),
         batchId,
       })
+      launchedKeys.add(keyOf(item))
     } catch (e) {
       // 单条失败不连坐(404 数据集被删 / 409 超闸与预检硬门等)— 记下继续,末尾汇总
       failures.push(`${item.name}:${fmtLaunchError(e)}`)
@@ -561,13 +567,15 @@ async function launchQueue() {
   const parts: string[] = []
   if (failures.length) {
     parts.push(`${targets.length - failures.length}/${targets.length} 条已发起,${failures.length} 条失败:${failures.join('；')}`)
+    parts.push(`${failures.length} 条已留在队列,可修复后重发`)
   } else {
     parts.push(`已发起 ${targets.length} 条(批次 ${batchId})`)
   }
   if (skipped > 0) parts.push(`${skipped} 条未启动(方案跑不了,已留在队列)`)
   if (failures.length) toast.warning({ message: parts.join('；'), duration: 8000 })
   else toast.success(parts.join('；'))
-  clearQueue()
+  queue.value = queue.value.filter((q) => !launchedKeys.has(keyOf(q)))
+  if (selectedIdx.value >= queue.value.length) selectedIdx.value = 0
   router.push(executionsBatchUrl(batchId))
 }
 </script>

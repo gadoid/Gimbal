@@ -80,13 +80,9 @@ const routes = [
     component: () => import('@/views/SchemeWorkbench.vue'),
     meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
-  {
-    // S7.3:/carry-config 退役 —— 全局默认落公共项目「配置」页签
-    // (?path= 深链透传;「我的默认」层迁个人设置 /profile/config)
-    path: '/carry-config',
-    component: () => import('@/views/PublicProjectRedirect.vue'),
-    meta: { requiresAuth: true, tab: 'config' },
-  },
+  // FE-07(2026-11-20 审计,决策 2B):/carry-config 路由撤除 —— 终点
+  // (ProjectConfigPanel)从不消费 ?path 深链,是一条断在中途的导航;
+  // 维护入口 = 公共项目「配置」页签直达。
   {
     path: '/admin/users',
     component: () => import('@/views/UsersAdmin.vue'),

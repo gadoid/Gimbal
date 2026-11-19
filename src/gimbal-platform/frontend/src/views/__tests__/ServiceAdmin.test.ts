@@ -737,10 +737,9 @@ describe('ServiceAdmin — 实例标签交互', () => {
     w.unmount()
 
     // 目标标签被别的实例组占用:后端 409 → 抽屉错误条
-    vi.spyOn(svcApi, 'putInstanceTags').mockRejectedValue({
-      response: { data: { detail: { code: 'instance_tag_conflict',
-        message: '目标标签已属于该系统的其它实例' } } },
-    })
+    vi.spyOn(svcApi, 'putInstanceTags').mockRejectedValue(Object.assign(
+      new Error('目标标签已属于该系统的其它实例'),
+      { status: 409, code: 'instance_tag_conflict' }))
     const w2 = await mountPage()
     await openDrawer(w2, 'fin-service', 1)
     await w2.get('[data-testid="cfg-tag-box"]').trigger('click')

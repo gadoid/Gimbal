@@ -86,7 +86,8 @@ describe('ServiceBindingEditor — 别名键(三层视图)', () => {
     // 「默认值」来源 chip 可点跳默认值页(原型对齐后是 button,带 ↗)
     const defChip = w.find('[data-testid="svc-source-$.from-default"]')
     expect(defChip.text()).toContain('默认值')
-    expect(defChip.element.tagName).toBe('BUTTON')
+    // FE-07(决策 2B):默认值 chip 撤深链后是纯文本 SPAN(不再可点)
+    expect(defChip.element.tagName).toBe('SPAN')
     expect(w.find('[data-testid="svc-source-$.from-nowhere"]').text()).toBe('无行')
 
     const ph = (path: string) =>
@@ -105,17 +106,21 @@ describe('ServiceBindingEditor — 别名键(三层视图)', () => {
     w.unmount()
   })
 
-  it('「默认值」chip 点击 → /carry-config?path= 深链', async () => {
+  it('「默认值」来源为纯文本(FE-07 决策 2B:深链撤除,不再导航)', async () => {
     const router = makeRouter()
     const w = mount(ServiceBindingEditor, {
       props: { serviceKey: 'fin-service-uat', baseService: 'fin-service' },
       global: { plugins: [router] },
     })
     await flushPromises()
-    await w.find('[data-testid="svc-source-$.from-default"]').trigger('click')
+    const chip = w.find('[data-testid="svc-source-$.from-default"]')
+    // 撤深链后是 span(非 button):点击不再导航,标题指引维护位置
+    expect(chip.element.tagName).toBe('SPAN')
+    expect(chip.attributes('title')).toContain('配置」页维护')
+    expect(chip.text()).not.toContain('↗')
+    await chip.trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe(
-      `/carry-config?path=${encodeURIComponent('$.from-default')}`)
+    expect(router.currentRoute.value.fullPath).toBe('/')
     w.unmount()
   })
 
@@ -179,7 +184,8 @@ describe('ServiceBindingEditor — 实例档模式(§8.9)', () => {
     expect(carryApi.getBindingsForInstance).toHaveBeenCalledWith('fin', 2, undefined)
     expect(carryApi.getBindingsFor).not.toHaveBeenCalled()
     expect(w.text()).toContain('本实例绑定')
-    expect(w.text()).not.toContain('服务级')
+    // FE-08d:无「服务级」来源**单值**;空/默认行标签带服务级覆盖限定
+    expect(w.text()).toContain('(服务级可能')
     await w.find('[data-testid="save-service"]').trigger('click')
     await flushPromises()
     expect(carryApi.putBindingsInstance).toHaveBeenCalledWith(

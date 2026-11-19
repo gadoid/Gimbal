@@ -51,6 +51,10 @@ export function carrySourceLabel(source: string): string {
   if (mi) {
     return `${mi[1] === 'project' ? '项目层' : '个人层'}·实例`
   }
+  // FE-06(2026-11-20 审计):层默认值是两段式 `{scope}:{scopeId}`(后端
+  // defaults_out 无档位后缀)—— 此前不匹配任何分支,来源列原样显示坐标串。
+  const md = /^(project|user):(\d+)$/.exec(source)
+  if (md) return md[1] === 'project' ? '项目层默认' : '个人层默认'
   return source
 }
 

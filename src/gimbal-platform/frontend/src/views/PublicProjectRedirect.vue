@@ -20,10 +20,8 @@ onMounted(async () => {
     const pub = (await listProjects()).find((p) => p.kind === 'public')
     if (pub) {
       const tab = String(route.meta.tab ?? 'scenarios')
-      // S7.3:/carry-config 退役 → 公共项目「配置」页签;?path= 深链
-      // (键详情「默认值」来源 chip 的落点)原样透传
-      const path = typeof route.query.path === 'string' ? route.query.path : ''
-      target = `/projects/${pub.id}?tab=${tab}${path ? `&path=${encodeURIComponent(path)}` : ''}`
+      // FE-07:?path 深链透传撤除(终点从不消费;/carry-config 路由已删)
+      target = `/projects/${pub.id}?tab=${tab}`
     }
   } catch { /* 回落项目列表 */ }
   await router.replace(target)

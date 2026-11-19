@@ -63,7 +63,7 @@
                 <span class="muted">个人池 {{ r.personalCount }} 个账户</span>
               </div>
             </td>
-            <td><span class="svc-flag" :class="rowTone(r)">{{ rowLabel(r) }}</span></td>
+            <td><span class="svc-flag" :class="rowTone(r)" :title="rowTitle">{{ rowLabel(r) }}</span></td>
             <td>
               <button
                 v-if="canManage && !r.projectCredentials.length"
@@ -119,7 +119,10 @@ async function load(): Promise<void> {
   }
 }
 
-/** 行状态:登录口 / 地址 / 任一凭证池,三者齐 = 就绪 */
+/** 行状态:登录口 / 地址 / 任一凭证池,三者齐 = 就绪。
+ *  FE-08k(2026-11-20 审计):「有凭证」是**计数口径**(池内存在该
+ *  (system, env) 的凭证),粗于执行链的 ref 解析(refMode/refUsername/
+ *  默认位)——标签措辞与 title 说明以预检解析为准,避免读成必可用。 */
 function rowOk(r: MatchRow): boolean {
   return Boolean(r.loginUrl) && r.addresses.length > 0
     && (r.projectCredentials.length > 0 || r.personalCount > 0)
@@ -128,8 +131,9 @@ function rowTone(r: MatchRow): string {
   return rowOk(r) ? 'green' : 'amber'
 }
 function rowLabel(r: MatchRow): string {
-  return rowOk(r) ? '就绪' : '待补'
+  return rowOk(r) ? '凭证在池' : '待补'
 }
+const rowTitle = '凭证在池 = 登录口、地址与至少一枚池内凭证齐备(计数粗口径);实际取用以执行预检的条目解析为准。'
 
 watch(() => props.envId, () => void load())
 // 跨项目直达(同路由复用组件)→ 匹配表随项目重载(此前只 watch envId)

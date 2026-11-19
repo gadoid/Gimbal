@@ -34,8 +34,13 @@ export function pickAccountLikeBackend<T extends AccountLikeRow>(
   entry: IdentityRefLike,
 ): T | undefined {
   if (!system) return undefined
+  // FE-04(2026-11-20 审计):镜像后端 _pick_one 的边缘值语义 ——
+  // refMode=username 但 refUsername 为空(存量旧值;写面已拒新增)
+  // 按默认位回落,不再按空名恒 miss 报「缺账户」。
+  const usernameRef = entry.refMode === 'username'
+    && !!(entry.refUsername ?? '').trim()
   const cands = accounts.filter((a) => a.system === system
-    && (entry.refMode === 'username'
+    && (usernameRef
       ? a.username === entry.refUsername
       : a.isDefault === true))
   const sameTag = cands.filter((a) => a.envId === entry.envId)

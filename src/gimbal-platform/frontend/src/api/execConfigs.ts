@@ -75,7 +75,8 @@ export function getExecConfig(id: number): Promise<ExecConfigRow> {
     .then(({ data }) => data)
 }
 
-/** 整体替换式 PATCH */
+/** 合并式 PATCH(v7 起):按键更新 payload —— 只传 systems 不抹
+ *  description/tags;None=不改、""/[]=显式清空。本页保存仍传全量字段。 */
 export function updateExecConfig(
   id: number,
   body: ExecConfigUpdateInput,

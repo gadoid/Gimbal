@@ -226,6 +226,7 @@
                     :key="sc.schemeId"
                     :scheme="sc"
                     :last-run="runs.lastRunOfScheme(row.meta.scenarioId, sc.schemeId)"
+                    :running="isSchemeRunning(row, sc)"
                     @run="runScheme(row, sc)"
                     @update="(_s, patch) => updateScheme(row, sc, patch)"
                   />
@@ -565,11 +566,24 @@ function onQuickRun(): void {
   void doRunScheme(q.row, q.scheme, quickRunSource.value)
 }
 
+/** FE-01(2026-11-20 审计):场景库快捷执行在飞守卫 —— 执行是对被绑
+ *  第三方的副作用动作,双击即双发;per-scheme busy 集 + 卡片按钮禁用
+ *  (与 Runner.launching 守卫同分级)。 */
+const runningSchemes = ref(new Set<string>())
+const schemeRunKey = (row: ScenarioListItem, scheme: SchemeV2) =>
+  `${row.meta.scenarioId}:${scheme.schemeId}`
+function isSchemeRunning(row: ScenarioListItem, scheme: SchemeV2): boolean {
+  return runningSchemes.value.has(schemeRunKey(row, scheme))
+}
+
 async function doRunScheme(
   row: ScenarioListItem, scheme: SchemeV2,
   credentialSource?: 'personal' | 'project',
 ) {
   const id = row.meta.scenarioId
+  const key = schemeRunKey(row, scheme)
+  if (runningSchemes.value.has(key)) return
+  runningSchemes.value = new Set(runningSchemes.value).add(key)
   try {
     const res = await runScenario({
       ...schemeToRunRequest(scheme, id),
@@ -581,6 +595,10 @@ async function doRunScheme(
     await runs.load(id, true)
   } catch (e) {
     toast.error(`执行失败: ${(e as Error).message}`)
+  } finally {
+    const next = new Set(runningSchemes.value)
+    next.delete(key)
+    runningSchemes.value = next
   }
 }
 

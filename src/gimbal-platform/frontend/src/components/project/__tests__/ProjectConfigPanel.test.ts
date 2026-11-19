@@ -91,7 +91,8 @@ beforeEach(() => {
 
 afterEach(() => { document.body.innerHTML = '' })
 
-/** 面板读 route.query.path(公共项目 ?path= 深链)→ 带真 router 挂载 */
+/** FE-07 备正:面板不读 route.query(?path 深链已随决策 2B 撤除);
+ * router 仅满足子组件依赖 */
 function mountPanel(p = proj) {
   const router = createRouter({
     history: createMemoryHistory(),

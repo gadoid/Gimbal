@@ -946,11 +946,11 @@ const router = useRouter()
 const error = ref('')
 
 function msg(e: unknown): string {
-  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-  if (typeof d === 'string') return d
-  if (d && typeof d === 'object' && 'message' in d) return String((d as { message: unknown }).message)
-  if (d && typeof d === 'object' && 'msg' in d) return String((d as { msg: unknown }).msg)
-  return String((e as Error)?.message ?? e)
+  // FE-08e(2026-11-20 审计):e.response.data.* 分支删除 —— http 拦截器
+  // 已归一 ApiError(message 含 detail 摘要),原始 response 不可达。
+  const m = (e as { message?: unknown })?.message
+  if (typeof m === 'string' && m) return m
+  return String(e)
 }
 
 // ── 数据面(主档 = 服务全集;目录只用于对账)──────────────────
@@ -1354,9 +1354,12 @@ async function saveSvc(): Promise<void> {
   }
 }
 async function removeSvc(svc: ServiceRow): Promise<void> {
+  // FE-03(2026-11-20 审计):文案对齐后端实际行为 —— delete_service 只删
+  // 服务主档登记行(挂靠 409 拦截),system 级共享实例行/部署/环境**不**
+  // 随删;此前「所有环境下的实例将一并移除」属过度承诺。
   const ok = await confirmAction(
-    `删除「${svc.name}」?该服务的登记及其在所有环境下的实例将一并移除;有身份条目或部署地址挂靠时会被拦截。`,
-    '删除实例',
+    `删除服务「${svc.name}」的服务登记?仅移除主档登记行;有身份条目或部署地址挂靠时会被拦截。系统实例与部署行不受影响(可在「实例配置」另行管理)。`,
+    '删除服务登记',
     { danger: true, confirmButtonText: '删除' },
   )
   if (!ok) return
@@ -1432,7 +1435,19 @@ async function confirmAccess(): Promise<void> {
     // 多标签:先确保实例行存在,再整组挂标签(组内共享配置)
     const first = resolved[0]
     if (resolved.length > 1) {
+      // FE-08b(2026-11-20 审计):putInstanceTags 是整组替换 —— 首标签
+      // 所在实例组若已有本次未选的标签,会被静默移除;先取当前组标签,
+      // 有删除时确认点名(409 只挡「别的组」,挡不住同组静默覆写)。
       await putInstance(svc.system, first.id, {})
+      const cur = instances.value.find(
+        (r) => r.system === svc.system && r.envId === first.id)
+      const dropping = (cur?.tags ?? []).filter((t) => !tags.includes(t))
+      if (dropping.length) {
+        const ok = await confirmAction(
+          `实例(${svc.system} · ${first.name ?? first.id})已有标签「${dropping.join('、')}」不在本次提交集合内,将被移除。继续?`,
+          '标签覆写确认', { danger: true, confirmButtonText: '继续' })
+        if (!ok) return
+      }
       await putInstanceTags(svc.system, first.id, tags)
     }
     accessOpen.value = false
@@ -1460,13 +1475,21 @@ watch(focusedEnv, () => { envDelArmed.value = false })
 
 async function makeDefault(): Promise<void> {
   if (focusedEnv.value == null) return
-  await setDefaultEnvironment(focusedEnv.value)
-  await refreshAll()
+  // FE-08a(2026-11-20 审计):裸 await 失败 = 未处理 rejection,用户无
+  // 反馈;补 catch + toast(与页内其余动作同口径)。
+  try {
+    await setDefaultEnvironment(focusedEnv.value)
+    toast.success('已设为默认环境')
+    await refreshAll()
+  } catch (e) { toast.error(`设置失败: ${(e as Error).message}`) }
 }
 async function clearDefault(): Promise<void> {
   if (focusedEnv.value == null) return
-  await unsetDefaultEnvironment(focusedEnv.value)
-  await refreshAll()
+  try {
+    await unsetDefaultEnvironment(focusedEnv.value)
+    toast.success('已取消默认环境')
+    await refreshAll()
+  } catch (e) { toast.error(`操作失败: ${(e as Error).message}`) }
 }
 function openEditEnv(): void {
   const cur = focusedCurrent.value

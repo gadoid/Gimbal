@@ -138,7 +138,7 @@
             <template v-else>
               <div class="head-row">
                 <label class="lb">名称</label>
-                <Input v-model="form.name" placeholder="如 商户B视角@UAT"
+                <Input v-model="form.name" placeholder="如 商户B视角@UAT" maxlength="64"
                        data-testid="ec-name" />
                 <span v-if="mode === 'edit' && selected?.isDefault"
                       class="svc-flag green" data-testid="ec-is-default">默认配置</span>
@@ -189,8 +189,9 @@
               </template>
               <span class="head-acts-fill" />
               <Button variant="outline" size="sm" data-testid="ec-cancel"
-                      @click="cancel">取消</Button>
-              <Button size="sm" data-testid="ec-save" @click="save">保存</Button>
+                      :disabled="saving" @click="cancel">取消</Button>
+              <Button size="sm" data-testid="ec-save" :disabled="saving"
+                      @click="save">{{ saving ? '保存中…' : '保存' }}</Button>
             </div>
           </div>
 
@@ -640,6 +641,9 @@
             <EffectivePreviewDialog inline :open="true"
               :scenarios="scenOptions" :exec-config-id="selected?.id"
               :env-names="envNames" />
+            <p v-if="scenCapped" class="hint" data-testid="ec-scen-capped">
+              场景超过 {{ scenOptions.length }} 条,下拉仅列前 {{ scenOptions.length }} 条 —— 用场景名精确定位或在场景列表发起预览。
+            </p>
           </div>
 
           <!-- 存量绑定声明条目的软建议(各服务已加载条目并集) -->
@@ -786,6 +790,8 @@ const instRows = ref<InstanceRow[]>([])
 const authRows = ref<Array<{ id: number; system: string | null; envId: number | null;
                             username?: string; isDefault?: boolean | null }>>([])
 const scenOptions = ref<Array<{ id: string; name: string }>>([])
+/** 翻页上限外还有场景(>1000)时提示 —— 下拉是选择面不是台账,截断可接受 */
+const scenCapped = ref(false)
 /** 主档(服务选项 + 装载坐标 baseService → system + 说明) */
 const svcRows = ref<ServiceRow[]>([])
 
@@ -1214,10 +1220,12 @@ async function loadHub(c: ExecConfigRow): Promise<void> {
 }
 
 function msg(e: unknown): string {
-  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-  if (typeof d === 'string') return d
-  if (d && typeof d === 'object' && 'message' in d) return String((d as { message: unknown }).message)
-  return String((e as Error)?.message ?? e)
+  // FE-08e(2026-11-20 审计):e.response.data.detail 分支删除 —— http
+  // 拦截器已把一切错误归一为 ApiError(message 含 detail 摘要),原始
+  // response 不可达,该分支是永不可达的死代码。
+  const m = (e as { message?: unknown })?.message
+  if (typeof m === 'string' && m) return m
+  return String(e)
 }
 
 // ── 未保存改动快照(脏检查):fillForm / 新建落快照;切换与新建前比对,
@@ -1404,7 +1412,12 @@ async function reload(): Promise<void> {
   rows.value = await listExecConfigs()
 }
 
+/** FE-05(2026-11-20 审计):保存在飞守卫 —— create 双击发双 POST(后端
+ *  名唯一兜底,第二个 409 误显为失败);saving 态 + 按钮禁用。 */
+const saving = ref(false)
+
 async function save(): Promise<void> {
+  if (saving.value) return
   error.value = ''
   const name = form.value.name.trim()
   if (!name) { error.value = '配置名不能为空'; return }
@@ -1420,6 +1433,11 @@ async function save(): Promise<void> {
     tags: [...new Set(form.value.tags.map((t) => t.trim()).filter(Boolean))],
     systems: payloadOf(),
   }
+  saving.value = true
+  // FE-08h(2026-11-20 审计):selectConfig 会复位到编辑页签 —— 用户停在
+  // 就绪度/预览页签保存时不应被跳走;保存后恢复原页签(切配置/新建的
+  // 复位语义不变)。
+  const tabBefore = activeTab.value
   try {
     if (mode.value === 'create') {
       const created = await createExecConfig(body)
@@ -1432,7 +1450,8 @@ async function save(): Promise<void> {
       selectConfig(selectedId.value)
       toast.success('配置已保存')
     }
-  } catch (e) { error.value = msg(e) }
+    activeTab.value = tabBefore
+  } catch (e) { error.value = msg(e) } finally { saving.value = false }
 }
 
 async function makeDefault(): Promise<void> {
@@ -1480,6 +1499,26 @@ async function del(): Promise<void> {
   } catch (e) { error.value = msg(e) }
 }
 
+/** 预览场景候选:翻页取全(收尾批在 ProjectConfigPanel 修过同一问题,
+ *  此前本页只拉单页 50 条,'mine' 场景多于 50 时后排场景选不到);
+ *  上限 10 页,超出提示。 */
+async function loadScenOptions(): Promise<void> {
+  const out: Array<{ id: string; name: string }> = []
+  let total = Infinity
+  let page = 1
+  while (out.length < total && page <= 10) {
+    const envelope = await listScenarioOptions(
+      { page, page_size: 100, scope: 'mine' })
+    total = envelope.total
+    if (!envelope.items.length) break
+    out.push(...envelope.items.map((i) => ({
+      id: i.scenarioId, name: i.name || i.scenarioId })))
+    page += 1
+  }
+  scenOptions.value = out
+  scenCapped.value = total > out.length
+}
+
 onMounted(async () => {
   try {
     const [cfgs, envRows] = await Promise.all([
@@ -1497,18 +1536,16 @@ onMounted(async () => {
   // Ping All 拨测目标)、主档(服务选项 + 装载坐标 + 说明;拉不到 → 服务列
   // 降级手输、坐标显 ?)、实例行(表单实例过滤 + 枢纽①登录口列)、
   // 场景 options(预览下拉)
-  listAllAuths().then((r) => { authRows.value = r as never }).catch(() => {})
+  // FE-08f:去掉 `as never` 硬转 —— AuthSession 形状与 authRows 声明
+  // 结构兼容(system/envId/username/isDefault 均为宽化方向)。
+  listAllAuths().then((r) => { authRows.value = r }).catch(() => {})
   listServices()
     .then((out) => { svcRows.value = out.services })
     .catch(() => { svcRows.value = [] })
   listInstances()
     .then((r) => { instRows.value = r })
     .catch(() => { instRows.value = [] })
-  listScenarioOptions({ page_size: 50, scope: 'mine' })
-    .then((envelope) => {
-      scenOptions.value = envelope.items.map((i) => ({
-        id: i.scenarioId, name: i.name || i.scenarioId }))
-    }).catch(() => {})
+  loadScenOptions().catch(() => {})
 })
 </script>
 
@@ -1617,6 +1654,8 @@ onMounted(async () => {
   font-size: 0.71875rem;
   color: var(--sl-ink-3);
 }
+/* 预览场景下拉截断提示(与 ProjectConfigPanel .hint 同款) */
+.hint { margin: 0.5rem 0 0; color: var(--sl-ink-3); font-size: 0.75rem; }
 .rail-new {
   flex: none;
   margin-top: 0.625rem;

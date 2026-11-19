@@ -55,7 +55,8 @@
           @keyup.esc="cancel"
         />
       </span>
-      <button type="button" class="run-link" @click.stop="$emit('run', scheme)">▶ 执行</button>
+      <button type="button" class="run-link" :disabled="running"
+        @click.stop="$emit('run', scheme)">{{ running ? '执行中…' : '▶ 执行' }}</button>
     </div>
   </div>
 </template>
@@ -69,6 +70,9 @@ import { relTime } from '@/utils/datetime'
 const props = defineProps<{
   scheme: SchemeV2
   lastRun: { status: string; at: string | null } | null
+  /** FE-01:该方案的执行在飞中(宿主 doRunScheme busy 集)→ 按钮禁用,
+   *  双击不再重复派发(对被绑第三方是真实重复副作用)。 */
+  running?: boolean
 }>()
 const emit = defineEmits<{
   run: [scheme: SchemeV2]

@@ -101,20 +101,18 @@
             <td class="muted">{{ row.type }}</td>
             <td>
               <!-- 「来源」= 三层链的落点,配色与键详情那条链同一族:
-                   本键蓝 · 服务级紫 · 默认值(可点跳兜底层)· 无行虚线 -->
-              <button
-                v-if="sourceOf(row) === 'default'"
-                type="button"
-                class="svc-flag src-link"
-                :data-testid="`svc-source-${row.path}`"
-                :title="`该兜底值在「默认值」页的位置(${row.path})`"
-                @click="router.push(`/carry-config?path=${encodeURIComponent(row.path)}`)"
-              >{{ sourceLabel(row) }} ↗</button>
+                   本键蓝 · 服务级紫 · 默认值 · 无行虚线。FE-07(2026-11-20
+                   审计,决策 2B):默认值来源的 /carry-config?path 深链撤除
+                   —— 终点(ProjectConfigPanel)从不消费 path,高亮逻辑留在
+                   零引用的孤儿 CarryDefaultsEditor 里;点击无反应的假交互
+                   改诚实纯文本(兜底值在公共项目「配置」页维护)。 -->
               <span
-                v-else
                 class="svc-flag"
                 :class="`src-${sourceOf(row)}`"
                 :data-testid="`svc-source-${row.path}`"
+                :title="sourceOf(row) === 'default'
+                  ? `兜底值来自层默认(${row.path});在公共项目「配置」页维护`
+                  : undefined"
               >
                 {{ sourceLabel(row) }}
               </span>
@@ -171,7 +169,6 @@
  * 继承层 placeholder / 无行 = 不注入)。
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { buildServiceEntries, type ServiceCarryRow } from '@/utils/carry-entries'
@@ -218,7 +215,6 @@ const isAlias = computed(() =>
   !isInstance.value && !!props.baseService && props.baseService !== props.serviceKey)
 const ownLabel = computed(() =>
   (isInstance.value ? '本实例' : (isAlias.value ? '本别名' : '本服务')))
-const router = useRouter()
 
 /** 表底统计(原型 H-alias-detail):本键行数 / 非 none 来源的链路覆盖数。 */
 const ownCount = computed(() => rows.value.filter((r) => r.hasRow).length)
@@ -249,8 +245,11 @@ function sourceLabel(row: ServiceRow): string {
   switch (sourceOf(row)) {
     case 'own': return ownLabel.value
     case 'service': return '服务级'
-    case 'default': return '默认值'
-    default: return '无行'
+    // FE-08d(2026-11-20 审计):实例模式无「服务级」单值显示位(按消费
+    // 服务各异),但运行链序服务档**压过**层默认 —— 标签带限定,避免
+    // 把「默认值/无行」读成最终生效值。
+    case 'default': return isInstance.value ? '默认值(服务级可能覆盖)' : '默认值'
+    default: return isInstance.value ? '无本键行(服务级可能注入)' : '无行'
   }
 }
 
@@ -441,8 +440,6 @@ onMounted(async () => {
   background: transparent;
   border: 1px dashed var(--sl-star-off);
 }
-.src-link { cursor: pointer; border: 0; }
-.src-link:hover { color: var(--sl-accent); text-decoration: underline; }
 </style>
 
 <style scoped>

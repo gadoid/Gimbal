@@ -189,7 +189,9 @@ describe('ProjectDetailView — 详情页签', () => {
   })
 
   it('非成员/不存在:404 态回落项目列表链接', async () => {
-    vi.mocked(projectsApi.getProject).mockRejectedValue(new Error('404'))
+    // FE-08j:404 与加载失败分离 —— 桩带 status 供 httpStatusOf 判定
+    vi.mocked(projectsApi.getProject).mockRejectedValue(
+      Object.assign(new Error('Not Found'), { status: 404 }))
     const w = await mountView(ProjectDetailView, { isAdmin: false, path: '/projects/99' })
     expect(w.text()).toContain('项目不存在或无权访问')
     w.unmount()

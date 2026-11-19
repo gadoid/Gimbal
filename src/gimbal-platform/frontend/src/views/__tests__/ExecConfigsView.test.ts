@@ -774,10 +774,11 @@ describe('ExecConfigsView', () => {
   })
 
   it('重名 409 → detail.message 内联展示', async () => {
-    ec.createExecConfig.mockRejectedValue({
-      response: { data: { detail: { code: 'exec_config_name_exists',
-                                    message: "执行配置名 'x' 已存在" } } },
-    })
+    // FE-08e:http 拦截器归一后错误是 Error(message 含 detail)——
+    // 桩改真实形状(旧 response.data.detail 形状在真链路不可达)
+    ec.createExecConfig.mockRejectedValue(Object.assign(
+      new Error("执行配置名 'x' 已存在"),
+      { status: 409, code: 'exec_config_name_exists' }))
     const w = await mountPage()
     await w.get('[data-testid="ec-new"]').trigger('click')
     await w.get('[data-testid="ec-name"]').setValue('x')
