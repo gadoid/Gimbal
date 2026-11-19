@@ -1212,6 +1212,67 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
     (刷新失败 toast,不再 unhandled rejection);ProjectDetailView
     套件搜索防抖定时器卸载清理。
 
+### 接线质量审计 · 核实与修复轮(2026-11-19/20,🟢 批次①–④ 完成)
+
+外部审计报告 `docs/wiring-quality-audit-20261119.md`(三主线:前端交互/
+配置拼接注入/第三方令牌,32 项指控)逐项复核:**29 属实 / 1 部分(CFG-05
+实为 TOK-02 另一面)/ 2 属已拍板设计(TOK-03 §8.10、TOK-05 明文回显)**;
+报告四点更正(CFG-05 表述、precheck_hard_gate「四面共用」言过其实、C3
+归层、AuthAccount 无 refresh_token 列)。**三决策点拍板:决策 2 = 撤
+/carry-config 深链;决策 3 = 引擎缺凭证 fail-fast + 环境变量逃生口;
+决策 1(§8.10 圈定升运行时白名单)挂起** —— 设计定稿见
+`docs/identity-registry-driven-plan.md`。修复按批次落 commit
+(fd060592..daf04ace 七连):
+
+- **P3 清理(评审轮遗留)**:`carry_injection.merge_carry_tiers` 单源化
+  —— 预览(resolve_effective_config)与执行链(build_carry_context)
+  改调同一函数,链序结构上不可能漂移(此前是两份手写平行实现靠测试钉
+  同步);ExecConfigs 预览场景下拉翻页取全(10 页上限);api PATCH
+  注释改合并式口径;
+- **批次① 能力恢复(P1)**:CFG-01 lifecycle **三断**(审计录两断,修
+  ①后第三断显形:漏传 `resolved_vars` / `statemachine.states` 误导入
+  StepStatus / `StepContext` 无 `.view` 属性)—— 补参、删误导入用
+  模块顶正确版、改 `StepContextAdapter` 包裹,两处裸 except 补 warning;
+  setup/teardown 上下文/归档能力整体恢复 + 归档回归钉。CFG-02 订阅指纹
+  `b.id`→`b.account_id`(run_dispatcher 同类曾修,此处漏网;全仓
+  PickedIdentity 消费点清扫确认唯一)。**审计外追修**:`scheme_store
+  .normalized()` 先合成 dataSetSelection 再被模型 dump 的显式空 [] 盖回
+  —— 经 /run-schemes 创建的旧形状(dataSetIds)方案**静默丢数据集**,
+  合成移到 update 后。CFG-03 graph 单元降级补 warning + `scheme_env`
+  死键删除(§8.2 退役残留);
+- **批次② 安全收口(P1)**:TOK-01 `plate_client.convert` **入口单点剥
+  作者明文 `config.users`**(深拷贝;覆盖派发/graph/集成/adhoc/保存校验/
+  适配/导入×2 全部 8 调用面;执行语义零变 —— materialize 本就丢弃
+  converted users)。TOK-02(决策 3A)三层:graph 缺槽闸项目池→**双池**
+  (个人池 409 `auth_aliases_missing` 点名条目);adhoc 补 `identity_missing`
+  422(排在结构/地址/版本校验后);引擎 `call.py` 三处会话缺失分支
+  warning+空 header → `AuthError` fail-fast,逃生口
+  `GIMBAL_ALLOW_ANONYMOUS_AUTH=1`。TOK-06 wl/yhr/github(src+backend
+  双副本)DEBUG 完整响应移到 `apply_token` 掩码后、AuthError 只报键面;
+- **批次③④ 前端**:FE-01 快捷执行 per-scheme busy 集 + 按钮禁用(双击
+  不再双发副作用)/FE-05 保存 saving 态/FE-08a 设默认 catch+toast;
+  FE-07(决策 2B)深链撤除五件(chip 纯文本+title 指路/卡片退只读/路由
+  删/?path 透传删/孤儿 CarryDefaultsEditor 删+测试注释修正);
+  FE-03 删除文案对齐实际行为;FE-06 来源标签补两段式层默认分支;
+  FE-04 refMode=username⇒refUsername 写面校验(创建 422 + patch 按合并
+  后组合)+ 前端镜像空名回落对齐;FE-08 b–l 小项(多标签覆写确认点名
+  删除项/实例档来源标签带服务级覆盖限定/两处 msg() 死分支删/as never
+  移除/name maxlength/保存保持页签/Runner 只清成功项/404 与网络失败
+  分离/「凭证在池」粗口径措辞/services Any 导入);
+- **测试**:新增 8 用例(lifecycle 归档钉/指纹行级绑定换绑翻转/convert
+  剥 users 断言/签名器 fail-fast 双路径含逃生口/graph 个人池闸双向/
+  adhoc 新门)+ 6 个钉旧行为用例随契约更新(深链 SPAN、错误桩改
+  拦截器归一后的真实 Error 形状等);
+- **验证**:前端 vitest **172 文件 / 1493 passed / 0 failed** + vue-tsc 0;
+  后端分域全绿(carry/注入/链 54 + consent/scheme/q3 22 + adhoc 30 +
+  s8 7 + plate 14 + alias/bindings 15 + 引擎签名器 23 + lifecycle 3);
+  adhoc 遗留 1 个 teardown 死锁经 **HEAD 对照确认为既有 flake**(与本轮
+  无关);后端已重启 `/api/health` ok。**后端全量 pytest 基线未跑**
+  (口径:先不全量);
+- **遗留**:决策 1(§8.10 白名单归一,设计定稿待拍板)、FE-02 假空态
+  集群(≥12 处,建议 degraded 三态单独一批)、TOK-04 硬编码凭证轮换
+  (运维)、TOK-05/08 家族已登记项、C3 测试口径、后端全量基线。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。
