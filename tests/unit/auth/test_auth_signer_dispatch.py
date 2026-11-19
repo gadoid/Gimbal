@@ -77,9 +77,44 @@ def test_standard_basic_without_token():
     assert signed["Authorization"].startswith("Basic ")
 
 
-def test_bearer_without_token_skips():
-    signed = _login(_Session(auth_signer="standard.bearer", token=None))
-    assert signed == {}
+def test_bearer_without_token_fails_fast(monkeypatch):
+    """TOK-02(决策 3A):声明了 user 却无会话 → 默认 AuthError(拒绝
+    匿名调用);逃生口 GIMBAL_ALLOW_ANONYMOUS_AUTH=1 恢复旧行为(空头)。
+    (本用例前身 test_bearer_without_token_skips 钉的是旧的 warning+匿名。)"""
+    import pytest
+    from gimbal.exceptions import AuthError
+
+    monkeypatch.delenv("GIMBAL_ALLOW_ANONYMOUS_AUTH", raising=False)
+    with pytest.raises(AuthError, match="拒绝匿名调用"):
+        _login(_Session(auth_signer="standard.bearer", token=None))
+
+    monkeypatch.setenv("GIMBAL_ALLOW_ANONYMOUS_AUTH", "1")
+    assert _login(_Session(auth_signer="standard.bearer", token=None)) == {}
+
+
+def test_missing_session_fails_fast_all_signers(monkeypatch):
+    """会话整体缺失(registry 查无此标签;签名器恒回落 md5 分支)与
+    bearer 有会话未登录(token 空)两条缺凭证路径 → 同一 fail-fast
+    口径;逃生口下统一降级为空 header。"""
+    import pytest
+    from gimbal.exceptions import AuthError
+
+    class _EmptyAuth:
+        def get(self, tag):
+            return None
+
+    def _login_missing():
+        from gimbal.protocols.builtin.http import HttpProtocolExecutor
+        ex = HttpProtocolExecutor()
+        ex.bind(auth_registry=_EmptyAuth())
+        return ex.login("user1")
+
+    monkeypatch.delenv("GIMBAL_ALLOW_ANONYMOUS_AUTH", raising=False)
+    with pytest.raises(AuthError, match="拒绝匿名调用"):
+        _login_missing()
+
+    monkeypatch.setenv("GIMBAL_ALLOW_ANONYMOUS_AUTH", "true")
+    assert _login_missing() == {}
 
 
 def test_token_type_default_bearer_does_not_hijack():

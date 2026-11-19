@@ -144,7 +144,23 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     Returns Plate's ``data`` payload (``{consumer, converted}``) on
     success.  Raises :class:`PlateUnavailableError` on connect / 5xx,
     :class:`PlateRejectedError` on 4xx.
+
+    TOK-01(2026-11-20 审计):入口**剥作者明文 users**(config.users)
+    —— 池凭证经 materialize_run_copy 在 convert 产物上物化,执行链
+    不依赖 convert 输入里的 users(run_materialize 对 converted users
+    一律丢弃);此前作者内置凭证明文随 convert 输入进 plate,plate
+    HTTP 面无鉴权,暴露面 = PLATE_HOST 非回环或本机恶意进程。单点
+    收口覆盖全部 8 个调用面(派发/graph/集成/adhoc/保存校验/适配/
+    导入 ×2)。深拷贝后剥离,不改动调用方传入的 dict。
     """
+    import copy as _copy
+
+    if isinstance(scenario_dict, dict):
+        cfg = scenario_dict.get("config")
+        if isinstance(cfg, dict) and cfg.get("users"):
+            scenario_dict = _copy.deepcopy(scenario_dict)
+            scenario_dict["config"] = {
+                k: v for k, v in cfg.items() if k != "users"}
 
     body = {"consumer": "gimbal", "scenario": scenario_dict}
     client = get_client()

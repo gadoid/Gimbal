@@ -1170,9 +1170,11 @@ async def dispatch_target(
     # injectedAuths 清单与实际注入的 users。
     auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
         db, definition_from_payload(scenario_payload), _bindings)
-    if _graph is not None and cred_project_id is not None:
-        # 编排 + 项目凭证:缺槽按**全图**凭证清单判(与物化同源),不是
-        # 锚点场景的清单 —— 否则单元缺槽要到执行期才步骤级报错
+    if _graph is not None:
+        # 编排缺槽按**全图**凭证清单判(与物化同源),不是锚点场景的
+        # 清单 —— 否则单元缺槽要到执行期才步骤级报错。TOK-02
+        # (2026-11-20 审计):此前仅项目凭证池有闸,个人池缺身份会
+        # 静默漏到引擎层匿名调用 —— 双池统一 fail-fast。
         from . import graph_dispatch as _gd
         try:
             _g_missing = await _gd.missing_auth_aliases(
@@ -1181,12 +1183,19 @@ async def dispatch_target(
         except _gd.GraphDispatchError as e:
             raise Conflict("graph_invalid", str(e)) from None
         if _g_missing:
+            if cred_project_id is not None:
+                raise Conflict(
+                    "auth_aliases_missing",
+                    "以下身份条目项目凭证未登记,请项目管理员在项目配置页"
+                    "登记,或改用个人凭证:" + "、".join(_g_missing),
+                    extra={"aliases": _g_missing,
+                           "credentialSource": "project"})
             raise Conflict(
                 "auth_aliases_missing",
-                "以下身份条目项目凭证未登记,请项目管理员在项目配置页"
-                "登记,或改用个人凭证:" + "、".join(_g_missing),
+                "以下身份条目在你的个人凭证池未登记,请先在「凭证管理」"
+                "登记后再发起编排:" + "、".join(_g_missing),
                 extra={"aliases": _g_missing,
-                       "credentialSource": "project"})
+                       "credentialSource": "personal"})
         auth_aliases = []      # 已按全图核对;锚点清单不再重复判
     # S5 失败即中止:注入清单在执行人池解不到账户 → 整单拒发(此前
     # 告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
@@ -2413,8 +2422,10 @@ async def _fanout(
                         convert_cache[cache_key] = copy.deepcopy(convert_data)
                     plate_state["consecutive_unavailable"] = 0
                     # Convert succeeded — hand the gimbal-shaped product to the
-                    # engine. 明文 users 只进 run 副本(convert 那份不带,防明文
-                    # 流进 plate 校验/日志);注入形状同 V1 executor 生产路径。
+                    # engine. 明文 users 不流经 plate(池凭证经 materialize
+                    # 在 convert 产物上物化;作者 config.users 由
+                    # plate_client.convert 入口统一剥除,TOK-01)——注入
+                    # 形状同 V1 executor 生产路径。
                     # convert_data = {consumer, converted};converted 是
                     # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
                     converted = convert_data.get("converted") or {}

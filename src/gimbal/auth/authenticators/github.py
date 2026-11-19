@@ -32,12 +32,15 @@ class GitHubAuthenticator(Authenticator):
         )
         response.raise_for_status()
         data = response.json()
-        logger.debug("GitHub OAuth response: {}", data)
 
         token = data.get("access_token")
         if not token:
-            raise AuthError(f"GitHub OAuth 未返回 access_token: {data}")
+            # TOK-06:错误消息不带响应体(键面即可定位;完整体不落日志)
+            raise AuthError(
+                f"GitHub OAuth 未返回 access_token (keys: {sorted(data)})")
 
         # GitHub token 没有明确的过期时间，默认给个合理值
         expires_in = 3600 * 8  # 8 小时
         auth.apply_token(token, expires_in)
+        # TOK-06:DEBUG 日志移到 apply_token 之后(token 已进按值掩码表)
+        logger.debug("GitHub OAuth response: {}", data)

@@ -163,6 +163,34 @@ class CallExecutor(ProtocolExecutor):
 
     # ── 协议侧认证握手（S-2：login 并入适配器）─────────────────
 
+    @staticmethod
+    def _anonymous_fallback_allowed() -> bool:
+        """TOK-02(决策 3A,2026-11-20):声明了 call.user 却取不到会话
+        = 硬错误(fail-fast),不再 warning+匿名照发 —— 平台侧硬门漏到
+        引擎层的缺凭证,旧口径会变成对第三方的匿名调用。
+
+        逃生口(兼容存量「故意匿名」形态,应改为不声明 call.user):
+        环境变量 ``GIMBAL_ALLOW_ANONYMOUS_AUTH=1`` 恢复旧的
+        warning + 空 header 行为。
+        """
+        import os
+        return os.environ.get("GIMBAL_ALLOW_ANONYMOUS_AUTH", "").lower() in (
+            "1", "true", "yes")
+
+    def _auth_session_missing(self, user: str, reason: str):
+        """会话缺失的统一处置:fail-fast 抛 AuthError(步骤级失败,
+        由外层包成 ProtocolAuthError)或逃生口下降级 warning。"""
+        if self._anonymous_fallback_allowed():
+            logger.warning(
+                "[CallExecutor] call.user={!r} {}，跳过认证头注入"
+                "(GIMBAL_ALLOW_ANONYMOUS_AUTH=1 兼容模式)", user, reason)
+            return {}
+        from gimbal.exceptions import AuthError
+        raise AuthError(
+            f"call.user={user!r} {reason} —— 拒绝匿名调用"
+            f"(修复:补登记该身份的凭证,或去掉 call.user 声明;"
+            f"兼容逃生口 GIMBAL_ALLOW_ANONYMOUS_AUTH=1)")
+
     def login(self, user: str, pctx: Optional[ProtocolCallContext] = None,
               *, signer_override: Optional[str] = None) -> dict:
         """http 握手：按标签取会话，签名 token/timestamp 头（S-2）。
@@ -170,7 +198,8 @@ class CallExecutor(ProtocolExecutor):
         契约与退役插件 auth_headers 逐字节一致（特征化用例钉死）：
         token = md5(f"{session.token}{timestamp}").hexdigest()（32-hex，
         随会话 token 变化）；timestamp = str(int(epoch 秒))。
-        无标签 / 会话缺失 / token 空 → 空 dict（调用方跳过注入，不阻断）。
+        无标签 → 空 dict(不注入)。会话缺失/未登录 → 默认 fail-fast
+        (TOK-02,决策 3A;逃生口见 _anonymous_fallback_allowed)。
         """
         registry = getattr(self, "_auth_registry", None)
         if not user or registry is None:
@@ -188,8 +217,7 @@ class CallExecutor(ProtocolExecutor):
         # 声明驱动的写入面在集成 P2 的 call.auth 透传。
         if signer == "standard.basic":
             if session is None:
-                logger.warning("[CallExecutor] call.user={!r} 会话缺失，跳过 Basic 认证头注入", user)
-                return {}
+                return self._auth_session_missing(user, "会话缺失")
             import base64
             username = getattr(session, "username", "") or ""
             password = getattr(session, "password", "") or ""
@@ -198,12 +226,10 @@ class CallExecutor(ProtocolExecutor):
             return {"Authorization": f"Basic {cred}"}
         if signer == "standard.bearer":
             if not token:
-                logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
-                return {}
+                return self._auth_session_missing(user, "会话缺失或未登录")
             return {"Authorization": f"Bearer {token}"}
         if session is None or not token:
-            logger.warning("[CallExecutor] call.user={!r} 会话缺失或未登录，跳过认证头注入", user)
-            return {}
+            return self._auth_session_missing(user, "会话缺失或未登录")
         import hashlib
         import time as _time
         timestamp = int(_time.time())

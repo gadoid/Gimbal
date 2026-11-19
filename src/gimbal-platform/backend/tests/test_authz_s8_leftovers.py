@@ -121,6 +121,39 @@ class TestRunsGraphProjectSource:
         assert det["credentialSource"] == "project"
         assert "项目凭证" in det["message"]
 
+    async def test_graph_personal_pool_missing_identity_409(
+            self, client, plate_mock, monkeypatch):
+        """TOK-02(2026-11-20 审计):graph 个人池缺身份 → 派发前 409 ——
+        此前仅项目池有闸,个人池缺账户静默漏到引擎层匿名调用(决策 3A
+        的平台侧配套);补齐个人池账户后放行。"""
+        from .test_authz_m2b_q3_dataset_accounts import _binding
+
+        plate_mock.behaviour = "echo"
+        h = await register_and_login(client, "l1_gp", "pw123456")
+        pid = await _mk_project("l1-gp", members={"l1_gp": "member"})
+        await _seed_project_scenario(client, h, pid, sid="sc-l1gp")
+        graph = {"mode": "aggregate",
+                 "units": [{"ref": "a", "scenarioId": "sc-l1gp"}]}
+        r = await client.post("/api/runs", headers=h,
+                              json={"scenarioId": "sc-l1gp", "graph": graph})
+        assert r.status_code == 409, r.text
+        det = r.json()["detail"]
+        assert det["code"] == "auth_aliases_missing"
+        assert det["credentialSource"] == "personal"
+        assert "个人凭证池" in det["message"]
+        assert "qa1" in det["aliases"]
+
+        # 补齐个人池账户(两 identity 均 default-ref → 一个系统默认账户
+        # 同时覆盖 qa1/s8-alias)→ 放行
+        async with db_module.SessionLocal() as db:
+            uid = (await db.execute(sa.text(
+                "SELECT id FROM users WHERE username = 'l1_gp'"))).scalar()
+        await _binding(owner=uid, alias="qa1", org="l1gp-org", default=True)
+        _graph_launch_capture(monkeypatch, [])
+        r = await client.post("/api/runs", headers=h,
+                              json={"scenarioId": "sc-l1gp", "graph": graph})
+        assert r.status_code == 201, r.text
+
 
 class TestSuiteRunWithProjectSource:
     async def _mk_suite(self, client, h, pid: int, mode: str) -> int:

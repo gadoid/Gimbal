@@ -35,14 +35,17 @@ class YHRAuthenticator(Authenticator):
         response.raise_for_status()
         
         data = response.headers
-        logger.debug("Response data: {}", data)
 
         # 根据实际响应结构调整 token 提取逻辑
         cookie = data.get("set-cookie")
         if not cookie:
-            raise AuthError(f"API 响应中未找到 cookie: {cookie}")
+            # TOK-06:错误消息不带响应头内容(set-cookie 即凭证;只报缺键)
+            raise AuthError("API 响应中未找到 set-cookie 凭证头")
 
         auth.apply_token(cookie, auth.expires_in if auth.expires_in else DEFAULT_EXPIRES_IN )
+        # TOK-06:DEBUG 日志移到 apply_token 之后(cookie 值已进掩码表;
+        # 此前在登记前打印含 set-cookie 的完整响应头)
+        logger.debug("Response data: {}", data)
 
 
 if  __name__ == "__main__" :

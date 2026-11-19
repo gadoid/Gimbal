@@ -317,6 +317,23 @@ def gimbal_mock(monkeypatch: pytest.MonkeyPatch) -> dict:
 
 
 # ── preview-plate ──────────────────────────────────────────────────
+async def test_convert_strips_author_users(plate_mock: PlateMock) -> None:
+    """TOK-01(2026-11-20 审计):作者明文 config.users 不进 plate
+    convert 输入 —— plate HTTP 面无鉴权,plate_client.convert 入口
+    单点剥除(执行链不依赖:materialize 对 converted users 一律丢弃,
+    池凭证在 convert 产物上物化)。调用方传入的 dict 不被原地改。"""
+    from app.services import plate_client
+
+    scen = {"meta": {"name": "n"},
+            "config": {"users": {"bob": {"username": "u", "password": "p"}},
+                       "vars": {}},
+            "steps": []}
+    await plate_client.convert(scen)
+    sent = plate_mock.convert_calls[-1]["scenario"]
+    assert "users" not in (sent.get("config") or {})
+    assert scen["config"]["users"]["bob"]["password"] == "p"
+
+
 async def test_preview_plate_ok(client: AsyncClient, plate_mock: PlateMock) -> None:
     headers = await _register_and_login(client)
     r = await client.post(

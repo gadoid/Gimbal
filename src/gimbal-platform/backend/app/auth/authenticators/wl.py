@@ -37,7 +37,6 @@ class WLAuthenticator(Authenticator):
         response.raise_for_status()
 
         data = response.json()
-        logger.debug("Response data: {}", data)
 
         # 根据实际响应结构调整 token 提取逻辑
         resp_data = data.get("data")
@@ -47,9 +46,15 @@ class WLAuthenticator(Authenticator):
             token = None
 
         if not token:
-            raise AuthError(f"API 响应中未找到 token: {data}")
+            # TOK-06(2026-11-20 审计):错误消息不带响应体(可能含敏感值,
+            # AuthError 会流进执行记录);只报键面。
+            raise AuthError(
+                f"API 响应中未找到 token (keys: "
+                f"{sorted(data) if isinstance(data, dict) else type(data).__name__})")
 
         auth.apply_token(
             token,
             auth.expires_in if auth.expires_in else DEFAULT_EXPIRES_IN,
         )
+        # TOK-06:DEBUG 日志移到 apply_token 之后 —— token 已进按值掩码表。
+        logger.debug("Response data: {}", data)
