@@ -227,6 +227,17 @@ async def create_exec_config(
         scope, scope_id = "project", pid
     else:
         scope, scope_id = "user", user.id
+    # TOK-07 写面闸(2026-11-20 审计):换用目标须存在且同基础服务,
+    # 落库前拦(422 口径同 scenarios 的 binding 校验)
+    from ..services.service_aliases import (
+        BindingAliasInvalid, validate_slot_overrides)
+    try:
+        await validate_slot_overrides(db, {
+            k: v for s in body.systems for k, v in s.bindings.items()})
+    except BindingAliasInvalid as e:
+        raise HTTPException(status_code=422, detail={
+            "code": e.code, "message": e.message,
+            "service": e.service, "alias": e.alias})
     if body.isDefault:
         await _clear_default(db, scope, scope_id)
     row = ExecConfig(
@@ -265,6 +276,17 @@ async def patch_exec_config(
     """整体替换式 PATCH。默认切换不在此面 —— POST /{id}/default
     原子切换。"""
     row = await _access(db, config_id, user, write=True)
+    # TOK-07 写面闸:systems 显式给定才校验(合并式 PATCH,None=保持旧值)
+    if body.systems is not None:
+        from ..services.service_aliases import (
+            BindingAliasInvalid, validate_slot_overrides)
+        try:
+            await validate_slot_overrides(db, {
+                k: v for s in body.systems for k, v in s.bindings.items()})
+        except BindingAliasInvalid as e:
+            raise HTTPException(status_code=422, detail={
+                "code": e.code, "message": e.message,
+                "service": e.service, "alias": e.alias})
     if body.name is not None:
         row.name = body.name
     # payload 合并式更新(v7):只传 systems 的旧客户端不得抹掉说明/标签;

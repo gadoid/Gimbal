@@ -9,9 +9,37 @@ from __future__ import annotations
 from .helpers import register_and_login
 
 
+async def _seed_binding_pair(
+    declared: str, target: str, service: str = "fin-service",
+    owner: str = "", u1: str = "bind-u1", u2: str = "bind-u2",
+) -> None:
+    """TOK-07 写面闸布景:声明条目与换用目标各种一条(同基础服务,
+    四件套范式;同 (system,env) 第二个账户让出默认位)。账户须挂属主
+    (ck_account_owner_xor_project),owner = 测试用户名。"""
+    from sqlalchemy import text
+
+    from app.core import db as db_module
+
+    from .conftest import seed_identity_fixture
+
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(text(
+            "SELECT id FROM users WHERE username = :u"), {"u": owner})
+        ).scalar()
+        await seed_identity_fixture(
+            s, alias=declared, username=u1, password="pw123456",
+            service=service, owner_id=uid, is_default=True)
+        await seed_identity_fixture(
+            s, alias=target, username=u2, password="pw123456",
+            service=service, owner_id=uid, is_default=False)
+
+
 async def test_exec_config_crud_roundtrip(client, fresh_db):
     await register_and_login(client, "cfgu1", "pw123456")
     u1 = await register_and_login(client, "cfgu1", "pw123456")
+    # TOK-07 写面闸:bindings 键/值须是已登记条目(同基础服务)
+    await _seed_binding_pair("fin-service.merchant-b", "merchant-b",
+                             owner="cfgu1")
 
     systems = [{
         "service": "fin-service",
@@ -127,6 +155,7 @@ async def test_exec_config_owner_isolation(client, fresh_db):
     u1 = await register_and_login(client, "cfgown1", "pw123456")
     await register_and_login(client, "cfgown2", "pw123456")
     u2 = await register_and_login(client, "cfgown2", "pw123456")
+    await _seed_binding_pair("fin.a", "a", service="fin", owner="cfgown1")
 
     row = (await client.post("/api/exec-configs", headers=u1, json={
         "name": "秘密配置",
@@ -153,6 +182,7 @@ async def test_exec_config_copy(client, fresh_db):
     全拷,副本恒非默认;重名 409。"""
     await register_and_login(client, "cfgcp", "pw123456")
     u = await register_and_login(client, "cfgcp", "pw123456")
+    await _seed_binding_pair("fin.a", "a", service="fin", owner="cfgcp")
 
     src = (await client.post("/api/exec-configs", headers=u, json={
         "name": "基线", "isDefault": True,
@@ -233,6 +263,7 @@ async def test_exec_config_aliases_scope_semantics(client, fresh_db):
     持久化回读 / 缺省 [](存量未圈定)/ 整体替换式 PATCH / 非法 422。"""
     await register_and_login(client, "cfgal", "pw123456")
     u = await register_and_login(client, "cfgal", "pw123456")
+    await _seed_binding_pair("fin.a", "a", service="fin", owner="cfgal")
 
     # 缺省(存量形态):省键 → 回读补 []
     row = (await client.post("/api/exec-configs", headers=u, json={
@@ -277,6 +308,8 @@ async def test_exec_config_entry_name_domain_128(client, fresh_db):
 
     long_name = "fin." + "x" * 100          # 104 字符:> 64 且 ≤ 128
     declared = "decl." + "y" * 100          # 105 字符声明键
+    await _seed_binding_pair(declared, long_name, service="fin",
+                             owner="cfgdom", u1="dom-u1", u2="dom-u2")
     r = await client.post("/api/exec-configs", headers=u, json={
         "name": "长条目名", "systems": [{
             "service": "fin", "aliases": [long_name],
@@ -344,3 +377,52 @@ async def test_exec_config_drift(client, fresh_db, plate):
     h2 = await register_and_login(client, "cfgdr2", "pw123456")
     r = await client.get(f"/api/exec-configs/{cid}/drift", headers=h2)
     assert r.status_code == 404
+
+async def test_exec_config_bindings_write_gate(client, fresh_db):
+    """TOK-07(2026-11-20 审计):换用槽位写面闸 —— 目标/声明不存在 422、
+    跨基础服务 422(运行时 precheck 只拦不存在,跨基础服务由此补拦);
+    PATCH 显式 systems 同口径,不带 systems(合并式)不触发。"""
+    await register_and_login(client, "cfggate", "pw123456")
+    u = await register_and_login(client, "cfggate", "pw123456")
+    await _seed_binding_pair("fin.a", "a", service="fin", owner="cfggate")
+    await _seed_binding_pair("crm.x", "crm.y", service="crm", owner="cfggate",
+                             u1="crm-u1", u2="crm-u2")
+
+    # 换用目标不存在
+    r = await client.post("/api/exec-configs", headers=u, json={
+        "name": "bad-target", "systems": [
+            {"service": "fin", "bindings": {"fin.a": "ghost"}}]})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "slot_alias_unknown"
+
+    # 跨基础服务换用:fin 声明 → crm 条目(凭证注入原地址的攻击面)
+    r = await client.post("/api/exec-configs", headers=u, json={
+        "name": "cross-base", "systems": [
+            {"service": "fin", "bindings": {"fin.a": "crm.x"}}]})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "slot_alias_mismatch"
+
+    # 声明条目自身不存在
+    r = await client.post("/api/exec-configs", headers=u, json={
+        "name": "bad-declared", "systems": [
+            {"service": "fin", "bindings": {"ghost": "a"}}]})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "slot_alias_unknown"
+
+    # 合法:同基础服务放行
+    r = await client.post("/api/exec-configs", headers=u, json={
+        "name": "ok", "systems": [
+            {"service": "fin", "bindings": {"fin.a": "a"}}]})
+    assert r.status_code == 201, r.text
+    cid = r.json()["id"]
+
+    # PATCH 显式 systems:同口径拦截
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=u, json={
+        "systems": [{"service": "fin", "bindings": {"fin.a": "crm.y"}}]})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "slot_alias_mismatch"
+
+    # PATCH 不带 systems(合并式):不触发校验,改名放行
+    r = await client.patch(f"/api/exec-configs/{cid}", headers=u,
+                           json={"name": "ok-2"})
+    assert r.status_code == 200, r.text

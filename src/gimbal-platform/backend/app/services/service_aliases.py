@@ -345,6 +345,38 @@ async def validate_binding_aliases(
                 service=svc, alias=alias)
 
 
+async def validate_slot_overrides(
+    db: AsyncSession, alias_overrides: dict[str, str] | None,
+) -> None:
+    """执行配置绑定(换用条目)写面闸(TOK-07,2026-11-20 审计):声明
+    条目与换用目标都须存在,且同基础服务 —— 换用只换「池内取哪条身份」,
+    不许借道把别家基础服务的凭证注入原槽位发往原地址(运行时 precheck
+    只拦「目标不存在」,跨基础服务此前任何层都不拦;与
+    ``validate_binding_aliases`` 两分支同款口径)。"""
+    pairs = {k: v for k, v in (alias_overrides or {}).items() if k != v}
+    if not pairs:
+        return
+    names = set(pairs) | set(pairs.values())
+    base_of = dict((await db.execute(
+        select(ServiceIdentity.alias_name, ServiceIdentity.base_service).where(
+            ServiceIdentity.alias_name.in_(names)))).all())
+    for declared, target in pairs.items():
+        if declared not in base_of:
+            raise BindingAliasInvalid(
+                "slot_alias_unknown", f"声明条目 {declared!r} 不存在",
+                service=declared, alias=declared)
+        if target not in base_of:
+            raise BindingAliasInvalid(
+                "slot_alias_unknown", f"换用条目 {target!r} 不存在",
+                service=declared, alias=target)
+        if base_of[target] != base_of[declared]:
+            raise BindingAliasInvalid(
+                "slot_alias_mismatch",
+                f"换用条目 {target!r} 不属于声明条目 {declared!r} 的基础服务"
+                f"({base_of[target]} ≠ {base_of[declared]})",
+                service=declared, alias=target)
+
+
 async def credential_alias_hits(
     db: AsyncSession, steps: list,
     bindings: dict[str, dict] | None = None,
