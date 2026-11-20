@@ -323,3 +323,37 @@ describe('ServiceAliasDetail — 条目模式', () => {
     w.unmount()
   })
 })
+
+// ── FE-02:失败≠空态(就绪矩阵/键判定降级)──────────────────────
+describe('ServiceAliasDetail — FE-02 读面降级三态', () => {
+  it('目录读取失败 → 键不可判定空态,不误报「找不到」', async () => {
+    setAuth(false)
+    vi.spyOn(catalog, 'loadCatalogServiceNames')
+      .mockRejectedValue(new Error('plate down'))
+    const { w } = await mountAt('/service-admin/unknown-service')
+    expect(w.get('[data-testid="key-unresolved"]').text()).toContain('无法判定')
+    expect(w.text()).not.toContain('找不到')
+    w.unmount()
+  })
+
+  it('地址面读取失败 → 降级横幅 + 矩阵格显「读取失败」,不出「缺」结论', async () => {
+    setAuth(true)
+    vi.spyOn(depApi, 'listDeployments').mockRejectedValue(new Error('dep down'))
+    const { w } = await mountAt('/service-admin/fin-service-uat')
+    expect(w.get('[data-testid="ready-degraded"]').text()).toContain('API 地址')
+    // API 地址格(td[1])显「读取失败」;登录口格实例面正常,真实缺照报
+    const cells = w.get('[data-testid="ready-env-测试"]').findAll('td')
+    expect(cells[1].text()).toBe('读取失败')
+    expect(cells[1].text()).not.toContain('缺')
+    w.unmount()
+  })
+
+  it('环境面读取失败 → 矩阵暂不可用提示,不误报「平台还没有环境」', async () => {
+    setAuth(false)
+    vi.spyOn(envApi, 'listEnvironments').mockRejectedValue(new Error('env down'))
+    const { w } = await mountAt('/service-admin/fin-service-uat')
+    expect(w.text()).toContain('环境面读取失败')
+    expect(w.text()).not.toContain('平台还没有环境')
+    w.unmount()
+  })
+})

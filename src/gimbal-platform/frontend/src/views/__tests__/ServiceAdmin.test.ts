@@ -764,3 +764,27 @@ describe('ServiceAdmin — 实例标签交互', () => {
     w.unmount()
   })
 })
+
+describe('FE-02 失败≠空态(读面降级三态)', () => {
+  it('账户面失败 → 降级横幅 + 凭据 chip 显「读取失败」,不再误报 ✗ 凭据', async () => {
+    vi.mocked(authApi.listAll).mockRejectedValue(new Error('auth down'))
+    const w = await mountPage()
+    expect(w.get('[data-testid="accounts-degraded"]').text()).toContain('账户面读取失败')
+    await expand(w, 'fin-service')
+    // merchant-b 条目在 env1:账户表空 + degraded → 不出「✗ 凭据」结论
+    const ready = w.get('[data-testid="inst-ready-fin-service-1"]').text()
+    expect(ready).toContain('凭据读取失败')
+    expect(ready).not.toContain('✗ 凭据')
+    w.unmount()
+  })
+
+  it('条目面失败 → 槽位列显「条目读取失败」,不再显示「未登记条目」', async () => {
+    vi.mocked(aliasApi.listAliases).mockRejectedValue(new Error('alias down'))
+    const w = await mountPage()
+    await expand(w, 'fin-service')
+    const slots = w.get('[data-testid="inst-slots-fin-service-1"]').text()
+    expect(slots).toContain('条目读取失败')
+    expect(slots).not.toContain('未登记条目')
+    w.unmount()
+  })
+})

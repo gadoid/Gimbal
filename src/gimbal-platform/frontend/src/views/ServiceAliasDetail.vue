@@ -31,6 +31,13 @@
       <Button variant="outline" data-testid="back-admin" @click="backFromDetail">{{ backLabel }}</Button>
     </div>
 
+    <!-- FE-02:目录读取失败 ≠ 键不存在,不得借 missing 空态报「找不到」 -->
+    <div v-else-if="keyUnresolved" class="slib-empty" data-testid="key-unresolved">
+      <p>服务目录读取失败 —— 无法判定 <code class="mono">{{ key }}</code> 是否登记。</p>
+      <p class="slib-note mt-0">刷新重试;确认 plate 服务可达后再回来核对键名。</p>
+      <Button variant="outline" data-testid="back-admin" @click="backFromDetail">{{ backLabel }}</Button>
+    </div>
+
     <template v-else>
       <!-- 键身份行:是什么键 / 环境 / 账户装载 ref,扫完再下钻 -->
       <div class="svc-stats">
@@ -119,6 +126,7 @@
                 <tr><th>系统</th>
                   <td>
                     <span v-if="systemOf" class="mono">{{ systemOf }}</span>
+                    <span v-else-if="svcRowsFailed" class="svc-flag amber" title="主档读取失败 —— 无法判定系统归属(FE-02 降级)">主档读取失败</span>
                     <span v-else class="svc-flag amber" title="先在服务注册登记主档,才有 (系统, 环境) 实例坐标">未登记主档</span>
                   </td>
                 </tr>
@@ -150,7 +158,9 @@
                 缺口点跳「服务注册」
               </span>
             </div>
-            <p v-if="!envs.length" class="cred-note">平台还没有环境 — 地址无从配置。</p>
+            <div v-if="readinessDegraded" class="svc-banner warn" data-testid="ready-degraded">{{ readinessDegraded }}</div>
+            <p v-if="!envs.length && envsFailed" class="cred-note">环境面读取失败 — 矩阵暂不可用。</p>
+            <p v-else-if="!envs.length" class="cred-note">平台还没有环境 — 地址无从配置。</p>
             <table v-else class="ov-table" data-testid="alias-ready-matrix">
               <thead><tr><th>环境</th><th>API 地址</th><th>登录口</th><th>版本线</th></tr></thead>
               <tbody>
@@ -158,6 +168,8 @@
                   <td>{{ e.name }}<template v-if="e.is_default"> · 默认</template></td>
                   <td>
                     <span v-if="deployUrl(e.id)" class="mono">{{ deployUrl(e.id) }}</span>
+                    <!-- FE-02:地址面读取失败 ≠ 缺地址,不出「缺」结论 -->
+                    <span v-else-if="deploysFailed" class="muted">读取失败</span>
                     <!-- 缺口:持写权者深链服务注册矩阵补录;普通用户只读提示
                          (不再给一个点了会被弹回的链接) -->
                     <router-link v-else-if="canManage"
@@ -166,8 +178,9 @@
                     <span v-else class="svc-flag amber">缺 — 由管理员维护</span>
                   </td>
                   <td>
-                    <!-- 未登记主档 → 无系统归属,实例无从谈起 -->
-                    <span v-if="!systemOf" class="muted" title="服务未登记主档,无 (系统, 环境) 实例坐标">—</span>
+                    <!-- 未登记主档 → 无系统归属,实例无从谈起(读取失败同口径) -->
+                    <span v-if="!systemOf" class="muted" :title="svcRowsFailed ? '主档读取失败,无法判定系统归属' : '服务未登记主档,无 (系统, 环境) 实例坐标'">{{ svcRowsFailed ? '主档读取失败' : '—' }}</span>
+                    <span v-else-if="instancesFailed" class="muted" title="实例面读取失败,登录口不可判定">实例读取失败</span>
                     <span v-else-if="instOf(systemOf, e.id)?.loginUrl"
                           class="mono" :data-testid="`ready-login-${e.name}`"
                           :title="`实例登录口(系统 ${systemOf} 共享)— 拨测与登录走此地址`"
@@ -426,6 +439,12 @@ const deploys = ref<Array<{ baseService: string; envId: number; baseUrl: string 
 /** 主档(系统归属)+ 实例((system, env) → 登录口/版本线) */
 const svcRows = ref<ServiceRow[]>([])
 const instances = ref<InstanceRow[]>([])
+/** 旁路面失败标记(FE-02):失败≠空数据/未登记,就绪矩阵不出「缺」结论 */
+const catalogFailed = ref(false)
+const envsFailed = ref(false)
+const deploysFailed = ref(false)
+const svcRowsFailed = ref(false)
+const instancesFailed = ref(false)
 
 function deployUrl(envId: number): string | null {
   const hit = deploys.value.find(
@@ -447,10 +466,28 @@ function kindLabel(kind: string): string {
   return '受管(Plate 目录)'
 }
 
-/** 键合法性:主档 ∪ plate 目录(§2.2;external 行不受目录可达性影响) */
+/** 键合法性:主档 ∪ plate 目录(§2.2;external 行不受目录可达性影响)。
+ *  目录/主档读取失败时不断「找不到」(FE-02)—— 落 keyUnresolved 降级态。 */
 const missing = computed(() =>
-  !loading.value && row.value === null && !catalogNames.value.includes(key.value)
+  !loading.value && row.value === null && !catalogFailed.value
+  && !catalogNames.value.includes(key.value)
   && !svcRows.value.some((s) => s.name === key.value))
+/** 读取失败导致的键不可判定(missing 的诚实降级伴生态) */
+const keyUnresolved = computed(() =>
+  !loading.value && row.value === null && catalogFailed.value
+  && !svcRows.value.some((s) => s.name === key.value))
+/** 就绪矩阵旁路降级文案(只列失败面) */
+const readinessDegraded = computed(() => {
+  const faces = [
+    envsFailed.value && '环境',
+    deploysFailed.value && 'API 地址(deployments)',
+    svcRowsFailed.value && '主档(系统归属)',
+    instancesFailed.value && '实例(登录口/版本线)',
+  ].filter(Boolean) as string[]
+  return faces.length
+    ? `${faces.join(' / ')}读取失败 —— 矩阵中「缺」与「—」不代表真实状态,请刷新重试`
+    : ''
+})
 
 const pageTitle = computed(() =>
   loading.value ? '键详情' : isAliasMode.value ? '身份条目详情' : '服务详情')
@@ -685,20 +722,27 @@ onMounted(async () => {
   try {
     ;[aliases.value, catalogNames.value] = await Promise.all([
       listAllAliases(),
-      loadCatalogServiceNames().catch((): string[] => []),
+      loadCatalogServiceNames().catch((e): string[] => {
+        catalogFailed.value = true
+        showError('目录', e)
+        return []
+      }),
     ])
   } catch (e) {
     showError('加载', e)
   } finally {
     loading.value = false
   }
-  // 概览旁路数据(失败静默降级)
-  listEnvironments().then((rows) => { envs.value = rows }).catch(() => {})
-  listDeployments().then((rows) => { deploys.value = rows }).catch(() => {})
+  // 概览旁路数据(失败置降级标记,FE-02:不再伪装成「未登记/缺」)
+  listEnvironments().then((rows) => { envs.value = rows })
+    .catch(() => { envsFailed.value = true })
+  listDeployments().then((rows) => { deploys.value = rows })
+    .catch(() => { deploysFailed.value = true })
   listServices()
     .then((out) => { svcRows.value = out.services })
-    .catch(() => { /* 主档拉不到 — 系统列显「未登记」 */ })
-  listInstances().then((rows) => { instances.value = rows }).catch(() => {})
+    .catch(() => { svcRowsFailed.value = true })
+  listInstances().then((rows) => { instances.value = rows })
+    .catch(() => { instancesFailed.value = true })
   void loadServiceSides()
 })
 

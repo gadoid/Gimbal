@@ -108,6 +108,9 @@
             </tbody>
           </table>
         </div>
+        <p v-else-if="defaultsError" class="hint" :data-testid="`${defaultsTid}-err`">
+          默认值读取失败 —— 不代表该层没有兜底参数,刷新重试。
+        </p>
         <p v-else class="hint" :data-testid="`${defaultsTid}-empty`">
           该层暂无兜底参数 —— 未命中的键不注入。
         </p>
@@ -124,6 +127,9 @@
           项目场景引用的身份条目 × 成员装载情况 —— 条目按 ref 取执行者本人池的账户,装载到位执行才不缺凭据。
         </p>
         <p v-if="slotLoading" class="hint">加载中…</p>
+        <p v-else-if="slotsError" class="hint" data-testid="prj-slots-err">
+          装载清单读取失败 —— 不代表没有引用,刷新重试。
+        </p>
         <template v-else-if="slots.length">
           <div v-for="s in slots" :key="s.slot" class="slot-card" :data-testid="`prj-slot-${s.slot}`">
             <header>
@@ -171,7 +177,10 @@
             data-testid="prj-config-preview-go" @click="previewOpen = true"
           >预览</button>
         </div>
-        <p v-if="scenCapped" class="hint">
+        <p v-if="scenError" class="hint" data-testid="prj-config-scen-err">
+          场景候选读取失败 —— 不代表项目没有场景,可到场景列表页直接发起预览。
+        </p>
+        <p v-else-if="scenCapped" class="hint">
           场景超过 {{ scenOptions.length }} 条,下拉仅列前 {{ scenOptions.length }} 条 —— 用场景名精确定位或在场景列表发起预览。
         </p>
       </section>
@@ -301,9 +310,12 @@ async function saveEnv(): Promise<void> {
 // ── ③ 默认值(只读;手写编辑 2026-11-18 退场)─────────────────────
 const defaultsRows = ref<Array<{ k: string; v: string | null }>>([])
 const defaultsLoading = ref(true)
+/** 默认值读取失败(FE-02):失败≠该层为空 */
+const defaultsError = ref(false)
 
 async function loadDefaults(): Promise<void> {
   defaultsLoading.value = true
+  defaultsError.value = false
   try {
     const d = await getDefaults(defaultsTarget.value)
     defaultsRows.value = Object.entries(d ?? {})
@@ -311,6 +323,7 @@ async function loadDefaults(): Promise<void> {
       .map(([k, v]) => ({ k, v: v ?? null }))
   } catch {
     defaultsRows.value = []
+    defaultsError.value = true
   } finally {
     defaultsLoading.value = false
   }
@@ -319,11 +332,15 @@ async function loadDefaults(): Promise<void> {
 // ── ④ 装载状态 ───────────────────────────────────────────────────
 const slots = ref<SlotStatusRow[]>([])
 const slotLoading = ref(true)
+/** 装载清单读取失败(FE-02):失败≠没有引用 */
+const slotsError = ref(false)
 
 // ── ⑤ 生效预览 ───────────────────────────────────────────────────
 const scenOptions = ref<Array<{ id: string; name: string }>>([])
 /** 翻页上限外还有场景(>1000)时提示 —— 下拉是选择面不是台账,截断可接受 */
 const scenCapped = ref(false)
+/** 场景候选读取失败(FE-02):失败=空下拉不说「无场景」 */
+const scenError = ref(false)
 const previewScenario = ref('')
 const previewOpen = ref(false)
 
@@ -355,13 +372,16 @@ async function loadAll(): Promise<void> {
     loadDefaults(),
   ]
   if (!isPublic.value) {
+    slotsError.value = false
+    scenError.value = false
     jobs.push(
       getSlotStatus(props.project.id)
         .then((r) => { slots.value = r.slots })
-        .catch(() => { slots.value = [] }),
+        .catch(() => { slots.value = []; slotsError.value = true }),
       loadScenOptions(props.project.id).catch(() => {
         scenOptions.value = []
         scenCapped.value = false
+        scenError.value = true
       }),
     )
   }

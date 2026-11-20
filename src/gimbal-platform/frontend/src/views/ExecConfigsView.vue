@@ -247,6 +247,9 @@
                   <template v-if="nodeLoadState(s) === 'loading'">
                     <span class="svc-flag ink">条目加载中…</span>
                   </template>
+                  <template v-else-if="nodeLoadState(s) === 'error'">
+                    <span class="svc-flag amber" :data-testid="`ec-node-alias-err-${i}`">条目读取失败</span>
+                  </template>
                   <template v-else-if="nodeLoadState(s) === 'empty'">
                     <span class="svc-flag amber">未登记条目</span>
                   </template>
@@ -316,8 +319,8 @@
                         <td><span class="mono">{{ r.use ? identCoord(r.use) : '—' }}</span></td>
                         <td>
                           <span v-if="r.loaded" class="svc-flag green">已装载</span>
-                          <span v-else-if="!r.use" class="svc-flag red">✕ 未登记</span>
-                          <span v-else class="svc-flag red">缺账户</span>
+                          <span v-else-if="!r.use" class="svc-flag red">{{ r.useFailed ? '✕ 读取失败' : '✕ 未登记' }}</span>
+                          <span v-else class="svc-flag red">{{ r.loadedFailed ? '账户读取失败' : '缺账户' }}</span>
                         </td>
                       </tr>
                     </tbody>
@@ -386,10 +389,10 @@
                           <td><span class="mono">{{ r.use ? identCoord(r.use) : '—' }}</span></td>
                           <td>
                             <span v-if="r.loaded" class="svc-flag green">已装载</span>
-                            <span v-else-if="!r.use" class="svc-flag red">✕ 未登记</span>
+                            <span v-else-if="!r.use" class="svc-flag red">{{ r.useFailed ? '✕ 读取失败' : '✕ 未登记' }}</span>
                             <template v-else>
-                              <span class="svc-flag red">缺账户</span>
-                              <a class="svc-link" :href="authHrefOf(r.use)"
+                              <span class="svc-flag red">{{ r.loadedFailed ? '账户读取失败' : '缺账户' }}</span>
+                              <a v-if="!r.loadedFailed" class="svc-link" :href="authHrefOf(r.use)"
                                  :data-testid="`ec-ident-auth-${r.alias}`">去补 ↗</a>
                             </template>
                           </td>
@@ -602,10 +605,10 @@
                         <span class="mono">{{ r.use ? identCoord(r.use) : '—' }}</span>
                       </td>
                       <td>
-                        <span v-if="r.loaded" class="svc-flag green">已装载</span>
-                        <span v-else-if="!r.use" class="svc-flag red"
-                              title="取用条目不在注册表 — 取不到 ref 坐标">✕ 未登记</span>
-                        <span v-else class="svc-flag red" :data-testid="`ec-slot-miss-${r.useName}`">缺账户</span>
+                          <span v-if="r.loaded" class="svc-flag green">已装载</span>
+                          <span v-else-if="!r.use" class="svc-flag red"
+                                :title="r.useFailed ? '条目面读取失败 — 无法判定是否登记' : '取用条目不在注册表 — 取不到 ref 坐标'">{{ r.useFailed ? '✕ 读取失败' : '✕ 未登记' }}</span>
+                          <span v-else class="svc-flag red" :data-testid="`ec-slot-miss-${r.useName}`">{{ r.loadedFailed ? '账户读取失败' : '缺账户' }}</span>
                         <!-- Ping All 拨测结果(仅测过的行渲染) -->
                         <span v-if="slotProbe[r.useName]" class="svc-flag"
                               :class="slotProbe[r.useName]?.ok ? 'green' : 'red'"
@@ -654,6 +657,7 @@
       </div>
 
       <div v-if="error" class="svc-banner bad mt-3.5" data-testid="ec-err">{{ error }}</div>
+      <div v-if="bypassDegraded" class="svc-banner warn mt-3.5" data-testid="ec-bypass-degraded">{{ bypassDegraded }}</div>
     </template>
   </section>
 </template>
@@ -794,6 +798,21 @@ const scenOptions = ref<Array<{ id: string; name: string }>>([])
 const scenCapped = ref(false)
 /** 主档(服务选项 + 装载坐标 baseService → system + 说明) */
 const svcRows = ref<ServiceRow[]>([])
+/** 旁路面失败标记(FE-02):静默降级不再伪装成空数据/未装载 */
+const authFailed = ref(false)
+const svcRowsFailed = ref(false)
+const instRowsFailed = ref(false)
+const scenOptionsFailed = ref(false)
+/** 旁路降级横幅文案(只列失败面;全部成功 = 空串不渲染) */
+const bypassDegraded = computed(() => {
+  const faces = [
+    authFailed.value && '账户(装载判定)',
+    svcRowsFailed.value && '主档(服务选项)',
+    instRowsFailed.value && '实例(登录口)',
+    scenOptionsFailed.value && '场景(预览下拉)',
+  ].filter(Boolean) as string[]
+  return faces.length ? `${faces.join(' / ')}读取失败 —— 相关列显示「读取失败」,不代表真实状态` : ''
+})
 
 // ── 写面注册簿数据(懒加载,静默降级;单一数据源 = binds)──────────
 /** 逐服务身份条目表(listAliases base 过滤;与 listAllAliases 同口径) */
@@ -801,7 +820,7 @@ const aliasCache = ref<Record<string, ServiceAliasRow[]>>({})
 /** 逐服务注册表总条数(截断提示:>200 未全量载入) */
 const aliasTotal = ref<Record<string, number>>({})
 /** 逐服务条目加载状态:loading = 占位;done 后看 cache 决定形态 */
-const aliasLoad = ref<Record<string, 'loading' | 'done'>>({})
+const aliasLoad = ref<Record<string, 'loading' | 'done' | 'error'>>({})
 
 // ── Ping All 状态(地址 ping + 换用账户拨测;结果就地渲染)────────
 const pingAllRunning = ref(false)
@@ -813,16 +832,18 @@ const depPing = ref<Record<string, PingResult>>({})
 const slotProbe = ref<Record<string, TestResult>>({})
 
 async function ensureAliases(service: string): Promise<void> {
-  if (!service || aliasLoad.value[service]) return
+  if (!service || aliasLoad.value[service] === 'loading'
+    || aliasLoad.value[service] === 'done') return
   aliasLoad.value = { ...aliasLoad.value, [service]: 'loading' }
   try {
     const page = await listAliases({ base: service, page_size: 200 })
     aliasCache.value = { ...aliasCache.value, [service]: page.items }
     aliasTotal.value = { ...aliasTotal.value, [service]: page.total }
-  } catch {
-    aliasCache.value = { ...aliasCache.value, [service]: [] }
-  } finally {
     aliasLoad.value = { ...aliasLoad.value, [service]: 'done' }
+  } catch {
+    // FE-02:失败≠空表 —— error 态让节点徽章/就绪判定显「读取失败」,
+    // 不再与「未登记条目」混淆;下次 ensure 可重试
+    aliasLoad.value = { ...aliasLoad.value, [service]: 'error' }
   }
 }
 
@@ -861,8 +882,9 @@ function nodeSummary(s: SysRow): { entries: number; swaps: number; missing: numb
 }
 /** 节点注册表加载态:loading = 占位;empty = 该服务未登记条目(不能报
  *  「装载齐」—— 0 条目时「齐」是误导);ok = 正常统计 */
-function nodeLoadState(s: SysRow): 'loading' | 'empty' | 'ok' {
+function nodeLoadState(s: SysRow): 'loading' | 'error' | 'empty' | 'ok' {
   if (aliasLoad.value[s.service] === 'loading') return 'loading'
+  if (aliasLoad.value[s.service] === 'error') return 'error'
   return entriesOf(s).length ? 'ok' : 'empty'
 }
 /** 表单态服务集合(去重;地址矩阵 / Ping All 地址目标 / 头卡计数用) */
@@ -966,13 +988,28 @@ function toggleUse(s: SysRow, alias: string, on: boolean): void {
 /** 所选条目 → 取用行(换用后;无换用 = 自身):row = 该服务注册表行,
  *  跨服务换用/未登记回落 faceMeta 定向检索;loaded = 取用条目 ref 在
  *  个人池解析到账户。就绪度装载面板 / Ping All 拨测 / 摘要统计共用。 */
-interface SlotRow { alias: string; useName: string; use: ServiceAliasRow | null; loaded: boolean }
+interface SlotRow {
+  alias: string; useName: string
+  use: ServiceAliasRow | null
+  loaded: boolean
+  /** 取用条目解析不到的原因可能是读取失败(FE-02)而非未登记 */
+  useFailed: boolean
+  /** 账户面读取失败时 loaded=false 不代表缺账户(FE-02) */
+  loadedFailed: boolean
+}
 function slotRowsOf(s: SysRow): SlotRow[] {
   return chosenAliases(s).map((alias) => {
     const useName = swapOf(s, alias) || alias
     const use = entriesOf(s).find((a) => a.aliasName === useName)
       ?? faceMeta.value[useName] ?? null
-    return { alias, useName, use, loaded: !!use && accountRowOf(use) != null }
+    const useFailed = !use && (faceError.value[useName] === true
+      || aliasLoad.value[s.service] === 'error')
+    return {
+      alias, useName, use,
+      loaded: !!use && accountRowOf(use) != null,
+      useFailed,
+      loadedFailed: !!use && accountRowOf(use) == null && authFailed.value,
+    }
   })
 }
 /** 该服务的注册表条目(未加载 = 空) */
@@ -1064,6 +1101,8 @@ const aliasSuggestions = computed(() => {
 // 全量拉取截断会误报「未登记」;绑定条目个数有限,每个名字一次 q 检索
 // + 精确命中,永不全量)。检索面 = 声明条目 ∪ 换用条目(两者都要坐标)。
 const faceMeta = ref<Record<string, ServiceAliasRow | null>>({})
+/** faceMeta 定向检索失败标记(FE-02):null ≠ 未登记,可能是查不到 */
+const faceError = ref<Record<string, boolean>>({})
 const facesLoaded = ref(false)
 async function loadFacesFor(c: ExecConfigRow): Promise<void> {
   const names = [...new Set(c.systems.flatMap((s) => [
@@ -1071,15 +1110,19 @@ async function loadFacesFor(c: ExecConfigRow): Promise<void> {
     ...Object.values(s.bindings),
   ]))]
   const out: Record<string, ServiceAliasRow | null> = {}
+  const errs = { ...faceError.value }
   await Promise.all(names.map(async (name) => {
     try {
       const env = await listAliases({ q: name, page_size: 10 })
       out[name] = env.items.find((a) => a.aliasName === name) ?? null
+      delete errs[name]
     } catch {
       out[name] = null
+      errs[name] = true
     }
   }))
   faceMeta.value = out
+  faceError.value = errs
   facesLoaded.value = true
 }
 
@@ -1532,20 +1575,21 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-  // 旁路数据(一次性;失败静默降级):个人池账户(装载判定/表单解析列/
-  // Ping All 拨测目标)、主档(服务选项 + 装载坐标 + 说明;拉不到 → 服务列
-  // 降级手输、坐标显 ?)、实例行(表单实例过滤 + 枢纽①登录口列)、
-  // 场景 options(预览下拉)
+  // 旁路数据(一次性;失败置降级标记,FE-02 不再静默伪装空态):个人池账户
+  // (装载判定/表单解析列/Ping All 拨测目标)、主档(服务选项 + 装载坐标 +
+  // 说明;拉不到 → 服务列降级手输、坐标显 ?)、实例行(表单实例过滤 +
+  // 枢纽①登录口列)、场景 options(预览下拉)
   // FE-08f:去掉 `as never` 硬转 —— AuthSession 形状与 authRows 声明
   // 结构兼容(system/envId/username/isDefault 均为宽化方向)。
-  listAllAuths().then((r) => { authRows.value = r }).catch(() => {})
+  listAllAuths().then((r) => { authRows.value = r })
+    .catch(() => { authFailed.value = true })
   listServices()
     .then((out) => { svcRows.value = out.services })
-    .catch(() => { svcRows.value = [] })
+    .catch(() => { svcRows.value = []; svcRowsFailed.value = true })
   listInstances()
     .then((r) => { instRows.value = r })
-    .catch(() => { instRows.value = [] })
-  loadScenOptions().catch(() => {})
+    .catch(() => { instRows.value = []; instRowsFailed.value = true })
+  loadScenOptions().catch(() => { scenOptionsFailed.value = true })
 })
 </script>
 

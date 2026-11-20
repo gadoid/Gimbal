@@ -277,3 +277,32 @@ describe('ProjectConfigPanel — ⑧ 项目执行配置(2026-11-18 退场)', () 
     expect(execApi.listExecConfigs).not.toHaveBeenCalled()
   })
 })
+
+// ── FE-02:失败≠空态(默认值/装载/场景候选读面降级)──────────────
+describe('ProjectConfigPanel — FE-02 读面降级', () => {
+  it('默认值读取失败 → 「读取失败」提示,不误报「暂无兜底参数」', async () => {
+    vi.spyOn(carryApi, 'getDefaults').mockRejectedValue(new Error('down'))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.get('[data-testid="prj-cfg-project-err"]').text()).toContain('默认值读取失败')
+    expect(w.text()).not.toContain('该层暂无兜底参数')
+    w.unmount()
+  })
+
+  it('装载清单读取失败 → 「读取失败」提示,不误报「还没有引用」', async () => {
+    vi.spyOn(projectsApi, 'getSlotStatus').mockRejectedValue(new Error('down'))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.get('[data-testid="prj-slots-err"]').text()).toContain('装载清单读取失败')
+    expect(w.text()).not.toContain('项目场景还没有引用任何身份条目')
+    w.unmount()
+  })
+
+  it('场景候选读取失败 → 指引去场景列表,不误报无场景', async () => {
+    vi.spyOn(scenApi, 'listScenarios').mockRejectedValue(new Error('down'))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.get('[data-testid="prj-config-scen-err"]').text()).toContain('场景候选读取失败')
+    w.unmount()
+  })
+})

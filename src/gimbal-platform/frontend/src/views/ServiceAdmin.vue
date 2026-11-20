@@ -76,6 +76,9 @@
       </div>
 
       <div v-if="error" class="svc-banner bad" data-testid="dep-err">{{ error }}</div>
+      <div v-if="accountsDegraded" class="svc-banner warn" data-testid="accounts-degraded">
+        账户面读取失败 —— 凭据/装载列显示「读取失败」不代表真实状态,请刷新重试
+      </div>
 
       <!-- ══ plate 差异横幅(原型 _1 Plate 差异感知;对账条)══════════ -->
       <div v-if="reconOpen && (unregistered.length || !plateReachable)"
@@ -257,7 +260,8 @@
                   <span v-if="plateReachable && svc.kind === 'plate' && !svc.inCatalog"
                         class="chip danger" :data-testid="`mx-drift-${svc.name}`"
                         title="主档 plate 行已不在 plate 目录(漂移)">漂移</span>
-                  <span v-if="aliasCountOf(svc) == null" class="chip weak">条目…</span>
+                  <span v-if="aliasFailed(svc.name)" class="chip warn">条目读取失败</span>
+                  <span v-else-if="aliasCountOf(svc) == null" class="chip weak">条目…</span>
                   <span v-else class="chip weak">{{ aliasCountOf(svc) }} 条目</span>
                 </div>
                 <!-- 说明行内编辑 -->
@@ -334,7 +338,7 @@
             <span v-else class="chip weak">暂无部署节点 —— 点「接入实例」登记地址</span>
             <span class="flex-1" />
             <span class="preview-hint mono">
-              实例 {{ previewDeployments(svc).length }}/{{ envsOf(svc).length }} · 条目 {{ aliasesOf(svc.name).length }}
+              实例 {{ previewDeployments(svc).length }}/{{ envsOf(svc).length }} · 条目 {{ aliasFailed(svc.name) ? '读取失败' : aliasesOf(svc.name).length }}
             </span>
           </div>
 
@@ -399,7 +403,8 @@
                       <span class="chip" :class="credentialState(svc, e.id) === 'ok' ? 'ok'
                         : credentialState(svc, e.id) === 'missing' ? 'warn' : 'weak'">
                         {{ credentialState(svc, e.id) === 'ok' ? '✓ 凭据'
-                          : credentialState(svc, e.id) === 'missing' ? '✗ 凭据' : '— 无条目' }}</span>
+                          : credentialState(svc, e.id) === 'missing' ? '✗ 凭据'
+                          : credentialState(svc, e.id) === 'degraded' ? '· 凭据读取失败' : '— 无条目' }}</span>
                     </div>
                     <div v-if="instOf(svc.system, e.id)?.line" class="inst-line mono">
                       线 {{ instOf(svc.system, e.id)!.line }}
@@ -410,7 +415,8 @@
                       {{ envAliases(svc, e.id).length }} 个配置槽位
                     </span>
                     <div class="slot-refs mono">
-                      <template v-if="envAliases(svc, e.id).length">
+                      <template v-if="aliasFailed(svc.name)">条目读取失败,无法判定</template>
+                      <template v-else-if="envAliases(svc, e.id).length">
                         {{ slotRefSummary(svc, e.id) }}
                       </template>
                       <template v-else>— 未登记条目</template>
@@ -804,7 +810,8 @@
             <div class="alias-grid">
               <div>
                 <span class="k">账户</span>
-                <span class="v mono">{{ accountOf(drawer.svc, a)?.username ?? '未装载' }}</span>
+                <span class="v mono">{{ accountOf(drawer.svc, a)?.username
+                  ?? (accountsDegraded ? '账户读取失败' : '未装载') }}</span>
               </div>
               <div>
                 <span class="k">鉴权类型</span>
@@ -812,7 +819,8 @@
               </div>
               <div>
                 <span class="k">凭据</span>
-                <span class="v">{{ accountOf(drawer.svc, a) ? '已托管(不回显)' : '—' }}</span>
+                <span class="v">{{ accountOf(drawer.svc, a) ? '已托管(不回显)'
+                  : accountsDegraded ? '读取失败' : '—' }}</span>
               </div>
               <div>
                 <span class="k">有效期</span>
@@ -979,8 +987,13 @@ async function refreshAliasTotal(): Promise<void> {
   } catch { /* 计数是增强面 */ }
 }
 
+/** 账户面降级(FE-02):失败≠无账户,凭据/装载判定不出结论 */
+const accountsDegraded = ref(false)
+
 async function refreshAccounts(): Promise<void> {
-  try { accounts.value = await listAllAuths() } catch { /* 装载判定降级为空 */ }
+  accountsDegraded.value = false
+  try { accounts.value = await listAllAuths() }
+  catch { accountsDegraded.value = true }
 }
 
 async function refreshAll(manual = false): Promise<void> {
@@ -1009,6 +1022,8 @@ async function refreshAll(manual = false): Promise<void> {
 // ── 条目缓存(按服务懒加载;卡头计数用它)────────────────────
 const aliasByService = ref<Record<string, ServiceAliasRow[]>>({})
 const aliasLoading = ref<Record<string, boolean>>({})
+/** 条目面失败标记(FE-02):失败≠0 条,与空态分列 */
+const aliasError = ref<Record<string, boolean>>({})
 
 async function ensureAliases(name: string, force = false): Promise<void> {
   if (!force && aliasByService.value[name] !== undefined) return
@@ -1016,11 +1031,18 @@ async function ensureAliases(name: string, force = false): Promise<void> {
   try {
     const page = await listAliases({ base: name, page_size: 200 })
     aliasByService.value = { ...aliasByService.value, [name]: page.items }
+    const { [name]: _drop, ...rest } = aliasError.value
+    aliasError.value = rest
   } catch {
-    aliasByService.value = { ...aliasByService.value, [name]: [] }
+    // 不写空数组占位:undefined + aliasError 让卡头/矩阵显「读取失败」而非 0 条
+    aliasError.value = { ...aliasError.value, [name]: true }
   } finally {
     aliasLoading.value = { ...aliasLoading.value, [name]: false }
   }
+}
+
+function aliasFailed(name: string): boolean {
+  return !!aliasError.value[name]
 }
 
 function aliasesOf(name: string): ServiceAliasRow[] {
@@ -1048,10 +1070,12 @@ function accountFieldsOf(svc: ServiceRow, a: ServiceAliasRow): Array<{ key: stri
   const fields = accountOf(svc, a)?.accountFields ?? {}
   return Object.entries(fields).map(([key, value]) => ({ key, value: String(value) }))
 }
-/** 凭据就绪:ok = 该环境所有条目都有账户;missing = 有缺口;none = 无条目 */
-function credentialState(svc: ServiceRow, envId: number): 'ok' | 'missing' | 'none' {
+/** 凭据就绪:ok = 该环境所有条目都有账户;missing = 有缺口;none = 无条目;
+ *  degraded = 账户面读取失败(FE-02,不出 ok/missing 结论) */
+function credentialState(svc: ServiceRow, envId: number): 'ok' | 'missing' | 'none' | 'degraded' {
   const list = envAliases(svc, envId)
   if (!list.length) return 'none'
+  if (accountsDegraded.value) return 'degraded'
   return list.every((a) => !!accountOf(svc, a)) ? 'ok' : 'missing'
 }
 function slotRefSummary(svc: ServiceRow, envId: number): string {

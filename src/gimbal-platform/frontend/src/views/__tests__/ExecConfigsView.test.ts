@@ -22,6 +22,7 @@ import type { ServiceList } from '@/api/services'
 import * as aliasApi from '@/api/service-aliases'
 import type { ServiceAliasRow, AliasPage } from '@/api/service-aliases'
 import * as authApi from '@/api/auth_sessions'
+import * as scenApi from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
 
@@ -1098,5 +1099,31 @@ describe('ExecConfigsView', () => {
     expect(titleRow2.text()).toContain('1 换用')
     expect(titleRow2.text()).toContain('1 缺装载')
     w2.unmount()
+  })
+})
+
+describe('FE-02 失败≠空态(旁路/条目面降级)', () => {
+  it('旁路四面失败 → 降级横幅点名失败面,不静默伪装空数据', async () => {
+    vi.mocked(authApi.listAll).mockRejectedValue(new Error('auth down'))
+    vi.mocked(svcApi.listServices).mockRejectedValue(new Error('svc down'))
+    vi.mocked(svcApi.listInstances).mockRejectedValue(new Error('inst down'))
+    vi.mocked(scenApi.listScenarioOptions).mockRejectedValue(new Error('scen down'))
+    const w = await mountPage()
+    const banner = w.get('[data-testid="ec-bypass-degraded"]').text()
+    expect(banner).toContain('账户(装载判定)')
+    expect(banner).toContain('主档(服务选项)')
+    expect(banner).toContain('实例(登录口)')
+    expect(banner).toContain('场景(预览下拉)')
+    w.unmount()
+  })
+
+  it('条目面失败 → 节点徽章显「条目读取失败」,不误报「未登记条目」', async () => {
+    vi.mocked(aliasApi.listAliases).mockRejectedValue(new Error('alias down'))
+    const w = await mountPage()
+    expect(w.get('[data-testid="ec-node-alias-err-0"]').text()).toContain('条目读取失败')
+    // 就绪度页签:取用条目解析不到 → 「读取失败」而非「未登记」
+    await openTab(w, 'readiness')
+    expect(w.text()).not.toContain('✕ 未登记')
+    w.unmount()
   })
 })

@@ -194,3 +194,17 @@ describe('ServiceBindingEditor — 实例档模式(§8.9)', () => {
     w.unmount()
   })
 })
+
+// ── FE-02:层默认读取失败 ≠ 没有默认值(来源列不可判定,不禁存)──
+describe('ServiceBindingEditor — FE-02 层默认降级', () => {
+  it('getDefaults 失败 → defaults-degraded 警示;保存不被禁用(门控只属字段面)', async () => {
+    vi.mocked(carryApi.getDefaults).mockRejectedValue(new Error('defaults down'))
+    const w = await mountEditor()
+    expect(w.get('[data-testid="defaults-degraded"]').text())
+      .toContain('层默认读取失败')
+    // 字段面正常 → 保存按钮可用(默认层级读取失败不阻塞写面)
+    const save = w.findAll('button').find((b) => b.text().includes('保存'))
+    expect(save?.attributes('disabled')).toBeUndefined()
+    w.unmount()
+  })
+})

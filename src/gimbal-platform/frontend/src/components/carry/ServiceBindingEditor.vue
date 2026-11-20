@@ -68,6 +68,15 @@
       </AlertDescription>
     </Alert>
 
+    <!-- FE-02:默认层读取失败≠没有默认值 —— 来源列的「默认值/无行」在
+         此态不可判定,警示但不禁存(写面门控只属于字段面) -->
+    <Alert v-if="defaultsFailed" variant="destructive" class="mb-3.5" data-testid="defaults-degraded">
+      <AlertTitle>层默认读取失败,来源列不可判定</AlertTitle>
+      <AlertDescription>
+        层默认(carry defaults)读取失败 —— 来源列此时显示的「无行」不代表执行时不注入;本键绑定值的读写不受影响
+      </AlertDescription>
+    </Alert>
+
     <div v-if="loadingFields" class="slib-loading">加载字段面…</div>
     <div v-else-if="rows.length" class="lib-card">
       <table class="slib-table">
@@ -222,6 +231,8 @@ const coveredCount = computed(() => rows.value.filter((r) => sourceOf(r) !== 'no
 
 const rows = ref<ServiceRow[]>([])
 const defaultsMap = ref<CarryValues>({})
+/** 层默认读取失败(FE-02):来源列 default/none 两档不可判定 */
+const defaultsFailed = ref(false)
 const baseBindings = ref<CarryValues>({})
 const loadingFields = ref(false)
 
@@ -412,7 +423,12 @@ async function save() {
 watch(() => [props.serviceKey, props.baseService, props.instanceEnvId, props.target],
   () => { void reload() })
 onMounted(async () => {
-  defaultsMap.value = await getDefaults().catch((): CarryValues => ({}))
+  try {
+    defaultsMap.value = await getDefaults()
+  } catch {
+    defaultsMap.value = {}
+    defaultsFailed.value = true
+  }
   await reload()
 })
 </script>
