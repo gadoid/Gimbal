@@ -2162,6 +2162,157 @@
         "title": "CheckSelector",
         "type": "object"
       },
+      "CleanupBindingRow": {
+        "description": "绑定换用目标未登记的运行方案行(写面闸历史存量面)。",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scenarioId": {
+            "title": "Scenarioid",
+            "type": "string"
+          },
+          "schemeId": {
+            "title": "Schemeid",
+            "type": "string"
+          },
+          "unregisteredTargets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unregisteredtargets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schemeId",
+          "scenarioId",
+          "name"
+        ],
+        "title": "CleanupBindingRow",
+        "type": "object"
+      },
+      "CleanupSnapshotRow": {
+        "description": "明文快照存量行(只列键名 —— 值是明文口令,不出任何面)。",
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "referencedKeys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Referencedkeys",
+            "type": "array"
+          },
+          "scenarioId": {
+            "title": "Scenarioid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenarioId",
+          "name",
+          "owner"
+        ],
+        "title": "CleanupSnapshotRow",
+        "type": "object"
+      },
+      "CleanupSurvey": {
+        "description": "清账向导盘点(enforce 时点的就绪清单,数字全 live):\n三面全空 = 「引用皆真条目 + 存量无明文」→ 可切 enforce(拍板:\n清账完成即切)。",
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupBindingRow"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "gateMode": {
+            "title": "Gatemode",
+            "type": "string"
+          },
+          "registrySize": {
+            "title": "Registrysize",
+            "type": "integer"
+          },
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupSnapshotRow"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "unregistered": {
+            "items": {
+              "$ref": "#/components/schemas/CleanupUnregisteredRow"
+            },
+            "title": "Unregistered",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gateMode",
+          "registrySize"
+        ],
+        "title": "CleanupSurvey",
+        "type": "object"
+      },
+      "CleanupUnregisteredRow": {
+        "description": "带未登记身份引用的场景行(引用面 = 保存/导入闸同一单源提取器)。",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projectid"
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
+          "scenarioId": {
+            "title": "Scenarioid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenarioId",
+          "name",
+          "owner"
+        ],
+        "title": "CleanupUnregisteredRow",
+        "type": "object"
+      },
       "CompositionMemberIn": {
         "description": "composition 的成员行:顺序即列表顺序(聚合发起序/串联链路序/\n扇出源在首位);role 见 suite_members.role。",
         "properties": {
@@ -10853,6 +11004,33 @@
           }
         ],
         "summary": "List Audit Logs",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/cleanup-survey": {
+      "get": {
+        "description": "清账向导盘点(阶段 3;admin 只读,零写面)。聚合三张存量面:\n\n* 未登记引用场景(决策 1 保存/导入闸同一提取器;\n  ``REGISTRY_ONLY_IDENTITIES`` audit 态的生产数字即此);\n* 明文快照场景(本案 §7;键名 only,清账走属主保存链显式清空);\n* 方案绑定目标未登记(``validate_binding_aliases`` 历史存量)。\n\n清账操作不经本端点:登记条目走既有 ``POST /service-aliases``,\n快照清空走属主保存链(PUT users={} 显式清空,admin 无旁路 ——\nW3 拍板,向导只指路不代刀)。",
+        "operationId": "cleanup_survey_api_admin_cleanup_survey_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupSurvey"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cleanup Survey",
         "tags": [
           "admin"
         ]

@@ -108,8 +108,8 @@ afterEach(() => {
 
 describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
   it('api 层:X-Identity-Warnings 头解析(黄条链的真实起点)', async () => {
-    // updateScenario 返回 {scenario, identityWarnings} — 头为 JSON 对象
-    // 字符串(阶段 0 载体);坏 JSON/缺头保守空数组,不吵。
+    // updateScenario 返回 {scenario, identityWarnings, baseWarnings} — 头为
+    // JSON 对象字符串(阶段 0 载体);坏 JSON/缺头保守空数组,不吵。
     const http = (await import('@/api/http')).default
     const scenario = sampleScenario()
     vi.spyOn(http, 'put').mockResolvedValueOnce({
@@ -118,6 +118,7 @@ describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
     } as any)
     const r1 = await api.updateScenario('sc-demo', {} as any)
     expect(r1.identityWarnings).toEqual(['ghost'])
+    expect(r1.baseWarnings).toEqual([])
     expect(r1.scenario).toBe(scenario)
     vi.spyOn(http, 'put').mockResolvedValueOnce({
       data: scenario, headers: {},
@@ -127,6 +128,26 @@ describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
       data: scenario, headers: { 'x-identity-warnings': 'not-json' },
     } as any)
     expect((await api.updateScenario('sc-demo', {} as any)).identityWarnings).toEqual([])
+  })
+
+  it('api 层 + 黄条:X-Identity-Base-Warnings 头(阶段 3 同 base 闸 audit 载体)', async () => {
+    const http = (await import('@/api/http')).default
+    const scenario = sampleScenario()
+    vi.spyOn(http, 'put').mockResolvedValueOnce({
+      data: scenario,
+      headers: { 'x-identity-base-warnings': JSON.stringify({
+        code: 'identity_base_mismatch',
+        refs: [{ index: 1, service: 'fin-service', identity: 'gitlab',
+                 identityBase: 'gitlab', serviceBase: 'fin-service' }],
+      }) },
+    } as any)
+    const r = await api.updateScenario('sc-demo', {} as any)
+    expect(r.baseWarnings).toHaveLength(1)
+    expect(r.baseWarnings[0].identity).toBe('gitlab')
+    vi.spyOn(http, 'put').mockResolvedValueOnce({
+      data: scenario, headers: { 'x-identity-base-warnings': '{bad' },
+    } as any)
+    expect((await api.updateScenario('sc-demo', {} as any)).baseWarnings).toEqual([])
   })
 
   it('UsersCard 手配草稿 → 随自动保存 PUT 进 authDrafts;newAuths 回包清草稿 + 点名新建', async () => {
@@ -176,6 +197,30 @@ describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
     expect(vi.mocked(toast.warning).mock.calls.some(
       ([m]) => typeof m === 'object' && m !== null
         && (m as { message: string }).message.includes('ghost'))).toBe(true)
+    w.unmount()
+  })
+
+  it('baseWarnings → 跨源黄条(阶段 3 同 base 闸;保存已放行指引改绑)', async () => {
+    const update = vi.fn().mockResolvedValue({
+      scenario: sampleScenario(),
+      identityWarnings: [],
+      baseWarnings: [{ index: 1, service: 'fin-service', identity: 'gitlab',
+                       identityBase: 'gitlab', serviceBase: 'fin-service' }],
+    })
+    vi.spyOn(api, 'updateScenario').mockImplementation(update)
+    const w = await mountPage()
+    const card = w.findComponent(UsersCard)
+    card.vm.$emit('update:authDrafts', []) // 触发 dirty → 自动保存
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS)
+    await flushPromises()
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(toast.warning).mock.calls.some(
+      ([m]) => typeof m === 'object' && m !== null && (() => {
+        const msg = (m as { message: string }).message
+        return msg.includes('跨源引用') && msg.includes('gitlab')
+          && msg.includes('步骤2') // index+1 的 1-based 呈现
+      })())).toBe(true)
     w.unmount()
   })
 })

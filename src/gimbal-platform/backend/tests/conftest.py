@@ -160,6 +160,13 @@ async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
 
     monkeypatch.setattr(_settings, "EXEC_CHAIN", "legacy", raising=True)
 
+    # 阶段 3(2026-11-21):生产 .env 已切 enforce —— 套件与 .env 取值
+    # 解耦(同 EXEC_CHAIN 先例):缺省钉回 off,登记/同 base 闸行为由
+    # 专项用例显式 monkeypatch 三态(identity_registry_gate /
+    # auth_drafts / admin_cleanup_survey 等),不受环境配置漂移影响。
+    monkeypatch.setattr(_settings, "REGISTRY_ONLY_IDENTITIES", "off",
+                        raising=True)
+
     import uuid
 
     schema = f"t_{uuid.uuid4().hex}"

@@ -1155,6 +1155,17 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
         duration: 8000,
       })
     }
+    // 阶段 3 同 base 闸 audit 态:X-Identity-Base-Warnings 头点名跨 base
+    // 引用 —— 保存已放行,黄条指引改绑(与存在性告警各自独立,互不吞并)
+    if (result.baseWarnings.length) {
+      toast.warning({
+        message: `跨源引用(已按 audit 放行):`
+          + result.baseWarnings.map((r0) =>
+            `${r0.identity}(${r0.identityBase})@步骤${r0.index + 1}[${r0.service}]`).join('、')
+          + ' — 条目与所在步骤服务不同源,请改绑同源条目',
+        duration: 8000,
+      })
+    }
     // 新建场景后拉一次数据集列表(空列表,但保持状态一致)
     if (!dataSets.value.length) await loadDataSets()
     lastSavedAt.value = new Date()

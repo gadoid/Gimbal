@@ -131,17 +131,35 @@ export async function createScenario(
   const r = await http.post<Scenario>('/scenarios', draft, {
     params: projectId != null ? { projectId } : undefined,
   })
-  return { scenario: r.data, identityWarnings: identityWarningsOf(r) }
+  return {
+    scenario: r.data,
+    identityWarnings: identityWarningsOf(r),
+    baseWarnings: identityBaseWarningsOf(r),
+  }
 }
 
 export async function updateScenario(
   scenarioId: string, draft: ScenarioDraft,
 ): Promise<SaveScenarioResult> {
   const r = await http.put<Scenario>(`/scenarios/${enc(scenarioId)}`, draft)
-  return { scenario: r.data, identityWarnings: identityWarningsOf(r) }
+  return {
+    scenario: r.data,
+    identityWarnings: identityWarningsOf(r),
+    baseWarnings: identityBaseWarningsOf(r),
+  }
 }
 
-// ── 保存结果(凭证治理 2c)────────────────────────────────────────
+// ── 保存结果(凭证治理 2c + 阶段 3 同 base)───────────────────────
+/** 声明侧同 base 违规行(阶段 3;X-Identity-Base-Warnings 头 refs)。 */
+export interface IdentityBaseRef {
+  /** definition.steps 下标 */
+  index: number
+  service: string
+  identity: string
+  identityBase: string
+  serviceBase: string
+}
+
 /** 保存链结果:scenario + 登记闸 audit 态的未登记引用清单。 */
 export interface SaveScenarioResult {
   scenario: Scenario
@@ -149,6 +167,9 @@ export interface SaveScenarioResult {
    *  X-Identity-Warnings 头(JSON {code, identities})点名未登记引用
    *  —— 保存已放行,黄条提示;enforce 态保存直接 422 到不了这。 */
   identityWarnings: string[]
+  /** 声明侧同 base 闸 audit 态(阶段 3):X-Identity-Base-Warnings 头
+   *  (JSON {code, refs})点名跨 base 引用;enforce 态 422 到不了这。 */
+  baseWarnings: IdentityBaseRef[]
 }
 
 /** X-Identity-Warnings 头解析(缺头/坏 JSON → 空数组,保守不吵)。
@@ -161,6 +182,22 @@ function identityWarningsOf(r: AxiosResponse<Scenario>): string[] {
     return Array.isArray(parsed.identities)
       ? parsed.identities.filter((x): x is string => typeof x === 'string')
       : []
+  } catch {
+    return []
+  }
+}
+
+/** X-Identity-Base-Warnings 头解析(阶段 3;缺头/坏 JSON/形状漂移 →
+ *  空数组,保守不吵 —— 与 identityWarningsOf 同口径)。 */
+function identityBaseWarningsOf(r: AxiosResponse<Scenario>): IdentityBaseRef[] {
+  const raw: unknown = r.headers?.['x-identity-base-warnings']
+  if (typeof raw !== 'string' || !raw) return []
+  try {
+    const parsed = JSON.parse(raw) as { refs?: unknown }
+    if (!Array.isArray(parsed.refs)) return []
+    return parsed.refs.filter(
+      (x): x is IdentityBaseRef =>
+        !!x && typeof x === 'object' && typeof (x as IdentityBaseRef).identity === 'string')
   } catch {
     return []
   }

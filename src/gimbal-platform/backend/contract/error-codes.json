@@ -968,6 +968,21 @@
         422
       ]
     },
+    "identity_base_mismatch": {
+      "shapes": [
+        [
+          "code",
+          "message",
+          "refs"
+        ]
+      ],
+      "sites": [
+        "app/routers/scenarios.py:362"
+      ],
+      "statuses": [
+        422
+      ]
+    },
     "identity_missing": {
       "sites": [
         "app/routers/run_precheck.py:542",
@@ -991,7 +1006,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:339"
+        "app/routers/scenarios.py:346"
       ],
       "statuses": [
         422
@@ -1159,7 +1174,7 @@
       ],
       "sites": [
         "app/routers/project_promotions.py:123",
-        "app/services/project_promotion.py:325"
+        "app/services/project_promotion.py:442"
       ],
       "statuses": [
         409,
@@ -1188,7 +1203,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1007"
+        "app/routers/scenarios.py:1032"
       ],
       "statuses": [
         409
@@ -1320,7 +1335,7 @@
         "app/routers/project_credentials.py:106",
         "app/routers/project_promotions.py:94",
         "app/routers/project_promotions.py:203",
-        "app/routers/project_promotions.py:287",
+        "app/routers/project_promotions.py:290",
         "app/routers/project_tokens.py:62",
         "app/routers/project_tokens.py:79",
         "app/routers/projects.py:99",
@@ -1337,7 +1352,7 @@
         "app/routers/report_definitions.py:225",
         "app/routers/report_definitions.py:245",
         "app/routers/report_definitions.py:252",
-        "app/routers/scenarios.py:552",
+        "app/routers/scenarios.py:577",
         "app/routers/webhook_deliveries.py:54",
         "app/services/project_promotion.py:59",
         "app/services/project_promotion.py:69",
@@ -1372,7 +1387,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1138",
+        "app/routers/scenarios.py:1163",
         "app/routers/suites.py:1844"
       ],
       "statuses": [
@@ -1412,7 +1427,7 @@
       "sites": [
         "app/routers/project_promotions.py:220",
         "app/routers/project_promotions.py:261",
-        "app/routers/project_promotions.py:290"
+        "app/routers/project_promotions.py:293"
       ],
       "statuses": [
         409
@@ -1574,7 +1589,7 @@
         "app/routers/endpoint_catalog.py:154",
         "app/routers/endpoint_catalog.py:311",
         "app/routers/scenarios.py:287",
-        "app/routers/scenarios.py:1219"
+        "app/routers/scenarios.py:1244"
       ],
       "statuses": [
         422,
@@ -1598,7 +1613,7 @@
         "app/routers/integration.py:872",
         "app/routers/runs.py:265",
         "app/routers/scenarios.py:279",
-        "app/routers/scenarios.py:1212",
+        "app/routers/scenarios.py:1237",
         "app/routers/strategy_catalog.py:58"
       ],
       "statuses": [
@@ -1736,7 +1751,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:942",
+        "app/routers/scenarios.py:967",
         "app/routers/suites.py:1763"
       ],
       "statuses": [
@@ -2144,8 +2159,8 @@
     },
     "source_deleted": {
       "sites": [
-        "app/services/project_promotion.py:311",
-        "app/services/project_promotion.py:319"
+        "app/services/project_promotion.py:425",
+        "app/services/project_promotion.py:436"
       ],
       "statuses": [
         409
@@ -2168,7 +2183,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:758"
+        "app/routers/scenarios.py:783"
       ],
       "statuses": [
         409
@@ -2542,7 +2557,7 @@
       "sites": [
         "app/routers/integration.py:728",
         "app/routers/report_definitions.py:230",
-        "app/routers/scenarios.py:1144",
+        "app/routers/scenarios.py:1169",
         "app/routers/suites.py:1850"
       ],
       "statuses": [
@@ -2653,7 +2668,7 @@
     "app/routers/runs.py:664": "e.code",
     "app/routers/scenario_import.py:32": "detail",
     "app/routers/scenarios.py:198": "e.code",
-    "app/routers/scenarios.py:367": "e.code",
+    "app/routers/scenarios.py:392": "e.code",
     "app/routers/suites.py:330": "e.code",
     "app/routers/suites.py:579": "payload",
     "app/services/plate_client.py:642": "resp.json().get('error', {}).get('code', 'plate_error')",
@@ -2686,6 +2701,6 @@
     ],
     "int_codes_module": "app/routers/_codes.py",
     "note": "动态(非字面量)code 位点在 dynamic 面:取值由对应异常/helper 调用位点枚举,位点增删即契约变化;无码纯 message detail 不入面",
-    "scanned_files": 173
+    "scanned_files": 174
   }
 }

@@ -190,7 +190,7 @@ identity_project_grants(
 | **0** | 审计脚本 + audit 态保存/导入闸 | 1 天 | 无 |
 | **1** | 执行闸白名单(决策 1 全部内容) | 2–3 天 | 无(与阶段 0 并行) |
 | **2** | enforce + 编排器选取器 + 存量清账向导 | 4–6 天 | 阶段 0 的存量数据 |
-| **3** | promotion 授权(迁移 0064 + analyze + approve + 项目呈现) | 2–3 天 | 阶段 2(引用皆真条目后移交才干净) |
+| **3** | promotion 授权(迁移 0064 + analyze + approve + 项目呈现) | 2–3 天 | **✅ 2026-11-21 提前建表落**(与本案阶段 3 并行):0064 live 已升级 + analyze `identityEntries` 分区 + execute/approve 批量 upsert(直通路径「不落申请行」→ 溯源 NULL)+ reject/withdraw revoke 兜底 + PromotionDialog 分区呈现;执行解析不查授权表(拍板照默认口径) |
 | 并行 | 决策 2 撤深链(0.5 天)、决策 3 引擎 fail-fast(1 天 + 存量对账) | 独立 | 无 |
 
 关键路径:0 → 2 → 3,合计约 7–10 天;阶段 1 随时可插。
@@ -220,9 +220,9 @@ identity_project_grants(
 | `backend/app/core/config.py` | + `REGISTRY_ONLY_IDENTITIES` 开关 |
 | `backend/app/routers/run_precheck.py` | 硬门 + `identity_not_circled` 分类 |
 | `backend/app/services/run_dispatcher.py` | 派发漏斗复用取用集比对(挂同一硬门) |
-| `backend/alembic/versions/0064_*` | `identity_project_grants` 建表 |
+| `backend/alembic/versions/0064_*` | `identity_project_grants` 建表 — **✅ 0064_identity_project_grants(2026-11-21,live 已 upgrade head)** |
 | `backend/app/models/` | + `IdentityProjectGrant` 模型 |
-| `backend/app/services/project_promotion.py` | analyze 升级(条目明细)+ execute/approve 写授权 |
+| `backend/app/services/project_promotion.py` | analyze 升级(条目明细)+ execute/approve 写授权 — **✅ 已落(2026-11-21)** |
 | `backend/app/routers/project_promotions.py` | 裁决面板数据面(身份条目分区) |
 | `frontend/src/components/composer/ValueSourcePicker.vue`、`UsersCard.vue`、`CaseComposerConfig.vue` | 身份引用选取器 + 未登记标红 + 降级 |
 | `frontend/src/views/ExecConfigsView.vue` | 换用目标自动纳入圈定(`payloadOf`);409 深链一键纳入 |

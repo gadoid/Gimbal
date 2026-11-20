@@ -209,6 +209,11 @@ def _create_retired_tables(eng) -> None:
             conn.exec_driver_sql(
                 "ALTER TABLE access_token_scopes DROP CONSTRAINT IF EXISTS "
                 "access_token_scopes_auth_id_fkey")
+            # 0064 的授权表(create_all 产出)同属未来表 —— 其 FK 压在
+            # project_promotions/service_identities 上,不撤会挡老迁移
+            # 的 drop/recreate(0040–0042 区划系)。
+            conn.exec_driver_sql(
+                "DROP TABLE IF EXISTS identity_project_grants CASCADE")
             conn.exec_driver_sql(
                 "DROP TABLE IF EXISTS service_identities CASCADE")
             conn.exec_driver_sql(

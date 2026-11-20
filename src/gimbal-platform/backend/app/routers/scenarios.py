@@ -308,11 +308,18 @@ async def _identity_registry_gate(
     db: AsyncSession, definition: dict, response: Response,
     *, extra_known: "set[str] | None" = None,
 ) -> None:
-    """决策 1「引用即登记」保存闸(阶段 0;identity-registry §2):
+    """决策 1「引用即登记」保存闸(阶段 0;identity-registry §2)+
+    声明侧同 base 闸(阶段 3;TOK-07 声明面收口):
     ``REGISTRY_ONLY_IDENTITIES`` 三态 —— off(缺省)不校验;audit 保存
     成功 + ``X-Identity-Warnings`` 头(前端黄条随阶段 2 选取器接入);
     enforce 422 ``identity_not_registered`` 硬拦(切换前置 = 存量清账
     完成,时点由阶段 0 审计数字定)。
+
+    同 base 步(阶段 3):已登记条目的 base 须 == 所在步骤服务的基础
+    服务(逐步骤 ``${auth.*}``/``call.user`` 配对,``same_base_
+    violations`` 单源);enforce 422 ``identity_base_mismatch``,audit
+    ``X-Identity-Base-Warnings`` 头(载体同款,独立头 —— 存在性与
+    同 base 两种告警可同时成立,互不吞并)。
 
     挂路由层而非 store:copy/share 等复制路径不走本闸 —— enforce 前提
     下库内已清账,直写与副本漏网由执行闸白名单(§4 两闸关系)兜底,
@@ -327,25 +334,43 @@ async def _identity_registry_gate(
                 "REGISTRY_ONLY_IDENTITIES 取值 %r 不在 off/audit/enforce,"
                 "按 off 处理", mode)
         return
-    from ..services.service_aliases import unregistered_identities
+    from ..services.service_aliases import same_base_violations, \
+        unregistered_identities
     unreg = await unregistered_identities(db, definition)
     if extra_known:
         # 手配(§3.3 阶段 2)随保存同事务建条目 —— 引用名此刻未入库,
         # 闸判定时视为「将登记」(时序:本闸在 store 落池之前)。
         unreg = [n for n in unreg if n not in extra_known]
-    if not unreg:
+    if unreg:
+        if mode == "enforce":
+            raise HTTPException(status_code=422, detail={
+                "code": "identity_not_registered",
+                "message": "引用的身份条目未登记:" + "、".join(unreg)
+                           + " —— 去服务注册页登记,或改绑已有条目",
+                "identities": unreg})
+        response.headers["X-Identity-Warnings"] = json.dumps(
+            {"code": "identity_not_registered", "identities": unreg},
+            ensure_ascii=False)
+        logger.warning(
+            "registry gate(audit) identity_not_registered: %s", unreg)
+    # 同 base 步(阶段 3):只裁已登记条目,与手配 extra_known 无交
+    # (草稿落池条目的 base 由 422 系统闸保证同主档)。
+    bad_base = await same_base_violations(db, definition)
+    if not bad_base:
         return
     if mode == "enforce":
         raise HTTPException(status_code=422, detail={
-            "code": "identity_not_registered",
-            "message": "引用的身份条目未登记:" + "、".join(unreg)
-                       + " —— 去服务注册页登记,或改绑已有条目",
-            "identities": unreg})
-    response.headers["X-Identity-Warnings"] = json.dumps(
-        {"code": "identity_not_registered", "identities": unreg},
+            "code": "identity_base_mismatch",
+            "message": "身份条目与所在步骤服务不同源:" + "、".join(
+                f"{r['identity']}({r['identityBase']})@步骤{r['index']}"
+                f"[{r['service']}/{r['serviceBase']}]" for r in bad_base)
+                       + " —— 改绑同源条目,或去服务注册页核对条目归属",
+            "refs": bad_base})
+    response.headers["X-Identity-Base-Warnings"] = json.dumps(
+        {"code": "identity_base_mismatch", "refs": bad_base},
         ensure_ascii=False)
     logger.warning(
-        "registry gate(audit) identity_not_registered: %s", unreg)
+        "registry gate(audit) identity_base_mismatch: %s", bad_base)
 
 
 @router.post("", response_model=Scenario, status_code=status.HTTP_201_CREATED)

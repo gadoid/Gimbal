@@ -476,6 +476,69 @@ async def unregistered_identities(
     return sorted(set(names) - known)
 
 
+async def same_base_violations(
+    db: AsyncSession, definition: dict,
+) -> list[dict]:
+    """声明侧**同 base** 闸(TOK-07 声明面收口;评审 P2 登记,阶段 3):
+    逐步骤把声明的身份引用配对到所在步骤服务,已登记条目的 base 必须
+    == 步骤服务的基础服务(基础服务口径与 ``validate_binding_aliases``
+    同款:条目行 ``base_service``,非条目即自身)—— 直写 API 可声明
+    跨服务条目引用(他服务凭证注入本服务地址),编排器选取器只给同基
+    候选,这里是直写口子的保存面收口。
+
+    扫描面 = ``auth_ref_scan.step_auth_refs``(步骤内 ``${auth.*}``
+    模板 + ``call.user`` 直引)。刻意边界:
+    * 未登记名跳过 —— 存在性是 ``unregistered_identities`` 的业务,
+       本闸只裁已登记条目;否则 base 回落自身会造假阳性;
+    * ``config.setup``/``teardown`` 条目与无 ``call.service`` 的步骤
+       跳过 —— 无步骤服务锚点,不比对(其引用仍受存在闸覆盖);
+    * 步骤服务键默认命中(条目名 == 服务键)自比同 base,无信息量,
+       不产生行。
+
+    返回违规清单(有序去重):``{index, service, identity,
+    identityBase, serviceBase}``;index = definition.steps 下标。
+    off/audit/enforce 三态由调用方分派;本函数只报事实。
+    """
+    from .auth_ref_scan import step_auth_refs
+    steps = (definition or {}).get("steps")
+    if not isinstance(steps, list):
+        return []
+    pairs: list[tuple[int, str, str]] = []
+    scan_names: set[str] = set()
+    svc_keys: set[str] = set()
+    for idx, st in enumerate(steps):
+        if not isinstance(st, dict):
+            continue
+        call = st.get("call")
+        svc = call.get("service") if isinstance(call, dict) else None
+        if not isinstance(svc, str) or not svc:
+            continue
+        svc_keys.add(svc)
+        for name in step_auth_refs(st):
+            scan_names.add(name)
+            pairs.append((idx, svc, name))
+    if not pairs:
+        return []
+    base_of = dict((await db.execute(
+        select(ServiceIdentity.alias_name, ServiceIdentity.base_service).where(
+            ServiceIdentity.alias_name.in_(scan_names | svc_keys)))).all())
+    out: list[dict] = []
+    seen: set[tuple[int, str, str]] = set()
+    for idx, svc, name in pairs:
+        if name not in base_of:  # 未登记 → 存在闸业务,这里跳过
+            continue
+        svc_base = base_of.get(svc, svc)
+        if base_of[name] == svc_base:
+            continue
+        key = (idx, svc, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"index": idx, "service": svc, "identity": name,
+                    "identityBase": base_of[name], "serviceBase": svc_base})
+    return out
+
+
 async def credential_aliases_for(
     db: AsyncSession, raw_names: list[str],
 ) -> dict[str, str]:

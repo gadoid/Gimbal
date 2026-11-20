@@ -864,7 +864,12 @@ async def land(
     # create/update 走 X-Identity-Warnings 头 —— 两种载体前端阶段 2
     # 选取器统一收口)。运行方案保存无定义侧引用面,由既有
     # validate_binding_aliases 覆盖,不在此重复挂。
+    # 同 base 步(阶段 3,TOK-07 声明面收口):已登记条目 base 须同
+    # 所在步骤服务;enforce 422 identity_base_mismatch,audit 以
+    # identityBaseWarnings 键随响应返回(与路由层 X-Identity-Base-
+    # Warnings 头同款载体)。
     identity_warnings: list[str] = []
+    identity_base_warnings: list[dict] = []
     _mode = settings.REGISTRY_ONLY_IDENTITIES
     if _mode in ("audit", "enforce"):
         unreg = await alias_svc.unregistered_identities(db, defn)
@@ -878,6 +883,20 @@ async def land(
                 "registry gate(audit,import) identity_not_registered: %s",
                 unreg)
             identity_warnings = unreg
+        bad_base = await alias_svc.same_base_violations(db, defn)
+        if bad_base:
+            if _mode == "enforce":
+                raise ImportRejected(
+                    "identity_base_mismatch", 422,
+                    "身份条目与所在步骤服务不同源:" + "、".join(
+                        f"{r['identity']}({r['identityBase']})"
+                        f"@步骤{r['index']}[{r['service']}/"
+                        f"{r['serviceBase']}]" for r in bad_base)
+                    + " —— 改绑同源条目,或去服务注册页核对条目归属")
+            logger.warning(
+                "registry gate(audit,import) identity_base_mismatch: %s",
+                bad_base)
+            identity_base_warnings = bad_base
 
     draft = ScenarioDraft(definition=defn)
     try:
@@ -912,6 +931,8 @@ async def land(
     out = {"scenarioId": row.scenario_id, "idMode": id_mode, **report}
     if identity_warnings:
         out["identityWarnings"] = identity_warnings
+    if identity_base_warnings:
+        out["identityBaseWarnings"] = identity_base_warnings
     return out
 
 

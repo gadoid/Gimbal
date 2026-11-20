@@ -21,12 +21,24 @@ export interface PromotionMemberPlan {
   role: string
 }
 
+/** 身份条目分区行(决策 1 阶段 4 §5):slots 的逐条目明细 —— 授权与
+ *  项目池账户就绪是呈现提示,不拦执行(执行解析不查授权表)。 */
+export interface PromotionIdentityEntry {
+  aliasName: string
+  baseService: string
+  envLabel: string
+  registered: boolean
+  granted: boolean
+  projectAccountReady: boolean
+}
+
 export interface PromotionAnalysis {
   services: string[]
   conflicts: PromotionConflict[]
   blockers: { scenarioId: string; reason: string }[]
   slots: string[]
   memberPlan?: PromotionMemberPlan[]
+  identityEntries?: PromotionIdentityEntry[]
 }
 
 export interface PromotionOut {

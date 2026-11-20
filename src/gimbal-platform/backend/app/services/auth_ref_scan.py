@@ -21,6 +21,27 @@ def scan_auth_aliases(steps: list) -> list[str]:
     return list(seen)
 
 
+def step_auth_refs(step: dict) -> list[str]:
+    """单个步骤声明的身份引用(声明侧同 base 闸,2026-11-21):
+
+    * 步骤字符串值里的 ``${auth.<alias>.*}`` 模板引用(headers/path/
+      body/strategy 一网打尽,与 scan_auth_aliases 同正则);
+    * ``call.user = X`` 直引(scan_token_faces 同款语义 —— 以该身份
+      调用本步骤服务)。
+
+    保持出现序去重。调用方拿它配对步骤服务做 base 比对 —— 全量递归
+    扫描器(scan_auth_aliases)不携带步骤锚点,做不了逐步骤比对。"""
+    if not isinstance(step, dict):
+        return []
+    seen: dict[str, None] = {}
+    for found in _scan_value(step):
+        seen.setdefault(found, None)
+    call = step.get("call")
+    if isinstance(call, dict) and call.get("user"):
+        seen.setdefault(str(call["user"]), None)
+    return list(seen)
+
+
 # ${auth.X}(裸引用 = token 面)或 ${auth.X.token};字段面(password 等)
 # 不在其中 —— 静态令牌形态不需要登录口(引擎 PreToken:password 即 token)。
 _TOKEN_FACE_RE = re.compile(r"\$\{\s*auth\.([A-Za-z0-9_-]+?)(?:\.token)?\s*\}")

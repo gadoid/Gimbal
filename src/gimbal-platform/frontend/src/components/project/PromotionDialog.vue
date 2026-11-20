@@ -60,6 +60,26 @@
           <p v-if="analysis.slots.length" class="muted">
             引用条目:{{ analysis.slots.join('、') }}(凭证跟人走,进项目后成员各自装载)
           </p>
+          <!-- 身份条目分区(阶段 4 §5):共享即授权的呈现面 —— 授权状态
+              + 项目池账户就绪(执行解析不查授权表,这里只指引) -->
+          <div v-if="analysis.identityEntries?.length"
+               class="ident-entries" data-testid="promo-identity-entries">
+            <p class="muted">身份条目(共享即授权):</p>
+            <table class="tbl">
+              <thead><tr><th>条目</th><th>基础服务/环境</th><th>授权</th><th>项目池账户</th></tr></thead>
+              <tbody>
+                <tr v-for="e in analysis.identityEntries" :key="e.aliasName">
+                  <td class="mono">{{ e.aliasName }}</td>
+                  <td>{{ e.baseService }}<template v-if="e.envLabel"> / {{ e.envLabel }}</template></td>
+                  <td>{{ e.granted ? '已授权' : '批准时自动授权' }}</td>
+                  <td>
+                    <template v-if="e.projectAccountReady">✓ 就绪</template>
+                    <template v-else>缺 —— 进项目后到「凭证」页签配置项目池账户</template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </template>
       </template>
       <p v-else-if="error" class="err" data-testid="promo-error">{{ error }}</p>

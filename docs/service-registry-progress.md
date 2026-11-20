@@ -1701,6 +1701,137 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
    作为 feature 收口基线。
 3. **双主题截图**：服务注册页 / 凭证页在 1280 与 1920 两档、日间/夜间各截一轮核对。
 
+### 合并改造阶段 3 · 同 base 闸 + 清账 → enforce(2026-11-21,🟢 本地已切)
+
+**3a 声明侧同 base 闸**(登记册 E-区 P2 收口,TOK-07 声明面):
+
+- `auth_ref_scan.step_auth_refs`:逐步骤身份引用扫描(`${auth.*}`
+  模板 + `call.user` 直引)—— 全量递归扫描器不带步骤锚点,做不了
+  逐步骤比对;`service_aliases.same_base_violations`:已登记条目 base
+  须 == 所在步骤服务的基础服务(`validate_binding_aliases` 同口径:
+  条目行 `base_service`,非条目即自身)。边界:未登记名跳过(存在闸
+  业务);setup/teardown 与无 `call.service` 步骤跳过(无锚点);
+  服务键默认命中自比同 base 无信息量,不产行。
+- 载体随登记闸同款三态,enforce:`_identity_registry_gate` 422
+  `identity_base_mismatch`(refs 逐步骤定位);audit:
+  `X-Identity-Base-Warnings` 头(独立头 —— 两种告警可同时成立,互不
+  吞并);导入链 `identityBaseWarnings` 键。前端:api 层
+  `IdentityBaseRef` 解析(坏 JSON/形状漂移保守空数组)+ CaseComposer
+  跨源黄条(1-based 步骤号)+ ImportScenarioDialog 黄条。
+- 契约:215→**216 码**(`identity_base_mismatch`,scenarios 路由侧
+  位点);openapi 零变化(头不入 schema)。README 计数刷新。
+- 测试:gate 簇 12 用例(同源放行 / enforce 422 refs 结构 / audit
+  头 / 双告警共存 / call.user 进闸 + setup 不比对 + 未登记跳过 /
+  服务键同名条目行 base 查找)—— 原 `test_enforce_allows_registered`
+  按**语义收紧翻新**(只报事实 → 归属强校验,非删断言);前端
+  credentialReform +2 / ImportScenarioDialog +1。
+
+**3b 清账向导**(合并路线 §10「两步走」管理面收口):
+
+- 后端 `GET /admin/cleanup-survey`(admin 只读,零写面):三面 live
+  盘点 —— 未登记引用场景(保存/导入闸同一提取器)/ 明文快照场景
+  (键名 only + `referencedKeys` = 被步骤引用键,先登记再清不悬空)/
+  方案绑定目标未登记;`gateMode` 回显。清账操作不经端点(登记走
+  POST /service-aliases,清快照走属主保存链 —— W3 admin 无旁路)。
+- 前端 `/admin/credential-cleanup`(cap ops.write,侧栏「凭证清账」
+  平台组):① 未登记引用 distinct 名一键登记 + 场景改绑深链;
+  ② 快照行:属主本人「清空快照并保存」(确认闸 → getScenarioDraft →
+  users={} → 保存链 PUT),非属主「属主执行」+ 深链;`referencedKeys`
+  徽标;③ 绑定面;置顶就绪面板(三面清零 → 绿灯 + enforce 切换
+  指引文案)。盘点读取失败 error toast(失败≠清零,不亮绿灯)。
+- 测试:后端 survey 端点 3(403 门 / 三面聚合 + 登记后翻转 +
+  referencedKeys 判定 / 未引用键直接清);前端向导 7(渲染三面 /
+  登记 → createAlias → 重盘点 / 属主清空链 / 确认闸取消 / 非属主
+  呈现 / 失败不亮绿灯)。
+
+**3c 清账执行 → enforce 切换**(拍板:清账完成即切):
+
+- `scripts/cleanup_credential_debt.py`(dry-run 缺省 / `--apply`;
+  与向导同语义同提取器):[A] 登记 4 名 → 实登 3(boot2/boot_self/
+  codfish;codfish1 已在注册表)+ 主档补行;[B] 10 场景明文快照经
+  **属主保存链**显式清空(`scenario_store.update`,整容器 round-trip
+  只翻 users 键,orchestration/断言注册表保留);[C] 重盘三面
+  **0/0/0 亲验**。
+- **数据漂移记录**:阶段 0 审计数字(sb×20+gitlab×1 / 快照 12)到
+  执行时已漂移 —— 现存未登记名 = boot_self×29 + boot2×2 + codfish×1
+  (gimbal-bootstrap 种子「自举用户」系),快照 = 10 场景 3 键
+  (codfish1×7/tester_a×2/codfish×1,属主 admin×6/Codfish×2/Debug
+  Test×1/第2步验收×1)。清账以 live 数字为准,脚本是可重入口。
+- **enforce 已切**:`backend/.env` 置
+  `REGISTRY_ONLY_IDENTITIES=enforce` + 后端重启(audit 数字已失去
+  观测对象,三面清零后无余量)。闸测试全部显式 monkeypatch 三态,
+  套件不依赖 .env 取值(enforce 下全量 suite 另跑见下)。
+
+### 合并改造阶段 4 · promotion 身份授权提前建表(2026-11-21,🟢 后端+呈现落地)
+
+- 迁移 **0064_identity_project_grants**(identity-registry §5 共享
+  即授权;条目本体不拷贝):`identity_project_grants`(identity_id FK
+  CASCADE / project_id FK CASCADE / source_promotion_id FK SET NULL
+  溯源 / created_at / UNIQUE(identity_id, project_id));fresh 链
+  守卫(表已存在空转);**live 库已 upgrade head**。drift 增量门
+  (check_migration_drift)本地无 psql 未跑,CI plate-ci 步骤覆盖。
+- 模型 `IdentityProjectGrant`(`models/identity_grant.py`)+ 注册
+  `models/__init__`。
+- analyze 升级:`_referenced_identity_entries` 逐条目明细
+  `{aliasName, baseService, envLabel, registered, granted,
+  projectAccountReady}`(授权 = grants 行;项目池账户就绪 =
+  AuthAccount(project, base_service, env_id) 存在性);响应新增
+  `identityEntries` 键,`slots` 平铺名保持不变(suite 分支按条目名
+  去重保序)。**执行解析不查授权表**(拍板照默认口径,纯管理面)。
+- execute/approve 写授权:`_grant_identities` 批量 upsert(幂等,
+  source_promotion_id 溯源)挂 scenario/suite 两分支;直通路径
+  「不落申请行」→ 溯源位 NULL(设计语义:非经申请行的共享);
+  reject/withdraw 兜底 `revoke_grants`(当前状态机 approve 终态下
+  正常流无授权可删,幂等安全)。
+- 呈现:PromotionDialog 新增「身份条目(共享即授权)」分区(条目/
+  基础服务环境/授权态/项目池账户就绪指引);api 类型
+  `PromotionIdentityEntry`。
+- 测试:`test_promotion_identity_grants.py` 4(analyze 分区三态 /
+  直通复制落授权 + 幂等 + granted 翻转 / approve 面溯源 promotion id
+  / withdraw revoke 兜底);PromotionDialog 3(分区渲染 / 已授权就绪
+  呈现 / 无条目不渲染)。定向簇排查记一笔:granted 判定首版误用
+  identity_id(int)对 alias(str),debug 复现后修正为 alias_name
+  join —— 未流入提交。
+
+### 阶段 3/4 验证(本节时点)
+
+- 后端定向:gate 簇 12 + import/auth_drafts 36 + plate_integration/
+  contract 15 + survey 3 + grants 4 全绿;契约 gen+check 双绿
+  (survey 端点入 openapi +178 行;216 码/443 位点/35 动态)。
+- 前端定向:wizard 7 + credentialReform +1(双头解析)+ dialog 3 +
+  router/sidebar 簇 40 绿;vue-tsc 0 + eslint 0(涉及面逐文件)。
+- **测试面翻转修复**(enforce 首跑全量 56 failed / 2088 passed 的
+  收口,三类):
+  ① **conftest 缺省钉 off**(同 EXEC_CHAIN 先例):生产 .env=enforce
+  后套件与配置取值解耦 —— import 流水线 ×7 / run_bindings_injection
+  ×6 / integration w0b×4 + w1×1 / precheck_hard_gate ×3 /
+  s21_env_chain ×1 全部为 ambient enforce 的 `identity_not_registered`
+  422,钉 off 后 92 用例复跑全绿;闸行为由显式 monkeypatch 三态的
+  专项用例覆盖(gate/auth_drafts/survey 等),不受环境漂移影响。
+  ② **test_migrations 时代造形撤未来表**(×4):0064 的
+  identity_project_grants(create_all 产出)FK 压在
+  project_promotions/service_identities 上,挡老迁移 drop/recreate
+  (0036/0040–0042 区划系)—— 造形块补
+  `DROP TABLE IF EXISTS identity_project_grants CASCADE`,22 用例
+  全绿。
+  ③ **Sidebar 计数/sitemap 翻新**(FE ×4):平台组 +「凭证清账」
+  入口 → 计数 16→17 / nav-text 17→18 / hrefs 序列插入,15 用例全绿。
+- **后端全量**(终态,含全部改动):**2148 passed / 2 skipped /
+  0 failed** + 1 teardown 竞态 ERROR(test_adhoc_run ::
+  path_params_shape_and_passthrough —— 用例本体 201+snapshot 全绿,
+  schema DROP 与 dispatcher 残连死锁,即 2c 已记档的
+  graph_dispatch teardown flake 同类;本轮两次全量该错误分别落在
+  s21_env_chain / adhoc 两处,错误位漂移 = 竞态非代码缺陷)。
+  **前端全量 vitest:175 文件 / 1528 用例 0 failed**;vue-tsc 0;
+  全量 eslint 0;契约 gen+check 终态双绿(216 码/443 位点/35 动态,
+  与 README 计数一致)。
+- **部署**:本地栈三服务已带全部代码重启(backend .env=enforce +
+  迁移 0064 已应用;/api/health 绿)。远端部署仍阻断:三 SSH 目标
+  探测 140.210.92.250:26675 connection refused /
+  192.168.229.130 timeout / 118.31.5.88 publickey denied —— 远端
+  dist 替换 + 生产 enforce 切换待目标恢复或人工执行。
+
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |

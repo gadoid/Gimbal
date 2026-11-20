@@ -1,4 +1,5 @@
-"""决策 1「引用即登记」保存/导入闸(阶段 0;identity-registry §2)。
+"""决策 1「引用即登记」保存/导入闸(阶段 0;identity-registry §2)+ 声明
+侧同 base 闸(阶段 3;TOK-07 声明面收口)。
 
 三态口径(off / audit / enforce)× 三挂载链(场景 create / PUT 更新 /
 导入 land):
@@ -10,6 +11,12 @@
 * 已登记名放行(enforce 不误伤);
 * enforce 拒收时导入的**单事务语义**:映射 create 出的条目随拒收一并
   回滚(库内无新条目、无场景行)。
+
+阶段 3 同 base 步:已登记条目 base 须 == 所在步骤服务的基础服务
+(``validate_binding_aliases`` 同口径);enforce 422
+``identity_base_mismatch``,audit ``X-Identity-Base-Warnings`` 头 /
+导入 ``identityBaseWarnings`` 键(独立载体,可与存在性告警同时成立);
+未登记名不进本闸(存在闸业务),setup/teardown 无步骤锚点不比对。
 
 运行方案保存无定义侧引用面,由 ``validate_binding_aliases`` 既有覆盖
 (s60 绑定闸用例),不在此重复测。
@@ -107,16 +114,117 @@ async def test_enforce_mode_rejects(client, plate_mock, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_enforce_allows_registered(client, plate_mock, monkeypatch):
-    """enforce 下已登记名放行(闸只报事实,不做服务归属强校验 ——
-    换用目标归属属 validate_binding_aliases 职责)。"""
+async def test_enforce_allows_registered_same_base(
+        client, plate_mock, monkeypatch):
+    """enforce 下已登记名放行 —— 阶段 3 语义收紧:条目 base 须与步骤
+    服务同源(seeding 服务键即 base);同源 → 201 无任何警告头。"""
     monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "enforce")
-    await _seed_identity("ghost-reg")
+    await _seed_identity("ghost-reg", base="fin-service")
     h = await role_headers(client, "gate-reg")
     r = await client.post("/api/scenarios", headers=h, json=make_draft(
         "sc-gate-reg", steps=_steps(auth_ref="ghost-reg")))
     assert r.status_code == 201, r.text
     assert "X-Identity-Warnings" not in r.headers
+    assert "X-Identity-Base-Warnings" not in r.headers
+
+
+@pytest.mark.asyncio
+async def test_enforce_rejects_cross_base(client, plate_mock, monkeypatch):
+    """enforce + 已登记条目跨 base(gitlab 条目注入 fin-service 步骤)
+    → 422 identity_base_mismatch,refs 逐步骤定位,未落库。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "enforce")
+    await _seed_identity("gitlab", base="gitlab")
+    h = await role_headers(client, "gate-xbase")
+    r = await client.post("/api/scenarios", headers=h, json=make_draft(
+        "sc-gate-xbase", steps=_steps(auth_ref="gitlab")))
+    assert r.status_code == 422, r.text
+    d = r.json()["detail"]
+    assert d["code"] == "identity_base_mismatch"
+    ref = d["refs"][0]
+    assert ref == {"index": 0, "service": "fin-service", "identity": "gitlab",
+                   "identityBase": "gitlab", "serviceBase": "fin-service"}
+    assert "gitlab" in d["message"]
+    async with db_module.SessionLocal() as s:
+        assert (await s.execute(select(ComposerScenario.scenario_id).where(
+            ComposerScenario.scenario_id == "sc-gate-xbase"))
+        ).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_audit_base_warnings_header(client, plate_mock, monkeypatch):
+    """audit + 跨 base 已登记条目 → 201 + X-Identity-Base-Warnings 头
+    (refs 结构化);存在性头不出现(该引用已登记)。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "audit")
+    await _seed_identity("gitlab-a", base="gitlab")
+    h = await role_headers(client, "gate-audit-xb")
+    r = await client.post("/api/scenarios", headers=h, json=make_draft(
+        "sc-gate-audit-xb", steps=_steps(auth_ref="gitlab-a")))
+    assert r.status_code == 201, r.text
+    assert "X-Identity-Warnings" not in r.headers
+    warn = json.loads(r.headers["X-Identity-Base-Warnings"])
+    assert warn["code"] == "identity_base_mismatch"
+    assert warn["refs"][0]["identity"] == "gitlab-a"
+    assert warn["refs"][0]["identityBase"] == "gitlab"
+
+
+@pytest.mark.asyncio
+async def test_audit_both_warnings_coexist(client, plate_mock, monkeypatch):
+    """audit:未登记(ghost)+ 跨 base(gitlab)同时成立 → 两个头各自
+    独立,互不吞并。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "audit")
+    await _seed_identity("gitlab-b", base="gitlab")
+    h = await role_headers(client, "gate-audit-both")
+    r = await client.post("/api/scenarios", headers=h, json=make_draft(
+        "sc-gate-audit-both", steps=_steps(auth_ref="gitlab-b") + _steps()))
+    assert r.status_code == 201, r.text
+    assert json.loads(
+        r.headers["X-Identity-Warnings"])["identities"] == ["ghost"]
+    assert json.loads(
+        r.headers["X-Identity-Base-Warnings"])["refs"][0]["identity"] == \
+        "gitlab-b"
+
+
+@pytest.mark.asyncio
+async def test_same_base_skips_unregistered_and_anchored_faces(
+        client, plate_mock, monkeypatch):
+    """扫描边界:未登记名不进同 base 闸(存在闸业务);call.user 直引
+    **进**闸(跨 base 照拦);setup/teardown 模板引用无步骤锚点不比对
+    (其存在性仍走存在闸)。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "audit")
+    await _seed_identity("gitlab-c", base="gitlab")
+    h = await role_headers(client, "gate-scan-edge")
+    steps = _steps()  # 未登记 ghost → 只进存在闸
+    steps[0]["call"]["user"] = "gitlab-c"  # 跨 base 直引 → 进同 base 闸
+    draft = make_draft("sc-gate-scan-edge", steps=steps)
+    draft["definition"]["config"] = {"setup": [{
+        "kind": "step", "endpoint": "fin.orders.get",
+        "call": {"service": "fin-service", "method": "GET", "path": "/s",
+                 "headers": {"Authorization": "${auth.gitlab-c.token}"}},
+        "request": {"kind": "request", "body": {}}, "strategy": [],
+    }]}
+    r = await client.post("/api/scenarios", headers=h, json=draft)
+    assert r.status_code == 201, r.text
+    base_refs = json.loads(
+        r.headers["X-Identity-Base-Warnings"])["refs"]
+    # 唯一违规 = 步骤内 call.user;setup 内同条目模板引用不重复产生行
+    assert [r0["identity"] for r0 in base_refs] == ["gitlab-c"]
+    assert base_refs[0]["service"] == "fin-service"
+    assert "X-Identity-Warnings" in r.headers  # ghost 走存在闸
+
+
+@pytest.mark.asyncio
+async def test_service_key_entry_base_lookup(client, plate_mock, monkeypatch):
+    """步骤服务键本身有条目行时,svc base 取其行 base(非条目即自身
+    回落不适用):条目 fin-m 挂 fin-service 行(base fin),引用条目
+    base 也是 fin → 同源放行。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "enforce")
+    await _seed_identity("fin-service", base="fin")   # 服务键同名条目行
+    await _seed_identity("fin-m", base="fin")
+    h = await role_headers(client, "gate-svckey")
+    r = await client.post("/api/scenarios", headers=h, json=make_draft(
+        "sc-gate-svckey", steps=_steps(auth_ref="fin-m")))
+    assert r.status_code == 201, r.text
+    assert "X-Identity-Base-Warnings" not in r.headers
 
 
 @pytest.mark.asyncio

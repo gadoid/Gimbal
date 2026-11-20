@@ -76,13 +76,13 @@
   登记):run_schemes 保存仅硬 422 存在性/同基校验,响应无 warnings
   载体;解析面取不到凭证由派发 auth_aliases_missing 409 / 预检
   account_missing 硬门兜底 —— 补告警需新立载体(增量契约面),缓议;
-- **声明侧同 base 闸未实施**(评审 P2 登记,2026-11-20 阶段 2c):
-  场景声明侧(headers ``${auth.*}`` / 模板引用 / setup-teardown)经决策 1
-  登记闸只校验**存在性**,不校验「引用条目 base == 所在步骤服务 base」
-  —— 直写 API 可声明跨服务条目引用(他服务凭证注入本服务地址,TOK-07
-  同族但走声明侧;编排器选取器只给同基候选,直写 API 是口子)。收口
-  形态 = 场景保存闸扩一步(逐步骤 auth 引用 → 条目 base 比对,422/audit
-  载体随登记闸同款),涉引用扫描面与契约码增量,单独排期;
+- ~~声明侧同 base 闸未实施~~ **✅ 已销(2026-11-21 阶段 3a)**:
+  `auth_ref_scan.step_auth_refs`(逐步骤 `${auth.*}` + `call.user`)+
+  `service_aliases.same_base_violations`(base 口径同
+  validate_binding_aliases);enforce 422 `identity_base_mismatch` /
+  audit `X-Identity-Base-Warnings` 独立头 / 导入 `identityBaseWarnings`
+  键(契约 216 码)。边界:未登记名归存在闸;setup/teardown 无步骤
+  锚点不比对(其存在性仍走存在闸);
 - ImportRejected 错误码不在契约提取面(既有缺口:tuple 赋值形态不被
   `_discover_coded_exceptions` 识别,导入侧码仅以 dynamic 位点
   `scenario_import.py:32` 兜底;阶段 0 新码 identity_not_registered

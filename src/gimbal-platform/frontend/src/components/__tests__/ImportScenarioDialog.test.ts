@@ -163,6 +163,26 @@ describe('ImportScenarioDialog 状态机', () => {
     w.unmount()
   })
 
+  it('同 base 闸 audit 黄条(阶段 3):identityBaseWarnings 点名跨源引用', async () => {
+    importPrecheck.mockResolvedValue(pre())
+    importScenario.mockResolvedValue({
+      scenarioId: 'sc-import-abc', idMode: 'new',
+      identityBaseWarnings: [{ index: 1, service: 'fin-service', identity: 'gitlab',
+                               identityBase: 'gitlab', serviceBase: 'fin-service' }],
+    })
+    const w = mountDialog('alias.write')
+    await flushPromises()
+    await w.find('[data-testid="import-confirm"]').trigger('click')
+    await flushPromises()
+
+    const warn = w.find('[data-testid="import-base-warnings"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('跨源引用')
+    expect(warn.text()).toContain('gitlab')
+    expect(warn.text()).toContain('步骤2') // index+1 的 1-based 呈现
+    w.unmount()
+  })
+
   it('409 自愈:scenario_id_exists → 自动重新预检', async () => {
     importPrecheck.mockResolvedValue(pre())
     importScenario.mockRejectedValueOnce({

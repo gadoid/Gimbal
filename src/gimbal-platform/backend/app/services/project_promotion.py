@@ -189,6 +189,111 @@ async def _referenced_slots(db: AsyncSession, payload: dict) -> list[str]:
     return sorted(set(slots))
 
 
+async def _referenced_identity_entries(
+    db: AsyncSession, payload: dict, project_id: int,
+) -> list[dict]:
+    """身份条目分区(决策 1 阶段 4,§5 analyze 升级):逐条目输出
+    ``{aliasName, baseService, envLabel, registered, granted,
+    projectAccountReady}`` —— 裁决面板 / 项目呈现与账户就绪引导的
+    数据面。``slots`` 保持平铺名清单不变(向后兼容);本分区是它的
+    明细化。授权 = ``identity_project_grants`` 行(共享即授权);
+    项目池账户就绪 = 项目池存在 (base_service, env_id) 账户行
+    (呈现提示,不拦执行 —— 执行解析不查授权表,拍板照默认口径)。"""
+    from sqlalchemy import func as sa_func
+
+    from ..models.auth_account import AuthAccount
+    from ..models.environment import Environment
+    from ..models.identity_grant import IdentityProjectGrant
+    from ..models.service_identity import ServiceIdentity
+    from .service_aliases import exec_auth_aliases_of_definition
+
+    names = await exec_auth_aliases_of_definition(
+        db, definition_from_payload(payload))
+    if not names:
+        return []
+    rows = (await db.execute(
+        select(ServiceIdentity.alias_name, ServiceIdentity.base_service,
+               ServiceIdentity.env_id, Environment.name)
+        .outerjoin(Environment, Environment.id == ServiceIdentity.env_id)
+        .where(ServiceIdentity.alias_name.in_(names)))).all()
+    registered: dict[str, tuple[str, int, str | None]] = {
+        alias: (base, env_id, env_name)
+        for alias, base, env_id, env_name in rows}
+    granted_aliases = set((await db.execute(
+        select(ServiceIdentity.alias_name)
+        .join(IdentityProjectGrant, IdentityProjectGrant.identity_id ==
+              ServiceIdentity.id)
+        .where(IdentityProjectGrant.project_id == project_id,
+               ServiceIdentity.alias_name.in_(names)))).scalars())
+    out: list[dict] = []
+    for alias in names:
+        base, env_id, env_name = registered.get(alias, ("", None, None))
+        ready = False
+        if base and env_id is not None:
+            ready = bool((await db.execute(
+                select(sa_func.count()).select_from(AuthAccount).where(
+                    AuthAccount.project_id == project_id,
+                    AuthAccount.system == base,
+                    AuthAccount.env_id == env_id))).scalar())
+        out.append({
+            "aliasName": alias, "baseService": base,
+            "envLabel": env_name or "", "registered": alias in registered,
+            "granted": alias in granted_aliases,
+            "projectAccountReady": ready,
+        })
+    return out
+
+
+async def _grant_identities(
+    db: AsyncSession, promo: ProjectPromotion, payloads: list[dict],
+) -> int:
+    """批量 upsert 授权(共享即授权,execute/approve 落面):
+    引用条目 × promo.project_id,``source_promotion_id`` 溯源;幂等
+    (已存在跳过)。返回新建行数。"""
+    from ..models.identity_grant import IdentityProjectGrant
+    from ..models.service_identity import ServiceIdentity
+    from .service_aliases import exec_auth_aliases_of_definition
+
+    names: set[str] = set()
+    for payload in payloads:
+        names.update(await exec_auth_aliases_of_definition(
+            db, definition_from_payload(payload)))
+    if not names:
+        return 0
+    ids = (await db.execute(
+        select(ServiceIdentity.id).where(
+            ServiceIdentity.alias_name.in_(names)))).scalars().all()
+    if not ids:
+        return 0
+    have = set((await db.execute(
+        select(IdentityProjectGrant.identity_id).where(
+            IdentityProjectGrant.identity_id.in_(ids),
+            IdentityProjectGrant.project_id == promo.project_id)))
+        .scalars())
+    made = 0
+    for identity_id in ids:
+        if identity_id in have:
+            continue
+        db.add(IdentityProjectGrant(
+            identity_id=identity_id, project_id=promo.project_id,
+            source_promotion_id=promo.id))
+        made += 1
+    return made
+
+
+async def revoke_grants(db: AsyncSession, promo_id: int) -> int:
+    """共享回滚删授权(§5:回滚 → 删授权;按 source_promotion_id 溯源
+    删,只删本表 —— 条目本体与项目数据不动)。幂等;当前状态机
+    (approve 终态)下正常流不会触发,供 reject/withdraw 兜底与将来
+    「撤销已批准」扩展复用。"""
+    from sqlalchemy import delete as sa_delete
+
+    from ..models.identity_grant import IdentityProjectGrant
+    res = await db.execute(sa_delete(IdentityProjectGrant).where(
+        IdentityProjectGrant.source_promotion_id == promo_id))
+    return int(res.rowcount or 0)
+
+
 async def analyze_promotion(
     db: AsyncSession, *, kind: str, source_id: str,
     project_id: int, user,
@@ -200,6 +305,8 @@ async def analyze_promotion(
     if kind == "scenario":
         analysis = await _scenario_analysis(db, src, project_id)
         slots = await _referenced_slots(db, src.payload)
+        identity_entries = await _referenced_identity_entries(
+            db, src.payload, project_id)
     else:
         # 用例集:成员场景须已在目标项目(reference)或私有随行(promote);
         # 其余(他人私有 / 别的项目 / 公共副本 / 已删)= 阻断项
@@ -250,16 +357,23 @@ async def analyze_promotion(
                     blockers.append({"scenarioId": m.scenario_id,
                                      "reason": "not_owner"})
         slots: list[str] = []
+        identity_entries: list[dict] = []
         for m in members:
             scen = (await db.execute(select(ComposerScenario.payload).where(
                 ComposerScenario.scenario_id == m.scenario_id))
             ).scalar_one_or_none()
             if scen:
                 slots += await _referenced_slots(db, scen)
+                identity_entries += await _referenced_identity_entries(
+                    db, scen, project_id)
         analysis = {"services": sorted(services), "conflicts": conflicts,
                     "memberPlan": plan}
     return {**analysis, "blockers": blockers,
-            "slots": sorted(set(slots))}
+            "slots": sorted(set(slots)),
+            # 身份条目分区(阶段 4 §5):slots 的逐条目明细(授权状态 +
+            # 账户就绪);suite 分支重复名在此按条目名去重保序
+            "identityEntries": list({
+                e["aliasName"]: e for e in identity_entries}.values())}
 
 
 async def _promote_scenario(
@@ -310,6 +424,9 @@ async def execute_promotion_copy(
         if src is None:
             raise PromotionError(409, "source_deleted",
                                  "原件已删除,无法完成加入")
+        made = await _grant_identities(db, promo, [src.payload])
+        if made:
+            await db.flush()
         return {"scenarioId": await _promote_scenario(
             db, src, promo.project_id)}
     # 用例集:按批准那一刻重新核对成员计划(原件在申请期间可能改过)
@@ -367,6 +484,15 @@ async def execute_promotion_copy(
     removed = {m.scenario_id for m in members_now} - set(mapping)
     new_suite.mode_config = remap_config_references(
         suite.mode_config or {}, mapping, removed)
+    # 共享即授权(阶段 4 §5):成员场景引用条目批量落授权(approve 面)
+    member_payloads = (await db.execute(
+        select(ComposerScenario.payload).where(
+            ComposerScenario.scenario_id.in_(
+                {m["scenarioId"] for m in analysis["memberPlan"]}
+                or {"__none__"})))).scalars().all()
+    made = await _grant_identities(db, promo, list(member_payloads))
+    if made:
+        await db.flush()
     return {"suiteId": new_suite.id, "copiedScenarioIds": copied}
 
 

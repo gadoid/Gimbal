@@ -274,6 +274,9 @@ async def reject_promotion(
              f"{promo.source_id}:{body.reason}",
         link=f"/projects/{promo.project_id}",
         payload={"promotionId": promo.id}, commit=False)
+    # 共享回滚删授权(阶段 4 §5;pending 态本无授权 —— 幂等兜底)
+    from ..services.project_promotion import revoke_grants
+    await revoke_grants(db, promo.id)
     await db.commit()
     return _promo_out(promo)
 
@@ -291,5 +294,8 @@ async def withdraw_promotion(
             "code": "not_pending",
             "message": f"申请当前状态 {promo.status},只有 pending 可撤回"})
     promo.status = "withdrawn"
+    # 共享回滚删授权(阶段 4 §5;pending 态本无授权 —— 幂等兜底)
+    from ..services.project_promotion import revoke_grants
+    await revoke_grants(db, promo.id)
     await db.commit()
     return _promo_out(promo)

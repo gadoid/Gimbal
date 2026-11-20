@@ -58,6 +58,10 @@
             ⚠ 仍有未登记引用(已按 audit 放行):<b class="mono">{{ result.identityWarnings.join('、') }}</b>
             —— 请到「服务注册」登记条目,或改绑已有条目;enforce 后保存将被拒。
           </p>
+          <p v-if="result.identityBaseWarnings?.length" class="imp-warn" data-testid="import-base-warnings">
+            ⚠ 跨源引用(已按 audit 放行):<b class="mono">{{ result.identityBaseWarnings.map((r) => `${r.identity}(${r.identityBase})@步骤${r.index + 1}[${r.service}]`).join('、') }}</b>
+            —— 条目与所在步骤服务不同源,请改绑同源条目;enforce 后保存将被拒。
+          </p>
           <div v-if="result.undeclaredUsers?.length" class="imp-warn" data-testid="import-undeclared">
             <p v-for="u in result.undeclaredUsers" :key="u.tag" class="imp-warn-line">
               ⚠ 认证标签 <b class="mono">{{ u.tag }}</b>({{ u.services.join('、') }})未落地为身份条目:{{ undeclaredReasonLabel(u.reason) }} —— 这些步骤执行时会报错。
@@ -295,11 +299,12 @@ function builtinUserLabel(u: ImportBuiltinUser): string {
   return '将改写到所属服务的条目'
 }
 /** 结果视图有可报内容才停留;否则保持「导入即进场景」旧流程。
- *  identityWarnings(2c):登记闸 audit 黄条也是可报内容 —— 停留展示。 */
+ *  identityWarnings(2c):登记闸 audit 黄条也是可报内容 —— 停留展示。
+ *  identityBaseWarnings(阶段 3):同 base 闸 audit 黄条同款。 */
 function hasReport(r: ImportResult): boolean {
   return !!(r.authEntries?.length || r.authRenames?.length
     || r.undeclaredUsers?.length || r.droppedUsers?.length
-    || r.identityWarnings?.length)
+    || r.identityWarnings?.length || r.identityBaseWarnings?.length)
 }
 /** 已装载 → 检索定位;未装载 → 按条目登记坐标深链(条目自主档派生
  *  system+env;悬空条目无坐标,退普通入口)。 */

@@ -39,6 +39,8 @@ from .service import Service
 from .system_env_instance import SystemEnvInstance
 from .service_identity import ServiceIdentity
 from .auth_account import AuthAccount
+# promotion 身份授权(决策 1 阶段 4,迁移 0064;共享即授权,§5)
+from .identity_grant import IdentityProjectGrant
 
 __all__ = [
     "User",
@@ -76,6 +78,7 @@ __all__ = [
     "SystemEnvInstance",
     "ServiceIdentity",
     "AuthAccount",
+    "IdentityProjectGrant",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

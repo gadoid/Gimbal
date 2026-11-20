@@ -1,6 +1,7 @@
 // scenario-import.ts — 场景导入流水线 API(v2.3 方案 §3,W5)。
 // precheck(纯读演练)→ import(单事务落库);导出侧补「可导入」入口。
 import http from '@/api/http'
+import type { IdentityBaseRef } from '@/api/scenario-composer'
 
 /** 预检的按服务键析出分析行(v2.3 §3.1)。 */
 export interface ImportServiceRow {
@@ -67,6 +68,9 @@ export interface ImportResult {
   /** 决策 1 登记闸 audit 态(阶段 0 载体):改写后最终形态里仍未登记的
    *  引用名 —— 保存已放行,前端黄条提示(2c 收口;enforce 态直接 422)。 */
   identityWarnings?: string[]
+  /** 声明侧同 base 闸 audit 态(阶段 3):已登记条目与所在步骤服务跨
+   *  base 的引用行 —— 保存已放行,前端黄条提示;enforce 态直接 422。 */
+  identityBaseWarnings?: IdentityBaseRef[]
 }
 
 /** 重锚定报告条目(#323):reason 为 null 才是已锚。not_in_revision 等
