@@ -1271,7 +1271,56 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   (口径:先不全量);
 - **遗留**:决策 1(§8.10 白名单归一,设计定稿待拍板)、FE-02 假空态
   集群(≥12 处,建议 degraded 三态单独一批)、TOK-04 硬编码凭证轮换
-  (运维)、TOK-05/08 家族已登记项、C3 测试口径、后端全量基线。
+  (运维)、TOK-05/08 家族已登记项、C3 测试口径、后端全量基线
+  —— **除决策 1 / TOK-04 / 批次⑤治本 / 后端全量外,其余已于
+  2026-11-20 遗留收口轮处理(见下节)**。
+
+### 审计遗留收口轮(2026-11-20,🟢 五批次完成)
+
+处理上节遗留的可实施项(批次⑤治本=错误码单源化+REST 契约守卫**单独
+排期**:37 前端 api 文件手写镜像 ~210 类型、错误码 ~140 条、REST 契约
+零雏形,属多天线工程;决策 1 待拍板、TOK-04 属运维)。原则:不推翻
+拍板设计(TOK-05 明文保留、md5sign 协议兼容、account_fields F6),只加
+护栏、修真缺陷。五连 commit(7dd02fd7..29f2b5b5):
+
+- **批次 A · FE-02 假空态集群三态化(十处/5 文件)**:以
+  ServiceBindingEditor degraded 门控为模板 —— ServiceAdmin 账户面
+  (accountsDegraded 横幅 + 凭据 chip「· 凭据读取失败」,不再 ✗ 结论)
+  与条目面(aliasError:卡头/槽位列「条目读取失败」≠「未登记条目」);
+  ExecConfigsView 条目 error 态(节点徽章)+ faceError 定向检索失败
+  (就绪三处「✕ 读取失败」≠「✕ 未登记」)+ 旁路四面降级横幅
+  (账户/主档/实例/场景,不再静默伪装空数据);ServiceAliasDetail 键
+  判定(keyUnresolved 空态 ≠「找不到」)+ 就绪矩阵四格降级(地址/
+  登录口/主档/环境,「读取失败」≠「缺」);ProjectConfigPanel 默认值/
+  装载/场景候选三处「读取失败」≠「暂无」;ServiceBindingEditor 层默认
+  失败警示(来源列不可判定,不禁存 —— 写面门控只属字段面)。+12 vitest;
+- **批次 B · TOK-05 明文回显护栏**:`auth.secret.read` 入审计登记表,
+  include_secrets 分支落审计行(best-effort,读类先例
+  external_endpoint.query_safe);前端凭证池导入 confirmAction 二次确认
+  (文案点名明文密码 + 审计留痕,取消零请求)。+2 测试;
+- **批次 C · TOK-07 换用槽位写面闸**:`validate_slot_overrides`
+  (声明条目与换用目标双侧存在 + 同基础服务,slot_alias_unknown/
+  mismatch)接入 exec-configs POST 与 PATCH(显式 systems 拦,合并式
+  不触发)—— 运行时 precheck 只拦「不存在」,跨基础服务凭证注入
+  (他服务凭证发往原地址)由此堵住。+1 负例 + 4 用例随契约补布景;
+- **批次 D · TOK-08a/c/e**:个人池密码 ≥6 位对齐项目池(闸上提单源
+  `routers/_password_gate.py`,schema 层会破坏 detail.code 契约故路由
+  层实现;16 处测试密码随契约更新);http_basic 的 http:// login_url
+  凭据明文上链告警(内网合法形态只警不拦);yz 认证器 None-token
+  fail-fast(不再把字面量 `data[username]=None` 写成会话 token)+
+  `__main__` 硬编码真实口令清除(轮换属登记册 A3)。**登记不修**:
+  account_fields 明文(F6 拍板)、md5sign(被测系统协议仿真,退役走
+  自举)、yz 真实登录协议(缺外部信息)。+6 测试;
+- **批次 E · C3 口径最小对齐**:dispatch_run/suites 两处
+  `getattr(settings, "EXEC_CHAIN", "legacy")` 死兜底(pydantic Settings
+  属性恒存在)改直读、空串防御回落 server —— 与 config.py:120 生产
+  默认一致,零行为变化。conftest 钉位/签名缺省不动(登记册路径 =
+  自举覆盖 server 链后退役 legacy);
+- **验证**:前端 vitest **172 文件 / 1505 passed / 0 failed**(基线
+  1493 + 本轮 12)+ vue-tsc 0 错;后端分域全绿(auth_sessions 22 +
+  exec_configs 11 + exec_config_chain/bindings 19 + s31_slots/r6/
+  s8/audit 39 + suites_orch 6 + adhoc 30 —— adhoc 既有 flake 本轮
+  通过);引擎 auth+lifecycle 30。后端全量基线仍未跑(口径不变)。
 
 ### P2-C 验证收口
 
