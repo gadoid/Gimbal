@@ -82,7 +82,7 @@ async def test_patch_moves_entity_coordinates_and_conflicts(client):
 
     r = await client.post("/api/auths", headers=h, json={
         "system": "fin-service", "envId": env,
-        "username": "u", "password": "p",
+        "username": "u", "password": "p12345",
         "accountFields": {"orgNo": "1001"}})
     assert r.status_code == 201, r.text
     first = r.json()
@@ -96,10 +96,10 @@ async def test_patch_moves_entity_coordinates_and_conflicts(client):
 
     # 同 (system, env, username) 二行 → PATCH/POST 都撞四元组 409
     r = await client.post("/api/auths", headers=h, json={
-        "system": "crm", "envId": env, "username": "u", "password": "p"})
+        "system": "crm", "envId": env, "username": "u", "password": "p12345"})
     assert r.status_code == 409
     r2 = await client.post("/api/auths", headers=h, json={
-        "system": "crm", "envId": env, "username": "u2", "password": "p"})
+        "system": "crm", "envId": env, "username": "u2", "password": "p12345"})
     assert r2.status_code == 201
     r = await client.patch(f"/api/auths/{r2.json()['id']}", headers=h,
                            json={"username": "u"})
@@ -109,7 +109,7 @@ async def test_patch_moves_entity_coordinates_and_conflicts(client):
     assert r.json()["username"] == "u2"
     # 改回 system 撞已有行 → 409 更新冲突
     r = await client.post("/api/auths", headers=h, json={
-        "system": "other", "envId": env, "username": "u9", "password": "p"})
+        "system": "other", "envId": env, "username": "u9", "password": "p12345"})
     other = r.json()
     r = await client.patch(f"/api/auths/{other['id']}", headers=h,
                            json={"system": "crm", })
@@ -119,7 +119,7 @@ async def test_patch_moves_entity_coordinates_and_conflicts(client):
     # 环境不存在 → 404 code=environment_not_found
     r = await client.post("/api/auths", headers=h, json={
         "system": "fin-service", "envId": 99999,
-        "username": "u", "password": "p"})
+        "username": "u", "password": "p12345"})
     assert r.status_code == 404
 
 

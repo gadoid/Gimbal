@@ -38,6 +38,8 @@ from ..core.deps import CurrentUser
 from ..core.security import fernet_decrypt, fernet_encrypt
 from ..models import AuthAccount, Project, SystemEnvInstance
 from ..models.environment import Environment
+# r6 小项闸已上提单源(TOK-08a:个人池对齐同款),本地名保留免改调用点
+from ._password_gate import require_maskable_password as _require_maskable_password
 from ..schemas.auth_session import (
     AuthAccountCreateIn,
     AuthAccountOut,
@@ -95,15 +97,7 @@ async def _manage_gate(db: AsyncSession, user, project_id: int) -> Project:
                 "message": "只有项目管理员能维护项目凭证"})
 
 
-def _require_maskable_password(password: str | None) -> None:
-    """r6 小项:项目账户密码 ≥6 位 —— 引擎按值掩码的登记阈值就是 6,
-    短密码在 events/rows/日志证据面不受掩码保护(共享凭证必须护住)。"""
-    if password is not None and len(password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "password_too_short_for_masking",
-                    "message": "密码至少 6 位 —— 短于 6 位的凭证不受"
-                               "执行记录按值掩码保护(项目成员可见)"})
+# r6 小项闸已上提单源(_password_gate;本地名经由顶部 import 保留)
 
 
 async def _get_cred(db: AsyncSession, project_id: int, cid: int) -> AuthAccount:

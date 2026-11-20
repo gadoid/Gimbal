@@ -76,7 +76,7 @@ async def test_create_requires_known_environment(client) -> None:
     r = await client.post(
         "/api/auths", headers=auth,
         json={"system": "fin-service", "envId": 999,
-              "username": "u", "password": "p"},
+              "username": "u", "password": "p12345"},
     )
     assert r.status_code == 404, r.text
     assert r.json()["detail"]["code"] == "environment_not_found"
@@ -147,7 +147,7 @@ async def test_account_tuple_must_be_unique(client) -> None:
     env = await _seed_env()
 
     payload = {"system": "fin-service", "envId": env,
-               "username": "u", "password": "p"}
+               "username": "u", "password": "p12345"}
     r1 = await client.post("/api/auths", headers=auth, json=payload)
     assert r1.status_code == 201
     r2 = await client.post("/api/auths", headers=auth, json=payload)
@@ -166,7 +166,7 @@ async def test_same_account_different_owners_is_ok(client) -> None:
             "/api/auths",
             headers=headers,
             json={"system": "fin-service", "envId": env,
-                  "username": "u", "password": "p"},
+                  "username": "u", "password": "p12345"},
         )
         assert r.status_code == 201, r.text
 
@@ -184,7 +184,7 @@ async def test_cannot_get_other_owners_auth(client) -> None:
     r = await client.post(
         "/api/auths", headers=a_auth,
         json={"system": "fin-service", "envId": env,
-              "username": "u", "password": "p"},
+              "username": "u", "password": "p12345"},
     )
     alice_id = r.json()["id"]
 
@@ -208,7 +208,7 @@ async def test_patch_updates_password_and_token_type(client) -> None:
     r = await client.post(
         "/api/auths", headers=auth,
         json={"system": "fin-service", "envId": env,
-              "username": "u", "password": "p"},
+              "username": "u", "password": "p12345"},
     )
     aid = r.json()["id"]
 
@@ -232,11 +232,11 @@ async def test_default_is_exclusive_per_system_env(client) -> None:
     r1 = await client.post(
         "/api/auths", headers=auth,
         json={"system": "fin-service", "envId": env,
-              "username": "u1", "password": "p"})
+              "username": "u1", "password": "p12345"})
     r2 = await client.post(
         "/api/auths", headers=auth,
         json={"system": "fin-service", "envId": env,
-              "username": "u2", "password": "p"})
+              "username": "u2", "password": "p12345"})
     assert r1.json()["isDefault"] is True  # 首账户即默认
     assert r2.json()["isDefault"] is False
 
@@ -264,7 +264,7 @@ async def test_delete_returns_204(client) -> None:
     r = await client.post(
         "/api/auths", headers=auth,
         json={"system": "fin-service", "envId": env,
-              "username": "u", "password": "p"},
+              "username": "u", "password": "p12345"},
     )
     aid = r.json()["id"]
     r = await client.delete(f"/api/auths/{aid}", headers=auth)
@@ -349,7 +349,7 @@ async def test_test_endpoint_instance_missing_reports_clearly(client) -> None:
     r = await client.post(
         "/api/auths", headers=auth,
         json={"system": "no-instance-svc", "envId": env,
-              "username": "u", "password": "p"},
+              "username": "u", "password": "p12345"},
     )
     aid = r.json()["id"]
 
@@ -476,7 +476,7 @@ async def test_detail_with_secrets_cross_owner_404(client) -> None:
     r = await client.post(
         "/api/auths", headers=a_auth,
         json={"system": "fin-service", "envId": env,
-              "username": "u", "password": "p"},
+              "username": "u", "password": "p12345"},
     )
     aid = r.json()["id"]
 
@@ -505,10 +505,38 @@ async def test_detail_with_secrets_rotation_422(
     r = await client.post(
         "/api/auths", headers=auth,
         json={"system": "fin-service", "envId": env,
-              "username": "u", "password": "p"},
+              "username": "u", "password": "p12345"},
     )
     aid = r.json()["id"]
 
     r = await client.get(f"/api/auths/{aid}?include_secrets=true", headers=auth)
     assert r.status_code == 422
     assert "重新编辑保存" in r.json()["detail"]
+
+
+async def test_create_and_patch_short_password_422(client) -> None:
+    """TOK-08a(2026-11-20 审计):个人池对齐项目池 —— <6 位密码 422
+    (password_too_short_for_masking;引擎按值掩码登记阈值即 6,短密码
+    在证据面不受掩码保护)。"""
+    auth = await register_and_login(client)
+    env = await _seed_env()
+    r = await client.post(
+        "/api/auths", headers=auth,
+        json={"system": "fin-service", "envId": env,
+              "username": "shortpw", "password": "p1234"})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "password_too_short_for_masking"
+
+    # 合法建户后:patch 改短密同款 422;不带 password(不改密)放行
+    r = await client.post(
+        "/api/auths", headers=auth,
+        json={"system": "fin-service", "envId": env,
+              "username": "okpw", "password": "p123456"})
+    aid = r.json()["id"]
+    r = await client.patch(f"/api/auths/{aid}", headers=auth,
+                           json={"password": "p1234"})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "password_too_short_for_masking"
+    r = await client.patch(f"/api/auths/{aid}", headers=auth,
+                           json={"token_type": "Basic"})
+    assert r.status_code == 200

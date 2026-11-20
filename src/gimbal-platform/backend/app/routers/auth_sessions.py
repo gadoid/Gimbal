@@ -38,6 +38,7 @@ from ..schemas.auth_session import (
     TestResult,
 )
 from ..services import auth_probe, auth_references, query_view_runner
+from ._password_gate import require_maskable_password
 
 router = APIRouter(prefix="/auths", tags=["auths"])
 
@@ -199,6 +200,9 @@ async def create_auth(
     session: DbSession,
 ) -> AuthAccountOut:
     from ..models.environment import Environment
+    # TOK-08a(2026-11-20 审计):个人池对齐项目池 —— 密码 ≥6 位才受
+    # 按值掩码保护(单源 _password_gate)
+    require_maskable_password(payload.password)
     if await session.get(Environment, payload.env_id) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -306,6 +310,8 @@ async def patch_auth(
     session: DbSession,
 ) -> AuthAccountOut:
     a = await _get_owned(session, auth_id, user.id)
+    # TOK-08a:改密同款闸(None = 不改密,闸内放行)
+    require_maskable_password(payload.password)
     old = (a.system, a.env_id, a.is_default)
     if "system" in payload.model_fields_set:
         a.system = payload.system
