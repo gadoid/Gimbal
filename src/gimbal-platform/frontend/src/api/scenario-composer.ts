@@ -6,6 +6,7 @@
  * Case 层已解散 — RunRequest 即执行配方,直接挂 scenario。
  */
 import http from '@/api/http'
+import type { AxiosResponse } from 'axios'
 import { sanitizeEndpointFull } from '@/utils/declarations'
 import type {
   Scenario, ScenarioOptionsPage, ScenarioPage,
@@ -126,18 +127,43 @@ export async function getScenarioDraft(scenarioId: string): Promise<ScenarioDraf
 /** projectId(S7.0 D6):在项目内新建 —— 门 = 项目成员,公共项目 422。 */
 export async function createScenario(
   draft: ScenarioDraft, projectId?: number,
-): Promise<Scenario> {
-  const { data } = await http.post<Scenario>('/scenarios', draft, {
+): Promise<SaveScenarioResult> {
+  const r = await http.post<Scenario>('/scenarios', draft, {
     params: projectId != null ? { projectId } : undefined,
   })
-  return data
+  return { scenario: r.data, identityWarnings: identityWarningsOf(r) }
 }
 
 export async function updateScenario(
   scenarioId: string, draft: ScenarioDraft,
-): Promise<Scenario> {
-  const { data } = await http.put<Scenario>(`/scenarios/${enc(scenarioId)}`, draft)
-  return data
+): Promise<SaveScenarioResult> {
+  const r = await http.put<Scenario>(`/scenarios/${enc(scenarioId)}`, draft)
+  return { scenario: r.data, identityWarnings: identityWarningsOf(r) }
+}
+
+// ── 保存结果(凭证治理 2c)────────────────────────────────────────
+/** 保存链结果:scenario + 登记闸 audit 态的未登记引用清单。 */
+export interface SaveScenarioResult {
+  scenario: Scenario
+  /** 决策 1 保存闸 audit 态(REGISTRY_ONLY_IDENTITIES=audit):
+   *  X-Identity-Warnings 头(JSON {code, identities})点名未登记引用
+   *  —— 保存已放行,黄条提示;enforce 态保存直接 422 到不了这。 */
+  identityWarnings: string[]
+}
+
+/** X-Identity-Warnings 头解析(缺头/坏 JSON → 空数组,保守不吵)。
+ *  axios 响应头经 AxiosHeaders 大小写不敏感存取。 */
+function identityWarningsOf(r: AxiosResponse<Scenario>): string[] {
+  const raw: unknown = r.headers?.['x-identity-warnings']
+  if (typeof raw !== 'string' || !raw) return []
+  try {
+    const parsed = JSON.parse(raw) as { identities?: unknown }
+    return Array.isArray(parsed.identities)
+      ? parsed.identities.filter((x): x is string => typeof x === 'string')
+      : []
+  } catch {
+    return []
+  }
 }
 
 export async function deleteScenario(scenarioId: string): Promise<void> {

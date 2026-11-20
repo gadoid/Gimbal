@@ -11,6 +11,10 @@ import http from './http'
 
 export interface AuthSession {
   id: number
+  /** 池来源(凭证治理 2c 双源检索):personal=本人池;project=项目池
+   *  (检索面徽标;管理面 _member_view 掩码口径不变)。缺省 = personal
+   *  (旧缓存/后端默认值)。 */
+  source?: 'personal' | 'project'
   /** 系统名(与 Plate 侧一致;账户的 system 维度,跨服务共享登录) */
   system: string
   /** 账户归属环境(必填;无环境的执行无从解析身份) */
@@ -92,6 +96,12 @@ export interface AuthsPage {
 export function list(params?: {
   q?: string
   token_type?: string
+  /** 双源检索(凭证治理 2c):personal(缺省,存量行为)/ project /
+   *  all(本人池 ∪ project_id 池);project/all 须携 project_id。 */
+  source?: 'personal' | 'project' | 'all'
+  project_id?: number
+  /** 环境标签精确过滤(执行标签同键域) */
+  env_id?: number
   page?: number
   page_size?: number
 }) {

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +21,9 @@ class AuthAccountOut(BaseModel):
 
     id: int
     username: str
+    # 池来源(凭证治理 2c 双源检索):personal=本人池;project=项目池。
+    # 检索面带徽标;项目管理面板各自视图的 ``_member_view`` 掩码口径不变
+    source: Literal["personal", "project"] = "personal"
     # 系统名(plate system 口径,非服务名;与实例/条目同键域)
     system: str
     env_id: int = Field(alias="envId")

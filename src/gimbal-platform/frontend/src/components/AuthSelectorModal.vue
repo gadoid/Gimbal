@@ -19,6 +19,7 @@
           <CredentialSelect
             v-model="alias"
             :credentials="auths"
+            :env-names="envNames"
             placeholder="选择一个身份条目"
             data-testid="auth-alias"
           />
@@ -57,6 +58,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { ServiceAliasRow } from '@/api/service-aliases'
+import { listEnvironments } from '@/api/environments'
 import CredentialSelect from '@/components/credential/CredentialSelect.vue'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -80,12 +82,26 @@ const FIELDS = ['token', 'username', 'password'] as const
 const alias = ref<string>('')
 const field = ref<'token' | 'username' | 'password'>('token')
 
+// 环境名(2c v6 化:条目按环境分组;envNames 空 = 分组退平铺,envId
+// 裸值不上屏)。模块级单飞 — 同一会话只拉一次。
+const envNames = ref<Record<number, string>>({})
+let envNamesOnce: Promise<void> | null = null
+function ensureEnvNames(): Promise<void> {
+  envNamesOnce ??= listEnvironments()
+    .then((rows) => {
+      envNames.value = Object.fromEntries(rows.map((r) => [r.id, r.name]))
+    })
+    .catch(() => { /* 环境名不可达 → 平铺列表,不阻塞选择 */ })
+  return envNamesOnce
+}
+
 watch(
   () => props.modelValue,
   (open) => {
     if (open) {
       alias.value = props.preselectAlias ?? ''
       field.value = 'token'
+      void ensureEnvNames()
     }
   },
 )

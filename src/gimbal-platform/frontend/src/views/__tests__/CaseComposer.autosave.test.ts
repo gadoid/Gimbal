@@ -67,6 +67,11 @@ function sampleScenario(expire = false): Scenario {
   }
 }
 
+/** api.updateScenario/createScenario 自 2c 起返回 {scenario, identityWarnings}。 */
+function saved(s: Scenario) {
+  return { scenario: s, identityWarnings: [] as string[] }
+}
+
 let router: Router
 async function mountPage(path = '/composer/sc-demo') {
   router = createRouter({
@@ -100,7 +105,7 @@ afterEach(() => {
 describe('CaseComposer — 防抖自动保存', () => {
   it('已保存场景编辑停顿 2.5s → 自动 PUT 最新草稿', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    const update = vi.fn().mockResolvedValue(sampleScenario(true))
+    const update = vi.fn().mockResolvedValue(saved(sampleScenario(true)))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     const w = await mountPage()
     expect(update).not.toHaveBeenCalled()
@@ -123,7 +128,7 @@ describe('CaseComposer — 防抖自动保存', () => {
 
   it('加载完成不触发自动保存(loadScenario 赋值不是编辑)', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    const update = vi.fn().mockResolvedValue(sampleScenario(true))
+    const update = vi.fn().mockResolvedValue(saved(sampleScenario(true)))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     const w = await mountPage()
 
@@ -136,7 +141,7 @@ describe('CaseComposer — 防抖自动保存', () => {
 
   it('dirty 未到防抖窗口即点运行 → 先 flush 保存再发起运行', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    const update = vi.fn().mockResolvedValue(sampleScenario(true))
+    const update = vi.fn().mockResolvedValue(saved(sampleScenario(true)))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     const runScenario = vi.fn().mockResolvedValue({ runId: 'r-1', executionId: 1 })
     vi.spyOn(api, 'runScenario').mockImplementation(runScenario)
@@ -165,8 +170,8 @@ describe('CaseComposer — 防抖自动保存', () => {
 
   it('保存进行中继续编辑 → 完成后再次自动保存最新草稿(不被 1 号保存吞)', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    let resolveSave!: (v: Scenario) => void
-    const update = vi.fn().mockImplementation(() => new Promise<Scenario>((res) => {
+    let resolveSave!: (v: ReturnType<typeof saved>) => void
+    const update = vi.fn().mockImplementation(() => new Promise<ReturnType<typeof saved>>((res) => {
       resolveSave = res
     }))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
@@ -183,7 +188,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     // 「成功即 clean」吞掉:dirty 保留,防抖到点再存最新值
     await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
-    resolveSave(sampleScenario(true))
+    resolveSave(saved(sampleScenario(true)))
     await flushPromises()
 
     await vi.advanceTimersByTimeAsync(AUTOSAVE_MS)
@@ -198,7 +203,7 @@ describe('CaseComposer — 防抖自动保存', () => {
 
   it('dirty 时 beforeunload 拦截;clean 时放行', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    vi.spyOn(api, 'updateScenario').mockResolvedValue(sampleScenario(true))
+    vi.spyOn(api, 'updateScenario').mockResolvedValue(saved(sampleScenario(true)))
     const w = await mountPage()
 
     const clean = new Event('beforeunload', { cancelable: true })
@@ -215,7 +220,7 @@ describe('CaseComposer — 防抖自动保存', () => {
 
   it('dirty 离开路由:「放弃修改」→ 放行且不保存', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    const update = vi.fn().mockResolvedValue(sampleScenario(true))
+    const update = vi.fn().mockResolvedValue(saved(sampleScenario(true)))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     const w = await mountPage()
     await w.find('button[role="switch"]').trigger('click')
@@ -233,7 +238,7 @@ describe('CaseComposer — 防抖自动保存', () => {
   it('dirty 离开路由:「保存并离开」→ 先存后走;ESC(close)→ 留下', async () => {
     // ── 保存并离开 ──
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    const update = vi.fn().mockResolvedValue(sampleScenario(true))
+    const update = vi.fn().mockResolvedValue(saved(sampleScenario(true)))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     let w = await mountPage()
     await w.find('button[role="switch"]').trigger('click')

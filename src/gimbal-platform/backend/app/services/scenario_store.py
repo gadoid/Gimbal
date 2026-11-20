@@ -107,6 +107,33 @@ async def enforce_meta_plate(definition: dict,
     # validate_meta_plate_refs 自身的 ValueError 已带 meta_plate_invalid_ref 前缀
 
 
+def _integrity_conflict_code(e: IntegrityError) -> str:
+    """IntegrityError → 冲突码(并发冲突码精确化,评审 P2 2026-11-20)。
+
+    手配落池(§3.3)与场景行同事务后,create/update 提交点的完整性
+    冲突不再只有场景 PK 一个来源 —— 条目名唯一(service_identities)、
+    账户四元组/默认位唯一(auth_accounts)按约束名分派回 auth_draft
+    家族码(路由侧既有 409 映射,「同名直接引用」语义一致),其余保守
+    回落 scenario_id_exists(旧行为;FK 竞态等罕见面宁 409 不 500)。
+    """
+    orig = getattr(e, "orig", None)
+    name = str(getattr(orig, "constraint_name", "")
+               or getattr(getattr(orig, "diag", None),
+                          "constraint_name", "") or "")
+    if "service_identities" in name or "alias_name" in name:
+        return "auth_draft_alias_taken"
+    if "uq_account" in name or "ck_account" in name or "auth_accounts" in name:
+        return "auth_draft_account_exists"
+    return "scenario_id_exists"
+
+
+def _integrity_message(code: str, scenario_id: str) -> str:
+    if code == "scenario_id_exists":
+        return f"scenario_id_exists: {scenario_id}"
+    return (f"{code}: 并发冲突(他处刚登记同名条目/账户)—— "
+            "同名即直接引用,或改条目名后重试")
+
+
 async def create_in_transaction(
     db: AsyncSession,
     draft: ScenarioDraft,
@@ -242,7 +269,8 @@ async def create(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise ValueError(f"scenario_id_exists: {scenario_id}") from e
+        code = _integrity_conflict_code(e)
+        raise ValueError(_integrity_message(code, scenario_id)) from e
     await db.refresh(row)
     # 场景创建即物化默认方案(工作台 spec §4.3/§5;
     # GET /run-schemes 侧的 ensure_default 是自愈兜底)。
@@ -363,7 +391,15 @@ async def update(
         ui=draft.ui,
     ).model_dump(by_alias=True, mode="json")
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        # 手配落池并发唯一冲突(update 同族:create 的 blanket 误报修复,
+        # 评审 P2 2026-11-20)—— 场景行 PK 不变无撞号面,冲突源只有
+        # drafts 家族;此前裸 IntegrityError = 500。
+        await db.rollback()
+        raise ValueError(_integrity_message(
+            _integrity_conflict_code(e), scenario_id)) from e
     await db.refresh(row)
     # 版本模型 4.1(M1):普通保存后,已验证修订 best-effort 升级为
     # 当时的生效修订 —— plate 不可达时保持原值,绝不阻塞保存主链。

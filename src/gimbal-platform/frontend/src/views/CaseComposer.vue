@@ -156,7 +156,9 @@
               v-else-if="stepIdx === 2"
               key="config"
               v-model="definition.config"
+              v-model:auth-drafts="authDrafts"
               :scenario-id="scenarioId"
+              :project-id="runProjectId"
               :assertion-entries="registry.entries"
               :dead-entry-ids="deadEntryIds"
               @run-entry="onRunEntry"
@@ -171,6 +173,7 @@
               v-model:field-states="uiFieldStates"
               :plate-ref-of="plateRefOf"
               :service-kinds="serviceKinds"
+              :auth-drafts="authDrafts"
               :scenario="scenario"
               :services="definition.config?.services ?? {}"
               :focus-jump="focusJump"
@@ -305,10 +308,11 @@ import { confirmAction, promptAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
 import type {
-  DataSetSelection, SchemeV2,
+  DataSetSelection, SchemeV2, SaveScenarioResult,
 } from '@/api/scenario-composer'
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
+  AuthDraftView,
 } from '@/types/scenario-composer'
 import type { AssertionRegistry, RegistryMark } from '@/types/assertion-registry'
 import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
@@ -377,6 +381,9 @@ const dataSets = ref<DataSetSummary[]>([])
 // M4:字段状态增量(payload.ui.fieldStates,按步骤位置索引)——
 // field_states 已出 step,Canvas 唯一写入方经 v-model 同步到这里。
 const uiFieldStates = ref<Record<string, Record<string, FieldState>>>({})
+/** 手配凭证草稿(凭证治理 §3.3;2c 前端接线):配置页 UsersCard 维护,
+ *  saveDraft 组进 ScenarioDraft.authDrafts —— 保存成功即落池并清空。 */
+const authDrafts = ref<AuthDraftView[]>([])
 
 /** M1(6.1):系统 → meta.plate 声明的修订 —— Canvas 按它读契约/投影。 */
 function plateRefOf(system: string): string {
@@ -550,7 +557,9 @@ const progressPct = computed(() => {
 // 但 dirty 置位;保存成功后据此不清 dirty,防抖再存最新草稿(编辑不被吞)。
 let suppressDirty = false
 let editsDuringSave = false
-watch([definition, orchestration], () => {
+// authDrafts 入脏链(2c):手配草稿增删 = 未保存改动 —— 触发自动保存与
+// 离开拦截,防「配了凭证没保存」静默丢失。
+watch([definition, orchestration, authDrafts], () => {
   if (suppressDirty) return
   dirty.value = true
   if (saveState.value === 'saving') {
@@ -1087,24 +1096,29 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
   saveState.value = 'saving'
   editsDuringSave = false   // 本次保存的编辑快照基线
   try {
-    // 容器草稿:definition(plate) + orchestration(平台渲染)
+    // 容器草稿:definition(plate) + orchestration(平台渲染)+
+    // 手配凭证(保存期通道,凭证治理 §3.3 同事务落池;空 = 不发键)
     const draft: ScenarioDraft = {
       definition: definition.value,
       orchestration: orchestration.value,
       assertion_registry: registry.value,
       ui: { fieldStates: uiFieldStates.value },
+      ...(authDrafts.value.length ? { authDrafts: authDrafts.value } : {}),
     }
-    let saved: Scenario | undefined
+    let result: SaveScenarioResult | undefined
     if (scenario.value) {
-      saved = await store.saveScenario(scenario.value.meta.scenarioId, draft)
+      result = await store.saveScenario(scenario.value.meta.scenarioId, draft)
     } else {
       // create:撞 id 时后端返 409 (scenario_id_exists),重生成 id 重试(最多 2 次)。
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          saved = await store.saveScenario(null, draft, createProjectId.value)
+          result = await store.saveScenario(null, draft, createProjectId.value)
           break
         } catch (e: any) {
-          if (attempt < 2 && /scenario_id_exists|409/.test(String(e?.message || e))) {
+          // 收窄到撞号本身(评审 P3-2):/|409/ 会把手配落池的
+          // auth_draft_* 409 也当撞号重试 —— 重生成 id 救不了重名,
+          // 只会白耗两次重试才把真错 surfacing。
+          if (attempt < 2 && /scenario_id_exists/.test(String(e?.message || e))) {
             definition.value.scenarioId = genScenarioId(meta.value.name)
             draft.definition = definition.value
             continue
@@ -1112,8 +1126,9 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
           throw e
         }
       }
-      if (!saved) throw new Error('create failed: id 撞号重试耗尽')
+      if (!result) throw new Error('create failed: id 撞号重试耗尽')
     }
+    const saved = result.scenario
     scenario.value = saved
     // 保存(含改名)后同步面包屑缓存:顶条即时显示新名,不待刷新
     seedScenarioName(saved.meta.scenarioId, saved.meta.name)
@@ -1121,6 +1136,24 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
     // URL 可分享;router-view 无 key 不重挂载,内存态原样保留)。
     if (route.params.scenarioId === 'new') {
       router.replace(composerUrl(saved.meta.scenarioId, stepIdx.value + 1))
+    }
+    // 手配落池(行为规则④):保存结果点名本次新建的凭证/条目 → toast +
+    // 清草稿 + bump 注册表版本(Canvas registeredAliases 随之刷新,新名
+    // 的引用悬空判定即刻恢复准确)
+    if (saved.newAuths?.length) {
+      toast.success(`已新建凭证/条目:${saved.newAuths.join('、')}(已入本人池)`)
+      authDrafts.value = []
+      store.bumpRegistryRev()
+    }
+    // 决策 1 登记闸 audit 态:X-Identity-Warnings 头点名未登记引用 ——
+    // 保存已放行,黄条指引登记(阶段 0 载体的前端收口;enforce 态保存
+    // 直接 422 到不了这)
+    if (result.identityWarnings.length) {
+      toast.warning({
+        message: `未登记引用(已按 audit 放行):${result.identityWarnings.join('、')}`
+          + ' — 请到「服务注册」登记条目,或改绑已有条目',
+        duration: 8000,
+      })
     }
     // 新建场景后拉一次数据集列表(空列表,但保持状态一致)
     if (!dataSets.value.length) await loadDataSets()

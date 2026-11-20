@@ -145,6 +145,24 @@ describe('ImportScenarioDialog 状态机', () => {
     w.unmount()
   })
 
+  it('登记闸 audit 黄条(2c 收口):identityWarnings 点名未登记引用', async () => {
+    importPrecheck.mockResolvedValue(pre())
+    importScenario.mockResolvedValue({
+      scenarioId: 'sc-import-abc', idMode: 'new', identityWarnings: ['sb', 'gitlab'],
+    })
+    const w = mountDialog('alias.write')
+    await flushPromises()
+    await w.find('[data-testid="import-confirm"]').trigger('click')
+    await flushPromises()
+
+    const warn = w.find('[data-testid="import-identity-warnings"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('sb')
+    expect(warn.text()).toContain('gitlab')
+    expect(warn.text()).toContain('未登记引用')
+    w.unmount()
+  })
+
   it('409 自愈:scenario_id_exists → 自动重新预检', async () => {
     importPrecheck.mockResolvedValue(pre())
     importScenario.mockRejectedValueOnce({

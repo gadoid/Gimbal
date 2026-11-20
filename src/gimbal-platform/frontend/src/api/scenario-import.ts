@@ -64,6 +64,9 @@ export interface ImportResult {
   }[]
   /** 没有任何步骤用到的内置凭证键(仅丢明文) */
   droppedUsers?: string[]
+  /** 决策 1 登记闸 audit 态(阶段 0 载体):改写后最终形态里仍未登记的
+   *  引用名 —— 保存已放行,前端黄条提示(2c 收口;enforce 态直接 422)。 */
+  identityWarnings?: string[]
 }
 
 /** 重锚定报告条目(#323):reason 为 null 才是已锚。not_in_revision 等

@@ -17,7 +17,7 @@ from app.core import db as db_module
 from app.models import AuthAccount, Environment
 
 from .conftest import seed_identity_fixture
-from .helpers import register_and_login
+from .helpers import register_and_login, role_headers
 
 
 async def _seed_env(name: str = "测试") -> int:
@@ -540,3 +540,133 @@ async def test_create_and_patch_short_password_422(client) -> None:
     r = await client.patch(f"/api/auths/{aid}", headers=auth,
                            json={"token_type": "Basic"})
     assert r.status_code == 200
+
+
+# ── 双源检索(凭证治理 2c,拍板 #10)──────────────────────────────
+async def _seed_project_account(project_id: int, env_id: int,
+                                username: str = "svc1",
+                                system: str = "fin") -> None:
+    """项目池行直插(检索面只读;写面属项目管理员,API 链在 s8 已覆盖)。"""
+    async with db_module.SessionLocal() as db:
+        db.add(AuthAccount(project_id=project_id, system=system,
+                           env_id=env_id, username=username,
+                           password_enc="enc", token_type="Bearer"))
+        await db.commit()
+
+
+async def test_list_dual_source_merges_pools_with_badges(client) -> None:
+    """source=all:本人池 ∪ 项目池,行带 source 徽标、个人池行在前;
+    默认(无参)行为不变 = 纯个人池。"""
+    from .test_authz_s8_project_credentials import _mk_project
+
+    h = await role_headers(client, "ds_m", role="user")
+    pid = await _mk_project("ds-proj", members={"ds_m": "user"})
+    env = await _seed_env()
+    await client.post(
+        "/api/auths", headers=h,
+        json={"system": "fin", "envId": env,
+              "username": "me1", "password": "pw12345"})
+    await _seed_project_account(pid, env, username="svc1")
+
+    r = await client.get("/api/auths", headers=h,
+                         params={"source": "all", "project_id": pid})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 2
+    assert [i["source"] for i in body["items"]] == ["personal", "project"]
+    assert [i["username"] for i in body["items"]] == ["me1", "svc1"]
+    # q 跨池命中:项目池行也可检索
+    body = (await client.get("/api/auths", headers=h,
+                             params={"source": "all", "project_id": pid,
+                                     "q": "svc"})).json()
+    assert body["total"] == 1 and body["items"][0]["source"] == "project"
+    # 默认(无参)= 纯个人池(source 徽标恒在,存量消费者零感知)
+    body = (await client.get("/api/auths", headers=h)).json()
+    assert body["total"] == 1
+    assert body["items"][0]["source"] == "personal"
+
+
+async def test_list_project_source_member_sees_username(client) -> None:
+    """拍板 #10(2026-11-20 深夜):检索端点项目池 username 对成员可见
+    —— 按名引用必需(运行时本就允许成员用项目凭证执行);
+    ``_member_view`` 掩码只在 /projects/{id}/credentials 管理面保留。"""
+    from .test_authz_s8_project_credentials import _mk_project
+
+    h = await role_headers(client, "ds_mv", role="user")
+    pid = await _mk_project("ds-mv", members={"ds_mv": "user"})
+    env = await _seed_env()
+    await _seed_project_account(pid, env, username="svc1")
+
+    r = await client.get("/api/auths", headers=h,
+                         params={"source": "project", "project_id": pid})
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["username"] == "svc1"
+    assert items[0]["source"] == "project"
+    # 对照:项目管理面板成员视图仍掩码(掩码口径不随检索面放宽)
+    r2 = await client.get(f"/api/projects/{pid}/credentials", headers=h)
+    assert r2.status_code == 200
+    assert r2.json()["items"][0]["username"] == ""
+
+
+async def test_list_project_source_gates(client) -> None:
+    """门:非成员 404;Admin+ 非成员同 404(凭证是项目的,读面不因
+    平台角色放宽);source=project 缺 project_id → 422。"""
+    from .test_authz_s8_project_credentials import _mk_project
+
+    h_in = await role_headers(client, "ds_in", role="user")
+    h_out = await role_headers(client, "ds_out", role="user")
+    h_admin = await role_headers(client, "ds_ad", role="admin")
+    pid = await _mk_project("ds-gate", members={"ds_in": "user"})
+    env = await _seed_env()
+    await _seed_project_account(pid, env)
+
+    params = {"source": "project", "project_id": pid}
+    assert (await client.get("/api/auths", headers=h_in,
+                             params=params)).status_code == 200
+    r = await client.get("/api/auths", headers=h_out, params=params)
+    assert r.status_code == 404
+    r = await client.get("/api/auths", headers=h_admin, params=params)
+    assert r.status_code == 404  # Admin+ 不旁路
+    r = await client.get("/api/auths", headers=h_in,
+                         params={"source": "project"})
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "project_id_required"
+
+
+async def test_list_project_source_public_project_409(client) -> None:
+    """公共项目无凭证面:_load_normal_project 同源 409(先于成员门;
+    public kind 全库唯一 —— 直接用 fresh_db 预种的公共项目)。"""
+    from app.models.project import Project
+
+    h = await role_headers(client, "ds_pub", role="user")
+    async with db_module.SessionLocal() as db:
+        pid = (await db.execute(
+            select(Project.id).where(Project.kind == "public"))).scalar_one()
+    r = await client.get("/api/auths", headers=h,
+                         params={"source": "project", "project_id": pid})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "public_project_no_credentials"
+
+
+async def test_list_env_id_filter(client) -> None:
+    """env_id 精确过滤(执行标签同键域)。"""
+    auth = await register_and_login(client)
+    env1 = await _seed_env()
+    async with db_module.SessionLocal() as db:
+        db.add(Environment(name="ds-env2"))
+        await db.commit()
+        env2 = (await db.execute(
+            select(Environment.id).where(Environment.name == "ds-env2"))
+        ).scalar_one()
+    await client.post("/api/auths", headers=auth,
+                      json={"system": "fin", "envId": env1,
+                            "username": "u1", "password": "pw12345"})
+    await client.post("/api/auths", headers=auth,
+                      json={"system": "fin", "envId": env2,
+                            "username": "u2", "password": "pw12345"})
+    body = (await client.get("/api/auths", headers=auth,
+                             params={"env_id": env2})).json()
+    assert body["total"] == 1
+    assert body["items"][0]["username"] == "u2"

@@ -54,6 +54,10 @@
           <p v-if="result.authRenames?.length" class="imp-warn" data-testid="import-auth-renames">
             步骤认证已落到本机身份条目:<template v-for="r in result.authRenames" :key="r.service">{{ r.service }}:{{ r.from }} → {{ r.to }};</template>
           </p>
+          <p v-if="result.identityWarnings?.length" class="imp-warn" data-testid="import-identity-warnings">
+            ⚠ 仍有未登记引用(已按 audit 放行):<b class="mono">{{ result.identityWarnings.join('、') }}</b>
+            —— 请到「服务注册」登记条目,或改绑已有条目;enforce 后保存将被拒。
+          </p>
           <div v-if="result.undeclaredUsers?.length" class="imp-warn" data-testid="import-undeclared">
             <p v-for="u in result.undeclaredUsers" :key="u.tag" class="imp-warn-line">
               ⚠ 认证标签 <b class="mono">{{ u.tag }}</b>({{ u.services.join('、') }})未落地为身份条目:{{ undeclaredReasonLabel(u.reason) }} —— 这些步骤执行时会报错。
@@ -290,10 +294,12 @@ function builtinUserLabel(u: ImportBuiltinUser): string {
   if (u.templated) return u.bound ? '同名条目已装载' : '同名条目未装载'
   return '将改写到所属服务的条目'
 }
-/** 结果视图有可报内容才停留;否则保持「导入即进场景」旧流程 */
+/** 结果视图有可报内容才停留;否则保持「导入即进场景」旧流程。
+ *  identityWarnings(2c):登记闸 audit 黄条也是可报内容 —— 停留展示。 */
 function hasReport(r: ImportResult): boolean {
   return !!(r.authEntries?.length || r.authRenames?.length
-    || r.undeclaredUsers?.length || r.droppedUsers?.length)
+    || r.undeclaredUsers?.length || r.droppedUsers?.length
+    || r.identityWarnings?.length)
 }
 /** 已装载 → 检索定位;未装载 → 按条目登记坐标深链(条目自主档派生
  *  system+env;悬空条目无坐标,退普通入口)。 */

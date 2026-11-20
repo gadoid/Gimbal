@@ -16,7 +16,7 @@ system_env_instances(实例缺席 → 拨测明确报,不回退)。username 明�
 """
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Query, status
 from loguru import logger
@@ -63,10 +63,16 @@ def _safe_decrypt(encrypted: str) -> str:
 
 def _to_out(a: AuthAccount, *, login_url: str = "",
             identity_count: int = 0, scenario_count: int = 0) -> AuthAccountOut:
-    """username 明文(账户实体键);password 恒掩码。"""
+    """username 明文(账户实体键);password 恒掩码。
+
+    ``source`` 按行派生(owner XOR project CHECK 保证恰一)—— 项目池行
+    自动带 ``source="project"`` 徽标(2c 双源检索);管理面 ``_member_view``
+    掩码口径不受影响。
+    """
     return AuthAccountOut(
         id=a.id,
         username=a.username,
+        source="project" if a.project_id is not None else "personal",
         system=a.system,
         env_id=a.env_id,
         token_type=a.token_type,
@@ -133,6 +139,9 @@ async def list_auths(
     user: CurrentUser, session: DbSession,
     q: Annotated[str | None, Query(max_length=128)] = None,
     token_type: Annotated[str | None, Query(max_length=32)] = None,
+    source: Annotated[Literal["personal", "project", "all"], Query()] = "personal",
+    project_id: Annotated[int | None, Query(ge=1)] = None,
+    env_id: Annotated[int | None, Query(ge=1)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> AuthListOut:
@@ -145,8 +154,46 @@ async def list_auths(
     条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。
     命中口径 = 条目名所在系统的全部本人账户(哪条装载由条目 ref
     决定,列表按系统呈现即修复引导)。
+
+    双源检索(凭证治理 2c,2026-11-20 拍板 #10):``source`` 选池 —
+    ``personal``(默认,存量行为不变)/ ``project``(须 ``project_id``)/
+    ``all``(本人池 ∪ 该项目池,行带 ``source`` 徽标)。检索是独立
+    口径,与执行链「单池互斥选一」(credential_source)无涉 —— 有序
+    池回退不存在,合并去重也无从谈起(两池行本就是不同实体)。
+    项目池行 **username 对成员可见**(按名引用必需;``_member_view``
+    掩码只在 /projects/{id}/credentials 管理面保留)。门:非成员 404、
+    公共项目 409 ``public_project_no_credentials``(与项目凭证面同源);
+    Admin+ 非成员不旁路。``env_id`` 精确过滤(执行标签同键域)。
     """
-    base = select(AuthAccount).where(AuthAccount.owner_id == user.id)
+    pool_clause = AuthAccount.owner_id == user.id
+    if source in ("project", "all"):
+        if project_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": "project_id_required",
+                        "message": "source=project/all 时须提供 project_id"})
+        # 惰性导入:project_credentials 模块顶层反向 import 本文件,
+        # 顶层互引成环(与 _revive 的惰性同款纪律)
+        from .project_credentials import _load_normal_project
+        from .projects import _my_role
+
+        proj = await _load_normal_project(session, project_id)
+        # 非成员 404(Admin+ 不旁路)—— 凭证是项目的,读面不因平台
+        # 角色放宽;_load_normal_project 未命中时自带 404
+        if await _my_role(session, user, proj.id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "not_found",
+                        "message": f"project not found: {project_id}"})
+        if source == "project":
+            pool_clause = AuthAccount.project_id == proj.id
+        else:
+            pool_clause = or_(AuthAccount.owner_id == user.id,
+                              AuthAccount.project_id == proj.id)
+
+    base = select(AuthAccount).where(pool_clause)
+    if env_id is not None:
+        base = base.where(AuthAccount.env_id == env_id)
     if q:
         from ..models.service_identity import ServiceIdentity
 
@@ -164,13 +211,16 @@ async def list_auths(
     )).scalar_one()
     tt_counts = dict((await session.execute(
         select(AuthAccount.token_type, func.count())
-        .where(AuthAccount.owner_id == user.id)
+        .where(pool_clause)
         .group_by(AuthAccount.token_type)
     )).all())
     rows = (
         (
             await session.execute(
-                base.order_by(AuthAccount.system.asc(), AuthAccount.username.asc())
+                # 个人池行排前(同系统内);project_id NULL=个人池
+                base.order_by(AuthAccount.system.asc(),
+                              AuthAccount.project_id.is_(None).desc(),
+                              AuthAccount.username.asc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )

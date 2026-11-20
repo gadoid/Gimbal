@@ -216,3 +216,56 @@ async def test_put_owner_manual_config(client: AsyncClient, plate_mock):
         assert (await s.execute(sa.select(ServiceIdentity.alias_name).where(
             ServiceIdentity.alias_name == "pay-m"))).scalar_one_or_none() \
             is None
+
+
+# ── 并发冲突码精确化(评审 P2,2026-11-20)──────────────────────────
+def test_integrity_conflict_dispatch_map():
+    """scenario_store.create/update 提交点的 IntegrityError 按约束名分派:
+    手配落池进同一事务后,条目/账户唯一冲突不再误报 scenario_id_exists
+    (此前 blanket 映射 → 前端撞号重试 regex 跟着白耗两次重试)。
+    认不出的约束保守回落旧行为(FK 竞态宁 409 不 500)。"""
+    from types import SimpleNamespace
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services import scenario_store
+
+    def mk(name: str) -> IntegrityError:
+        e = IntegrityError("stmt", {}, Exception("boom"))
+        e.orig = SimpleNamespace(constraint_name=name)
+        return e
+
+    dispatch = scenario_store._integrity_conflict_code
+    # 条目名唯一(service_identities.alias_name,PG 自动名)
+    assert dispatch(mk(
+        "service_identities_alias_name_key")) == "auth_draft_alias_taken"
+    # 账户四元组(0057 五键,模型显式名)/ 默认位部分索引 / XOR CHECK
+    assert dispatch(mk(
+        "uq_account_pool_system_env_user")) == "auth_draft_account_exists"
+    assert dispatch(mk("uq_account_default")) == "auth_draft_account_exists"
+    assert dispatch(mk(
+        "ck_account_owner_xor_project")) == "auth_draft_account_exists"
+    # 场景 PK 与未知约束:保守回落旧行为
+    assert dispatch(mk("composer_scenarios_pkey")) == "scenario_id_exists"
+    assert dispatch(mk("whatever_else")) == "scenario_id_exists"
+    # 消息形:撞号带 id;drafts 家族带「同名直接引用」指引
+    assert "sc-x" in scenario_store._integrity_message(
+        "scenario_id_exists", "sc-x")
+    assert "直接引用" in scenario_store._integrity_message(
+        "auth_draft_alias_taken", "sc-x")
+
+
+@pytest.mark.asyncio
+async def test_create_duplicate_scenario_still_maps(client: AsyncClient,
+                                                    plate_mock):
+    """保守回归钉:未知/场景 PK 冲突照旧 scenario_id_exists → 409
+    (前端撞号重试语义不变)。"""
+    await _seed_base()
+    h = await role_headers(client, "ad_dup")
+    r = await client.post("/api/scenarios", headers=h, json=_draft(
+        "sc-ad-dup", "pay-d", None))
+    assert r.status_code in (200, 201), r.text
+    r = await client.post("/api/scenarios", headers=h, json=_draft(
+        "sc-ad-dup", "pay-d", None))
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"].startswith("scenario_id_exists")

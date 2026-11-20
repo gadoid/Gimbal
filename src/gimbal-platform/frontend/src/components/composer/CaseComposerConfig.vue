@@ -249,8 +249,14 @@
       <button class="c-add" @click="addService">+ 添加服务</button>
     </div>
 
-    <!-- 用户认证(2026-08-25):场景级 users 快照 — 手动配置或凭证池导入 -->
-    <UsersCard v-model="local.users" />
+    <!-- 凭证与调用身份(凭证治理 §3.3 双入口):场景只存引用,检索/手配 -->
+    <UsersCard
+      v-model="local.users"
+      :auth-drafts="authDrafts"
+      :project-id="projectId"
+      :services="local.services"
+      @update:auth-drafts="emit('update:authDrafts', $event)"
+    />
 
     <!-- 断言管理纯展示列表(spec v3 §5)— 编辑入口搬家至测试数据页;
          每条「加入本次执行」预勾运行面板(Task 6 preset) -->
@@ -306,6 +312,7 @@ import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { scenarioSchemesUrl } from '@/utils/links'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
+import type { AuthDraftView } from '@/types/scenario-composer'
 import UsersCard from './UsersCard.vue'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -323,14 +330,21 @@ const SYS_LABELS: Record<string, string> = {
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
 // 单一 props: modelValue 绑 plate ConfigView;scenarioId/assertionEntries/
-// deadEntryIds 供断言管理纯展示列表(spec v3 §5)
+// deadEntryIds 供断言管理纯展示列表(spec v3 §5);
+// authDrafts/projectId 供凭证双入口(2c:手配通道透传 + 检索项目池圈定)
 const props = defineProps<{
   modelValue: ConfigView
   scenarioId?: string
   assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
   deadEntryIds?: string[]
+  authDrafts?: AuthDraftView[]
+  projectId?: number | null
 }>()
-const emit = defineEmits<{ 'update:modelValue': [ConfigView]; 'runEntry': [id: string] }>()
+const emit = defineEmits<{
+  'update:modelValue': [ConfigView]
+  'runEntry': [id: string]
+  'update:authDrafts': [AuthDraftView[]]
+}>()
 
 const router = useRouter()
 /** 跳方案工作台数据区(D1:数据集入口收拢进工作台,独立路由已退役);

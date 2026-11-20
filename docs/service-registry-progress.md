@@ -1559,6 +1559,140 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   否决,**按维持入账**(翻案退路已备:删 materialize 条目创建段,
   闸与冲突码不动),同步登记册 C12。
 
+### 合并改造阶段 2c · 检索面落地(2026-11-20 深夜,🟢 代码完成)
+
+阶段 2 写链的「2c 残余(检索面,另批开工)」当日收口。**零迁移**;
+后端 1 端点扩参 + 前端五个面(UsersCard 重建 / 保存链接线 / 编排器
+选取器硬化 / 查询视图换源 / 导入黄条)。明细:
+
+- **双源检索 API(B1)**:`GET /auths` 扩参 `source`(personal 缺省/
+  project/all)+ `project_id` + `env_id`;门(source 含 project)=
+  复用 `_load_normal_project`(公共项目 409 `public_project_no_credentials`
+  + 非成员 404,Admin+ 不旁路),`project_id` 缺失 422 `project_id_required`
+  (filter-groups 同码复用)。**拍板 #10 落地**:项目池行 username 对成员
+  可见(`_member_view` 掩码只在 /projects/{id}/credentials 管理面保留);
+  行增量 `AuthAccountOut.source`(按 owner XOR project CHECK 派生,
+  project_credentials 复用 `_to_out` 自动带标);q 三命中面/token_type/
+  env_id 作用于合并行集,`token_type_counts` 按同池谓词,个人池行排序
+  在前。检索是独立口径,与执行链「单池互斥选一」(credential_source)
+  无涉 —— 双源合并不去重(两池行本就是不同实体)。
+- **UsersCard 双入口重建(B2)**:卡改名「凭证与调用身份」——
+  - **手配**(替代「+ 添加用户」):AuthDraftIn 字段表单(name pattern
+    镜像/system 主档 select(加载失败降级手输)/envId 环境表 select/
+    username/password≥6/accountFields KV≤32)→ `authDrafts` 草稿行
+    (≤16)→ 保存期通道随场景提交;注册表重名预检(后端 409 仍权威);
+  - **检索**(替代「从凭证池导入」):`list({source:'all', project_id:
+    场景项目})` 双源行 = username/system/环境名/**来源徽标**(.src 圆角
+    徽标,我的池/项目池)/默认 chip/**引用条目名**(客户端镜像
+    `identities_for_account`:username-ref 认用户名、default-ref 认
+    系统默认;条目→system 走 `loadCatalogSystemByService` 两跳派生);
+    无条目 → 「未设条目引用」+ 深链服务注册(决策 1 §3:不做内联
+    登记);scope 默认限场景服务的系统(开关全量);**FE-02:池读取
+    失败显式降级横幅 ≠ 空态**;私有场景(无普通项目上下文,取
+    `runProjectId` 口径)回退纯个人池(后端 source=all 强制带
+    project_id,不静默变义);
+  - **快照导入退役**(§3.7 护栏接力):snapKey/submitImport/TOK-05
+    confirmAction/`getAuth(id,true)` 依赖全撤;
+  - **§7 存量透传**:遗留行只读表(alias/url/username/token_type,
+    明文不再展示)+ 「清空存量明文」(confirmAction → emit {};旧行
+    PUT 显式清空后端放行);
+- **保存链接线(B2)**:`ScenarioDraft.authDrafts`(类型 + 空不发键);
+  `createScenario/updateScenario` 返回 `{scenario, identityWarnings}`
+  (读 `X-Identity-Warnings` 头 JSON,缺头/坏 JSON 保守空);store
+  透传;saveDraft:payload 组装 + `newAuths` → toast 点名新建 + 清
+  草稿 + `bumpRegistryRev`(store 计数,Canvas watch 重拉注册表 —
+  新条目名即刻不再悬空)+ `identityWarnings` → 黄条点名未登记引用
+  (audit 放行指引,enforce 到不了这);**authDrafts 入脏链**(增删 =
+  未保存改动,触发自动保存与离开拦截);ImportScenarioDialog:响应
+  `identityWarnings` 键 → 黄条(`hasReport` 把它算作可报内容,结果
+  视图停留)。
+- **编排器选取器硬化(B3,决策 1 §3)**:Canvas registeredAliases
+  静默 catch → 降级横幅 + 重试 + >200 截断提示(FE-02);**悬空判定
+  已知集 = 注册表 ∪ 手配待保存名**(users 键域退场 —— 设计 §4.1:
+  恰是「引用即登记」口径;存量 users 键不再豁免,红 chip = 清账信号,
+  徽章 union 用例按新口径翻转);AuthSelectorModal:条目按环境分组
+  (CredentialSelect opt-in `envNames`,模块级单飞拉一次,失败退
+  平铺 envId 裸值不上屏)。
+- **查询视图换源(B4,§3.6)**:`queryAliasOf` 从 authored users 键
+  同域匹配切到「注册表条目 × 本人池装载」—— 步骤服务本身是条目时
+  优先自身(修订 11 执行视角延伸),否则同基候选;装载判定 =
+  `pickAccountLikeBackend`(前端单源,镜像 `_pick_one`)× 本人池
+  (懒加载单飞,失败不缓存可重试,期间退首条目候选)—— 与查询视图
+  loader「按 alias 从本人池取,不吃快照」同池同序;零装载 → null
+  诚实 422(不回退 users 旧值);`urlOriginOf` 同域判定随 users 键域
+  一并退役。
+- **契约面**:openapi +3 查询参数 + `AuthAccountOut.source`;error-codes
+  码数不变(215)/位点 437→442(`project_id_required`/`not_found` 站点
+  扩充,行漂移随 `_to_out` 增行);`gen`+`check` 双绿(重生两次 md5
+  一致);README 计数刷新。
+- **测试**:后端 `test_auth_sessions.py` +5(双源合并徽标+q 跨池 /
+  拍板 #10 成员可见项目池 username(对照管理面仍掩码)/ 门三态(非成员
+  404、Admin+ 不旁路、缺 project_id 422)/ 公共项目 409 / env_id 过滤)
+  —— auth_sessions+s8+drafts 定向 43 绿;**后端全量 pytest 2130 passed /
+  3 skipped(37m23s)** —— 首跑 3 failed + 1 error 全数当日处置:①grep
+  守卫 ×2 = auth_sessions 池谓词换形白名单同步(pool_clause 单点收编 +
+  旧 tt_counts 续行/`.where(base=)` 两 stale 条目删除,复绿);②
+  revision e2e = 测试 shell 的 Windows PATH 缺 git.exe 环境件(补 Git\cmd
+  复绿,16/16 含 graph_dispatch);③graph_dispatch 1 error = asyncpg
+  teardown 抖动类,单跑复绿(既有记载)——零代码回归。
+  前端:UsersCard.test.ts 重写 10(存量只读+清空确认闸/手配增删+
+  自定义字段/重名预检/短密码拒/检索双源徽标+拍板 #10 断言/scope 过滤/
+  引用条目名/降级/退役断言)+ CaseComposer.credentialReform.test.ts 新建 3
+  (authDrafts 进 PUT body+newAuths 清草稿+bump/空不发键+黄条/
+  api 层 X-Identity-Warnings 头解析三态[黄条链起点])+ ImportScenarioDialog
+  +1(黄条)+ Config 徽章用例按新口径改写(卡片
+  新名 + 存量清空透传)+ Canvas 100(查询换源 3 用例重写为注册表×池
+  装载口径 + 零装载新用例;徽章 union 翻转);AuthSelectorModal 环境分组
+  断言;**前端全量 vitest 173 文件 / 1514 用例 0 failed**(对照遗留收口轮
+  基线 172/1505)+ vue-tsc 0 错误 + eslint 干净。
+- **scope 核验记档(B5)**:ServiceAdmin `accountOf` 已 system-scoped
+  (`pickAccountLikeBackend`)、方案绑定 `aliasCandidates` 已同基
+  (= scope 等价)—— §3.2「检索/候选 = 池 ∩ system 匹配」在既有候选面
+  已满足,本批零改动;**方案绑定「名不在绑定者池 → 告警不阻断」未实施**
+  (run_schemes 无 warnings 载体,执行闸 auth_aliases_missing 409 已在
+  派发硬门兜底;黄条载体属增量契约面,缓议)。
+- **部署**:远端部署惯例所需的目标机制未在本会话确认(本地 8188/8000
+  均无监听),**未执行** —— build/替换 dist/重启 gimbal-platform 待人工
+  或目标确认后补(后端有改动,重启前生产仍在 audit 态旧代码,检索
+  端点新参数 422 不可达面仅新增字段,旧前端不受影响)。
+
+#### 2c 评审收口轮(2026-11-20 深夜,🟢 五项完成)
+
+评审轮意见逐项处置(两 P2 收口/入册 + 三 P3 全修):
+
+- **P2 · 并发冲突码误报(修复)**:`scenario_store.create` 的
+  IntegrityError blanket 映射(`scenario_id_exists`)在手配落池进同一
+  事务后误报条目/账户唯一冲突 —— 且前端撞号重试 regex(`/|409/`)会
+  跟着白耗两次重试。修复 = 约束名分派单源
+  (`_integrity_conflict_code`:service_identities/alias_name →
+  `auth_draft_alias_taken`;uq_account/ck_account/auth_accounts →
+  `auth_draft_account_exists`;其余保守回落旧行为),消息形区分(撞号
+  带 id,drafts 家族带「同名直接引用」指引);**update 的裸 commit
+  同族修复**(此前 IntegrityError = 裸 500,现同样分派)。复用路由侧
+  既有 409 映射零契约增量;测试 = 派发表单测(约束名四形 + 消息形)+
+  撞号 409 保守回归钉(test_auth_drafts +2)。
+- **P2 · 声明侧同 base 闸(入册)**:场景声明侧(headers `${auth.*}` /
+  模板 / setup-teardown)经登记闸只查存在性、不校验「条目 base ==
+  步骤服务 base」—— 直写 API 跨服务条目引用口子(TOK-07 同族走声明
+  侧)。收口需逐步骤扫描 + 契约码增量,单独排期 → 登记册 E 节。
+- **P3-1 · 检索截断提示**:UsersCard 池检索单页 200 截断显式提示
+  (`uc-pool-truncated`,Canvas 同款口径)+1 用例钉位。
+- **P3-2 · 撞号重试 regex 收窄**:`/scenario_id_exists|409/` →
+  `/scenario_id_exists/`(auth_draft_* 409 不再误入重试,真错直接
+  surfacing)。
+- **P3-3 · 小项**:AuthDraftView.accountFields 收紧
+  `Record<string, unknown>` → `Record<string, string>`(对齐后端
+  dict[str,str]);clearLegacy toast 改草稿语义(「已标记清空 —— 保存
+  场景后生效」);黄条 hex 系既有三处组件同款,非本批漂移,token 化
+  旧账不另立条目。
+- **验证**:后端定向(auth_drafts/grep 守卫/api_contract/plaintext 闸/
+  s60/import 流水线/auth_sessions)77 绿 + scenario_store 相关联簇
+  (plate_integration/shares/s72)26 绿;前端定向(UsersCard 11/
+  credentialReform/autosave/registry/Config)+ vue-tsc 0 + eslint 0;
+  **前端全量 vitest 复跑 173 文件 / 1515 用例 0 failed**(+1 截断钉);
+  后端全量以上一轮 2130/3 基线 + 本轮定向簇为口径(scenario_store
+  改动面由 auth_drafts/import 流水线/plate_integration 簇覆盖)。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。

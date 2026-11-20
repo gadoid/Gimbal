@@ -33,6 +33,25 @@ export interface Orchestration {
 }
 
 // ─── 平台草稿容器 ──────────────────────────────────────────────────
+/** 手配草稿(凭证治理 §3.3 / 阶段 2 落地):随场景保存**同事务**落本人池
+ *  账户(Fernet)+ username-ref 身份条目;字段对齐后端 AuthDraftIn。
+ *  保存期通道 —— 不进存储容器(后端 exclude=True;name 即落池后的
+ *  条目名,场景里以 ``${auth.<name>}`` 引用)。 */
+export interface AuthDraftView {
+  /** 条目名(= 场景引用名;全局唯一,重名 409 auth_draft_alias_taken) */
+  name: string
+  /** plate 系统名(须命中主档既有服务,未知系统 422) */
+  system: string
+  /** 环境标签 id(实体键第四位) */
+  envId: number
+  username: string
+  /** 明文密码(≥6 位;仅保存链传输,不落场景 payload) */
+  password: string
+  /** 账号级自定义字段(${slot.<name>.<field>} 消费;≤32 键;
+   *  后端 dict[str, str],表单只产字符串值) */
+  accountFields?: Record<string, string>
+}
+
 export interface ScenarioDraft {
   /** plate 完整结构,核心属性,原样透传 plate /convert */
   definition: ScenarioView
@@ -42,6 +61,8 @@ export interface ScenarioDraft {
   assertion_registry?: AssertionRegistry
   /** M4/Q18:编辑器状态(定义之外)—— fieldStates 按步骤位置索引 */
   ui?: { fieldStates?: Record<string, Record<string, FieldState>> }
+  /** 手配凭证(§3.3):保存期通道,同事务落池;见 AuthDraftView */
+  authDrafts?: AuthDraftView[]
 }
 
 // ─── 读侧(列表/详情,非草稿)──────────────────────────────────────
@@ -84,6 +105,11 @@ export interface Scenario {
   starred?: boolean
   /** P1 读侧收紧:'private' 仅 owner/admin 可读;'public' 全员可读 */
   visibility?: 'private' | 'public'
+  /** S7.1:所属项目 id(检索双源用它圈项目池;null = 私有) */
+  projectId?: number | null
+  /** 保存响应回带(阶段 2 §3.3):本次同事务新建的凭证/条目名清单;
+   *  列表/详情读面恒 null。 */
+  newAuths?: string[] | null
 }
 
 // ─── M1 列表响应投影(PG迁移方案 §7 M1 / §4.1)──────────────────────

@@ -50,23 +50,49 @@
         @keydown.esc.stop="close"
       />
       <div class="cred-options" role="listbox">
-        <button
-          v-for="c in filteredCredentials"
-          :key="c.aliasName"
-          type="button"
-          role="option"
-          class="cred-option"
-          :class="{ selected: c.aliasName === modelValue }"
-          :aria-selected="c.aliasName === modelValue"
-          :data-testid="`credential-option-${c.aliasName}`"
-          @click="pick(c.aliasName)"
-        >
-          <span class="cred-line1">
-            <code class="mono">{{ c.aliasName }}</code>
-            <span class="cred-type">{{ c.kind }}</span>
-          </span>
-          <span class="cred-line2">{{ c.baseService }}<template v-if="c.display"> · {{ c.display }}</template></span>
-        </button>
+        <!-- 环境分组(v6 范式,opt-in:envNames 传入且非空才启用;
+             跨环境同名服务条目在平铺列表里不可分辨) -->
+        <template v-if="groupedOptions">
+          <div v-for="g in groupedOptions" :key="g.label" class="cred-group">
+            <p class="cred-group-label">{{ g.label }}</p>
+            <button
+              v-for="c in g.rows"
+              :key="c.aliasName"
+              type="button"
+              role="option"
+              class="cred-option"
+              :class="{ selected: c.aliasName === modelValue }"
+              :aria-selected="c.aliasName === modelValue"
+              :data-testid="`credential-option-${c.aliasName}`"
+              @click="pick(c.aliasName)"
+            >
+              <span class="cred-line1">
+                <code class="mono">{{ c.aliasName }}</code>
+                <span class="cred-type">{{ c.kind }}</span>
+              </span>
+              <span class="cred-line2">{{ c.baseService }}<template v-if="c.display"> · {{ c.display }}</template></span>
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <button
+            v-for="c in filteredCredentials"
+            :key="c.aliasName"
+            type="button"
+            role="option"
+            class="cred-option"
+            :class="{ selected: c.aliasName === modelValue }"
+            :aria-selected="c.aliasName === modelValue"
+            :data-testid="`credential-option-${c.aliasName}`"
+            @click="pick(c.aliasName)"
+          >
+            <span class="cred-line1">
+              <code class="mono">{{ c.aliasName }}</code>
+              <span class="cred-type">{{ c.kind }}</span>
+            </span>
+            <span class="cred-line2">{{ c.baseService }}<template v-if="c.display"> · {{ c.display }}</template></span>
+          </button>
+        </template>
         <p v-if="!filteredCredentials.length" class="cred-empty" data-testid="credential-empty">
           {{ filter ? '没有匹配的身份条目' : '当前列表为空' }}
         </p>
@@ -86,6 +112,10 @@ const props = defineProps<{
   disabled?: boolean
   /** 可选字段场景:值非空时给清除钮(emit '' — 调用方按空串转 null) */
   clearable?: boolean
+  /** 环境分组(2c v6 范式,opt-in):envId → 环境名映射传入且非空才启用
+   *  分组渲染;缺省平铺(既有消费者零影响)。加载失败 → 调用方不传或
+   *  传空,自然退平铺(envId 裸值不上屏)。 */
+  envNames?: Record<number, string>
 }>()
 
 const emit = defineEmits<{
@@ -105,6 +135,23 @@ const filteredCredentials = computed(() => {
     (c) => c.aliasName.toLowerCase().includes(kw)
       || c.baseService.toLowerCase().includes(kw)
       || (c.display ?? '').toLowerCase().includes(kw))
+})
+
+/** 环境分组视图(按名排序;映射缺席的 envId 落「无环境」组)。 */
+const groupedOptions = computed(() => {
+  if (!props.envNames || !Object.keys(props.envNames).length) return null
+  const byLabel = new Map<string, ServiceAliasRow[]>()
+  for (const c of filteredCredentials.value) {
+    const label = c.envId != null
+      ? (props.envNames[c.envId] ?? '无环境')
+      : '无环境'
+    const bucket = byLabel.get(label)
+    if (bucket) bucket.push(c)
+    else byLabel.set(label, [c])
+  }
+  return [...byLabel.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([label, rows]) => ({ label, rows }))
 })
 
 function toggle(): void {
@@ -222,6 +269,15 @@ watch(() => props.disabled, (d) => { if (d) close() })
 .cred-filter:focus { outline: none; border-color: var(--sl-accent); }
 
 .cred-options { max-height: 13.75rem; overflow-y: auto; }
+
+.cred-group-label {
+  margin: 0;
+  padding: 0.3125rem 0.5rem 0.125rem;
+  font-size: 0.65625rem;
+  font-weight: 600;
+  color: #8b93a1;
+  letter-spacing: 0.02em;
+}
 
 .cred-option {
   display: flex;

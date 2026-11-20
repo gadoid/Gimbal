@@ -44,9 +44,12 @@ _ALLOWLIST: dict[str, int] = {
     # 凭证治理阶段 2(2026-11-20):手配落池 services/auth_drafts ——
     # 个人池终态同款(本人池行的存在/默认位查询,与 auth_sessions 同类)
     'services/auth_drafts.py:AuthAccount.owner_id == owner_id,': 2,
-    'routers/auth_sessions.py:.where(AuthAccount.owner_id == user.id)': 1,
+    # 凭证治理阶段 2c(2026-11-20):双源检索的池谓词 —— pool_clause 单点
+    # 收编(all 源 = or_ 个人池 ∪ 项目池;检索是独立口径,非权限闸放宽);
+    # 旧 tt_counts 续行 .where(AuthAccount.owner_id == user.id) 同步换形删除
+    'routers/auth_sessions.py:pool_clause = AuthAccount.owner_id == user.id': 1,
+    'routers/auth_sessions.py:pool_clause = or_(AuthAccount.owner_id == user.id,': 1,
     'routers/auth_sessions.py:AuthAccount.owner_id == user.id,': 3,
-    'routers/auth_sessions.py:base = select(AuthAccount).where(AuthAccount.owner_id == user.id)': 1,
     'routers/auth_sessions.py:if a is None or a.owner_id != owner_id:': 1,
     'routers/constants.py:base = select(ConstantEntry).where(ConstantEntry.owner_id == user.id)': 1,
     'routers/constants.py:if entry is None or entry.owner_id != owner_id:': 1,

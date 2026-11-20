@@ -14,8 +14,17 @@
       @back="subView = null"
     />
 
+    <!-- 注册表降级/截断横幅(FE-02;2c):读取失败 ≠ 无已登记条目 -->
+    <div v-if="registryDegraded" class="registry-banner" data-testid="registry-degraded">
+      ⚠ 身份条目注册表读取失败 ——「已登记」标记与 ⓘ 选择器不可用,不代表没有已登记条目。
+      <button type="button" class="registry-retry" data-testid="registry-retry" @click="reloadRegistry">重试</button>
+    </div>
+    <div v-else-if="registryTruncated" class="registry-banner" data-testid="registry-truncated">
+      注册表超过 200 条未全量载入 —— 可到「服务注册」页管理
+    </div>
+
     <!-- 主页:3 栏 -->
-    <div v-else class="three-col">
+    <div v-if="subView !== 'catalog'" class="three-col">
       <!-- ① 步骤流 -->
       <aside class="col col-steps">
         <div class="col-head">
@@ -582,6 +591,7 @@ import AuthSelectorModal from '../AuthSelectorModal.vue'
 import VarSelectorModal from './VarSelectorModal.vue'
 import ValueSourcePicker from './ValueSourcePicker.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
+import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
 import {
@@ -589,6 +599,7 @@ import {
   validateEndpointFieldStates,
 } from '@/api/scenario-composer'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import type { AuthDraftView } from '@/types/scenario-composer'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
 import { fetchQueryViewIndex, fetchQueryViewRows } from '@/api/query-views'
 import type { QueryViewIndexEntry } from '@/api/query-views'
@@ -606,7 +617,9 @@ import {
 } from '@/utils/declarations'
 import type { FieldTreeNode, ValueSourceGroup } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
-import { loadCatalogServiceNames } from '@/utils/catalog-services'
+import { loadCatalogServiceNames, loadCatalogSystemByService } from '@/utils/catalog-services'
+import { listAll } from '@/api/auth_sessions'
+import { pickAccountLikeBackend } from '@/utils/identityResolve'
 import {
   endpointFullState, ensureEndpointFull, getEndpointFull,
 } from '@/composables/useEndpointFull'
@@ -640,6 +653,9 @@ const props = defineProps<{
    *  CaseComposer 按锚定系统集拉取;未拉到/未命中按 plate 展示,
    *  不让读面故障变成整列红)。 */
   serviceKinds?: Record<string, 'plate' | 'external' | 'unknown'>
+  /** 手配草稿名(凭证治理 2c):悬空判定已知集 = 注册表 ∪ 待保存手配名
+   *  (落池前「将登记」放行,与后端登记闸 extra_known 同口径)。 */
+  authDrafts?: AuthDraftView[]
 }>()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
@@ -973,6 +989,7 @@ function hdrRefStatus(ref: TplRef): 'ok' | 'dangling' {
 // 注册表 = 共享 vars(config) + 全部 step 的 extract;config 来自共享
 // draft store(CaseComposer watch 同步,含本页未编辑的最新值)。
 const draftStore = useScenarioDraftStore()
+const composerStore = useScenarioComposerStore()
 const constantsStore = useConstantsStore()
 const varPickerOpen = ref(false)
 const varPickerKey = ref<string | null>(null)
@@ -1283,11 +1300,10 @@ const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
 
 /**
- * 查询上下文(§7.2/§6.1):服务 URL 与查询别名同源于**当前 step** —
- * 服务 URL 走 authored services 声明(svc → URL 平表,Canvas 唯一可达的
- * URL 源);查询别名 = headers auth 引用首命中(修订 11)▸ 该服务同域的
- * users 条目(修订 10)。后端凭证闸把 alias=None 视作「无凭证」(bearer
- * 视图 422 query_credential_required)。
+ * 查询上下文(§7.2/§6.1;2c 换源):服务 URL 走 authored services 声明;
+ * 查询别名 = headers auth 引用首命中(修订 11)▸ 注册表条目 × 个人池
+ * 装载(§3.6)。后端凭证闸把 alias=None 视作「无凭证」(bearer 视图
+ * 422 query_credential_required)。
  */
 function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
   const svc = stepService(step)
@@ -1312,29 +1328,26 @@ function headerAuthTagOf(step: StepView): string | null {
   return null
 }
 
-/** 查询别名(§6.1 修订 10,2026-09-10 多服务混编裁定:查询身份 = 执行
- *  身份的域内首键)= 与当前 step 服务**同域**的 users 条目,键序首命中
- *  (确定性;users 条目自带登录域 url)。单服务退化 = 同域唯一命中即
- *  首键,行为与修订 8 一致;组合期查询用执行账号,钉的值执行时必然查
- *  得到(§6.3 权限腐烂由构造消解)。零命中(该服务域没配用户,含条目
- *  缺 url)→ null 诚实 422 —— 不回退异域首键:错域 token 必被 SUT 拒,
- *  业务码 401/407 还会拉黑该凭证,污染其本域查询(§13.8 实证)。服务
- *  URL 自身未知 → 首键回退(服务侧 422 先炸,凭证侧无独立信号)。
- *  config.users 键与凭证池同一命名空间;池无该别名 → 后端诚实 422
- *  「未找到查询凭证」。 */
+/** 查询别名(凭证治理 §3.6 换源,2c):候选 = 步骤服务的注册表条目 ——
+ *  步骤服务本身是已登记条目时优先自身(执行视角 = 查询视角,修订 11
+ *  延伸),否则同基条目(aliasCandidates 同口径)。「装载」判定 =
+ *  pickAccountLikeBackend(镜像后端 run_prepare._pick_one;§8.3 引用
+ *  不校验标签)× 本人池 —— 与查询视图 loader「按 alias 从本人池取,
+ *  不吃快照」同池同序,选中的候选执行时必查得到。无装载条目 → null
+ *  诚实 422(不再回退 authored users 旧值:那是治理要清的陈旧凭证)。
+ *  目录映射/池拉取失败 → 退首条目候选(服务侧诚实报,不本地猜)。 */
 function queryAliasOf(svc: string): string | null {
-  const users = draftStore.draft?.definition?.config?.users ?? {}
-  const keys = Object.keys(users)
-  const first = keys[0]?.trim() || null
-  const origin = urlOriginOf(declaredUrlOf(svc))
-  if (!origin) return first
-  return keys.find(k => urlOriginOf(users[k]?.url) === origin) ?? null
-}
-
-/** url → origin(scheme+host+port 归一);空/非串/解析失败 → null。 */
-function urlOriginOf(u: unknown): string | null {
-  if (typeof u !== 'string' || !u) return null
-  try { return new URL(u).origin } catch { return null }
+  const base = deriveBase(svc, catalogNames.value) ?? svc
+  const self = registeredAliases.value.find((a) => a.aliasName === svc)
+  const candidates = self
+    ? [self]
+    : registeredAliases.value.filter((a) => a.baseService === base)
+  if (!candidates.length) return null
+  const system = systemByService.value.get(self ? self.baseService : base)
+  if (!system || myAccountsFailed) return candidates[0]!.aliasName
+  const loaded = candidates.filter(
+    (a) => !!pickAccountLikeBackend(myAccounts.value, system, a))
+  return loaded[0]?.aliasName ?? null
 }
 
 /** 行集首键 = label 列(后端投影列序:label 恒行首;空行集不进选择态)。 */
@@ -1450,6 +1463,8 @@ async function vsLoad(g: ValueSourceGroup, refresh: boolean, params: Record<stri
   vsPicker.columns = []
   vsPicker.label = ''
   try {
+    // 换源(2c):queryAlias 候选按本人池装载判定 — 池未载/失败先补一拍
+    await ensureMyAccounts()
     const ctx = resolveQueryContext(step)
     const res = await fetchQueryViewRows(g.view, {
       refresh, serviceUrl: ctx.serviceUrl, queryAlias: ctx.queryAlias,
@@ -1650,11 +1665,12 @@ watch([() => props.focusJump, () => props.steps?.length], ([j]) => {
   nextTick(() => onStrategyJump(Math.max(0, j.strategyIdx)))
 }, { immediate: true })
 
-/** 模板里 refStatus 的第二参:已知 alias 集合 = 凭证池 ∪ 草稿 config.users
- *  (③ 用户认证快照 — 场景本地用户执行期由 Config.users 解析,不能误标悬空) */
+/** 模板里 refStatus 的第二参:已知 alias 集合(凭证治理 2c 起)= 注册表
+ *  ∪ 待保存手配名 —— users 键域退场(设计 §4.1:纯注册表恰是决策 1
+ *  「引用即登记」口径;存量 users 键不再豁免悬空标记,红 chip 即清账信号) */
 const authAliases = computed(() => {
-  const localUsers = Object.keys(draftStore.draft?.definition?.config?.users ?? {})
-  return [...new Set([...auths.value.map((a) => a.aliasName), ...localUsers])]
+  const pending = (props.authDrafts ?? []).map((d) => d.name)
+  return [...new Set([...auths.value.map((a) => a.aliasName), ...pending])]
 })
 
 onMounted(() => {
@@ -1835,11 +1851,37 @@ const respTypeC = computed<TypeCField[]>(() => {
 
 /** plate 目录服务名全串集合(会话级,模块缓存由 loader 负责) */
 const catalogNames = ref<Set<string>>(new Set())
+/** 服务 → 系统(查询换源 2c:装载判定的 scope 键;失败 = 空表 → 退首
+ *  条目,后端诚实 422,不本地猜) */
+const systemByService = ref<Map<string, string>>(new Map())
 onMounted(() => {
   loadCatalogServiceNames()
     .then((ns) => { catalogNames.value = new Set(ns) })
     .catch(() => { /* 目录不可达 → 派生降级裸声明黄警,不阻塞编排 */ })
+  loadCatalogSystemByService()
+    .then((m) => { systemByService.value = m })
+    .catch(() => { /* 同上:查询装载判定退首条目 */ })
 })
+
+// ── 查询视图换源(凭证治理 §3.6,2c)────────────────────────────
+// queryAlias 候选从 authored config.users 键域切到「注册表条目 × 个人池
+// 装载」— 与查询视图 loader(按 alias 从本人池取,不吃快照)同池同序。
+/** 本人池(懒加载单飞;失败不缓存 —— 下次取数重试,期间退首条目候选)。 */
+const myAccounts = ref<Awaited<ReturnType<typeof listAll>>>([])
+let myAccountsOnce: Promise<void> | null = null
+let myAccountsFailed = false
+function ensureMyAccounts(): Promise<void> {
+  myAccountsOnce ??= listAll()
+    .then((rows) => {
+      myAccounts.value = rows
+      myAccountsFailed = false
+    })
+    .catch(() => {
+      myAccountsFailed = true
+      myAccountsOnce = null   // 允许下次取数重试
+    })
+  return myAccountsOnce
+}
 
 // ── 步骤服务 → 身份条目(配套方案 §1.1 C3a;registry 条目口径)────
 // 步骤服务命中身份条目时,认证选择器预填该条目的凭证
@@ -1852,16 +1894,28 @@ const aliasSlotMap = ref<Record<string, string>>({})
 const registeredAliases = ref<ServiceAliasRow[]>([])
 const registeredByName = computed(
   () => new Map(registeredAliases.value.map((a) => [a.aliasName, a])))
+/** FE-02 三态(2c 硬化):拉取失败显式降级(≠空注册表),截断提示 >200。 */
+const registryDegraded = ref(false)
+const registryTruncated = ref(false)
+async function reloadRegistry() {
+  registryDegraded.value = false
+  try {
+    const rows = await listAllAliases()
+    registeredAliases.value = rows
+    const m: Record<string, string> = {}
+    for (const r of rows) if (r.slot) m[r.aliasName] = r.slot
+    aliasSlotMap.value = m
+    registryTruncated.value = rows.length >= 200
+  } catch {
+    // 失败 ≠「没有已登记条目」:降级横幅 + 重试;手工选择不受影响
+    registryDegraded.value = true
+  }
+}
 onMounted(() => {
-  listAllAliases()
-    .then((rows) => {
-      registeredAliases.value = rows
-      const m: Record<string, string> = {}
-      for (const r of rows) if (r.slot) m[r.aliasName] = r.slot
-      aliasSlotMap.value = m
-    })
-    .catch(() => { /* 别名表不可达 → 无预填/无已登记来源,手工选择不受影响 */ })
+  void reloadRegistry()
 })
+// 手配落池(newAuths)后父级 bump → 重拉:新条目名即刻不再悬空
+watch(() => composerStore.registryRev, () => { void reloadRegistry() })
 
 interface BoundCredential { aliasName: string; slot: string }
 
@@ -2230,6 +2284,29 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 <style scoped>
 /* 表单控件统一外观走 composer.css (.c-form) */
 .canvas-shell { width: 100%; }
+
+/* 注册表降级/截断横幅(FE-02 口径:失败≠空态,有 data-testid 与重试) */
+.registry-banner {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: #854d0e;
+  background: #fef9c3;
+  border: 1px solid #fde68a;
+  border-radius: 0.375rem;
+}
+.registry-retry {
+  margin-left: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  color: #854d0e;
+  background: transparent;
+  border: 1px solid #fde68a;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+.registry-retry:hover { background: #fef3c7; }
 
 /* 三栏自适应: 宽屏 3 栏, 中屏两栏 (信息面板下移), 窄屏单列
    (gap 16px 对齐 ①-③ 页 .c-page 卡片间隔) */

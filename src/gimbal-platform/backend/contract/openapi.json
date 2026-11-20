@@ -788,6 +788,15 @@
             "title": "Scenariorefcount",
             "type": "integer"
           },
+          "source": {
+            "default": "personal",
+            "enum": [
+              "personal",
+              "project"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
           "system": {
             "title": "System",
             "type": "string"
@@ -962,6 +971,15 @@
             "default": 0,
             "title": "Scenariorefcount",
             "type": "integer"
+          },
+          "source": {
+            "default": "personal",
+            "enum": [
+              "personal",
+              "project"
+            ],
+            "title": "Source",
+            "type": "string"
           },
           "system": {
             "title": "System",
@@ -11038,7 +11056,7 @@
     },
     "/api/auths": {
       "get": {
-        "description": "Page 信封 + 服务端过滤(M4,§6.3):``q``(username/system 子串;\nusername 账户化后为明文,可检索)、``token_type`` 精确。双计数 =\nref 条目数 + 条目聚合场景数(auth_references.account_ref_counts)。\n\n``q`` 第三命中面(2026-11-19):**身份条目名** —— 缺凭证角标\n(FunctionCard)与导入对话框的修复深链发的是条目名,账户化后\n条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。\n命中口径 = 条目名所在系统的全部本人账户(哪条装载由条目 ref\n决定,列表按系统呈现即修复引导)。",
+        "description": "Page 信封 + 服务端过滤(M4,§6.3):``q``(username/system 子串;\nusername 账户化后为明文,可检索)、``token_type`` 精确。双计数 =\nref 条目数 + 条目聚合场景数(auth_references.account_ref_counts)。\n\n``q`` 第三命中面(2026-11-19):**身份条目名** —— 缺凭证角标\n(FunctionCard)与导入对话框的修复深链发的是条目名,账户化后\n条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。\n命中口径 = 条目名所在系统的全部本人账户(哪条装载由条目 ref\n决定,列表按系统呈现即修复引导)。\n\n双源检索(凭证治理 2c,2026-11-20 拍板 #10):``source`` 选池 —\n``personal``(默认,存量行为不变)/ ``project``(须 ``project_id``)/\n``all``(本人池 ∪ 该项目池,行带 ``source`` 徽标)。检索是独立\n口径,与执行链「单池互斥选一」(credential_source)无涉 —— 有序\n池回退不存在,合并去重也无从谈起(两池行本就是不同实体)。\n项目池行 **username 对成员可见**(按名引用必需;``_member_view``\n掩码只在 /projects/{id}/credentials 管理面保留)。门:非成员 404、\n公共项目 409 ``public_project_no_credentials``(与项目凭证面同源);\nAdmin+ 非成员不旁路。``env_id`` 精确过滤(执行标签同键域)。",
         "operationId": "list_auths_api_auths_get",
         "parameters": [
           {
@@ -11073,6 +11091,55 @@
                 }
               ],
               "title": "Token Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "personal",
+              "enum": [
+                "personal",
+                "project",
+                "all"
+              ],
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "env_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Env Id"
             }
           },
           {

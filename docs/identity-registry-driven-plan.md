@@ -2,7 +2,7 @@
 
 - **定稿日期**:2026-11-20
 - **分支/基线**:`feat/service-registry` @ `916926aa`(+ 未提交 P3 清理:merge_carry_tiers 单源化等)
-- **状态**:设计定稿;§9-2 执行不查授权已拍板(2026-11-20),仅余 enforce 时点随阶段 0 数据定
+- **状态**:设计定稿;§9-2 执行不查授权已拍板(2026-11-20),仅余 enforce 时点随阶段 3 定
 - **阶段 0 已落**(2026-11-20 傍晚):保存/导入闸(audit 态生产运行,`REGISTRY_ONLY_IDENTITIES=audit`)+ 审计脚本 `scripts/audit_unregistered_identities.py` 出数 —— 21/56 场景带未登记引用,distinct 名仅 2(`sb`×20 bootstrap 种子 + `gitlab`×1);方案绑定期 0。数字判读与落地明细见 `docs/service-registry-progress.md` 阶段 0 章节。
 - **阶段 1 已落**(2026-11-20 晚):执行闸白名单(圈定即承诺,§4)——
   `identity_not_circled` 硬门进 `precheck_hard_gate` 同一道门,含 slot
@@ -10,6 +10,13 @@
   预检 `notCircled` advisory;换用目标前端自动纳入圈定(payloadOf);
   分享缺名提示钉位。生效行口径 = 显式选定 > 本人默认行(默认行也承诺,
   与绑定层「默认不吃」刻意差异),测试钉死。
+- **阶段 2(检索面 2c)已落**(2026-11-20 深夜):§3 编排器选取器硬化
+  (注册表降级横幅/截断提示/悬空判定域 = 注册表 ∪ 手配待保存名;
+  AuthSelectorModal 环境分组)+ UsersCard 双入口重建(§3.3 本案侧:
+  检索 = 双源 `GET /auths?source=all`(拍板 #10 项目池 username 对成员
+  可见)+ 手配 = authDrafts 通道;快照导入退役 §3.7 护栏接力)+
+  双源检索 API(拍板 #10 载体)。enforce 仍待阶段 3 清账(时点已拍板:
+  清账完成即切)。明细见 progress doc「阶段 2c」节。
 - **前置讨论**:docs/wiring-quality-audit-20261119.md(TOK-03)→ 三决策点讨论 → 用户拍板「勾选 = 执行承诺」+「引用即登记、共享即移交」
 
 ---

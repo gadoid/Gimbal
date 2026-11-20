@@ -36,6 +36,11 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
     dataSets: [] as DataSetSummary[],
     dataSetsStatus: 'idle' as FetchStatus,
 
+    /** 身份条目注册表版本(凭证治理 2c):手配落池(newAuths)后 bump,
+     *  Canvas watch 它刷新 registeredAliases —— 悬空判定即刻恢复准确,
+     *  不必整页刷新。 */
+    registryRev: 0,
+
     lastError: null as string | null,
   }),
 
@@ -94,6 +99,11 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
      *  下次挂载再拉。不维护全量乐观 upsert —— 那是退位前的形态。 */
     invalidate() {
       this.windowLoaded = false
+    },
+
+    /** 手配落池后 bump(2c):消费方(Canvas registeredAliases)watch 刷新。 */
+    bumpRegistryRev() {
+      this.registryRev++
     },
 
     async saveScenario(

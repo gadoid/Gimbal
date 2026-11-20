@@ -21,8 +21,10 @@ import type { ConfigView } from '@/types/plate'
 
 // 目录服务名加载器 mock(归属列 deriveBase 的唯一外部输入)—— 用例不碰
 // /plate 网络;直引 / 别名派生 base / 未挂目录 全由该集合决定。
+// 2c:UsersCard(凭证双入口)的 scope 派生用 — 空映射 = 检索退全量口径。
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceNames: vi.fn(async () => ['fin-service']),
+  loadCatalogSystemByService: vi.fn(async () => new Map<string, string>()),
 }))
 
 function makeConfig(): ConfigView {
@@ -97,17 +99,21 @@ describe('CaseComposerConfig — 变量注册表已迁 Canvas(#11 摘除)', () =
   })
 })
 
-describe('CaseComposerConfig — 用户认证卡(2026-08-25)', () => {
-  it('UsersCard 挂载;users 变更经 v-model 上抛父 config', async () => {
-    const { w, config } = mountWithParent(makeConfig())
-    expect(w.text()).toContain('用户认证')
+describe('CaseComposerConfig — 凭证与调用身份卡(2c 双入口)', () => {
+  it('UsersCard 挂载(新口径);存量 users 清空经 v-model 上抛父 config', async () => {
+    const initial = makeConfig()
+    initial.users = {
+      qa1: { url: 'https://x', username: 'u', password: 'p', token_type: 'Bearer', expires_in: 3600 },
+    }
+    const { w, config } = mountWithParent(initial)
+    // 2c:卡片改称「凭证与调用身份」(场景只存引用,users 不再是写面)
+    expect(w.text()).toContain('凭证与调用身份')
     const card = w.findComponent(UsersCard)
     expect(card.exists()).toBe(true)
-    card.vm.$emit('update:modelValue', {
-      qa1: { url: 'https://x', username: 'u', password: 'p', token_type: 'Bearer', expires_in: 3600 },
-    })
+    // 显式清空存量明文 → 父 config.users = {}(旧场景 PUT 放行)
+    card.vm.$emit('update:modelValue', {})
     await flush()
-    expect(config.value.users.qa1?.username).toBe('u')
+    expect(config.value.users).toEqual({})
   })
 })
 

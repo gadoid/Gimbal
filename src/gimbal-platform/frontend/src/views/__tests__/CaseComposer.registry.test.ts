@@ -114,7 +114,9 @@ beforeEach(() => {
   vi.spyOn(api, 'listStrategyKinds').mockResolvedValue([])
   // registryAdd 触发 dirty → 防抖自动 PUT;fake timers 推进 2.5s 后发,
   // spy 兜底保证任何时序下都不碰真实网络。
-  vi.spyOn(api, 'updateScenario').mockResolvedValue(sampleScenario())
+  // api.updateScenario 自 2c 起返回 {scenario, identityWarnings}(登记闸载体)
+  vi.spyOn(api, 'updateScenario').mockResolvedValue(
+    { scenario: sampleScenario(), identityWarnings: [] })
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 })
 afterEach(() => {
