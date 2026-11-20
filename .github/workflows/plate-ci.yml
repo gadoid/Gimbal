@@ -77,6 +77,11 @@ jobs:
       - name: M2 兼容性守卫 — gen_m2 compat(不兼容变更须递增代际)
         # PR 的目标分支不是 main 时也能正确比对(github.base_ref)
         run: python scripts/gen_m2.py compat --base "origin/${{ github.base_ref || 'main' }}"
+      # 审计批次⑤轻量切片(登记册 B5):后端 REST 契约快照漂移守卫 ——
+      # 路由/模型/错误码改动未重生快照即红(backend pytest 里有同口径
+      # 用例,此步骤给出一目了然的失败名)。重生:gen_api_contract.py gen。
+      - name: REST 契约守卫 — openapi/错误码快照漂移比对
+        run: python scripts/gen_api_contract.py check
       - name: 入库闸门 — plate check(规则编号即错误码)
         run: |
           set -e

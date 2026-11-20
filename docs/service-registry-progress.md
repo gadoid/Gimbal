@@ -1322,6 +1322,34 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   s8/audit 39 + suites_orch 6 + adhoc 30 —— adhoc 既有 flake 本轮
   通过);引擎 auth+lifecycle 30。后端全量基线仍未跑(口径不变)。
 
+### 批次⑤轻量切片:REST 契约快照守卫(2026-11-20,🟢 切片完成)
+
+上节单独排期的批次⑤治本,先落**轻量切片**(登记册 B5 既定路径:先
+「快照 + 漂移比对」把无守卫变有守卫,codegen 单源化后排):
+
+- **`scripts/gen_api_contract.py`**(gen/check 双命令,仿 gen_m2 口径):
+  - `contract/openapi.json` —— `create_app().openapi()` 归一化落盘
+    (sort_keys 钉键序;199 路径 / 211 schema / 652KB;FastAPI 钉
+    lock 版本,重生逐字节确定);
+  - `contract/error-codes.json` —— AST 静态提取错误码(213 码 / 437
+    位点 / 35 动态位点),覆盖四类间接形态:`_codes.py` 整型码 11/11
+    (`code_detail` 与 `{"code": NAME}` 名字解析)、12 个带
+    `self.code` 业务异常类 raise 位点(code 参数按各类签名定位,
+    `PromotionError(status, code, …)` 在第二位)、`_bad` 型透传
+    helper 调用位点(含 `await assert_name_available(code=NAME_TAKEN)`
+    非 raise 位)、`at.ERR_*` 模块常量(相对导入按 level 精确定位)。
+    每码记 statuses/sites/detail 形状族(18 族,`code+msg` vs
+    `code+message` 一眼可辨);非字面量位点入 `dynamic` 面(取值由
+    对应异常/helper 位点枚举,位点增删即契约变化),无码纯 message
+    detail 不入面;
+- **双守卫接线**:plate-ci 显式步骤「REST 契约守卫」(紧随 M2 两守卫)
+  + `tests/test_api_contract.py`(子进程跑 check,本地 pytest 即拦 ——
+  CI 从未实跑的窗口期由本地测试面兜住);
+- **验证**:重生两次 md5 一致(确定);改名一个错误码 → check 红、
+  diff 直指该码(拦);pyflakes 清;`contract/README.md` 记契约变更
+  流程。**治本全量未动**:前端 37 个 `api/*.ts` 手写镜像的 codegen
+  单源化、错误码表前端接入,仍按登记册 B5 后排。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。
