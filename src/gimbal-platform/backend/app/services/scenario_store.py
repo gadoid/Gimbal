@@ -132,6 +132,28 @@ async def create_in_transaction(
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     await enforce_meta_plate(draft.definition)      # ⑥:唯一写入口收口
+    # 凭证治理 §3.5(拍板 2026-11-20):新场景不再接受明文凭证快照 ——
+    # config.users 非空 → ValueError("plaintext_users_rejected",调用方
+    # 映 422)。唯一写入口收口 = 全部新建路径统一生效;副本/导入链在
+    # 上游已清空(§4.4-2 拍板:副本 = 新建),恒过此闸,直写 API 是唯一
+    # 暴露面。选 422 而非 strip:静默丢弃用户输入是假空态反模式。
+    _plain_users = ((draft.definition.get("config") or {}).get("users"))
+    if isinstance(_plain_users, dict) and _plain_users:
+        raise ValueError(
+            "plaintext_users_rejected: 场景不再接受明文凭证快照"
+            "(definition.config.users)——引用请改为身份条目名"
+            "(${auth.*} 模板 / call.user),手配凭证请走认证管理或"
+            "配置页落池后引用")
+    # 凭证治理 §3.3 手配(阶段 2,拍板方案 A):随保存**同事务**落池 +
+    # 建 username-ref 条目;校验失败在场景行 add 之前整单 ValueError,
+    # 调用方映射后回滚 —— 池无孤儿行(行为规则④)。owner_id 缺省
+    # (系统管道)不收手配;属主闸在 update 路径(user_id vs row.owner)。
+    if draft.auth_drafts:
+        if owner_id is None:
+            raise ValueError(
+                "auth_draft_owner_required: 手配凭证须保存者即场景属主")
+        from .auth_drafts import materialize
+        await materialize(db, draft.auth_drafts, owner_id=owner_id)
     # 入站参数契约写时校验(设计 2026-11-13 §2.1):槽位 ⊆ vars 标量键
     run_params.validate_param_slots(
         draft.definition,
@@ -225,7 +247,12 @@ async def create(
     # 场景创建即物化默认方案(工作台 spec §4.3/§5;
     # GET /run-schemes 侧的 ensure_default 是自愈兜底)。
     await scheme_store.ensure_default_scheme(db, row.scenario_id)
-    return await to_read_shape(db, row)
+    out = await to_read_shape(db, row)
+    # 凭证治理行为规则④:保存结果列出本次新建凭证(revive 由路由层
+    # best-effort 触发,与 /auths create 同款)。
+    if draft.auth_drafts:
+        out.new_auths = [d.name for d in draft.auth_drafts]
+    return out
 
 
 async def update(
@@ -253,6 +280,29 @@ async def update(
         draft.definition,
         prev_meta_plate=(((row.payload or {}).get("definition") or {})
                          .get("meta") or {}).get("plate"))
+    # 凭证治理 §3.5(拍板 2026-11-20):存量判定点 = 行的既有形态 ——
+    # 旧行 users 非空(遗留明文快照,§7「只对新建生效」不改存量)放行;
+    # 旧行空(新形态场景)而本次提交带明文 → 422(与 create 同码)。
+    _old_users = (((row.payload or {}).get("definition") or {})
+                 .get("config") or {}).get("users")
+    _new_users = (draft.definition.get("config") or {}).get("users")
+    if (not (isinstance(_old_users, dict) and _old_users)
+            and isinstance(_new_users, dict) and _new_users):
+        raise ValueError(
+            "plaintext_users_rejected: 场景不再接受明文凭证快照"
+            "(definition.config.users)——引用请改为身份条目名"
+            "(${auth.*} 模板 / call.user),手配凭证请走认证管理或"
+            "配置页落池后引用")
+    # 凭证治理 §3.3 手配(阶段 2):§3.8 拍板 —— 维护者/admin 改他人
+    # 场景只能手填名字,不带手配(属主单判与 _require_owner 表 B 同源,
+    # 私有区写权本就归属主;公共/项目区维护者可写但不代属主落池)。
+    if draft.auth_drafts:
+        if user_id is None or user_id != row.owner_id:
+            raise ValueError(
+                "auth_draft_owner_required: 手配凭证仅场景属主可随保存"
+                "创建(维护者改他人场景请手填引用名)")
+        from .auth_drafts import materialize
+        await materialize(db, draft.auth_drafts, owner_id=user_id)
     # 入站参数契约缺键保留(设计 2026-11-13 挂账:前端契约编辑面本期
     # 不接线):**逐键**判定 —— 请求未携带该键而存量行有值则保留存量
     # (防前端整包保存/适配操作把 API 侧维护的契约抹掉);显式携带
@@ -334,7 +384,10 @@ async def update(
             db, actor_id=user_id, kind=activity.KIND_EDIT,
             resource_type="scenario", resource_id=scenario_id,
             detail={"name": server_owned.name})
-    return await to_read_shape(db, row, user_id=user_id)
+    out = await to_read_shape(db, row, user_id=user_id)
+    if draft.auth_drafts:
+        out.new_auths = [d.name for d in draft.auth_drafts]
+    return out
 
 
 async def delete(db: AsyncSession, scenario_id: str) -> None:
@@ -560,11 +613,14 @@ async def copy_scenario(
     origin_id: str | None = None,
     origin_owner_name: str | None = None,
     # S1.3 发布新语义:确定性副本 id(公共副本 = <原 id>-public)、
-    # 落库项目、剥离口径(cross_owner = 跨属主才剥,默认;
-    # always = 发布复制恒剥,同属主也剥 —— 公共副本不落明文)
+    # 落库项目、剥离口径三值 —— ``users``(缺省,拍板 #5 2026-11-20:
+    # 副本 = 新建,users 恒剥、同属主也剥;数据集敏感列同属主保留,
+    # 属主自己的数据)/ ``always``(发布复制与项目晋升:公共副本连
+    # 数据集敏感列一起剥,S1.3 原语义)/ ``cross_owner``(历史值,兼容
+    # 显式传参;跨属主恒双剥不依赖该值)。勿把缺省回退成 cross_owner。
     new_sid: str | None = None,
     project_id: int | None = None,
-    strip: str = "cross_owner",
+    strip: str = "users",
 ) -> Scenario:
     """深拷贝场景 + 数据集(替代 V1 公共库"复制到我的")。
 
@@ -589,11 +645,13 @@ async def copy_scenario(
     payload = _copy.deepcopy(src.payload or {})
     # authz W6:跨属主拷贝剥离内置凭证与数据集敏感列(单点:复制到我的 /
     # 分享拷贝 / 引用转副本 / suite fork / 变更适配副本全走这里;E1 ——
-    # 订阅不复制,无此路径)。同属主(作者另存为、给自己做适配副本)
-    # 凭证本就是自己的,原样保留。S1.3 发布复制走 strip="always":
-    # 公共副本不落明文,属主也一样(原件仍在属主手里)。
+    # 订阅不复制,无此路径)。拍板 #5(2026-11-20,凭证治理 §4.4-2):
+    # **同属主副本同样清空** —— 副本 = 新建,验收口径「新场景 users
+    # 恒空」全局一致;原件(含存量明文基座)仍在属主手里,丢的只是
+    # 副本上的陈旧明文兜底。上游还有 §3.5 的 create_in_transaction
+    # 422 闸(明文直写),这里是副本路径的清空位。
     cross_owner = src.owner_id != new_owner_id
-    if cross_owner or strip == "always":
+    if cross_owner or strip in ("users", "always"):
         strip_builtin_credentials(payload)
     copied_name = new_name or ""
     definition = payload.get("definition")
@@ -632,6 +690,9 @@ async def copy_scenario(
             name=ds.name,
             description=ds.description,
             rows=(strip_sensitive_columns(ds.rows or [])
+                  # 数据集敏感列:跨属主(属主自己的数据不外带)或
+                  # 发布/晋升(公共副本不落敏感列,S1.3)剥;同属主
+                  # 普通副本(拍板 #5 缺省口径)保留。
                   if (cross_owner or strip == "always")
                   else _copy.deepcopy(ds.rows or [])),
             # 变量锁本地放开清单按名存储 — 深拷贝必须带走,否则分叉

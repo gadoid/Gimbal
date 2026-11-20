@@ -332,11 +332,12 @@ async def test_subscriber_run_product_has_no_author_credentials(
     h_own = await register_and_login(client, "c2_fpo")
     draft = make_draft("sc-c2fp", steps=ANCHORED_STEPS,
                        plate={"jira": "1.0#1"}, system=["jira"])
-    draft["definition"]["config"]["users"] = {
-        "jira-svc": {"url": "https://jira", "username": "author-acct",
-                     "password": secret}}
     r = await client.post("/api/scenarios", headers=h_own, json=draft)
     assert r.status_code in (200, 201), r.text
+    from tests.helpers import seed_legacy_users
+    await seed_legacy_users("sc-c2fp", {
+        "jira-svc": {"url": "https://jira", "username": "author-acct",
+                     "password": secret}})
     from tests.inbound_fixtures import publish_scenario
 
     await publish_scenario("sc-c2fp")

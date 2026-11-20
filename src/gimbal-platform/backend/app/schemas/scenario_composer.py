@@ -160,6 +160,25 @@ class ParamSlot(BaseModel):
     description: str = Field(default="", max_length=512)
 
 
+class AuthDraftIn(BaseModel):
+    """凭证治理 §3.3 手配(阶段 2;拍板 2026-11-20 方案 A):随场景保存
+    **同事务**落本人池 + 建 username-ref 条目(引用名 = 场景引用的条目名,
+    ${auth.<name>.*} / call.user 直接可用)。同名条目冲突走「直接引用 /
+    去认证管理改」(行为规则①),不静默覆盖;密码过 ``require_maskable_
+    password`` 掩码闸(与 /auths 同单源)。"""
+    model_config = _CAMEL
+
+    name: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$",
+                      description="引用名(条目名,全局唯一)")
+    system: str = Field(min_length=1, max_length=128,
+                        description="系统名(须已有主档服务)")
+    env_id: int = Field(ge=1, alias="envId")
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=6, max_length=256)
+    account_fields: dict[str, str] = Field(
+        default_factory=dict, alias="accountFields", max_length=32)
+
+
 class ScenarioDraft(BaseModel):
     """Platform draft container.
 
@@ -198,6 +217,13 @@ class ScenarioDraft(BaseModel):
     # 位置索引({"<stepIndex>": {path: state}});与 orchestration 同级,
     # plate /convert 不感知(定义即纯 M2,Step 不再含 field_states)。
     ui: dict[str, Any] = Field(default_factory=dict)
+    # 凭证治理 §3.3 手配(阶段 2):随保存同事务落池的凭证清单。仅
+    # 保存者 == 属主可携带(§3.8 拍板:admin/维护者改他人场景不带手配,
+    # 只能手填名字);None/[] = 无手配。不进 definition(定义即纯 M2,
+    # plate /convert 不感知)。``exclude`` = 保存期通道,不进存储容器
+    #(payload 不带 authDrafts 键,读面/副本恒干净)。
+    auth_drafts: list[AuthDraftIn] | None = Field(
+        default=None, alias="authDrafts", max_length=16, exclude=True)
 
 
 # ─── data-set ──────────────────────────────────────────────────────
@@ -633,6 +659,10 @@ class Scenario(BaseModel):
     visibility: str = Field(default="private")
     # S7.1:所属项目 id(项目徽标;None = 私有)
     projectId: int | None = None
+    # 凭证治理行为规则④(阶段 2):本次保存手配新建的凭证引用名清单
+    #(连带触发暂停集成实例复活);无新建 = None。读面(列表/详情)
+    # 恒 None,只在 create/PUT 响应上出现。
+    new_auths: list[str] | None = Field(default=None, alias="newAuths")
 
 
 # ─── M1 列表响应投影(PG迁移方案 §7 M1 / §4.1)────────────────────────

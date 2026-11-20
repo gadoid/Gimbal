@@ -111,13 +111,14 @@ async def test_convert_ref_scenario(client: AsyncClient) -> None:
     await register_and_login(client, "cv_adm", "cv_adm_pass123")
     owner = await register_and_login(client, "cv_own", "cv_own_pass123")
     bob = await register_and_login(client, "cv_bob", "cv_bob_pass123")
-    # 带内置凭证的场景(跨属主拷贝须剥):config 挂 definition
+    # 带内置凭证的场景(跨属主拷贝须剥):§3.5 闸后走存量注入铺底
     draft = make_draft("sc-cv-1")
-    draft["definition"]["config"]["users"] = {
-        "qa1": {"url": "http://x", "username": "u",
-                "password": "p", "token_type": "Bearer"}}
     r = await client.post("/api/scenarios", headers=owner, json=draft)
     assert r.status_code in (200, 201), r.text
+    from tests.helpers import seed_legacy_users
+    await seed_legacy_users("sc-cv-1", {
+        "qa1": {"url": "http://x", "username": "u",
+                "password": "p", "token_type": "Bearer"}})
 
     async with db_module.SessionLocal() as s:
         owner_id = (await s.execute(sa.text(

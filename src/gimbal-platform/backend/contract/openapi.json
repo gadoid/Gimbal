@@ -994,6 +994,58 @@
         "title": "AuthAccountSecretsOut",
         "type": "object"
       },
+      "AuthDraftIn": {
+        "description": "凭证治理 §3.3 手配(阶段 2;拍板 2026-11-20 方案 A):随场景保存\n**同事务**落本人池 + 建 username-ref 条目(引用名 = 场景引用的条目名,\n${auth.<name>.*} / call.user 直接可用)。同名条目冲突走「直接引用 /\n去认证管理改」(行为规则①),不静默覆盖;密码过 ``require_maskable_\npassword`` 掩码闸(与 /auths 同单源)。",
+        "properties": {
+          "accountFields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 32,
+            "title": "Accountfields",
+            "type": "object"
+          },
+          "envId": {
+            "minimum": 1.0,
+            "title": "Envid",
+            "type": "integer"
+          },
+          "name": {
+            "description": "引用名(条目名,全局唯一)",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 6,
+            "title": "Password",
+            "type": "string"
+          },
+          "system": {
+            "description": "系统名(须已有主档服务)",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "System",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "system",
+          "envId",
+          "username",
+          "password"
+        ],
+        "title": "AuthDraftIn",
+        "type": "object"
+      },
       "AuthListOut": {
         "description": "M4 Page 信封 + 全量类型计数(metaText 的服务端供给)。",
         "properties": {
@@ -5600,6 +5652,21 @@
             "title": "Assertion Registry",
             "type": "object"
           },
+          "authDrafts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AuthDraftIn"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authdrafts"
+          },
           "definition": {
             "additionalProperties": true,
             "title": "Definition",
@@ -6627,6 +6694,20 @@
           "meta": {
             "$ref": "#/components/schemas/ScenarioMeta"
           },
+          "newAuths": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newauths"
+          },
           "orchestration": {
             "anyOf": [
               {
@@ -6724,7 +6805,63 @@
         "title": "ScenarioCopyIn",
         "type": "object"
       },
-      "ScenarioDraft": {
+      "ScenarioDraft-Input": {
+        "description": "Platform draft container.\n\ndefinition: the plate Scenario structure as a free-form dict. Backend does\n            not model plate's internal types — plate /convert is the single\n            validation authority (\"plate outputs a neutral dict; consumers\n            model it themselves\").\norchestration: platform-only rendering/orchestration fields, never sent\n               to plate (plate doesn't know about them).\nassertion_registry: 断言管理注册表(spec v2 §3)— 平台侧偏离注入条目,\n            与 orchestration 同级;引擎不感知,不进 plate convert。自由 dict,\n            条目形状权威在前端 types/assertion-registry.ts 与运行时物化函数。\nparam_slots / params_strict: 入站参数契约(设计 2026-11-13 决策 1/2)\n            —— 与 assertion_registry 同层平台侧字段,不进 plate;槽位\n            校验(≤64、name ⊆ vars 标量键、pattern 仅 string)在\n            scenario_store 写时双跑(create/PUT)。",
+        "properties": {
+          "assertion_registry": {
+            "additionalProperties": true,
+            "title": "Assertion Registry",
+            "type": "object"
+          },
+          "authDrafts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AuthDraftIn"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authdrafts"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "orchestration": {
+            "$ref": "#/components/schemas/Orchestration"
+          },
+          "paramSlots": {
+            "items": {
+              "$ref": "#/components/schemas/ParamSlot"
+            },
+            "maxItems": 64,
+            "title": "Paramslots",
+            "type": "array"
+          },
+          "paramsStrict": {
+            "default": false,
+            "title": "Paramsstrict",
+            "type": "boolean"
+          },
+          "ui": {
+            "additionalProperties": true,
+            "title": "Ui",
+            "type": "object"
+          }
+        },
+        "required": [
+          "definition"
+        ],
+        "title": "ScenarioDraft",
+        "type": "object"
+      },
+      "ScenarioDraft-Output": {
         "description": "Platform draft container.\n\ndefinition: the plate Scenario structure as a free-form dict. Backend does\n            not model plate's internal types — plate /convert is the single\n            validation authority (\"plate outputs a neutral dict; consumers\n            model it themselves\").\norchestration: platform-only rendering/orchestration fields, never sent\n               to plate (plate doesn't know about them).\nassertion_registry: 断言管理注册表(spec v2 §3)— 平台侧偏离注入条目,\n            与 orchestration 同级;引擎不感知,不进 plate convert。自由 dict,\n            条目形状权威在前端 types/assertion-registry.ts 与运行时物化函数。\nparam_slots / params_strict: 入站参数契约(设计 2026-11-13 决策 1/2)\n            —— 与 assertion_registry 同层平台侧字段,不进 plate;槽位\n            校验(≤64、name ⊆ vars 标量键、pattern 仅 string)在\n            scenario_store 写时双跑(create/PUT)。",
         "properties": {
           "assertion_registry": {
@@ -20149,7 +20286,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ScenarioDraft"
+                "$ref": "#/components/schemas/ScenarioDraft-Input"
               }
             }
           },
@@ -20550,7 +20687,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ScenarioDraft"
+                "$ref": "#/components/schemas/ScenarioDraft-Input"
               }
             }
           },
@@ -20730,7 +20867,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScenarioDraft"
+                  "$ref": "#/components/schemas/ScenarioDraft-Output"
                 }
               }
             },

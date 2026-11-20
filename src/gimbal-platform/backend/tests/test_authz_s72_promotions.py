@@ -155,8 +155,9 @@ class TestNoConflictDirectCopy:
         h_m = await role_headers(client, "s72_dm", role="user")
         pid = await _mk_project("s72-direct", members={"s72_dm": "member"})
         draft = _draft_with_carry("sc-s72-d")
-        draft["definition"]["config"]["users"] = {"acct": {"token": "sec"}}
         await client.post("/api/scenarios", headers=h_m, json=draft)
+        from tests.helpers import seed_legacy_users
+        await seed_legacy_users("sc-s72-d", {"acct": {"token": "sec"}})
         r = await client.post(
             f"/api/projects/{pid}/promotions", headers=h_m,
             json={"kind": "scenario", "sourceId": "sc-s72-d"})

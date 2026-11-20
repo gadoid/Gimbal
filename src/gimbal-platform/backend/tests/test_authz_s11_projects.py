@@ -265,9 +265,10 @@ class TestShadowWrite:
 
         h = await role_headers(client, "s11_sh", role="user")
         draft = make_draft("sc-s11-sh")
-        draft["definition"]["config"]["users"] = {"acct": {"url": "u"}}
         r = await client.post("/api/scenarios", headers=h, json=draft)
         assert r.status_code in (200, 201), r.text
+        from tests.helpers import seed_legacy_users
+        await seed_legacy_users("sc-s11-sh", {"acct": {"url": "u"}})
         r = await client.post("/api/scenarios/sc-s11-sh/publish", headers=h)
         assert r.status_code == 200, r.text
 

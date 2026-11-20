@@ -65,8 +65,10 @@ async def _seed_identity(alias: str, base: str = "fin") -> None:
 
 
 @pytest.mark.asyncio
-async def test_off_mode_no_gate(client, plate_mock):
-    """off(缺省):未登记引用照常保存,无警告头 —— 阶段 0 前现状。"""
+async def test_off_mode_no_gate(client, plate_mock, monkeypatch):
+    """off:未登记引用照常保存,无警告头(阶段 0 前现状;显式钉 off ——
+    生产 .env 已置 audit,缺省不再是 off)。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "off")
     h = await role_headers(client, "gate-off")
     r = await client.post("/api/scenarios", headers=h, json=make_draft(
         "sc-gate-off", steps=_steps()))

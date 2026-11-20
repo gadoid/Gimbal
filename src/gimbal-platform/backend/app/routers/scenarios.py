@@ -306,6 +306,7 @@ async def preview_plate(
 # ── 2) POST / (create) ─────────────────────────────────────────────
 async def _identity_registry_gate(
     db: AsyncSession, definition: dict, response: Response,
+    *, extra_known: "set[str] | None" = None,
 ) -> None:
     """决策 1「引用即登记」保存闸(阶段 0;identity-registry §2):
     ``REGISTRY_ONLY_IDENTITIES`` 三态 —— off(缺省)不校验;audit 保存
@@ -328,6 +329,10 @@ async def _identity_registry_gate(
         return
     from ..services.service_aliases import unregistered_identities
     unreg = await unregistered_identities(db, definition)
+    if extra_known:
+        # 手配(§3.3 阶段 2)随保存同事务建条目 —— 引用名此刻未入库,
+        # 闸判定时视为「将登记」(时序:本闸在 store 落池之前)。
+        unreg = [n for n in unreg if n not in extra_known]
     if not unreg:
         return
     if mode == "enforce":
@@ -362,7 +367,12 @@ async def create_scenario(
                 "code": e.code, "message": e.message}) from None
     # 决策 1 引用即登记(阶段 0):定义侧身份存在性闸(audit 头 /
     # enforce 422;项目门之后、store 之前 —— 不动事务,纯读)。
-    await _identity_registry_gate(db, body.definition, response)
+    await _identity_registry_gate(
+        db, body.definition, response,
+        extra_known={d.name for d in (body.auth_drafts or [])})
+    # 手配落池(§3.3 阶段 2)触发的暂停实例复活:保存成功后 best-effort
+    # (与 /auths create 的 _revive 同款;失败不回滚业务)。
+    _made_auths = bool(body.auth_drafts)
     try:
         out = await scenario_store.create(
             db, body, owner=owner, owner_id=user.id, project_id=project_id,
@@ -374,8 +384,23 @@ async def create_scenario(
             # ⑥:store 级版本声明闸的两种裁定 → 422(输入被拒)
             "meta_plate_missing_system": 422,
             "meta_plate_invalid_ref": 422,
+            # 凭证治理 §3.5(拍板 2026-11-20):明文快照直写 → 422
+            "plaintext_users_rejected": 422,
+            # 手配落池(§3.3 阶段 2,auth_drafts.materialize 单源):
+            # 环境/系统/重名 422,同名条目/账户冲突 409,属主闸 403
+            "auth_draft_env_not_found": 422,
+            "auth_draft_system_unknown": 422,
+            "auth_draft_name_duplicated": 422,
+            "auth_draft_alias_taken": 409,
+            "auth_draft_account_exists": 409,
+            "auth_draft_owner_required": 403,
         })
-    # 时间线:新建此前无痕(另存为/分享各有事件,唯手工新建缺失)。
+    if _made_auths:
+        try:
+            from ..services.integration_runner import revive_paused_instances
+            await revive_paused_instances(user.id)
+        except Exception:  # noqa: BLE001 — 复活是 best-effort,不炸保存
+            logger.warning("revive after save failed (best-effort)")
     # 挂路由层而非 store.create —— copy_scenario 内部也调 create,
     # 挂 store 会与 save_as/share_copy 双记。
     from ..services import activity as activity_svc
@@ -1051,9 +1076,11 @@ async def put_scenario(
     # 决策 1 引用即登记(阶段 0):与 create 同一道闸(存量的「只对新建
     # 生效」口径属本案 config.users 422,不适用于登记闸 —— 存量未登记
     # 引用正是 audit 态要观测的对象,update 同拦/同警示)。
-    await _identity_registry_gate(db, body.definition, response)
+    await _identity_registry_gate(
+        db, body.definition, response,
+        extra_known={d.name for d in (body.auth_drafts or [])})
     try:
-        return await scenario_store.update(
+        out = await scenario_store.update(
             db,
             scenario_id,
             body,
@@ -1067,7 +1094,23 @@ async def put_scenario(
             "scenario_id_changed": 409,
             "meta_plate_missing_system": 422,
             "meta_plate_invalid_ref": 422,
+            # 凭证治理 §3.5:旧行无明文而本次带 → 422(存量照旧放行)
+            "plaintext_users_rejected": 422,
+            # 手配落池(§3.3 阶段 2)同 create 一组码
+            "auth_draft_env_not_found": 422,
+            "auth_draft_system_unknown": 422,
+            "auth_draft_name_duplicated": 422,
+            "auth_draft_alias_taken": 409,
+            "auth_draft_account_exists": 409,
+            "auth_draft_owner_required": 403,
         })
+    if body.auth_drafts:
+        try:
+            from ..services.integration_runner import revive_paused_instances
+            await revive_paused_instances(user.id)
+        except Exception:  # noqa: BLE001 — 复活是 best-effort,不炸保存
+            logger.warning("revive after save failed (best-effort)")
+    return out
 
 
 class TransferIn(BaseModel):

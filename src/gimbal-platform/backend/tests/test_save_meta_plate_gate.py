@@ -198,15 +198,24 @@ async def test_dispatcher_labels_rejected_not_unavailable(
 async def test_user_view_keys_stripped_on_save(client, plate_mock: PlateMock):
     """A-1 根因收口(2026-10-14):plate ConfigView 的视图专有键
     (is_authenticated/remaining_seconds)不得落库 —— 落库即 /convert
-    extra_forbidden 拒收。保存闸统一剥(UI 预填之外的直写路径同守)。"""
+    extra_forbidden 拒收。保存链统一剥。§3.5 闸(2026-11-20)后直写
+    users 在 create 即 422 —— 视图键剥离的活跃面 = 存量行的 PUT
+    (旧行带明文基座,存量放行 + 剥视图键双钉)。"""
+    from tests.helpers import seed_legacy_users
+
     h = await register_and_login(client, "c2gatevk", "pw123456")
     draft = make_draft("sc-c2-viewkeys", steps=_steps(), plate={"fin": "working"})
-    draft["definition"]["config"]["users"] = {
+    r = await client.post("/api/scenarios", headers=h, json=draft)
+    assert r.status_code == 201, r.text
+    await seed_legacy_users("sc-c2-viewkeys", {"tester_a": {"url": ""}})
+    legacy = dict(draft)
+    legacy["definition"]["config"]["users"] = {
         "tester_a": {"url": "", "username": "tester_a",
                      "token_type": "Bearer", "is_authenticated": False,
                      "remaining_seconds": 300}}
-    r = await client.post("/api/scenarios", headers=h, json=draft)
-    assert r.status_code == 201, r.text
+    r = await client.put("/api/scenarios/sc-c2-viewkeys", headers=h,
+                         json=legacy)
+    assert r.status_code == 200, r.text
     stored = (await client.get("/api/scenarios/sc-c2-viewkeys/draft",
                                headers=h)).json()
     users = stored["definition"]["config"]["users"]["tester_a"]

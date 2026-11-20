@@ -30,16 +30,35 @@ _USERS = {"gitlab": {"username": "u", "password": "p", "token": "t"}}
 
 
 def _draft_with_users(sid: str, *, users: dict | None = None) -> dict:
-    draft = make_draft(sid, steps=[_GET_STEP])
-    draft["definition"]["config"]["users"] = users if users is not None else dict(_USERS)
-    return draft
+    """干净草稿(§3.5 闸 2026-11-20 落地后,新建不再收明文 users;名字
+    保留历史)。存量行铺底走 ``_inject_users`` 直写行 payload。"""
+    return make_draft(sid, steps=[_GET_STEP])
 
 
 def _draft_with_vars(sid: str) -> dict:
-    """内置凭证 + 声明 amount/password 两个变量(数据集行列须已声明)。"""
+    """声明 amount/password 两个变量(数据集行列须已声明)。"""
     draft = _draft_with_users(sid)
     draft["definition"]["config"]["vars"] = {"amount": 1, "password": ""}
     return draft
+
+
+async def _inject_users(sid: str, users: dict | None = None) -> None:
+    """直写行 payload 注入明文 users —— 模拟 §7 存量行(带明文快照
+    基座的老场景:保存闸放行存量、W6 属主基座语义照常覆盖)。"""
+    from sqlalchemy import select as sa_select
+
+    from app.models.composer_scenario import ComposerScenario
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(sa_select(ComposerScenario).where(
+            ComposerScenario.scenario_id == sid))).scalar_one()
+        payload = dict(row.payload or {})
+        defn = dict(payload.get("definition") or {})
+        cfg = dict(defn.get("config") or {})
+        cfg["users"] = users if users is not None else dict(_USERS)
+        defn["config"] = cfg
+        payload["definition"] = defn
+        row.payload = payload
+        await s.commit()
 
 
 # ── ① 主规则:谓词矩阵(built_in_users / prepare_exec 两层)────────
@@ -96,6 +115,7 @@ class TestStripping:
             "amount": 1, "api_key": "k", "userToken": "t", "note": "n"}
         h = await role_headers(client, "sc_own")
         await client.post("/api/scenarios", headers=h, json=draft)
+        await _inject_users("sc-w6-pub")
         r = await client.post(
             "/api/scenarios/sc-w6-pub/data-sets", headers=h,
             json={"name": "ds", "rows": [
@@ -150,6 +170,7 @@ class TestStripping:
         h_owner = await role_headers(client, "sc_lpo")
         await client.post("/api/scenarios", headers=h_owner,
                           json=_draft_with_vars("sc-w6-lp"))
+        await _inject_users("sc-w6-lp")
         await client.post(
             "/api/scenarios/sc-w6-lp/data-sets", headers=h_owner,
             json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
@@ -178,6 +199,7 @@ class TestStripping:
         h_owner = await role_headers(client, "sc_cpo")
         await client.post("/api/scenarios", headers=h_owner,
                           json=_draft_with_users("sc-w6-cp"))
+        await _inject_users("sc-w6-cp")
         h_other = await role_headers(client, "sc_cpc", role="user")
         # S7.4:副本分享(跨属主拷贝,源头凭证在场 —— 拷贝剥离正是为这条路径)
         roster = (await client.get(
@@ -200,9 +222,12 @@ class TestStripping:
             cfg = (row.payload or {}).get("definition", {}).get("config", {})
             assert not cfg.get("users")
 
-    async def test_self_save_as_keeps_credentials(self, client: AsyncClient):
-        """作者给自己「另存为」(同属主拷贝)保留内置凭证与数据集敏感列
-        —— 凭证本就是自己的;剥离只发生在跨属主拷贝。"""
+    async def test_self_save_as_strips_users_keeps_dataset(
+            self, client: AsyncClient):
+        """拍板 #5(2026-11-20):同属主「另存为」同样清空 config.users
+        (副本 = 新建,验收口径「新场景 users 恒空」全局一致);数据集
+        敏感列同属主保留(拍板只覆盖 users 面,原件含存量明文基座仍在
+        属主手里)。"""
         from sqlalchemy import select as sa_select
 
         from app.core import db as db_module
@@ -212,6 +237,7 @@ class TestStripping:
         h = await role_headers(client, "sc_sav")
         await client.post("/api/scenarios", headers=h,
                           json=_draft_with_vars("sc-w6-sav"))
+        await _inject_users("sc-w6-sav")
         await client.post(
             "/api/scenarios/sc-w6-sav/data-sets", headers=h,
             json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
@@ -224,7 +250,7 @@ class TestStripping:
             row = (await s.execute(sa_select(ComposerScenario).where(
                 ComposerScenario.scenario_id == new_sid))).scalar_one()
             cfg = (row.payload or {}).get("definition", {}).get("config", {})
-            assert cfg.get("users") == _USERS
+            assert not cfg.get("users")
             ds = (await s.execute(sa_select(ComposerDataSet).where(
                 ComposerDataSet.scenario_id == new_sid))).scalar_one()
             assert ds.rows == [{"amount": 1, "password": "pw"}]
@@ -240,6 +266,7 @@ class TestStripping:
         h_owner = await role_headers(client, "sc_cdo")
         await client.post("/api/scenarios", headers=h_owner,
                           json=_draft_with_vars("sc-w6-cd"))
+        await _inject_users("sc-w6-cd")
         await client.post(
             "/api/scenarios/sc-w6-cd/data-sets", headers=h_owner,
             json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
@@ -262,6 +289,7 @@ class TestStripping:
         h_owner = await role_headers(client, "sc_spo")
         await client.post("/api/scenarios", headers=h_owner,
                           json=_draft_with_users("sc-w6-su"))
+        await _inject_users("sc-w6-su")
         r = await client.post("/api/suites", headers=h_owner,
                               json={"name": "w6-suite", "description": ""})
         sid = r.json()["suiteId"]
@@ -323,10 +351,12 @@ class TestPrecheckAlarm:
         if member_uname is None:
             await client.post("/api/scenarios", headers=owner_h,
                               json=_draft_with_users("sc-w6-al"))
+            await _inject_users("sc-w6-al")
             return
         await _project_scenario(
             client, owner_h, owner_uname, member_uname,
             _draft_with_users("sc-w6-al"))
+        await _inject_users("sc-w6-al")
 
     async def _precheck(self, client, h, sid: str) -> dict:
         r = await client.post("/api/run/precheck", headers=h,
@@ -426,6 +456,7 @@ class TestForeignExecutionDesensitized:
         # 场景建在项目内(凭证源头保留),ex_ref 拉为成员
         await _project_scenario(client, h_owner, "ex_own", "ex_ref",
                                 _draft_with_vars("sc-w6-ex"))
+        await _inject_users("sc-w6-ex")
         r = await client.post(
             "/api/scenarios/sc-w6-ex/data-sets", headers=h_owner,
             json={"name": "ds", "rows": [{"amount": 1, "password": "pw"}]})
@@ -456,6 +487,7 @@ async def test_graph_units_strip_rows_for_foreign_runner(
     h = await role_headers(client, "gx_own")
     await client.post("/api/scenarios", headers=h,
                       json=_draft_with_vars("sc-w6-gx"))
+    await _inject_users("sc-w6-gx")
     r = await client.post(
         "/api/scenarios/sc-w6-gx/data-sets", headers=h,
         json={"name": "ds", "rows": [{"amount": 7, "password": "pw-secret"}]})
@@ -497,6 +529,7 @@ async def test_suite_validate_reports_builtin_auth_shadowed(
     await client.post(
         f"/api/scenarios?projectId={pid}", headers=h_owner,
         json=_draft_with_users("sc-w6-sv"))
+    await _inject_users("sc-w6-sv")
     r = await client.post("/api/suites", headers=h_owner,
                           json={"name": "w6-sv", "description": "",
                                 "projectId": pid})
@@ -567,11 +600,12 @@ def _echo_convert(monkeypatch):
 
 async def _mk_secret_scenario(client, h, sid: str, *, public: bool = False,
                                project_id: int | None = None):
+    """§3.5 闸落地后铺底走「干净 POST + 直写行注入」(模拟存量行)。"""
     draft = make_draft(sid, steps=[_GET_STEP])
-    draft["definition"]["config"]["users"] = dict(_SECRET_USERS)
     url = "/api/scenarios" + (f"?projectId={project_id}" if project_id else "")
     r = await client.post(url, headers=h, json=draft)
     assert r.status_code in (200, 201), r.text
+    await _inject_users(sid, dict(_SECRET_USERS))
     if public:
         from tests.inbound_fixtures import publish_scenario
 

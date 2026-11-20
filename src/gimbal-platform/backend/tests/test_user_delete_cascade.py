@@ -31,7 +31,7 @@ async def test_delete_user_cascades_pool_constant_alias(client: AsyncClient):
                 Environment.is_default.is_(True)))).scalar_one()
     r = await client.post("/api/auths", headers=target, json={
         "system": "bob-svc", "envId": env, "username": "u",
-        "password": "p", "token_type": "Bearer",
+        "password": "pass1234", "token_type": "Bearer",  # ≥6 位:TOK-08a 掩码闸
     })
     assert r.status_code in (200, 201), r.text
     r = await client.post("/api/constants", headers=target, json={

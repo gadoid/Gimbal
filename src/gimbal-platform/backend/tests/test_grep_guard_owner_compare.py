@@ -41,6 +41,9 @@ _ALLOWLIST: dict[str, int] = {
 #  AuthSession→AuthAccount 系同域改名,个人凭证数据类不变)
     'routers/access_tokens.py:.where(AuthAccount.owner_id == holder)': 1,
     'routers/activity.py:.where(Execution.owner_id == user.id)': 1,
+    # 凭证治理阶段 2(2026-11-20):手配落池 services/auth_drafts ——
+    # 个人池终态同款(本人池行的存在/默认位查询,与 auth_sessions 同类)
+    'services/auth_drafts.py:AuthAccount.owner_id == owner_id,': 2,
     'routers/auth_sessions.py:.where(AuthAccount.owner_id == user.id)': 1,
     'routers/auth_sessions.py:AuthAccount.owner_id == user.id,': 3,
     'routers/auth_sessions.py:base = select(AuthAccount).where(AuthAccount.owner_id == user.id)': 1,

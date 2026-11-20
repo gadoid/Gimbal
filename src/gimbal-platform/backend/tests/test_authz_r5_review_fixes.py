@@ -311,15 +311,21 @@ class TestExportZoneRules:
 
         def _draft(sid: str) -> dict:
             d = make_draft(sid)
-            d["definition"]["config"]["users"] = dict(_USERS)
             d["definition"]["config"]["services"] = {
                 "svc": {"baseUrl": "http://direct-inner"}}
             return d
 
+        async def _seed(sid: str) -> None:
+            """§3.5 闸后:POST 干净草稿 + 存量明文注入(私有区内置
+            凭证口径的铺底形态)。"""
+            r = await client.post("/api/scenarios", headers=h,
+                                  json=_draft(sid))
+            assert r.status_code in (200, 201), r.text
+            from tests.helpers import seed_legacy_users
+            await seed_legacy_users(sid, dict(_USERS))
+
         # 私有区(属主本人):内置凭证与直连地址照旧(Q3 口径不变)
-        r = await client.post("/api/scenarios", headers=h,
-                              json=_draft("sc-r5-priv"))
-        assert r.status_code in (200, 201), r.text
+        await _seed("sc-r5-priv")
         r = await client.get("/api/scenarios/sc-r5-priv/export", headers=h)
         assert r.status_code == 200, r.text
         cfg = r.json()["config"]
@@ -327,9 +333,16 @@ class TestExportZoneRules:
         assert cfg["services"]["svc"]["baseUrl"] == "http://direct-inner"
         # 项目区(属主本人创建):导出守区规则 —— 内置凭证当空、直连
         # 地址不生效(修前:属主导出带出明文)
-        r = await client.post(f"/api/scenarios?projectId={pid}",
-                              headers=h, json=_draft("sc-r5-proj"))
-        assert r.status_code in (200, 201), r.text
+        await _seed("sc-r5-proj")
+        # 项目区场景行挂项目(pid):注入前先落库再改挂靠
+        from app.core import db as db_module
+        from app.models.composer_scenario import ComposerScenario as _CS
+        from sqlalchemy import select as _sel
+        async with db_module.SessionLocal() as s2:
+            row2 = (await s2.execute(_sel(_CS).where(
+                _CS.scenario_id == "sc-r5-proj"))).scalar_one()
+            row2.project_id = pid
+            await s2.commit()
         r = await client.get("/api/scenarios/sc-r5-proj/export", headers=h)
         assert r.status_code == 200, r.text
         cfg = r.json()["config"]

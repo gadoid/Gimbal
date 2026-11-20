@@ -991,7 +991,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:334"
+        "app/routers/scenarios.py:339"
       ],
       "statuses": [
         422
@@ -1188,7 +1188,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:982"
+        "app/routers/scenarios.py:1007"
       ],
       "statuses": [
         409
@@ -1336,7 +1336,7 @@
         "app/routers/report_definitions.py:225",
         "app/routers/report_definitions.py:245",
         "app/routers/report_definitions.py:252",
-        "app/routers/scenarios.py:527",
+        "app/routers/scenarios.py:552",
         "app/routers/webhook_deliveries.py:54",
         "app/services/project_promotion.py:59",
         "app/services/project_promotion.py:69",
@@ -1371,7 +1371,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1095",
+        "app/routers/scenarios.py:1138",
         "app/routers/suites.py:1844"
       ],
       "statuses": [
@@ -1531,7 +1531,7 @@
         ]
       ],
       "sites": [
-        "app/routers/_password_gate.py:21"
+        "app/core/_password_gate.py:23"
       ],
       "statuses": [
         422
@@ -1573,7 +1573,7 @@
         "app/routers/endpoint_catalog.py:154",
         "app/routers/endpoint_catalog.py:311",
         "app/routers/scenarios.py:287",
-        "app/routers/scenarios.py:1176"
+        "app/routers/scenarios.py:1219"
       ],
       "statuses": [
         422,
@@ -1597,7 +1597,7 @@
         "app/routers/integration.py:872",
         "app/routers/runs.py:265",
         "app/routers/scenarios.py:279",
-        "app/routers/scenarios.py:1169",
+        "app/routers/scenarios.py:1212",
         "app/routers/strategy_catalog.py:58"
       ],
       "statuses": [
@@ -1734,7 +1734,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:917",
+        "app/routers/scenarios.py:942",
         "app/routers/suites.py:1763"
       ],
       "statuses": [
@@ -2166,7 +2166,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:733"
+        "app/routers/scenarios.py:758"
       ],
       "statuses": [
         409
@@ -2540,7 +2540,7 @@
       "sites": [
         "app/routers/integration.py:728",
         "app/routers/report_definitions.py:230",
-        "app/routers/scenarios.py:1101",
+        "app/routers/scenarios.py:1144",
         "app/routers/suites.py:1850"
       ],
       "statuses": [
@@ -2651,7 +2651,7 @@
     "app/routers/runs.py:664": "e.code",
     "app/routers/scenario_import.py:32": "detail",
     "app/routers/scenarios.py:198": "e.code",
-    "app/routers/scenarios.py:362": "e.code",
+    "app/routers/scenarios.py:367": "e.code",
     "app/routers/suites.py:330": "e.code",
     "app/routers/suites.py:579": "payload",
     "app/services/plate_client.py:642": "resp.json().get('error', {}).get('code', 'plate_error')",
@@ -2684,6 +2684,6 @@
     ],
     "int_codes_module": "app/routers/_codes.py",
     "note": "动态(非字面量)code 位点在 dynamic 面:取值由对应异常/helper 调用位点枚举,位点增删即契约变化;无码纯 message detail 不入面",
-    "scanned_files": 171
+    "scanned_files": 173
   }
 }

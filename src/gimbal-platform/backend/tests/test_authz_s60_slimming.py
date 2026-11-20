@@ -51,11 +51,19 @@ _STEP = {"kind": "step",
 
 
 async def _seed(client, h, sid: str, *, config: dict | None = None) -> None:
+    """§3.5 闸(2026-11-20)后铺底:config 携带的 users 弹出、POST 干净
+    草稿后注入行 —— _ZONE_CFG 形态(存量明文基座)照常可测。"""
+    legacy_users = None
     draft = _draft(sid, steps=[_STEP])
     if config is not None:
-        draft["definition"]["config"] = config
+        cfg = dict(config)
+        legacy_users = cfg.pop("users", None)
+        draft["definition"]["config"] = cfg
     r = await client.post("/api/scenarios", headers=h, json=draft)
     assert r.status_code in (200, 201), r.text
+    if legacy_users:
+        from .helpers import seed_legacy_users
+        await seed_legacy_users(sid, legacy_users)
 
 
 async def _move_to_project(sid: str, username: str) -> None:

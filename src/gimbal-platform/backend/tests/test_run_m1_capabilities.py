@@ -179,12 +179,13 @@ async def _seed_built_in_user(client: AsyncClient, headers: dict) -> None:
     服务 svc(S6:绑定只对 steps 实际引用的服务键选别名)。"""
     draft = _draft(steps=[{"id": "s1", "kind": "step",
                            "call": {"service": "svc", "path": "/x"}}])
-    draft["definition"]["config"]["users"] = {
-        "qa1": {"url": "http://builtin", "username": "u0", "password": "p0"}
-    }
     draft["definition"]["config"]["vars"] = {"qty": 1}  # C1:行键须 ⊆ 标量 vars
     r = await client.post("/api/scenarios", headers=headers, json=draft)
     assert r.status_code == 201, r.text
+    # §3.5 闸(2026-11-20)后:内置 users 走存量注入(W6 属主基座口径不变)
+    from tests.helpers import seed_legacy_users
+    await seed_legacy_users("sc-test", {
+        "qa1": {"url": "http://builtin", "username": "u0", "password": "p0"}})
     await _seed_ds(client, headers)
 
 

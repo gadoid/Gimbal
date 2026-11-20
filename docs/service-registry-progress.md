@@ -1497,6 +1497,61 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   (precheck 硬门 / exec_config 链 / exec_configs / 派发标签 / m2b
   行绑定 / m1 能力 / executions / adhoc 对拍)。
 
+### 合并改造阶段 2 落地 —— 写链收口(2026-11-20 晚,🟢 已上线;检索面 2c 残余另批)
+
+阶段 1 当日收口后接续(§10 路线;本案核心「新场景 users 恒空」写链):
+
+- **§3.5 保存闸(拍板 #4)**:`create_in_transaction`(唯一写入口,
+  直写 API 是唯一暴露面)对 `definition.config.users` 非空 → 422
+  `plaintext_users_rejected`(路由 create/PUT 双映射;store 级
+  ValueError 形态与 meta_plate 家族同款,不进契约码表)。存量判定 =
+  **行的既有形态**:旧行 users 非空(§7 遗留基座)PUT 放行、显式
+  清空可;旧行空而本次带 → 422。
+- **拍板 #5 副本清空**:`copy_scenario` strip 三值化 —— 缺省
+  `users`(副本 = 新建,users 恒剥、数据集敏感列同属主保留,属主
+  自己的数据)/ `always`(发布复制与项目晋升沿用:公共副本连数据集
+  敏感列一起剥,S1.3 原语义)/ `cross_owner`(历史值兼容)。修复中
+  发现:把缺省直翻 always 会连带剥掉发布副本数据集列(公共副本
+  不落敏感列是刻意的),三值化后发布/另存为两侧各自语义钉死。
+- **测试面翻转(§4.4-3 提前至今)**:全仓「POST 带 users 草稿」铺底
+  改「干净 POST + `seed_legacy_users` 直写行注入」(共享件入
+  tests/helpers.py),九个文件 ~20 处;`test_self_save_as_keeps_
+  credentials` 断言按拍板 #5 翻转为 strips;视图键剥离用例改走
+  存量 PUT 路径(活跃面)。
+- **§3.3 手配落池(拍板方案 A,2026-11-20)**:`ScenarioDraft.
+  authDrafts`(AuthDraftIn:引用名/system/envId/username/password/
+  accountFields;exclude=True = 保存期通道不进存储容器)→
+  `services/auth_drafts.materialize` **同事务**落 ① AuthAccount
+  本人池(Fernet + 掩码闸同源)② ServiceIdentity username-ref;
+  响应 `newAuths` 列新建清单 + best-effort revive(行为规则④)。
+  冲突码:同名条目/账户四元组 409(规则①:提示直接引用不覆盖)、
+  未知系统/环境 422、重名 422、**属主闸 403**(§3.8:维护者改他人
+  场景不带手配)。决策 1 登记闸协调:手配名按「将登记」放行
+  (extra_known,时序 = 闸在落池前)。掩码闸单源上提
+  `app/core/_password_gate`(旧路径 re-export)。
+- **⚠️ 权限面扩张(方案 A 代价,入账待否决)**:普通用户随场景保存
+  **自助建 username-ref 条目** —— 此前条目创建是 alias.write 能力面
+  (W7 导入门同款)。扩张范围窄:仅自用取用形态(ref=username),
+  base_service 必须落主档既有服务(未知系统 422 指引服务注册),
+  目录/部署管理仍属 admin。用户如不认可 → 退路 = 方案 B/C(手配
+  只建账户或深链认证管理),闸与冲突码不动,仅去条目创建段。
+- **契约面**:openapi +AuthDraftIn +Scenario.newAuths +
+  ScenarioDraft.authDrafts;错误码 ValueError 系不入快照(同 meta_plate
+  形态)。
+- **全量套件**(写链落地后首轮完整跑,45 分钟):**2124 通过 / 2
+  跳过**;5 失败全数当日修毕 —— ①grep 守卫收编 auth_drafts 两条个人池
+  终态比较(白名单+分类注释);②登记闸 off 态测试显式钉 off(生产
+  .env 已置 audit,缺省不再 off);③m1 内置 users 铺底改存量注入;
+  ④级联测试短密码(上午轮 TOK-08a 掩码闸债务,全量首轮暴露,首次
+  即修)。另 1 错误 + p35 一失败为全量序抖动(单跑绿,asyncpg teardown
+  /共享 worker 状态的已知类)。
+- **2c 残余(检索面,另批开工)**:双源检索 API(listAuths 加
+  scope/双源参数 + 项目池 username 掩码口径拍定)、UsersCard 双入口
+  重建(检索/手配/快照导入退役)、编排器选取器、查询视图换源
+  (`CaseComposerCanvas.queryAliasOf` 离开 authored config.users)、
+  ServiceAdmin/方案绑定 scope 过滤。双源端点的成员可见 username
+  口径待拍(现状 `_member_view` 掩码)。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。

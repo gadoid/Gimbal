@@ -136,6 +136,29 @@ def launch_ok() -> "Any":
     return LaunchResult(launch_status="ok", exit_code=0, total=1, passed=1)
 
 
+async def seed_legacy_users(sid: str, users: dict) -> None:
+    """凭证治理 §3.5 铺底件(2026-11-20 落闸后):新建不再收明文
+    config.users —— 直写行 payload 注入,模拟 §7 存量行(带明文快照
+    基座的老场景:保存闸放行存量、W6 属主基座语义照常覆盖)。
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.core import db as db_module
+    from app.models.composer_scenario import ComposerScenario
+
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(sa_select(ComposerScenario).where(
+            ComposerScenario.scenario_id == sid))).scalar_one()
+        payload = dict(row.payload or {})
+        defn = dict(payload.get("definition") or {})
+        cfg = dict(defn.get("config") or {})
+        cfg["users"] = users
+        defn["config"] = cfg
+        payload["definition"] = defn
+        row.payload = payload
+        await s.commit()
+
+
 async def wait_until(
     predicate: Callable[[], bool], timeout_s: float = 5.0, interval: float = 0.05,
     msg: str = "",
