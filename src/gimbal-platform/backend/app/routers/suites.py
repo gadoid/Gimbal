@@ -863,7 +863,9 @@ async def _run_orchestration(
 
     from ..services import execution_queue as _eq
     from ..services.run_dispatcher import create_execution, new_run_id
-    chain = str(getattr(settings, "EXEC_CHAIN", "legacy") or "legacy")
+    # C3(2026-11-20 审计)最小对齐:直读 settings,兜底与 config 默认
+    # (server)同值 —— getattr "legacy" 死兜底是口径矛盾,已删
+    chain = str(settings.EXEC_CHAIN) or "server"
     run_id = new_run_id()
     batch_id = f"suite-{suite.id}-{user.id}-{uuid4().hex[:12]}"
     execution = await create_execution(

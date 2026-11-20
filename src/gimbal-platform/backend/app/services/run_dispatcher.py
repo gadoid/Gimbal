@@ -1276,8 +1276,10 @@ async def dispatch_target(
             row_bindings_cfg.setdefault(f"{d}:{i}", {})[s] =                 _hit[(s, a)].account_id
 
     from . import execution_queue as _eq
-    chain = chain_override or str(
-        getattr(settings, "EXEC_CHAIN", "legacy") or "legacy")
+    # C3(2026-11-20 审计)最小对齐:settings 是 pydantic Settings,属性
+    # 恒存在,getattr 死兜底与 config 默认(server)矛盾 —— 直读;空串
+    # 防御回落到与 config.py 同值的 "server"。
+    chain = chain_override or (str(settings.EXEC_CHAIN) or "server")
     debug_spec = getattr(req, "debug", None)
     if debug_spec is not None:
         # 调试前置（引擎既有约束的收口）：单 case 且无乘法、非 graph
