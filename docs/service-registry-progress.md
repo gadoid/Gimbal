@@ -1421,6 +1421,48 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   下一入口 = 阶段 0 两个审计脚本(未登记引用分布 + 快照存量分布),
   数字定 enforce 时点。
 
+### 凭证治理 + 决策 1 合并改造 —— 阶段 0 落地(2026-11-20 傍晚,🟢 audit 态已上线)
+
+拍板完成后即启动合并路线阶段 0(§10;1 天档),当日落齐:
+
+- **决策 1 保存/导入闸(引用即登记)**:新函数
+  `service_aliases.unregistered_identities()`(引用集 =
+  `exec_auth_aliases_of_definition` 单源提取器,与执行注入同一实现;
+  登记集 = `service_identities.alias_name`)。挂载三处:场景 create /
+  PUT(scenarios.py 路由层,项目门后 store 前)、导入 land()(改写后
+  最终形态、映射 create 建条目**之后** —— 同事务建出的条目算已登记,
+  enforce 拒收随单事务回滚);**运行方案保存不重复挂**——方案无定义
+  侧引用面,`validate_binding_aliases` 已覆盖(绑定值存在 + 同基础
+  服务),口径说明入 config 注释。开关 `REGISTRY_ONLY_IDENTITIES`
+  (off/audit/enforce),未知取值按 off + 告警(闸失效最坏退化为现状);
+  副本路径不走闸 —— enforce 前提下库内已清账,漏网由执行闸白名单
+  (决策 1 §4 两闸关系)兜底。audit 载体:场景 create/PUT 走
+  `X-Identity-Warnings` 头,导入走响应 `identityWarnings` 键(前端
+  黄条随阶段 2 选取器统一收口);enforce = 422 `identity_not_registered`
+  (detail 带条目名清单 + 深链建议)。
+- **审计脚本 ×2(出数,enforce 时点的决策依据)**:
+  `scripts/audit_unregistered_identities.py`(场景 + 方案 vs 注册表,
+  只读,单源提取器同口径)+ `scripts/audit_snapshot_users.py`
+  (config.users 明文快照存量 + 测试面清点,值不进审计产物)。数字:
+  **未登记引用 21/56 场景,distinct 名仅 2**——`sb`×20(全部
+  gimbal-bootstrap 种子)+ `gitlab`×1;方案绑定目标 0 问题。
+  **明文快照 12 场景 / 4 键名**(codfish2×10 等);跨属主副本带
+  users 的一行(Catfish)核验为 2026-09-23 创建 —— W6 strip 落地前
+  遗留,非活漏点;测试面 6 文件 6 处(非空字面构造口径)。
+- **判读**:enforce 前置 ≈ 登记 2 个条目 + 12 场景清账 —— 清账
+  向导工作量 ≈ 半天,**「长期 audit + 白名单兜底」假设被数据否决**,
+  建议阶段 3 清账后直上 enforce(最终时点仍按流程待用户拍板)。
+- **契约面**:error-codes.json 213→214(`identity_not_registered`,
+  shape code/identities/message;ImportRejected 侧码本就属 dynamic 面
+  的既有覆盖缺口,同 `scenario_import.py:32` 登记);openapi 零变化。
+- **测试**:`test_identity_registry_gate.py` 7 用例(off 无痕 / audit
+  头 / enforce 422 不落库 / 已登记放行 / PUT 同闸 / 导入 audit
+  `identityWarnings` / 导入 enforce 单事务回滚含新建条目);受影响面
+  回归 95 用例全绿(契约守卫 + meta plate 闸 + 导入流水线 + s60 绑定
+  + 剥离面 + shares + r5 + 导出 overlay)。
+- **部署**:`backend/.env` 置 `REGISTRY_ONLY_IDENTITIES=audit`
+  (生产先跑此态拿真实数据,决策 1 §2 既定),gimbal-platform 重启。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。

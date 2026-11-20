@@ -70,7 +70,11 @@
   exec-config 行在被编辑前运行时照常生效(precheck 只拦不存在);
   风险面 = 配置属主自用,如需收口:一次性数据清查或运行时补同基校验;
 - adhoc/graph 缺槽闸把「账户歧义」并入「未登记」文案(review P2-6
-  登记;场景链硬门是 identity_missing/account_ambiguous 分码的)。
+  登记;场景链硬门是 identity_missing/account_ambiguous 分码的);
+- ImportRejected 错误码不在契约提取面(既有缺口:tuple 赋值形态不被
+  `_discover_coded_exceptions` 识别,导入侧码仅以 dynamic 位点
+  `scenario_import.py:32` 兜底;阶段 0 新码 identity_not_registered
+  已以路由侧形态入快照,2026-11-20 登记)。
 
 ## 已销(本批,2026-10-14)
 

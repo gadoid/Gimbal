@@ -3,6 +3,7 @@
 - **定稿日期**:2026-11-20
 - **分支/基线**:`feat/service-registry` @ `916926aa`(+ 未提交 P3 清理:merge_carry_tiers 单源化等)
 - **状态**:设计定稿;§9-2 执行不查授权已拍板(2026-11-20),仅余 enforce 时点随阶段 0 数据定
+- **阶段 0 已落**(2026-11-20 傍晚):保存/导入闸(audit 态生产运行,`REGISTRY_ONLY_IDENTITIES=audit`)+ 审计脚本 `scripts/audit_unregistered_identities.py` 出数 —— 21/56 场景带未登记引用,distinct 名仅 2(`sb`×20 bootstrap 种子 + `gitlab`×1);方案绑定期 0。数字判读与落地明细见 `docs/service-registry-progress.md` 阶段 0 章节。
 - **前置讨论**:docs/wiring-quality-audit-20261119.md(TOK-03)→ 三决策点讨论 → 用户拍板「勾选 = 执行承诺」+「引用即登记、共享即移交」
 
 ---

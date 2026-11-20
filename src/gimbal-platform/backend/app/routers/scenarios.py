@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from fastapi import APIRouter
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -304,9 +304,49 @@ async def preview_plate(
 
 
 # ── 2) POST / (create) ─────────────────────────────────────────────
+async def _identity_registry_gate(
+    db: AsyncSession, definition: dict, response: Response,
+) -> None:
+    """决策 1「引用即登记」保存闸(阶段 0;identity-registry §2):
+    ``REGISTRY_ONLY_IDENTITIES`` 三态 —— off(缺省)不校验;audit 保存
+    成功 + ``X-Identity-Warnings`` 头(前端黄条随阶段 2 选取器接入);
+    enforce 422 ``identity_not_registered`` 硬拦(切换前置 = 存量清账
+    完成,时点由阶段 0 审计数字定)。
+
+    挂路由层而非 store:copy/share 等复制路径不走本闸 —— enforce 前提
+    下库内已清账,直写与副本漏网由执行闸白名单(§4 两闸关系)兜底,
+    口径闭环。未知取值一律按 off 处理并告警(闸失效最坏退化为现状,
+    不因配置手误把保存面炸死)。"""
+    import json
+    from ..core.config import settings
+    mode = settings.REGISTRY_ONLY_IDENTITIES
+    if mode not in ("audit", "enforce"):
+        if mode != "off":
+            logger.warning(
+                "REGISTRY_ONLY_IDENTITIES 取值 %r 不在 off/audit/enforce,"
+                "按 off 处理", mode)
+        return
+    from ..services.service_aliases import unregistered_identities
+    unreg = await unregistered_identities(db, definition)
+    if not unreg:
+        return
+    if mode == "enforce":
+        raise HTTPException(status_code=422, detail={
+            "code": "identity_not_registered",
+            "message": "引用的身份条目未登记:" + "、".join(unreg)
+                       + " —— 去服务注册页登记,或改绑已有条目",
+            "identities": unreg})
+    response.headers["X-Identity-Warnings"] = json.dumps(
+        {"code": "identity_not_registered", "identities": unreg},
+        ensure_ascii=False)
+    logger.warning(
+        "registry gate(audit) identity_not_registered: %s", unreg)
+
+
 @router.post("", response_model=Scenario, status_code=status.HTTP_201_CREATED)
 async def create_scenario(
     user: CurrentUser, db: DbSession, body: ScenarioDraft,
+    response: Response,
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> Scenario:
     """新建场景;``?projectId=`` = 在该项目内新建(S7.0,门 = 项目成员,
@@ -320,6 +360,9 @@ async def create_scenario(
         except ProjectCreateDenied as e:
             raise HTTPException(status_code=e.status, detail={
                 "code": e.code, "message": e.message}) from None
+    # 决策 1 引用即登记(阶段 0):定义侧身份存在性闸(audit 头 /
+    # enforce 422;项目门之后、store 之前 —— 不动事务,纯读)。
+    await _identity_registry_gate(db, body.definition, response)
     try:
         out = await scenario_store.create(
             db, body, owner=owner, owner_id=user.id, project_id=project_id,
@@ -1001,9 +1044,14 @@ async def put_scenario(
     db: DbSession,
     scenario_id: str,
     body: ScenarioDraft,
+    response: Response,
 ) -> Scenario:
     row = await _load_row(db, scenario_id)
     await _require_owner(db, user, row)
+    # 决策 1 引用即登记(阶段 0):与 create 同一道闸(存量的「只对新建
+    # 生效」口径属本案 config.users 422,不适用于登记闸 —— 存量未登记
+    # 引用正是 audit 态要观测的对象,update 同拦/同警示)。
+    await _identity_registry_gate(db, body.definition, response)
     try:
         return await scenario_store.update(
             db,

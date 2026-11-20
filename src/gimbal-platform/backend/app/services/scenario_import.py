@@ -25,8 +25,11 @@ import re
 import secrets
 from typing import Any
 
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+
+from ..core.config import settings
 
 from ..models.composer_scenario import ComposerScenario
 from ..models.service_identity import ServiceIdentity
@@ -853,6 +856,29 @@ async def land(
             "alias_name_taken", 409,
             f"别名 {eff_key.get(key, '')!r} 已被占用(重预检)") from e
 
+    # ── 决策 1 引用即登记(阶段 0):改写后的最终形态上做声明侧存在闸
+    # (identity-registry §2;REGISTRY_ONLY_IDENTITIES 三态)。后于映射
+    # create 建条目 —— 同事务里 create 出的条目算已登记;enforce 拒收
+    # 时整个事务(含新条目)随请求回滚,与单事务语义一致。audit 态以
+    # identityWarnings 键随响应 dict 返回(导入响应是自由 dict;场景
+    # create/update 走 X-Identity-Warnings 头 —— 两种载体前端阶段 2
+    # 选取器统一收口)。运行方案保存无定义侧引用面,由既有
+    # validate_binding_aliases 覆盖,不在此重复挂。
+    identity_warnings: list[str] = []
+    _mode = settings.REGISTRY_ONLY_IDENTITIES
+    if _mode in ("audit", "enforce"):
+        unreg = await alias_svc.unregistered_identities(db, defn)
+        if unreg:
+            if _mode == "enforce":
+                raise ImportRejected(
+                    "identity_not_registered", 422,
+                    "引用的身份条目未登记:" + "、".join(unreg)
+                    + " —— 去服务注册页登记,或改绑已有条目")
+            logger.warning(
+                "registry gate(audit,import) identity_not_registered: %s",
+                unreg)
+            identity_warnings = unreg
+
     draft = ScenarioDraft(definition=defn)
     try:
         row = await scenario_store.create_in_transaction(
@@ -883,7 +909,10 @@ async def land(
     report = await _auth_report(
         db, definition_from_payload(row.payload or {}), user_id=user.id,
         builtin=builtin, renames=renames)
-    return {"scenarioId": row.scenario_id, "idMode": id_mode, **report}
+    out = {"scenarioId": row.scenario_id, "idMode": id_mode, **report}
+    if identity_warnings:
+        out["identityWarnings"] = identity_warnings
+    return out
 
 
 async def carry_store_put(db, service_name: str, entries: dict, user) -> None:

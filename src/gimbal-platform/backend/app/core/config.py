@@ -118,6 +118,17 @@ class Settings(BaseSettings):
     # legacy = run launch 子进程(stdout jsonl)——回滚路径,稳定一段
     #   时间后删除(不留兼容层)。
     EXEC_CHAIN: str = "server"
+    # ── 决策 1「引用即登记」保存/导入闸(identity-registry §2)─────
+    # 场景保存/更新/导入的身份引用存在性闸三态:
+    #   off     = 现状,不校验(阶段 0 落地时的缺省);
+    #   audit   = 保存成功,响应带 X-Identity-Warnings 头(前端黄条随
+    #              阶段 2 选取器接入)—— 生产先跑此态拿真实分布
+    #              (scripts/audit_unregistered_identities.py 同口径);
+    #   enforce = 422 identity_not_registered 硬拦。切换前置 = 存量清账
+    #              完成(合并路线阶段 3;时点由阶段 0 审计数字定)。
+    # 运行方案保存的登记闸 = validate_binding_aliases 既有覆盖(绑定值
+    # 存在 + 同基础服务),无定义侧引用面,不重复挂。
+    REGISTRY_ONLY_IDENTITIES: str = "off"
     # ── 周期对账(P0-3.2,webhook 设计 v3)───────────────────────
     # 僵尸执行(job 已终态/不存在而执行仍 queued/running)的周期收口:
     # 间隔 5 分钟一拍;宽限 10 分钟内的单不动(可能与正在收尾的执行抢

@@ -452,6 +452,30 @@ async def exec_auth_aliases_of_definition(
         extra_scan_nodes=setup_teardown_nodes(definition or {}))
 
 
+async def unregistered_identities(
+    db: AsyncSession, definition: dict,
+) -> list[str]:
+    """声明侧存在性闸(决策 1「引用即登记」,阶段 0):定义引用的身份
+    条目名 diff 注册表,返回未登记名(有序去重)。
+
+    引用集 = ``exec_auth_aliases_of_definition`` 单源口径(steps ∪
+    setup/teardown 模板扫描 ∪ 步骤服务条目默认命中);登记集 =
+    ``ServiceIdentity.alias_name``(全局唯一)。与 ``validate_binding_
+    aliases`` 职责互补:那边管**换用目标**(绑定值存在 + 同基础服务),
+    这里管**声明侧存在**——同一文件、一次调用链挂保存/更新/导入。
+
+    off/audit/enforce 三态由调用方按 ``settings.REGISTRY_ONLY_
+    IDENTITIES`` 分派;本函数只报事实,不做处置。
+    """
+    names = await exec_auth_aliases_of_definition(db, definition or {})
+    if not names:
+        return []
+    known = set((await db.execute(
+        select(ServiceIdentity.alias_name).where(
+            ServiceIdentity.alias_name.in_(names)))).scalars())
+    return sorted(set(names) - known)
+
+
 async def credential_aliases_for(
     db: AsyncSession, raw_names: list[str],
 ) -> dict[str, str]:
