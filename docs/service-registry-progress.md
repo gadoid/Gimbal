@@ -1463,6 +1463,40 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
 - **部署**:`backend/.env` 置 `REGISTRY_ONLY_IDENTITIES=audit`
   (生产先跑此态拿真实数据,决策 1 §2 既定),gimbal-platform 重启。
 
+### 合并改造阶段 1 落地(2026-11-20 晚,🟢 已上线)
+
+阶段 0 当日收口后接续(§10 路线;2–3 天档,当日落齐):
+
+- **决策 1 执行闸「圈定即承诺」**:`SystemSubConfig.aliases` 从 §8.10
+  管理位转运行承诺 —— `ExecConfigChoice.circled`(`_flatten` 收集
+  systems[].aliases 并集;**非空 = 白名单生效**,空/缺键 = 存量兼容
+  跳过)。比对进 `precheck_hard_gate` 同一道门(新码
+  `identity_not_circled`,比对集 = 换用后取用集 folded,含 slot 换用
+  目标):派发 409 / 集成路径无配置面天然不圈 / 预检端点 advisory
+  (`PrecheckResult.notCircled` 差集,scheme_valid=False 与
+  scope_missing 同读法)。行级 `@slot` 绑定的取用名在派发段同码拦截。
+  重跑按首发快照照查(config_json 新键 `execCircledAliases`,旧行缺键
+  = 当时未圈 → 跳过;单一规则不豁免)。
+- **口径拍定(代码注释 + 测试钉死)**:①生效行 = 显式选定 > 本人默认行
+  —— 默认行圈定**也承诺**(与绑定层「默认不吃」是刻意差异:绑定静默
+  改取用行,圈定是用户显式勾选的承诺,默认行同样是本人维护的常设
+  口径);②令牌/graph/adhoc 不吃执行配置 → 天然不圈。
+- **换用目标自动纳入**:前端 `ExecConfigsView.payloadOf` 把绑定换用
+  目标值(`b.slot`)自动写入 aliases —— 白名单生效时换用目标必在圈内
+  (4 处 vitest 断言钉死:新配/存量推导/v6 搜索加入/未登记存量键)。
+- **本案分享/fork 缺名提示钉位**(v2 §4.3):纯引用场景(无
+  config.users)被分享人执行 —— 预检 `missingAuths` 点名缺失条目、
+  `builtinAuthShadowed` 静默(三条件②不再满足,钉「不吵」),派发
+  `account_missing` 硬门兜底。既有机制确认零改动,钉位入测试。
+- **契约面**:openapi +`notCircled` 字段 + aliases 描述改写;
+  error-codes +`identity_not_circled`(215 码);`test_adhoc_run`
+  config_json 键集钉位随新快照键更新(刻意契约变化)。
+- **测试**:`test_identity_circled_gate.py` 8 用例(显式/默认行 409、
+  未圈定跳过、重跑快照权威、函数级三态 + slot 目标比对、行级 409、
+  预检 advisory 三态、分享缺名双面钉位);受影响面回归 133 用例绿
+  (precheck 硬门 / exec_config 链 / exec_configs / 派发标签 / m2b
+  行绑定 / m1 能力 / executions / adhoc 对拍)。
+
 ### P2-C 验证收口
 
 1. **登录后场景试跑**：当前 `admin` 密码未知（`admin123` → 4004），无法做业务流冒烟。

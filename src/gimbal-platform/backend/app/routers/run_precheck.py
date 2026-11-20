@@ -55,6 +55,9 @@ GATE_LOGIN_MISSING = "login_missing"          # 账户可解但实例登录口�
 GATE_IDENTITY_MISSING = "identity_missing"    # 身份条目未登记/悬空
 GATE_ACCOUNT_MISSING = "account_missing"      # 条目在、凭证池无账户
 GATE_ACCOUNT_AMBIGUOUS = "account_ambiguous"  # 多候选账户无同标签唯一命中
+# 决策 1 圈定即承诺(阶段 1):生效执行配置的圈定集非空 = 白名单生效,
+# 换用后取用集 ⊄ 圈定集 → 硬拦(派发 409 / 定时 precheck_config 暂停)。
+GATE_IDENTITY_NOT_CIRCLED = "identity_not_circled"
 
 #: 凭证域码(定时路径暂停沿用 missing_credential —— 复活钩子自动恢复)
 _GATE_CREDENTIAL_CODES = frozenset({
@@ -139,6 +142,12 @@ class PrecheckResult(BaseModel):
     # 清单;空 = 无告警
     builtin_auth_shadowed: list[str] = Field(
         default_factory=list, alias="builtinAuthShadowed")
+    # 决策 1 圈定即承诺(阶段 1):按 PrecheckItem.execConfigId 口径,
+    # 换用后取用集 ⊄ 该配置圈定集 的差集(真拒在派发 409
+    # identity_not_circled,故非空时 scheme_valid=False 与 scope_missing
+    # 同读法);未按执行配置口径预检 = 空清单(派发默认行口径时再拦)
+    not_circled: list[str] = Field(
+        default_factory=list, alias="notCircled")
 
 
 @router.post("/precheck", response_model=list[PrecheckResult])
@@ -181,40 +190,46 @@ async def precheck_run(
                 scheme_found=False, scheme_valid=False,
             ))
             continue
+        _slot_map, _circled = await _item_slot_map(db, user, item)
         one = await _precheck_one(
             db, scen_row, item, token=token,
             user_id=user.id if user is not None else None,
-            slot_map=await _item_slot_map(db, user, item))
+            slot_map=_slot_map, circled=_circled)
         one.builtin_auth_shadowed = await builtin_auth_shadowed(
             user.id if user is not None else None, scen_row)
         out.append(one)
     return out
 
 
-async def _item_slot_map(db, user, item: PrecheckItem) -> dict[str, str]:
+async def _item_slot_map(db, user, item: PrecheckItem) -> tuple[dict[str, str],
+                                                                frozenset[str]]:
     """§8.5 ``PrecheckItem.execConfigId``:按执行配置口径预检 —— 换用
-    slot_map 折进有效身份集合(与派发同一折叠)。不可加载 = 忽略
+    slot_map 折进有效身份集合(与派发同一折叠);圈定集(决策 1 阶段 1)
+    一并带回(advisory 差集在 ``_precheck_one`` 算)。不可加载 = 忽略
     (他人配置/已删:执行配置自身页面暴露,这里不连坐)。"""
     if item.exec_config_id is None or user is None:
-        return {}
+        return {}, frozenset()
     try:
         from ..services.exec_config import load_choice
         cfg = await load_choice(db, user.id, item.exec_config_id)
     except Exception:  # noqa: BLE001 — 预检不因配置不可加载而连坐
-        return {}
-    if cfg is None or not cfg.explicit or not cfg.bindings:
-        return {}
+        return {}, frozenset()
+    if cfg is None:
+        return {}, frozenset()
+    circled = cfg.circled
+    if not cfg.explicit or not cfg.bindings:
+        return {}, circled
     from ..services.scenario_store import get_row as _get_scen
     scen = await _get_scen(db, item.scenario_id)
     if scen is None:
-        return {}
+        return {}, circled
     from ..services.service_aliases import slot_lookup_overrides
     try:
         return await slot_lookup_overrides(
             db, (definition_from_payload(scen.payload or {})
-                 ).get("steps") or [], None, cfg.bindings)
+                 ).get("steps") or [], None, cfg.bindings), circled
     except Exception:  # noqa: BLE001
-        return {}
+        return {}, circled
 
 
 async def builtin_auth_shadowed(executor_id: int | None,
@@ -246,6 +261,7 @@ async def _precheck_one(
     db: AsyncSession, scen: ComposerScenario, item: PrecheckItem,
     *, token: "Any | None" = None, user_id: int | None = None,
     slot_map: dict[str, str] | None = None,
+    circled: "frozenset[str] | None" = None,
 ) -> PrecheckResult:
     result = PrecheckResult(scenario_id=item.scenario_id, scheme_id=item.scheme_id)
     raw_payload = scen.payload or {}
@@ -301,6 +317,15 @@ async def _precheck_one(
         result.env_warnings.append(str(e))
     if _env is not None and _env.env_id is not None:
         result.env_context = _env.snapshot()
+
+    # ── 决策 1 圈定即承诺(阶段 1,advisory):按 PrecheckItem.
+    # execConfigId 口径,换用后取用集 ⊄ 圈定集 → notCircled 差集
+    # (真拒在派发 409 identity_not_circled,故与 scope_missing 同读法
+    # 置 scheme_valid=False);未按执行配置口径预检 = 空清单。
+    if _auth_aliases and circled:
+        result.not_circled = sorted(set(_folded) - set(circled))
+        if result.not_circled:
+            result.scheme_valid = False
 
     # ── 未落点的服务引用(steps 引用 × 三层地址链皆缺)──────────
     result.unbound_services = await _gate_unbound_services(
@@ -470,6 +495,7 @@ async def precheck_hard_gate(
     slot_map: "dict[str, str] | None" = None,
     cred_project_id: "int | None" = None,
     env=None,
+    circled: "frozenset[str] | set[str] | None" = None,
 ) -> dict:
     """§8.5 预检硬门(三路径共用唯一实现;run_dispatcher「不开第二份」
     原则):UI/JWT、access token 经派发漏斗,webhook 定时路径在
@@ -549,6 +575,19 @@ async def precheck_hard_gate(
                 f"{m['alias']}(系统 {m['system']} × 标签#{m['envId']})"
                 for m in cls["login_missing"]),
             {"logins": cls["login_missing"]})
+    # ②b 圈定即承诺(决策 1 §4,阶段 1):``circled`` = 生效执行配置行的
+    # 圈定集(非空才生效;None/空 = 未圈定,存量兼容跳过)。比对集 =
+    # 换用后取用集(folded,含 slot 换用目标);差集非空 → 硬拦。重跑按
+    # 首发快照照查(调用方传入),单一规则不豁免;行级 @slot 绑定在派发
+    # 侧同一码拦截(precheck_hard_gate 不见行引用)。
+    if circled:
+        _outside = sorted(set(folded) - set(circled))
+        if _outside:
+            raise PrecheckGateError(
+                GATE_IDENTITY_NOT_CIRCLED,
+                "以下身份条目不在本次生效执行配置的圈定集内,请到执行配置"
+                "页「纳入」后重跑: " + "、".join(_outside),
+                {"aliases": _outside})
     # ③ 地址
     unbound = await _gate_unbound_services(
         db, project_id=project_id, definition=definition, env=env)

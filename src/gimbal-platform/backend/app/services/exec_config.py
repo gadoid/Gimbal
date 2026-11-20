@@ -42,7 +42,12 @@ class ExecConfigChoice:
     """一次执行选定的执行配置(摊平形态;零凭证值零地址值)。
 
     ``explicit`` = 是否显式选定(决策 9 与绑定链的闸:默认行 explicit
-    =False,携带 carry 但不携带绑定语义;env 链位已随 §8.2 退役)。"""
+    =False,携带 carry 但不携带绑定语义;env 链位已随 §8.2 退役)。
+    ``circled`` = 圈定集(决策 1 圈定即承诺,阶段 1):生效行(显式选定
+    > 本人默认)systems[].aliases 的并集,**非空 = 白名单生效**、空 =
+    未圈定(存量兼容,等同关闭)。与绑定层「默认不吃」是刻意差异:
+    绑定静默改池内取用行,默认行生效会静默改行为;圈定是用户在配置页
+    的显式勾选承诺,默认行同样是本人维护的常设口径。"""
     config_id: int
     name: str
     is_default: bool
@@ -52,6 +57,8 @@ class ExecConfigChoice:
     # 目录服务名 → {字段: 值|null=显式注入 null}
     carry_overrides: dict[str, dict[str, str | None]] = field(
         default_factory=dict)
+    # 圈定集(条目名并集;空 = 未圈定,执行闸跳过)
+    circled: frozenset[str] = field(default_factory=frozenset)
 
 
 EMPTY_CHOICE = ExecConfigChoice(
@@ -59,9 +66,11 @@ EMPTY_CHOICE = ExecConfigChoice(
 
 
 def _flatten(systems: Any) -> tuple[dict[str, str],
-                                    dict[str, dict[str, str | None]]]:
+                                    dict[str, dict[str, str | None]],
+                                    frozenset[str]]:
     bindings: dict[str, str] = {}
     carries: dict[str, dict[str, str | None]] = {}
+    circled: set[str] = set()
     for s in systems or []:
         if not isinstance(s, dict):
             continue
@@ -71,14 +80,18 @@ def _flatten(systems: Any) -> tuple[dict[str, str],
         carry = s.get("carryOverrides")
         if isinstance(carry, dict) and carry:
             carries[str(s.get("service") or "")] = dict(carry)
-    return bindings, carries
+        for a in (s.get("aliases") or []):
+            if isinstance(a, str) and a.strip():
+                circled.add(a.strip())
+    return bindings, carries, frozenset(circled)
 
 
 def choice_of_row(row: ExecConfig, *, explicit: bool) -> ExecConfigChoice:
-    bindings, carries = _flatten((row.payload or {}).get("systems"))
+    bindings, carries, circled = _flatten((row.payload or {}).get("systems"))
     return ExecConfigChoice(
         config_id=row.id, name=row.name, is_default=row.is_default,
-        explicit=explicit, bindings=bindings, carry_overrides=carries)
+        explicit=explicit, bindings=bindings, carry_overrides=carries,
+        circled=circled)
 
 
 async def load_choice(

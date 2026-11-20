@@ -1208,6 +1208,15 @@ async def dispatch_target(
         from .service_aliases import slot_lookup_overrides
         _slot_map = await slot_lookup_overrides(
             db, steps, _bindings, _exec_cfg.bindings)
+    # 决策 1 圈定即承诺(阶段 1):生效配置行(显式选定 > 本人默认;令牌/
+    # graph/adhoc 不吃配置,天然不圈)非空圈定集 = 白名单生效;重跑按
+    # 首发快照照查(§7 配置后改不影响历史执行)。比对在 precheck_hard_gate
+    # 同一道门;行级 @slot 绑定在下方行引用段同一码拦截。
+    if _exec_replay is not None:
+        _circled: frozenset[str] = frozenset(
+            _exec_replay.get("circledAliases") or [])
+    else:
+        _circled = _exec_cfg.circled if _exec_cfg is not None else frozenset()
     # M3 §8.5 预检硬门(2026-11-17):三路径统一 —— UI/JWT、access
     # token 都经本漏斗;判定与 /run/precheck 共用一套分类(run_precheck
     # 私有函数,「不开第二份」)。webhook 定时路径在 integration_runner
@@ -1223,7 +1232,8 @@ async def dispatch_target(
                 user_id=user_id, bindings=_bindings,
                 auth_aliases=auth_aliases,
                 slot_map=_slot_map or None,
-                cred_project_id=cred_project_id, env=env_choice)
+                cred_project_id=cred_project_id, env=env_choice,
+                circled=_circled or None)
         except PrecheckGateError as e:
             raise Conflict(e.code, e.message, extra=e.detail) from None
 
@@ -1260,6 +1270,18 @@ async def dispatch_target(
                     f"{r['slot']}={r['alias']}(行 {r['rowIndex']})"
                     for r in rows_out),
                     extra={"rows": rows_out, "credentialSource": _src})
+        # 决策 1 圈定即承诺(阶段 1):行级 @slot 的取用名一并计入比对
+        # (与 precheck_hard_gate 的定义级差集同码互补;行引用只在派发
+        # 段可见,故在此拦)。未圈定(空集)= 跳过。
+        if _circled:
+            _rows_out_c = sorted({a for _d, _i, _s, a in _row_refs
+                                   if a not in _circled})
+            if _rows_out_c:
+                raise Conflict(
+                    "identity_not_circled",
+                    "以下数据集行账号绑定不在本次生效执行配置的圈定集内,"
+                    "请到执行配置页「纳入」后重跑:" + "、".join(_rows_out_c),
+                    extra={"aliases": _rows_out_c})
         if token is not None:
             from . import access_token as _at
             _scope_aliases, _scope_auths = await _at.load_scope(db, token.id)
@@ -1387,6 +1409,9 @@ async def dispatch_target(
             # 为链路溯源(回放不回查该行)
             "execSlotMap": _slot_map,
             "execCarryOverrides": _exec_carry,
+            # 决策 1 圈定即承诺(阶段 1):圈定集终值快照 —— 重跑照查
+            # (单一规则不豁免);旧行缺键 = 当时未圈,回放空集 = 跳过。
+            "execCircledAliases": sorted(_circled),
             **({"execConfigId": _req_exec_id}
                if _req_exec_id is not None else {}),
             # S2.1 环境选择快照(environmentId/environmentSource;无环境

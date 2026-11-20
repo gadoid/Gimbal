@@ -990,6 +990,9 @@ async def rerun_execution(
                 "execConfigId": cfg.get("execConfigId"),
                 "slotMap": cfg.get("execSlotMap") or {},
                 "carryOverrides": cfg.get("execCarryOverrides") or None,
+                # 决策 1 圈定即承诺(阶段 1):圈定集按首发快照回放照查;
+                # 旧行缺键 = 当时未圈,空集 = 白名单关闭。
+                "circledAliases": cfg.get("execCircledAliases") or [],
             }
         # §8.2 快照兼容(P1-3 修复):S2.1 环境按首发快照回放 —— 经
         # dispatch 的 env_replay 参数(旧通道经 RunRequest.environmentId

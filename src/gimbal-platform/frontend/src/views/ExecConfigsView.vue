@@ -1425,14 +1425,19 @@ function payloadOf(): SystemSubConfig[] {
     .filter(({ service }) => service)
     .map(({ s, service }) => ({
       service,
-      // §8.10:圈定集 = 行内勾选 ∪ 存量绑定声明键(chosenAliases 同口径;
-      // 注册表未加载完时 entriesOf 空 → binds 键全并入,与勾选集不冲突)
+      // §8.10:圈定集 = 行内勾选 ∪ 存量绑定声明键 ∪ 换用目标值(决策 1
+      // 阶段 1:绑定换到的取用条目 b.slot 自动写入圈定 —— 白名单生效时
+      // 换用目标必在圈内,否则派发 409 identity_not_circled;注册表未加载
+      // 完时 entriesOf 空 → binds 键全并入,与勾选集不冲突)
       aliases: [...new Set([
         ...s.aliases.map((a) => a.trim()).filter(Boolean),
         ...s.binds
           .filter((b) => b.alias && b.slot
             && !entriesOf(s).some((a) => a.aliasName === b.alias.trim()))
           .map((b) => b.alias.trim()),
+        ...s.binds
+          .filter((b) => b.alias && b.slot)
+          .map((b) => b.slot.trim()),
       ])],
       bindings: Object.fromEntries(
         s.binds

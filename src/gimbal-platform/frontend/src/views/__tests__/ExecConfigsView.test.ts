@@ -427,8 +427,9 @@ describe('ExecConfigsView', () => {
       description: '',
       tags: [],
       systems: [
-        // §8.10 aliases = 圈定集;v3:无 carry 写面 → carryOverrides 恒空
-        { service: 'crm', aliases: ['crm.admin'],
+        // §8.10 aliases = 圈定集 ∪ 换用目标值(决策 1 阶段 1:绑定换到的
+        // 取用条目自动写入圈定,白名单生效时换用目标必在圈内)
+        { service: 'crm', aliases: ['crm.admin', 'admin'],
           bindings: { 'crm.admin': 'admin' }, carryOverrides: {} },
       ],
     })
@@ -447,8 +448,9 @@ describe('ExecConfigsView', () => {
       tags: [],
       systems: [{
         service: 'fin-service',
-        // §8.10:存量行无 aliases → 按 bindings 声明键推导,保存固化
-        aliases: ['fin-service.merchant-b'],
+        // §8.10:存量行无 aliases → 按 bindings 声明键推导,保存固化;
+        // 换用目标 merchant-b 随决策 1 阶段 1 一并写入圈定集
+        aliases: ['fin-service.merchant-b', 'merchant-b'],
         bindings: { 'fin-service.merchant-b': 'merchant-b' },
         // 存量 carry 覆盖逐字保留(v3 只读回写)
         carryOverrides: { 'merchant.grade': 'B' },
@@ -668,7 +670,8 @@ describe('ExecConfigsView', () => {
       systems: [{
         service: 'fin-service',
         // §8.10:存量推导 = bindings 声明键(ghost.entry 未登记也并入 —— 恒视为已纳入)
-        aliases: ['ghost.entry', 'fin-service.merchant-b'],
+        // + 换用目标值 admin(决策 1 阶段 1:取用条目自动写入圈定)
+        aliases: ['ghost.entry', 'fin-service.merchant-b', 'admin'],
         bindings: { 'ghost.entry': 'admin', 'fin-service.merchant-b': 'admin' },
         carryOverrides: {},
       }],
@@ -1044,7 +1047,8 @@ describe('ExecConfigsView', () => {
       tags: [],
       systems: [{
         service: 'fin-service',
-        aliases: ['fin-service.merchant-b', 'merchant-sit'],
+        // 末位 = 换用目标值(决策 1 阶段 1 自动写入圈定)
+        aliases: ['fin-service.merchant-b', 'merchant-sit', 'merchant-b'],
         bindings: { 'fin-service.merchant-b': 'merchant-b' },
         carryOverrides: { 'merchant.grade': 'B' },
       }],

@@ -5421,6 +5421,13 @@
             "title": "Missingauths",
             "type": "array"
           },
+          "notCircled": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notcircled",
+            "type": "array"
+          },
           "outOfScopeTargets": {
             "items": {
               "additionalProperties": true,
@@ -8301,7 +8308,7 @@
         "description": "按系统的子配置(§4:多系统混合编排下每组配置的组成单元)。",
         "properties": {
           "aliases": {
-            "description": "本配置采用的调用身份条目名(声明侧;管理范围,执行链不消费)",
+            "description": "本配置采用的调用身份条目名(圈定即承诺:非空 = 执行白名单生效,取用集须 ⊆ 圈定集,否则 409;空 = 未圈定不校验)",
             "items": {
               "maxLength": 128,
               "minLength": 1,

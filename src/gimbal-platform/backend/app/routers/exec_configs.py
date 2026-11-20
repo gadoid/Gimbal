@@ -73,14 +73,17 @@ class SystemSubConfig(BaseModel):
 
     service: str = Field(..., min_length=1, max_length=128,
                          description="目录服务名(分组键)")
-    # §8.10(2026-11-19):圈定本配置采用的调用身份条目(声明侧)。管理
-    # 范围语义 —— 圈定配置页就绪度/拨测/凭证引导的展示范围,**执行链
-    # 不消费**(services/exec_config._flatten 只取 bindings/carryOverrides,
-    # 场景声明条目仍按原链解析)。存量行缺键 → default [] = 未圈定,
-    # 前端按 bindings 声明键推导展示。
+    # §8.10(2026-11-19)→ 决策 1 圈定即承诺(2026-11-20 阶段 1 起执行链
+    # 消费):圈定本配置采用的调用身份条目(声明侧)。**非空 = 白名单
+    # 生效**:派发/预检时换用后取用集 ⊄ 圈定集 → 409 identity_not_circled
+    # (precheck_hard_gate 同一道门;行级 @slot 绑定同码);空 = 未圈定,
+    # 存量兼容(等同白名单关闭)。生效行 = 显式选定 > 本人默认行;令牌/
+    # graph/adhoc 不吃执行配置,天然不圈。重跑按首发快照照查。
     aliases: list[_SlotName] = Field(
         default_factory=list, max_length=64,
-        description="本配置采用的调用身份条目名(声明侧;管理范围,执行链不消费)")
+        description="本配置采用的调用身份条目名(圈定即承诺:非空 = "
+                    "执行白名单生效,取用集须 ⊆ 圈定集,否则 409;"
+                    "空 = 未圈定不校验)")
     bindings: dict[_AliasName, _SlotName] = Field(
         default_factory=dict, max_length=64,
         description="{身份面(别名全名): 条目名} —— 覆盖条目解析序的配置层")

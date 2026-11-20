@@ -185,7 +185,7 @@
     },
     "account_ambiguous": {
       "sites": [
-        "app/routers/run_precheck.py:538"
+        "app/routers/run_precheck.py:564"
       ],
       "statuses": []
     },
@@ -205,13 +205,13 @@
     },
     "account_missing": {
       "sites": [
-        "app/routers/run_precheck.py:529"
+        "app/routers/run_precheck.py:555"
       ],
       "statuses": []
     },
     "address_missing": {
       "sites": [
-        "app/routers/run_precheck.py:556"
+        "app/routers/run_precheck.py:595"
       ],
       "statuses": []
     },
@@ -633,25 +633,25 @@
     },
     "dataset_binding_unsupported": {
       "sites": [
-        "app/services/run_dispatcher.py:1240"
+        "app/services/run_dispatcher.py:1250"
       ],
       "statuses": []
     },
     "debug_not_supported": {
       "sites": [
-        "app/services/run_dispatcher.py:1289"
+        "app/services/run_dispatcher.py:1311"
       ],
       "statuses": []
     },
     "debug_single_case": {
       "sites": [
-        "app/services/run_dispatcher.py:1291"
+        "app/services/run_dispatcher.py:1313"
       ],
       "statuses": []
     },
     "debug_single_run": {
       "sites": [
-        "app/services/run_dispatcher.py:1295"
+        "app/services/run_dispatcher.py:1317"
       ],
       "statuses": []
     },
@@ -703,8 +703,8 @@
     },
     "duplicate_client_ref": {
       "sites": [
-        "app/services/run_dispatcher.py:1314",
-        "app/services/run_dispatcher.py:1446"
+        "app/services/run_dispatcher.py:1336",
+        "app/services/run_dispatcher.py:1471"
       ],
       "statuses": []
     },
@@ -774,7 +774,7 @@
         ]
       ],
       "sites": [
-        "app/routers/run_precheck.py:504",
+        "app/routers/run_precheck.py:530",
         "app/routers/runs.py:293",
         "app/routers/runs.py:439",
         "app/routers/scenarios.py:219",
@@ -788,7 +788,7 @@
     },
     "env_unspecified": {
       "sites": [
-        "app/routers/run_precheck.py:522"
+        "app/routers/run_precheck.py:548"
       ],
       "statuses": []
     },
@@ -834,7 +834,7 @@
         ]
       ],
       "sites": [
-        "app/routers/exec_configs.py:187"
+        "app/routers/exec_configs.py:190"
       ],
       "statuses": [
         409
@@ -970,8 +970,15 @@
     },
     "identity_missing": {
       "sites": [
-        "app/routers/run_precheck.py:516",
+        "app/routers/run_precheck.py:542",
         "app/services/adhoc_run.py:403"
+      ],
+      "statuses": []
+    },
+    "identity_not_circled": {
+      "sites": [
+        "app/routers/run_precheck.py:586",
+        "app/services/run_dispatcher.py:1280"
       ],
       "statuses": []
     },
@@ -1110,7 +1117,7 @@
     },
     "login_missing": {
       "sites": [
-        "app/routers/run_precheck.py:545"
+        "app/routers/run_precheck.py:571"
       ],
       "statuses": []
     },
@@ -1237,7 +1244,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:1112"
+        "app/routers/executions.py:1115"
       ],
       "statuses": [
         409
@@ -1271,8 +1278,8 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:1048",
-        "app/routers/executions.py:1065"
+        "app/routers/executions.py:1051",
+        "app/routers/executions.py:1068"
       ],
       "statuses": [
         409
@@ -1644,7 +1651,7 @@
       ],
       "sites": [
         "app/routers/carry.py:76",
-        "app/routers/exec_configs.py:158",
+        "app/routers/exec_configs.py:161",
         "app/routers/scenario_filter_groups.py:47"
       ],
       "statuses": [
@@ -1779,7 +1786,7 @@
         ]
       ],
       "sites": [
-        "app/routers/exec_configs.py:165"
+        "app/routers/exec_configs.py:168"
       ],
       "statuses": [
         409
@@ -1863,7 +1870,7 @@
       "sites": [
         "app/routers/integration.py:463",
         "app/routers/runs.py:200",
-        "app/services/run_dispatcher.py:1271"
+        "app/services/run_dispatcher.py:1293"
       ],
       "statuses": [
         403,
@@ -2625,10 +2632,10 @@
     "app/routers/access_tokens.py:593": "e.code",
     "app/routers/access_tokens.py:646": "e.code",
     "app/routers/access_tokens.py:685": "e.code",
-    "app/routers/exec_configs.py:239": "e.code",
-    "app/routers/exec_configs.py:288": "e.code",
-    "app/routers/executions.py:1008": "e.code",
-    "app/routers/executions.py:1013": "e.code",
+    "app/routers/exec_configs.py:242": "e.code",
+    "app/routers/exec_configs.py:291": "e.code",
+    "app/routers/executions.py:1011": "e.code",
+    "app/routers/executions.py:1016": "e.code",
     "app/routers/executions.py:752": "f'bad_{prefix}_pair'",
     "app/routers/executions.py:760": "f'bad_{prefix}_ts'",
     "app/routers/integration.py:350": "e.code",
@@ -2649,19 +2656,19 @@
     "app/routers/suites.py:579": "payload",
     "app/services/plate_client.py:642": "resp.json().get('error', {}).get('code', 'plate_error')",
     "app/services/run_dispatcher.py:1010": "e.code",
-    "app/services/run_dispatcher.py:1228": "e.code",
-    "app/services/run_dispatcher.py:1259": "code"
+    "app/services/run_dispatcher.py:1238": "e.code",
+    "app/services/run_dispatcher.py:1269": "code"
   },
   "meta": {
     "coded_exception_classes": [
-      "app/routers/run_precheck.py:65 PrecheckGateError",
+      "app/routers/run_precheck.py:68 PrecheckGateError",
       "app/services/access_token.py:90 TokenAuthError",
       "app/services/adhoc_run.py:48 AdhocRejected",
       "app/services/integration_runner.py:382 IntegrationRunError",
       "app/services/plate_client.py:60 PlateRejectedError",
       "app/services/project_promotion.py:33 PromotionError",
-      "app/services/run_dispatcher.py:3618 NotFound",
-      "app/services/run_dispatcher.py:3625 Conflict",
+      "app/services/run_dispatcher.py:3643 NotFound",
+      "app/services/run_dispatcher.py:3650 Conflict",
       "app/services/run_params.py:43 ParamsError",
       "app/services/service_aliases.py:308 BindingAliasInvalid",
       "app/services/suite_version.py:20 SuiteVersionError",
