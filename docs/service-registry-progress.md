@@ -1549,8 +1549,15 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   scope/双源参数 + 项目池 username 掩码口径拍定)、UsersCard 双入口
   重建(检索/手配/快照导入退役)、编排器选取器、查询视图换源
   (`CaseComposerCanvas.queryAliasOf` 离开 authored config.users)、
-  ServiceAdmin/方案绑定 scope 过滤。双源端点的成员可见 username
-  口径待拍(现状 `_member_view` 掩码)。
+  ServiceAdmin/方案绑定 scope 过滤。
+- **拍板补记(2026-11-20 深夜)**:①双源检索端点项目池 username 对
+  成员**可见**(补入 v2 §9 第 10 项)—— 按名引用必需,运行时本就
+  允许成员用项目凭证执行;`_member_view` 掩码保留在项目管理面板
+  各自视图;②决策 1 enforce 时点定为**阶段 3 清账完成即切**(阶段 0
+  数据否决长期 audit,清账 ≈ 半天,已回写决策 1 §9-1);③手配
+  方案 A(权限面:普通用户随保存自助建 username-ref 条目)用户未
+  否决,**按维持入账**(翻案退路已备:删 materialize 条目创建段,
+  闸与冲突码不动),同步登记册 C12。
 
 ### P2-C 验证收口
 

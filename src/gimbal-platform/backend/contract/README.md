@@ -5,8 +5,8 @@
 
 | 文件 | 内容 | 守卫面 |
 |---|---|---|
-| `openapi.json` | `create_app().openapi()` 原样落盘(199 路径 / 211 schema) | 请求/响应形状 |
-| `error-codes.json` | AST 静态提取的错误码清单(213 码 / 437 位点 / 35 动态位点) | 错误码/状态码/detail 形状 |
+| `openapi.json` | `create_app().openapi()` 原样落盘(199 路径 / 213 schema;2026-11-20 阶段 2 入库时点) | 请求/响应形状 |
+| `error-codes.json` | AST 静态提取的错误码清单(215 码 / 440 位点 / 35 动态位点;2026-11-20 阶段 0/1 入库时点) | 错误码/状态码/detail 形状 |
 
 *计数为本轮入库时点,演进后以 `check` 重生产物为准。*
 
