@@ -154,6 +154,50 @@ class TestAccountColumns:
         assert cases[0]["steps"][0]["request"]["body"]["org"] == "PB"
 
 
+async def test_row_bindings_out_of_token_scope(
+        client, plate_mock: PlateMock, monkeypatch):
+    """P1-1 回归钉(2026-11-20 review):行级绑定的令牌范围核对读
+    PickedIdentity.account_id —— 旧读 ``.id``(slots 数据类无该属性)
+    在「access-token 派发 × 数据集 @slot 行」同时出现时 AttributeError
+    → 500;正确行为是范围外账户 409 resource_not_allowed。"""
+    plate_mock.behaviour = "echo"
+    h = await register_and_login(client, "q3_t", "pw123456")
+    await _seed_alias()
+    uid = await _uid("q3_t")
+    id_a = await _binding(owner=uid, alias="acct-a", org="A", default=True)
+    await _binding(owner=uid, alias="acct-b", system="fin-b", org="B")
+    r = await client.post("/api/scenarios", headers=h, json=make_draft(
+        "sc-q3t", steps=[_STEP], vars_map={"amount": "1"}))
+    assert r.status_code in (200, 201), r.text
+    r = await _mk_ds(client, h, "sc-q3t", [{"@slot.qa1": "acct-b"}])
+    assert r.status_code == 201, r.text
+    ds_id = r.json()["datasetId"]
+    # 令牌范围只含 acct-a:行绑定 acct-b 出圈 → 409(修复前 AttributeError)
+    from .inbound_fixtures import mk_token
+    tok_id, _plain = await mk_token(user_id=uid, scope_auths=(id_a,))
+
+    from app.models.access_token import AccessToken
+    from app.services import run_dispatcher as rd
+    from app.schemas.scenario_composer import RunRequest
+    from app.services.scenario_store import get_row
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    async with db_module.SessionLocal() as db:
+        scen = await get_row(db, "sc-q3t")
+        tok = await db.get(AccessToken, tok_id)
+        with pytest.raises(rd.Conflict) as ei:
+            await rd.dispatch_target(
+                db, uid,
+                RunRequest(scenarioId="sc-q3t", clientRef="q3t",
+                           dataSetIds=[ds_id]),
+                rd.RunTarget(scenario_id=scen.scenario_id,
+                             payload=scen.payload or {}, kind="scenario"),
+                token=tok)
+    assert ei.value.code == "resource_not_allowed"
+    assert ei.value.extra == {"aliases": ["acct-b"]}
+    assert cases == []          # 未过闸不派发
+
+
 async def test_graph_unit_with_account_column_rejected(client):
     """suite 编排(graph 单元行)带账号列 → dataset_binding_unsupported。"""
     import pytest

@@ -8,6 +8,8 @@
 | `openapi.json` | `create_app().openapi()` 原样落盘(199 路径 / 211 schema) | 请求/响应形状 |
 | `error-codes.json` | AST 静态提取的错误码清单(213 码 / 437 位点 / 35 动态位点) | 错误码/状态码/detail 形状 |
 
+*计数为本轮入库时点,演进后以 `check` 重生产物为准。*
+
 错误码提取覆盖四类间接形态:`_codes.py` 整型码、带码业务异常类
 (`self.code = code`)raise 位点、透传 helper(`_bad` 型)调用位点、
 `at.ERR_*` 模块常量。非字面量位点登记进 `dynamic` 面(取值由对应

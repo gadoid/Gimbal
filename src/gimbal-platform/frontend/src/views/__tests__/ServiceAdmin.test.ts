@@ -785,6 +785,9 @@ describe('FE-02 失败≠空态(读面降级三态)', () => {
     const slots = w.get('[data-testid="inst-slots-fin-service-1"]').text()
     expect(slots).toContain('条目读取失败')
     expect(slots).not.toContain('未登记条目')
+    // review 收口(P2-7):计数 chip 同步降级 —— 不再与降级文案并显假「0 个」
+    expect(slots).toContain('读取失败')
+    expect(slots).not.toContain('0 个配置槽位')
     w.unmount()
   })
 })

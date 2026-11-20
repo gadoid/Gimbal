@@ -412,7 +412,9 @@
                   </td>
                   <td :data-testid="`inst-slots-${svc.name}-${e.id}`">
                     <span class="chip slot-chip">
-                      {{ envAliases(svc, e.id).length }} 个配置槽位
+                      <!-- FE-02(review 收口):计数随条目面降级,不再假 0 -->
+                      {{ aliasFailed(svc.name) ? '读取失败'
+                        : `${envAliases(svc, e.id).length} 个配置槽位` }}
                     </span>
                     <div class="slot-refs mono">
                       <template v-if="aliasFailed(svc.name)">条目读取失败,无法判定</template>

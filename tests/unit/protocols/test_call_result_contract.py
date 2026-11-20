@@ -513,6 +513,32 @@ class TestTransportError:
         assert result.message == "Request timeout: simulated"
         assert result.error == "tb-here"
 
+    def test_missing_auth_session_maps_to_auth_error_kind(self, monkeypatch):
+        """P1-2(review 2026-11-20):call.user 会话缺失的 AuthError 须落
+        ProtocolAuthError 通道 —— ``error_kind == "auth"`` + 拒绝匿名文案。
+        修复前认证注入在 send 的 try 外执行,AuthError 绕过类型翻译落
+        base 的兜底分支:无 error_kind + "Unexpected exception" 文案
+        (integration 的 auth 暂停/补齐复活通道永远不命中)。"""
+        monkeypatch.delenv("GIMBAL_ALLOW_ANONYMOUS_AUTH", raising=False)
+        from gimbal.auth.registry import AuthRegistry
+        from gimbal.schema import Request
+
+        step = Step(call=Call(protocol="http", service="svc", method="GET",
+                              path="/p", **{"user": "ghost"}),
+                    request=Request(body={}), strategy=[])
+        dispatcher = build_default_dispatcher(
+            hook_registry=HookRegistry(), auth_registry=AuthRegistry())
+        view = _StubView()
+        sm = StepStateMachine(
+            step_id="s", step_schema=step, dispatcher=dispatcher, view=view,
+            services={"svc": "https://svc.example"},
+            protocol_registry=dispatcher.protocols,
+        )
+        result = sm._do_call()
+        assert result.status == StrategyStatus.ERROR
+        assert result.error_kind == "auth"          # 修复前:无 error_kind
+        assert "拒绝匿名调用" in result.message      # 修复前:Unexpected exception
+
 
 class TestSummaryCompat:
 

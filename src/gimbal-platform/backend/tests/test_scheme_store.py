@@ -39,6 +39,21 @@ async def test_normalized_synthesizes_selection_from_legacy_ids():
     ]
 
 
+async def test_normalized_explicit_empty_selection_not_override_synthesis():
+    """P2-3 回归钉(review 2026-11-20):路由层模型 dump 恒带显式空
+    ``dataSetSelection: []`` + ``dataSetIds``(schemas/scenario_composer
+    default_factory=list)—— 双键同带时合成不得被空选择盖回,否则
+    经 /run-schemes 创建的旧形状方案静默丢数据集(2026-11-20 追修
+    的真形状;修复前顺序 update-后置会丢,本用例即红)。"""
+    got = scheme_store.normalized({
+        "dataSetIds": ["ds-001"],
+        "dataSetSelection": [],          # 显式空(整库语义)≠ 无该键
+    })
+    assert got["dataSetSelection"] == [
+        {"datasetId": "ds-001", "rowIndexes": []},
+    ]
+
+
 async def test_create_and_name_conflict(client):
     _, sid = await _mk_scenario(client)
     from app.core.db import SessionLocal

@@ -285,6 +285,35 @@ describe('ExecConfigsView', () => {
     w.unmount()
   })
 
+  it('FE-05 在飞守卫:保存落定前按钮禁用且不双发(create 双击曾双 POST 撞名 409)', async () => {
+    const META: ExecConfigRow = {
+      id: 21, name: '元信息套', isDefault: true,
+      description: 'd', tags: [],
+      systems: [{ service: 'fin-service', aliases: [], bindings: {}, carryOverrides: {} }],
+    }
+    setup([META])
+    ec.updateExecConfig.mockReset()
+    let release!: (v: ExecConfigRow) => void
+    ec.updateExecConfig.mockReturnValueOnce(
+      new Promise<ExecConfigRow>((r) => { release = r }))
+    const w = await mountPage()
+    await enterMetaEdit(w)
+    await w.get('[data-testid="ec-desc"]').setValue('新说明')
+    const btn = w.get('[data-testid="ec-save"]')
+    await btn.trigger('click')
+    // saving 态:UI 禁用 + 文案切换
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.text()).toContain('保存中')
+    // 程序化点击仍会派发事件(VTU dispatchEvent 不看 disabled)——
+    // 钉的是 save() 的 saving 早退守卫:不双发 PATCH
+    await btn.trigger('click')
+    expect(ec.updateExecConfig).toHaveBeenCalledTimes(1)
+    release(META)
+    await flushPromises()
+    expect(w.get('[data-testid="ec-save"]').attributes('disabled')).toBeUndefined()
+    w.unmount()
+  })
+
   it('v7/v8.2 取消:放弃全部未保存改动,头卡与节点回到只读态', async () => {
     const META: ExecConfigRow = {
       id: 22, name: '取消套', isDefault: false,

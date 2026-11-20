@@ -1263,8 +1263,10 @@ async def dispatch_target(
         if token is not None:
             from . import access_token as _at
             _scope_aliases, _scope_auths = await _at.load_scope(db, token.id)
+            # P1-1(review 2026-11-20):PickedIdentity 无 .id(slots),
+            # 绑定标识 = account_id —— 与十行下方的留档路径同款
             _out = sorted({a for (s, a), b in _hit.items()
-                           if b.id not in _scope_auths})
+                           if b.account_id not in _scope_auths})
             if _out:
                 raise Conflict(
                     _at.ERR_RESOURCE_NOT_ALLOWED,

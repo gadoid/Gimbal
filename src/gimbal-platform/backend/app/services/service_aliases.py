@@ -352,7 +352,14 @@ async def validate_slot_overrides(
     条目与换用目标都须存在,且同基础服务 —— 换用只换「池内取哪条身份」,
     不许借道把别家基础服务的凭证注入原槽位发往原地址(运行时 precheck
     只拦「目标不存在」,跨基础服务此前任何层都不拦;与
-    ``validate_binding_aliases`` 两分支同款口径)。"""
+    ``validate_binding_aliases`` 两分支同款口径)。
+
+    刻意差异(review 2026-11-20 登记):本闸**键侧无回落** ——
+    ``validate_binding_aliases`` 的服务键允许未注册(回落自身为基础
+    服务),而这里声明条目必须真实存在于注册表:换用键是池内取用条目,
+    未注册 = 无池身份,绑定在运行时被 ``slot_lookup_overrides`` 静默
+    忽略(label 未命中)—— 写面 422 优于静默接受死配置。对齐时勿反
+    向抄回落。"""
     pairs = {k: v for k, v in (alias_overrides or {}).items() if k != v}
     if not pairs:
         return

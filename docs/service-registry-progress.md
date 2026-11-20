@@ -1234,8 +1234,10 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   StepStatus / `StepContext` 无 `.view` 属性)—— 补参、删误导入用
   模块顶正确版、改 `StepContextAdapter` 包裹,两处裸 except 补 warning;
   setup/teardown 上下文/归档能力整体恢复 + 归档回归钉。CFG-02 订阅指纹
-  `b.id`→`b.account_id`(run_dispatcher 同类曾修,此处漏网;全仓
-  PickedIdentity 消费点清扫确认唯一)。**审计外追修**:`scheme_store
+  `b.id`→`b.account_id`(run_dispatcher 同类曾修,此处漏网;当时记
+  「全仓清扫确认唯一」—— **2026-11-20 review 查出第三处**
+  run_dispatcher 令牌范围核对同读 `.id`,已修并补钉,见「review 收口
+  轮」节)。**审计外追修**:`scheme_store
   .normalized()` 先合成 dataSetSelection 再被模型 dump 的显式空 [] 盖回
   —— 经 /run-schemes 创建的旧形状(dataSetIds)方案**静默丢数据集**,
   合成移到 update 后。CFG-03 graph 单元降级补 warning + `scheme_env`
@@ -1259,10 +1261,12 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   删除项/实例档来源标签带服务级覆盖限定/两处 msg() 死分支删/as never
   移除/name maxlength/保存保持页签/Runner 只清成功项/404 与网络失败
   分离/「凭证在池」粗口径措辞/services Any 导入);
-- **测试**:新增 8 用例(lifecycle 归档钉/指纹行级绑定换绑翻转/convert
-  剥 users 断言/签名器 fail-fast 双路径含逃生口/graph 个人池闸双向/
-  adhoc 新门)+ 6 个钉旧行为用例随契约更新(深链 SPAN、错误桩改
-  拦截器归一后的真实 Error 形状等);
+- **测试**:新增 6 用例(lifecycle 归档钉/指纹行级绑定换绑翻转/convert
+  剥 users 断言/签名器 fail-fast 双路径含逃生口/graph 个人池闸双向)+
+  6 个钉旧行为用例随契约更新(深链 SPAN、错误桩改拦截器归一后的真实
+  Error 形状等)。*原稿计「8 用例含 adhoc 新门」系虚报(review 复核
+  更正):adhoc identity_missing 门当时无直接用例,scheme_store 追修
+  也只钉了旧形状 —— 两钉由 review 收口轮补齐*;
 - **验证**:前端 vitest **172 文件 / 1493 passed / 0 failed** + vue-tsc 0;
   后端分域全绿(carry/注入/链 54 + consent/scheme/q3 22 + adhoc 30 +
   s8 7 + plate 14 + alias/bindings 15 + 引擎签名器 23 + lifecycle 3);
@@ -1349,6 +1353,40 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   diff 直指该码(拦);pyflakes 清;`contract/README.md` 记契约变更
   流程。**治本全量未动**:前端 37 个 `api/*.ts` 手写镜像的 codegen
   单源化、错误码表前端接入,仍按登记册 B5 后排。
+
+### Review 收口轮(2026-11-20 午,🟢 P1×2 + P2×7 完成)
+
+对当日全部 15 提交的批判性 review(批次①–④ 由独立评审逐提交读 diff +
+跑验证;后两轮逐 hunk 精审 + 复核全部关键声明)查出 2 P1 + 9 P2,本轮
+修 P1×2 + P2×7(#6 文案口径与 #9 部分项转登记):
+
+- **P1-1**:run_dispatcher 令牌范围核对残留 `b.id` 消费 PickedIdentity
+  (slots 数据类无该属性 → access-token 派发 × 数据集 @slot 行 = 500,
+  本应 409 resource_not_allowed)—— 批次①–④「清扫确认唯一」系误报,
+  同类第三处;改 `account_id` + Q3 补「令牌×行级绑定」钉(修复前复红
+  验证 AttributeError);
+- **P1-2**:引擎 `call.py` 认证注入在 httpx try **外**执行,会话缺失的
+  AuthError 绕过类型翻译 → 步骤失败**不带 error_kind=auth**(integration
+  的 auth 暂停/补齐复活通道永不命中,文案落 "Unexpected exception")——
+  注入挪进 try + 钉 `error_kind == "auth"`(修复前复红验证);
+- **P2 收口**:scenario_runner 两处 `exc_info=True` 被 loguru 静默忽略
+  → `opt(exception=True)`(降级可见补栈);yhr(src+backend 双副本)
+  DEBUG 日志的 `response.headers` 是 httpx.Headers 非 dict 族、scrub
+  不处理 → `dict()` 化走按值掩码(TOK-06 对 yhr 此前实际无效);
+  scheme_store 追修补**真形状**回归钉(双键同带:显式空
+  `dataSetSelection` + `dataSetIds`,旧测试两序皆绿);FE-01/FE-05
+  在飞守卫补 vitest 钉(可释放 promise:双击单发 + 释放后可再发/禁用
+  + 不双发 PATCH);ServiceAdmin 槽位计数 chip 随条目面降级(不再与
+  「条目读取失败」并显假 0);slot 写面闸 docstring 写明**键侧无回落
+  是刻意差异**(未注册声明条目 = 死配置,422 优于静默忽略,对齐勿反向
+  抄回落);进度档两处虚报更正(见批次①–④ 节注);
+- **转登记**:TOK-07 存量跨基础服务配置编辑前运行时照常生效(属主
+  自用面,数据清查或运行时补校验再议);adhoc 缺槽闸「歧义并入未登记」
+  文案粗化 —— 均入登记册 E 节;
+- **验证**:修复前复红 ×2(钉的是真缺陷);后端 47(q3/scheme/
+  exec_configs/auth_sessions/api_contract)+ 引擎 153(auth/protocols/
+  engine)+ 前端 87(三视图)+ vue-tsc 0;契约快照随行号漂移重生
+  (openapi 零变化)。
 
 ### P2-C 验证收口
 

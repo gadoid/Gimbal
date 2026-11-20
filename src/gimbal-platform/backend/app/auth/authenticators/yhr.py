@@ -45,4 +45,6 @@ class YHRAuthenticator(Authenticator):
             auth.expires_in if auth.expires_in else DEFAULT_EXPIRES_IN,
         )
         # TOK-06:DEBUG 日志移到 apply_token 之后(cookie 值已进掩码表)。
-        logger.debug("Response headers: {}", headers)
+        # P2(review 2026-11-20):httpx.Headers 非 dict 子族,scrub 不处理
+        # → set-cookie 明文照落;dict() 化后才走按值掩码(wl/github 同款)
+        logger.debug("Response headers: {}", dict(headers))

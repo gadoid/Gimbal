@@ -688,9 +688,11 @@ class ScenarioRunner:
                     resolved_vars={},
                 )
             except Exception:  # noqa: BLE001 — 上下文设施缺失时退化为无 ctx 分派
-                logger.warning(
+                # P2(review 2026-11-20):loguru 不认 stdlib 的 exc_info,
+                # 降级可见须带栈 —— 同 graph_dispatch 的 opt(exception=True)
+                logger.opt(exception=True).warning(
                     "[ScenarioRunner] lifecycle 上下文创建失败,退化为无 ctx 分派: "
-                    "step_id={}", step_id, exc_info=True)
+                    "step_id={}", step_id)
                 step_ctx = None
             spec = type("_LifecycleSpec", (), {
                 "kind": entry.kind, "name": step_id, "phase": None, "order": 0,
@@ -711,9 +713,9 @@ class ScenarioRunner:
                         step_ctx,
                         StepStatus.PASSED if result.passed else StepStatus.FAILED)
                 except Exception:  # noqa: BLE001 — 归档失败不改变条目判定
-                    logger.warning(
+                    logger.opt(exception=True).warning(
                         "[ScenarioRunner] lifecycle finalize_step 失败(归档缺失,"
-                        "判定不变): step_id={}", step_id, exc_info=True)
+                        "判定不变): step_id={}", step_id)
             if result.failed:
                 return StepRunResult(
                     step_id=step_id, status="failed",

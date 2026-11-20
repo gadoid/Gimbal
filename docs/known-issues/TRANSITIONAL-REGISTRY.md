@@ -65,7 +65,12 @@
   (docs/known-issues/ 各档,重开条件在档);
 - 测试环境域名硬编码认证器(私有环境拍板豁免,转公开前必须处理);
 - 修订台账 working 声明显示「不一致」提示(then=null vs now=working 的
-  语义歧义,低频观感问题)。
+  语义歧义,低频观感问题);
+- TOK-07 写面闸只拦新写(2026-11-20 review 登记):存量跨基础服务
+  exec-config 行在被编辑前运行时照常生效(precheck 只拦不存在);
+  风险面 = 配置属主自用,如需收口:一次性数据清查或运行时补同基校验;
+- adhoc/graph 缺槽闸把「账户歧义」并入「未登记」文案(review P2-6
+  登记;场景链硬门是 identity_missing/account_ambiguous 分码的)。
 
 ## 已销(本批,2026-10-14)
 

@@ -179,7 +179,8 @@ class CallExecutor(ProtocolExecutor):
 
     def _auth_session_missing(self, user: str, reason: str):
         """会话缺失的统一处置:fail-fast 抛 AuthError(步骤级失败,
-        由外层包成 ProtocolAuthError)或逃生口下降级 warning。"""
+        由 send() 的 except 翻译成 ProtocolAuthError → error_kind=auth)
+        或逃生口下降级 warning。"""
         if self._anonymous_fallback_allowed():
             logger.warning(
                 "[CallExecutor] call.user={!r} {}，跳过认证头注入"
@@ -292,9 +293,6 @@ class CallExecutor(ProtocolExecutor):
         timeout = spec.timeout
         pctx = getattr(spec, "pctx", None)
 
-        # 原生认证注入（批次 F-2b；原 auth_headers 插件的 HTTP_BEFORE_SEND 钩子退役）
-        self._inject_auth_headers(headers, pctx)
-
         # 请求体通道（残留 #5：$.call.request.body 子树）
         # 注意：用 `is None` 而非 `not ...` —— 空 dict / 空 list 是合法的 request body，
         # 不应被 falsy 判定重新覆盖。
@@ -305,6 +303,13 @@ class CallExecutor(ProtocolExecutor):
 
         try:
             import httpx
+
+            # 原生认证注入（批次 F-2b；原 auth_headers 插件的 HTTP_BEFORE_SEND 钩子退役）。
+            # P1-2(2026-11-20 review):注入必须在 try 内 —— 会话缺失的
+            # AuthError 在 try 外抛会绕过下方 AuthError→ProtocolAuthError
+            # 翻译,落 base 的无 error_kind 兜底(integration 的 auth 暂停
+            # 通道永远不命中)。注入只改 headers,与上方 body 通道无序依赖。
+            self._inject_auth_headers(headers, pctx)
 
             logger.info("[CallExecutor] HTTP 请求: {} {}", method, url)
 

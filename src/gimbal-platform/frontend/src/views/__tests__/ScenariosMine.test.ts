@@ -162,6 +162,28 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     w.unmount()
   })
 
+  it('FE-01 在飞守卫:执行未落定时双击不双发,释放后可再发', async () => {
+    vi.mocked(composerApi.runScenario).mockClear()
+    let release!: (v: { runId: string }) => void
+    vi.mocked(composerApi.runScenario).mockReturnValueOnce(
+      new Promise((r) => { release = r as (v: { runId: string }) => void }))
+    const w = mountPage([scen('sc-a', 'private', 5)])
+    await flushPromises()
+    await w.find('.schemes-chip').trigger('click')
+    await flushPromises()
+    const btn = w.find('.run-link')
+    await btn.trigger('click')
+    await btn.trigger('click')        // 在飞:per-scheme busy 集已含 → 早退
+    expect(composerApi.runScenario).toHaveBeenCalledTimes(1)
+    release({ runId: 'run-x' })
+    await flushPromises()
+    await btn.trigger('click')        // finally 已释放 → 可再发(非粘死)
+    expect(composerApi.runScenario).toHaveBeenCalledTimes(2)
+    release({ runId: 'run-y' })
+    await flushPromises()
+    w.unmount()
+  })
+
   it('并发越界被拦下,不落 updateRunScheme', async () => {
     const w = mountPage([scen('sc-a', 'private', 5)])
     await flushPromises()
