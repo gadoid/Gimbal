@@ -442,6 +442,34 @@ async def test_detail_with_secrets_returns_plaintext(client) -> None:
     assert body["password"] == "s3cret"
 
 
+async def test_detail_with_secrets_writes_audit_row(client) -> None:
+    """TOK-05 护栏(2026-11-20 审计):明文读取落审计行;掩码详情不记。"""
+    from app.models.permission import AuditLog
+
+    auth = await register_and_login(client)
+    env = await _seed_env()
+    r = await client.post(
+        "/api/auths", headers=auth,
+        json={"system": "fin-service", "envId": env,
+              "username": "audit_user", "password": "s3cret"},
+    )
+    aid = r.json()["id"]
+
+    async def _actions() -> list[str]:
+        async with db_module.SessionLocal() as db:
+            return list((await db.execute(select(AuditLog.action).where(
+                AuditLog.resource_type == "auth_account",
+                AuditLog.resource_id == str(aid)))).scalars().all())
+
+    r = await client.get(f"/api/auths/{aid}", headers=auth)
+    assert r.status_code == 200
+    assert await _actions() == []  # 普通详情(掩码)不落审计
+
+    r = await client.get(f"/api/auths/{aid}?include_secrets=true", headers=auth)
+    assert r.status_code == 200
+    assert await _actions() == ["auth.secret.read"]
+
+
 async def test_detail_with_secrets_cross_owner_404(client) -> None:
     a_auth = await register_and_login(client)
     env = await _seed_env()

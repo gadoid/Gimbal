@@ -10,7 +10,13 @@ import { defineComponent, h, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import UsersCard from '@/components/composer/UsersCard.vue'
 import { list, listAll, get } from '@/api/auth_sessions'
+import { confirmAction } from '@/utils/confirmAction'
 import type { UserAuthView } from '@/types/plate'
+
+// TOK-05:导入前二次确认(confirmAction 单源弹窗;默认放行)
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: vi.fn().mockResolvedValue(true),
+}))
 
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn(),
@@ -205,6 +211,29 @@ describe('UsersCard — 凭证池导入', () => {
     await flushPromises()
     expect(users.value['ua@fin']).toBeUndefined()
     expect(users.value['ub@fin']).toMatchObject({ password: 'plain-pw-2' })
+    w.unmount()
+  })
+})
+
+describe('UsersCard — TOK-05 明文导入二次确认', () => {
+  it('确认文案点名明文密码与审计;取消 → 不拉明文、快照不变', async () => {
+    vi.mocked(confirmAction).mockResolvedValueOnce(false)
+    const { w, users } = mountCard({})
+    await w.findAll('button').filter((b) => b.text().includes('从凭证池导入'))[0].trigger('click')
+    await flushPromises()
+    ;([...document.querySelectorAll('.pool-item')] as HTMLElement[])
+      .filter((el) => !el.classList.contains('disabled'))
+      .forEach((el) => el.click())
+    await flush()
+    clickDialogButton('导入')
+    await flushPromises()
+    // 确认弹窗文案:点名明文与审计留痕
+    const [message] = vi.mocked(confirmAction).mock.calls[0]
+    expect(message).toContain('明文密码')
+    expect(message).toContain('审计')
+    // 取消 → 一条明文都不拉
+    expect(get).not.toHaveBeenCalled()
+    expect(users.value['ua@fin']).toBeUndefined()
     w.unmount()
   })
 })

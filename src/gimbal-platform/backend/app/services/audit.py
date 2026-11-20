@@ -56,6 +56,9 @@ AUDIT_ACTIONS = (
     # ── authz M2a S8 项目凭证(项目管理员写;资源 = 项目)──────────
     "project.credential.write",   # 项目凭证建/改/换默认/删(detail.op)
     "project.token.write",        # M2b Q2 项目令牌签发/生命周期/换绑(detail.op)
+    # ── TOK-05 护栏(2026-11-20 审计):明文回显是拍板保留的内网测试
+    # 策略,但每次明文读取必须留痕(读类先例 external_endpoint.query_safe)
+    "auth.secret.read",           # GET /auths/{id}?include_secrets=true
 )
 
 

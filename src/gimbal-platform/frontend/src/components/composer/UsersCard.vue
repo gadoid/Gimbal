@@ -165,6 +165,7 @@ import { toTypedSchema } from '@/utils/zod-typed-schema'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
 import { toast } from '@/utils/toast'
+import { confirmAction } from '@/utils/confirmAction'
 import { listAll as listAuths, get as getAuth } from '@/api/auth_sessions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -305,6 +306,14 @@ async function openImport() {
 }
 
 async function submitImport() {
+  // TOK-05 二次确认(2026-11-20 审计):导入 = 逐条拉取明文密码写入
+  // 场景快照(后端每次明文读取落审计行),须显式确认后才执行
+  const ok = await confirmAction(
+    `将拉取 ${selectedIds.value.length} 条账户的明文密码并写入本场景快照(每次明文读取留审计日志)。快照与凭证池解耦,继续吗?`,
+    '拉取明文凭证?',
+    { type: 'warning', confirmButtonText: '导入明文' },
+  )
+  if (!ok) return
   importing.value = true
   let imported = 0
   const next = { ...props.modelValue }

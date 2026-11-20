@@ -272,6 +272,16 @@ async def get_auth(
     base = _to_out(a, login_url=urls.get(a.id, ""))
     if not include_secrets:
         return base
+    # TOK-05 护栏(2026-11-20 审计):明文回显是拍板保留的内网测试策略,
+    # 但每次明文读取必须落审计行(best-effort,失败不阻塞读取)。
+    from ..services import audit as audit_svc
+    await audit_svc.record(
+        session,
+        actor_id=user.id, actor_name=user.display_name or user.username,
+        action="auth.secret.read",
+        resource_type="auth_account", resource_id=str(a.id),
+        resource_name=a.username,
+    )
     # 严解密:密钥轮换后的旧密文不可恢复。快照拷贝会把返回值当真值写进
     # 场景导出产物,不能像列表 _safe_decrypt 那样降级为占位符 — 显式 422。
     try:
