@@ -167,9 +167,8 @@
                 <option
                   v-if="stepService(currentStep) && !serviceOptions.some(o => o.value === stepService(currentStep))"
                   :value="stepService(currentStep)"
-                >{{ stepService(currentStep) }}(未挂目录)</option>
+                >{{ stepService(currentStep) }}{{ effectiveServiceScope.length ? '(当前值·未入范围)' : '(未挂目录)' }}</option>
                 <option v-for="o in serviceOptions" :key="o.value" :value="o.value" :class="{ dim: o.dim }">{{ o.label }}</option>
-                <option value="__create__">+ 为此服务新建身份面…</option>
               </select>
               <span v-if="refWarning" class="svc-ref-warn" :class="refWarning.level">{{ refWarning.text }}</span>
               <div v-if="creatingAlias" class="alias-create">
@@ -656,6 +655,9 @@ const props = defineProps<{
   /** 手配草稿名(凭证治理 2c):悬空判定已知集 = 注册表 ∪ 待保存手配名
    *  (落池前「将登记」放行,与后端登记闸 extra_known 同口径)。 */
   authDrafts?: AuthDraftView[]
+  /** 服务范围(三级收敛,config.service_scope):步骤下拉的收敛域输入;
+   *  生效域 = scope ∪ 步骤引用键(自动收敛),空 = 未收敛(现状全量)。 */
+  serviceScope?: string[]
 }>()
 import { useRouter } from 'vue-router'
 
@@ -672,6 +674,8 @@ const emit = defineEmits<{
    *  上抛(请求侧落注入地址,响应侧落断言目标),CaseComposer 落
    *  registry.entries(registry 住在编排器层) */
   'registryAdd': [mark: RegistryMark]
+  /** 三级收敛:下拉「管理服务范围…」→ 父级切配置页(scope 收敛面) */
+  'manageScope': []
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
@@ -1988,20 +1992,57 @@ function carryInjectable(step: StepView): Map<string, CarrySource> {
 }
 
 /**
- * 引用下拉选项:锚点(目录服务)居首 → 同基别名(deriveBase === 锚点)
- * → 其他声明键置底标跨服务(dim)。锚点缺失(未挂目录步骤,引用键派生
- * 不出目录归属)时列出全部目录名 — 否则目录名在下拉里根本不出现,
- * 裸声明步骤无路切回目录服务,与「无法创建别名」互相死锁。
+ * 生效域 = 存储 scope ∪ 步骤引用键(自动收敛:目录新建步骤的锚点键
+ * 自动进域 —— 范围永不卡死步骤既有引用)。空 = 未收敛(新场景)→
+ * 下拉保持全量现状;模板「当前值域外」兜底 option 的文案也随此切换。
+ */
+const effectiveServiceScope = computed(() => {
+  const stepKeys = local
+    .map((s) => stepService(s))
+    .filter((k): k is string => !!k)
+  return [...new Set([...(props.serviceScope ?? []), ...stepKeys])]
+})
+
+/**
+ * 引用下拉选项 —— 三级收敛口径(目录定服务 → 配置定实例面 → 步骤定凭证):
+ *
+ * * 生效域(scope ∪ 步骤引用键)非空 → 只列**锚点服务下、域内**的键:
+ *   身份面条目(= 凭证面)/ 锚点自身(服务键直引·默认凭证);跨服务与
+ *   全量注册表从步骤页退场(本就只是黄警噪声,保存不拦)。当前值域外
+ *   由模板兜底 option 保留并标「未入范围」;「管理服务范围…」跳配置卡。
+ * * 生效域空(新场景未选范围无步骤)→ 现状全量:锚点居首 → 同基声明/
+ *   已登记 → 跨服务置底(dim)。锚点缺失(未挂目录步骤)时列全部目录名
+ *   — 否则裸声明步骤无路切回目录服务,与「无法创建别名」互相死锁。
  */
 const serviceOptions = computed(() => {
   const anchor = serviceAnchor.value
   const declared = props.services ?? {}
+  const effective = effectiveServiceScope.value
   const opts: Array<{ value: string; label: string; dim?: boolean }> = []
   const seen = new Set<string>()
   const push = (value: string, label: string, dim = false) => {
     if (seen.has(value)) return
     seen.add(value)
     opts.push({ value, label, dim })
+  }
+  if (effective.length) {
+    // base 判定:注册条目 baseService;拉取降级/未注册退化为键自身 →
+    // 同基过滤会失真 —— 降级期(registryDegraded)整域列出,横幅兜底。
+    const baseOf = (k: string) =>
+      registeredByName.value.get(k)?.baseService ?? k
+    const domain = registryDegraded.value || !anchor
+      ? effective
+      : effective.filter((k) => baseOf(k) === anchor)
+    const list = domain.length ? domain : effective
+    for (const k of list) {
+      if (k === anchor) push(k, `${k}(服务键直引 · 默认凭证)`)
+      else if (registeredByName.value.has(k)) push(k, `${k}(已登记)`)
+      else if (catalogNames.value.has(k)) push(k, `${k}(目录服务)`)
+      else push(k, k, true)
+    }
+    push('__create__', '+ 为此服务新建身份面…')
+    push('__manage__', '管理服务范围…')
+    return opts
   }
   if (anchor) push(anchor, `${anchor}(目录服务)`)
   else for (const n of catalogNames.value) push(n, `${n}(目录服务)`)
@@ -2024,6 +2065,7 @@ const serviceOptions = computed(() => {
     if (anchor && a.baseService !== anchor)
       push(a.aliasName, `${a.aliasName}(已登记)`, true)
   }
+  push('__create__', '+ 为此服务新建身份面…')
   return opts
 })
 
@@ -2070,6 +2112,7 @@ const svcUrlHint = computed(() => {
 
 function onServiceRefChange(step: StepView, value: string) {
   if (value === '__create__') { creatingAlias.value = true; return }
+  if (value === '__manage__') { emit('manageScope'); return }
   creatingAlias.value = false
   const call = stepCall(step)!       // call 唯一形态;local 直改经既有 watch 传播
   call.service = value

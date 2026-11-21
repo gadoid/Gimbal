@@ -1387,7 +1387,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1332",
+        "app/routers/scenarios.py:1347",
         "app/routers/suites.py:1844"
       ],
       "statuses": [
@@ -1589,7 +1589,7 @@
         "app/routers/endpoint_catalog.py:154",
         "app/routers/endpoint_catalog.py:311",
         "app/routers/scenarios.py:286",
-        "app/routers/scenarios.py:1413"
+        "app/routers/scenarios.py:1428"
       ],
       "statuses": [
         422,
@@ -1613,7 +1613,7 @@
         "app/routers/integration.py:872",
         "app/routers/runs.py:265",
         "app/routers/scenarios.py:278",
-        "app/routers/scenarios.py:1406",
+        "app/routers/scenarios.py:1421",
         "app/routers/strategy_catalog.py:58"
       ],
       "statuses": [
@@ -2587,7 +2587,7 @@
       "sites": [
         "app/routers/integration.py:728",
         "app/routers/report_definitions.py:230",
-        "app/routers/scenarios.py:1338",
+        "app/routers/scenarios.py:1353",
         "app/routers/suites.py:1850"
       ],
       "statuses": [

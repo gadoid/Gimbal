@@ -161,6 +161,8 @@
               :project-id="runProjectId"
               :assertion-entries="registry.entries"
               :dead-entry-ids="deadEntryIds"
+              :step-service-keys="stepServiceKeys"
+              :save-state="saveState"
               @run-entry="onRunEntry"
               @bind-jump="onServiceBindJump"
             />
@@ -177,11 +179,13 @@
               :auth-drafts="authDrafts"
               :scenario="scenario"
               :services="definition.config?.services ?? {}"
+              :service-scope="definition.config?.service_scope ?? []"
               :focus-jump="focusJump"
               @update:services="onServicesUpdate"
               @var-promote="onVarPromote"
               @seed-var="seedPoolVar"
               @registry-add="onRegistryAdd"
+              @manage-scope="stepIdx = 2"
             />
           </transition>
         </div>
@@ -348,6 +352,13 @@ function onServiceBindJump(key: string) {
   if (idx >= 0) focusJump.value = { stepIdx: idx, strategyIdx: -1, svcKey: key }
   else toast.info('没有步骤引用该键 —— 在步骤面板的「服务」下拉选择')
 }
+
+/** 步骤引用键(每步一条,含重复)—— 配置卡范围自动收敛的输入
+ *  (三级收敛:scope ∪ 步骤键,挂载期并集下次保存落库)。 */
+const stepServiceKeys = computed(() =>
+  (definition.value.steps ?? [])
+    .map((s) => stepService(s))
+    .filter((k): k is string => !!k))
 const scenarioId = computed(() => route.params.scenarioId as string | undefined)
 /** 收拢态判定(C 组去重):统一面包屑在 CollapsedTopbar,页面 crumb 隐藏 */
 const chromeMode = computed(() => (route.meta?.chromeMode as 'full' | 'collapsed' | undefined) ?? 'full')

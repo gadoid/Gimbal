@@ -361,6 +361,8 @@ let activePinia: ReturnType<typeof createPinia>
 type CanvasMountOpts = {
   steps: StepView[]
   services?: Record<string, string>
+  /** 三级收敛:存储范围(config.service_scope)—— 下拉收敛域输入 */
+  serviceScope?: string[]
   /** W11 三态:M1 plateRefOf + 无锚服务分类 */
   plateRefOf?: (system: string) => string
   serviceKinds?: Record<string, 'plate' | 'external' | 'unknown'>
@@ -399,6 +401,7 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
         steps: steps,
         orchestration: orch.value,
         services: services,
+        serviceScope: opts.serviceScope,
         plateRefOf: opts.plateRefOf,
         serviceKinds: opts.serviceKinds,
         authDrafts: opts.authDrafts,
@@ -892,33 +895,36 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
 })
 
 describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §1.4)', () => {
-  it('下拉列出目录服务 + 本服务别名;其他声明键置底标跨服务', async () => {
+  it('三级收敛缺省(未传 scope):步骤引用键即生效域 —— 下拉收敛为锚点直引,声明键不再进下拉(② 层退役)', async () => {
     const { w } = mountCanvas({
       steps: [stepOf('fin-service')],
       services: { 'fin-service': 'https://a', 'fin-service-2': 'https://b', 'order-svc-1': 'https://c' },
     })
     await flushPromises()
     const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
-    // 锚点(目录服务)+ 同基别名(fin-service-2 → base fin-service)+ 跨服务键置底
-    expect(opts.some((t) => t.includes('fin-service') && t.includes('目录服务'))).toBe(true)
-    expect(opts.some((t) => t.includes('fin-service-2'))).toBe(true)
-    expect(opts.some((t) => t.includes('order-svc-1') && t.includes('跨服务'))).toBe(true)
+    // 生效域 = scope ∪ 步骤键 = {fin-service} → 只剩锚点直引 + 管理入口
+    expect(opts.some((t) => t.includes('fin-service(服务键直引'))).toBe(true)
+    expect(opts.some((t) => t.includes('管理服务范围'))).toBe(true)
+    // 声明键(fin-service-2 / order-svc-1)不再进入下拉 —— 声明面已退役,
+    // 扩域走「管理服务范围」收敛,不在步骤页重开全量口子
+    expect(opts.some((t) => t.includes('fin-service-2'))).toBe(false)
+    expect(opts.some((t) => t.includes('order-svc-1'))).toBe(false)
     w.unmount()
   })
 
-  it('锚点缺失(引用未挂目录键)时,下拉仍列目录名可切回;裸声明键置底不丢', async () => {
-    // 步骤引用手写键 fin(不在目录)→ 派生 null → 锚点缺失。
-    // 修复点:此前此时目录名完全不出现,裸声明步骤无路切回目录服务。
+  it('锚点缺失(引用未挂目录键):裸键保留在收敛域可继续引用;切回目录服务走管理范围', async () => {
+    // 步骤引用手写键 fin(不在目录)→ 派生 null → 锚点缺失 → 域不过滤。
     const { w } = mountCanvas({
       steps: [stepOf('fin')],
       services: { fin: 'https://a' },
     })
     await flushPromises()
     const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
-    expect(opts.some((t) => t.includes('fin-service') && t.includes('目录服务'))).toBe(true)
-    expect(opts.some((t) => t.includes('order-svc') && t.includes('目录服务'))).toBe(true)
-    // 旧裸声明键仍在列(置底跨服务),不丢
-    expect(opts.some((t) => t.trim() === 'fin(跨服务)')).toBe(true)
+    // 裸声明键仍在列(域 = 生效域全量),不丢
+    expect(opts.some((t) => t.includes('fin'))).toBe(true)
+    // 目录名不再直接铺开 —— 收敛模型下扩域入口统一是「管理服务范围」
+    expect(opts.some((t) => t.includes('目录服务'))).toBe(false)
+    expect(opts.some((t) => t.includes('管理服务范围'))).toBe(true)
     w.unmount()
   })
 
@@ -935,6 +941,86 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     // 终态:身份面登记归服务注册页 —— 场景不写地址不写声明
     expect(canvas.emitted('update:services')).toBeUndefined()
     expect(steps[0].call?.service).toBe('fin-service')
+    w.unmount()
+  })
+
+  it('三级收敛:scope 非空 → 下拉只列锚点服务下域内键(直引+已登记面),跨服务 scope 键退场 + 管理入口在列', async () => {
+    const { listAllAliases } = await import('@/api/service-aliases')
+    vi.mocked(listAllAliases).mockResolvedValueOnce([
+      { aliasName: 'fin-service-uat', baseService: 'fin-service',
+        slot: null, kind: 'plate' as const, envId: 1,
+        refMode: 'default' as const, refUsername: null, display: '',
+        createdAt: '', updatedAt: '' },
+      { aliasName: 'order-svc-uat', baseService: 'order-svc',
+        slot: null, kind: 'plate' as const, envId: 1,
+        refMode: 'default' as const, refUsername: null, display: '',
+        createdAt: '', updatedAt: '' },
+    ] as never)
+    const { w } = mountCanvas({
+      steps: [stepOf('fin-service')],
+      services: { 'fin-service': 'https://a', 'order-svc-1': 'https://c' },
+      serviceScope: ['fin-service', 'fin-service-uat', 'order-svc-uat'],
+    })
+    await flushPromises()
+    const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
+    // 域内:锚点直引 + 同基已登记面
+    expect(opts.some((t) => t.includes('fin-service(服务键直引'))).toBe(true)
+    expect(opts.some((t) => t.includes('fin-service-uat') && t.includes('已登记'))).toBe(true)
+    // 跨服务 scope 键 / 声明键退场(不再从全量里选)
+    expect(opts.some((t) => t.includes('order-svc'))).toBe(false)
+    // 管理入口在列
+    expect(opts.some((t) => t.includes('管理服务范围'))).toBe(true)
+    expect(opts.some((t) => t.includes('新建身份面'))).toBe(true)
+    w.unmount()
+  })
+
+  it('三级收敛:当前值域外(接口面锚定 fin-service,引用跨服务键)→ 兜底 option 保留并标「未入范围」', async () => {
+    // 锚点来自 plate 接口面(currentFull.service),与 call.service 解耦 —
+    // 跨服务引用形态:锚 fin-service + 值 order-svc-1(base order-svc)
+    const full = vi.mocked(getFullEndpoint)
+    const origImpl = full.getMockImplementation()!
+    full.mockClear()
+    const { listAllAliases } = await import('@/api/service-aliases')
+    vi.mocked(listAllAliases).mockResolvedValueOnce([
+      { aliasName: 'fin-service-uat', baseService: 'fin-service',
+        slot: null, kind: 'plate' as const, envId: 1,
+        refMode: 'default' as const, refUsername: null, display: '',
+        createdAt: '', updatedAt: '' },
+    ] as never)
+    try {
+      full.mockResolvedValue({ description: 'ep', service: 'fin-service',
+        request: { declarations: [] }, responses: {} } as any)
+      const { w } = mountCanvas({
+        steps: [mkStep({
+          call: { kind: 'call', protocol: 'http', service: 'order-svc-1',
+            method: 'GET', path: '/x', headers: {},
+            view_hints: { endpoint_id: 'ep-1' } },
+        })],
+        serviceScope: ['fin-service', 'fin-service-uat'],
+      })
+      await flushPromises()
+      const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
+      expect(opts.some((t) => t.includes('order-svc-1') && t.includes('当前值·未入范围'))).toBe(true)
+      // 域内两键照常(直引 + 已登记面)
+      expect(opts.some((t) => t.includes('fin-service(服务键直引'))).toBe(true)
+      w.unmount()
+    } finally {
+      full.mockImplementation(origImpl)
+    }
+  })
+
+  it('三级收敛:__manage__ → emit manageScope(父级切配置页收敛面)', async () => {
+    const steps0 = [stepOf('fin-service')]
+    const { w } = mountCanvas({
+      steps: steps0,
+      serviceScope: ['fin-service'],
+    })
+    await flushPromises()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    await w.find('.svc-ref-select').setValue('__manage__')
+    expect(canvas.emitted('manageScope')).toBeTruthy()
+    // 管理入口不落引用值(call.service 不动;真实流程随即切配置页卸载)
+    expect(steps0[0].call?.service).toBe('fin-service')
     w.unmount()
   })
 
@@ -956,7 +1042,8 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
         view_hints: { endpoint_id: 'ep-1' },
       },
     })
-    const { w } = mountCanvas({ steps: [s0], services: { 'fin-service': 'https://a' } })
+    const { w } = mountCanvas({ steps: [s0], services: { 'fin-service': 'https://a' },
+      serviceScope: ['fin-service-uat'] })
     await flushPromises()
     await w.find('.svc-ref-select').setValue('fin-service-uat')
     expect(s0.call?.service).toBe('fin-service-uat')
@@ -987,6 +1074,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     const { w } = mountCanvas({
       steps: [s0],
       services: { 'fin-service': 'https://a' },
+      serviceScope: ['fin-service', 'fin-service-bare', 'fin-service-uat'],
     })
     await flushPromises()
     // 任一已登记条目都注入(条目名即 ${auth.X} 域;条目必 ref 账户)

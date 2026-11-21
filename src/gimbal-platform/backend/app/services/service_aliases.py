@@ -486,12 +486,13 @@ async def service_reference_audit(
     db: AsyncSession, definition: dict,
 ) -> tuple[list[str], list[str]]:
     """服务引用注册化审计(架构终态,2026-11-21):返回
-    ``(unregistered_keys, declared_url_keys)`` —— 步骤引用的服务键
+    ``(unregistered_keys, declared_url_keys)`` —— 引用的服务键
     diff 注册域 + 带 authored URL 的引用键。调用方(路由闸/导入链)
     按 ``REGISTRY_ONLY_SERVICES`` 三态分派;本函数只报事实。
 
-    * 引用键集 = ``referenced_services(steps)`` 单源(执行链地址解析
-      同口径;setup/teardown 无地址面不进集合);
+    * 引用键集 = ``referenced_services(steps)`` ∪ ``config.service_scope``
+      (范围收敛面:场景预选的服务/实例面键也是引用 —— 同样须注册;
+      scope 是纯键数组不参与 same_base 闸,envMixed 亦保持 steps 口径);
     * 注册域 = 主档 ``services.name`` ∪ 条目表 ``alias_name``
       (DB-only,不依赖 plate 目录可达性 —— 目录未同步主档的键按
       未注册报,指引服务注册页同步/登记);
@@ -501,7 +502,11 @@ async def service_reference_audit(
     from .run_materialize import referenced_services
 
     defn = definition or {}
-    keys = sorted(set(referenced_services(defn.get("steps") or [])))
+    scope = (defn.get("config") or {}).get("service_scope")
+    scope = [k for k in (scope if isinstance(scope, list) else [])
+             if isinstance(k, str) and k.strip()]
+    keys = sorted(set(referenced_services(defn.get("steps") or []))
+                  | set(scope))
     if not keys:
         return [], []
     known: set[str] = set()

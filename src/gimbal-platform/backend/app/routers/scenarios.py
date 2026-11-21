@@ -1137,11 +1137,13 @@ async def get_service_resolution(
 
     * ``environment`` —— 执行标签链结果(``resolve_execution_tag``:
       身份条目标签 > 项目默认 > 平台默认;混拼此处不炸,返回 null +
-      ``envMixed`` 名单,派发侧另有 409 硬拦);
-    * ``services[]`` —— 步骤引用键逐键:注册态(主档 ∪ 条目表)、
-      base/系统、身份面事实(键为条目名时)、(system, 执行标签)实例
-      (登录口/版本线,``SystemEnvInstance``)、部署表**逐环境**地址、
-      当前标签地址与缺口。
+      ``envMixed`` 名单,派发侧另有 409 硬拦;混拼判定保持步骤口径,
+      预选范围不掺入 —— 预告的是派发 409,派发只看步骤);
+    * ``services[]`` —— 引用键(步骤引用 ∪ ``config.service_scope``
+      预选范围)逐键:注册态(主档 ∪ 条目表)、base/系统、身份面事实
+      (键为条目名时)、(system, 执行标签)实例(登录口/版本线,
+      ``SystemEnvInstance``)、部署表**逐环境**地址、当前标签地址与
+      缺口、``stepRefs`` 步骤引用计数(0 = 仅预选)。
     """
     from ..models.deployment import Deployment
     from ..models.environment import Environment
@@ -1158,7 +1160,19 @@ async def get_service_resolution(
     row = await _load_row(db, scenario_id)
     await _require_reader_async(db, user, row)
     definition = definition_from_payload(row.payload)
-    keys = sorted(set(referenced_services(definition.get("steps") or [])))
+    # stepRefs = 逐键步骤计数(在用/仅预选的判别面);键集 = 步骤 ∪ scope
+    step_refs: dict[str, int] = {}
+    for _s in definition.get("steps") or []:
+        if not isinstance(_s, dict):
+            continue
+        _call = _s.get("call")
+        _svc = _call.get("service") if isinstance(_call, dict) else None
+        if isinstance(_svc, str) and _svc:
+            step_refs[_svc] = step_refs.get(_svc, 0) + 1
+    scope = (definition.get("config") or {}).get("service_scope")
+    scope = [k for k in (scope if isinstance(scope, list) else [])
+             if isinstance(k, str) and k.strip()]
+    keys = sorted(set(step_refs) | set(scope))
 
     ident_rows = (await db.execute(
         _sel(ServiceIdentity.alias_name, ServiceIdentity.base_service,
@@ -1221,6 +1235,7 @@ async def get_service_resolution(
                          if inst else None),
             "urls": urls, "currentUrl": current,
             "gap": current is None,
+            "stepRefs": step_refs.get(key, 0),
         })
     return {"environment": environment, "envMixed": env_mixed,
             "services": out_services}

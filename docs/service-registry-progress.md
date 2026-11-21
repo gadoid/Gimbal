@@ -1950,6 +1950,27 @@ authoring):① 解析行「改绑」→ `bindJump` 上抛,父级切 ④ 编排�
 补齐 svc-card 全套 CSS。+2 用例(nav-N5 / 手选可发现性),全量
 **1534 passed**;dist 重建 `index-B_8a4VmQ.js`。
 
+**范围收敛面 / 三级收敛(2026-11-21,用户纠偏「每步从全量里选」
++「配置侧先收敛实例」+「目录已定服务,步骤只选凭证面」)**:
+设计见 redesign §9「范围收敛面」——`config.service_scope`(纯引用
+键数组,不含地址/环境/实例;生效域 = scope ∪ 步骤引用键,自动收敛
+挂载期并集落库)。后端:`service_reference_audit` 键集并 scope
+(仅预选同样须注册;scope 不参与 same_base/不掺 envMixed)+
+`service-resolution` 返 scope∪steps + `stepRefs`(+4 用例;契约
+重生双绿)。前端:Config 卡改「服务范围与解析」(选取器按服务分组
+列主档+身份面,环境/引用模式可见;行徽标 在用/仅预选/未入范围;
+`saveState` saving→clean 重拉解析——缝 1);Canvas 下拉三级收敛
+(域 = 生效域∩同基;域外当前值兜底标「未入范围」;`__manage__` 跳
+配置卡;注册表降级期整域列出——缝 2;新建面漏斗统一走管理范围
+——缝 3;旧口径两用例按收敛模型改写);父级传 `stepServiceKeys`/
+`saveState`/`serviceScope` + `@manage-scope`。**接线验证先行**
+(新建/存量/执行/导入导出/回灌防吞/`${auth.*}` 注入清除全走查),
+发现并修掉「挂载并集不上抛则保存落库为空」的接线缝。全量
+**前端 1542 passed / 1 skip(1543)· vue-tsc 0 · eslint 0;后端
+2164 passed / 2 skipped / 0 failed**;契约 gen+check 双绿;dist 重建
+`index-N_GXLq6d.js`;后端 uvicorn 8000 重启(health 200,路由
+service-resolution 在位)。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |

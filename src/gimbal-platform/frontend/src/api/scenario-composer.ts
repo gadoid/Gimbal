@@ -236,6 +236,8 @@ export interface ServiceResolutionEntry {
   urls: Array<{ envId: number; envName: string; url: string }>
   currentUrl: string | null
   gap: boolean
+  /** 步骤引用计数(0 = 仅 scope 预选,未挂步骤) */
+  stepRefs: number
 }
 
 export interface ServiceResolution {

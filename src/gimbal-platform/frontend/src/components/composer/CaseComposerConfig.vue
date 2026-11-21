@@ -209,17 +209,57 @@
       <button class="c-add" @click="addVar">+ 添加变量</button>
     </div>
 
-    <!-- 服务引用与解析(架构终态:场景 = 纯引用容器)—— 引用键来自步骤,
-         注册/身份面/实例/逐环境地址全只读呈现;地址事实在部署表(③ 层),
-         场景不再持有(authored 声明只剩迁移清除面)。 -->
+    <!-- 服务范围与解析(三级收敛:目录定服务 → 本卡定实例面 → 步骤定凭证):
+         范围 = 纯引用键(service_scope ∪ 步骤引用自动收敛);地址/环境/实例
+         仍是解析事实(部署表 × 标签链),场景不持有。 -->
     <div class="c-card svc-card">
       <div class="c-card-head">
         <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M2 8h20M8 2v20"/></svg>
         <div>
-          <h3>服务引用与解析</h3>
-          <p class="c-head-desc">步骤引用的服务 × 注册事实 / 身份面 / 实例 / 逐环境部署地址;改绑在步骤面板的服务下拉</p>
+          <h3>服务范围与解析</h3>
+          <p class="c-head-desc">先收敛本场景用的服务/实例面;步骤「服务」下拉只从范围内选(生效域 = 范围 ∪ 步骤在用)</p>
         </div>
+        <button type="button" class="c-add" data-testid="cfg-svc-add" @click="toggleScopePicker">{{ scopePickerOpen ? '收起选取器' : '+ 选入服务' }}</button>
+        <button type="button" class="c-add" data-testid="cfg-svc-converge" @click="convergeFromSteps">按步骤引用收敛</button>
         <button type="button" class="c-add" data-testid="cfg-svc-refresh" :disabled="resolutionLoading" @click="loadResolution">重新解析</button>
+      </div>
+
+      <!-- 选取器:候选 = 主档服务(键直引)+ 身份面条目(按服务分组,
+           环境/引用模式可见)——「配置好的服务实例」的收敛入口 -->
+      <div v-if="scopePickerOpen" class="svc-picker" data-testid="cfg-svc-picker">
+        <input v-model="scopeQuery" class="svc-picker-q" placeholder="搜索服务 / 条目 / 系统 / 环境…" />
+        <div v-if="scopeLoadFailed" class="svc-degraded" data-testid="cfg-svc-picker-failed">
+          候选拉取失败 —— 主档/身份面注册表不可读,范围事实未知
+          <button type="button" class="svc-link" @click="loadScopeCandidates">重试</button>
+        </div>
+        <div v-else-if="!scopeCandidates" class="svc-picker-hint">候选加载中…</div>
+        <div v-else-if="!scopeGrouped.length" class="svc-picker-hint">
+          无匹配候选 —— 去服务注册登记后回来重开选取器
+        </div>
+        <div v-else class="svc-picker-list">
+          <div v-for="g in scopeGrouped" :key="g.service" class="svc-picker-group">
+            <p class="svc-picker-svc">{{ g.service }}<template v-if="g.system"> · {{ g.system }}</template></p>
+            <button
+              v-for="c in g.rows" :key="c.key" type="button" class="svc-picker-row"
+              :data-testid="`cfg-svc-pick-${c.key}`" :disabled="c.inScope"
+              :title="c.kind === 'svc' ? '服务键直引(默认凭证,环境按标签链)' : '身份面条目(服务×环境×引用账户)'"
+              @click="addScope(c.key)"
+            >
+              <span class="mono">{{ c.key }}</span>
+              <span v-if="c.kind === 'svc'" class="svc-pill">服务键直引</span>
+              <template v-else>
+                <span class="svc-pill">{{ c.envName || '无环境' }}</span>
+                <span class="svc-pill">{{ c.refMode }}</span>
+              </template>
+              <span v-if="c.inScope" class="svc-ok">✓ 已在范围</span>
+            </button>
+          </div>
+        </div>
+        <p class="svc-picker-foot">
+          注册表还没有的面 →
+          <button type="button" class="svc-link" @click="goServiceAdmin">去服务注册登记</button>
+          (登记后回来重开选取器)
+        </p>
       </div>
 
       <!-- 执行环境预览(标签链:身份条目 > 项目默认 > 平台默认;纯展示) -->
@@ -238,58 +278,89 @@
         解析读取失败 —— 引用事实未知(≠无引用);请「重新解析」(FE-02:失败不静默)
       </div>
 
-      <div v-if="!resolution" class="c-empty"><p>解析中…</p></div>
-      <div v-else-if="!resolution.services.length" class="c-empty">
-        <p>步骤还没有服务引用 —— 在编排页步骤面板的「服务」下拉选目录服务或已登记身份面</p>
+      <div v-if="resolutionLoading && !resolution" class="c-empty"><p>解析中…</p></div>
+      <div v-else-if="!scopeViewRows.length" class="c-empty">
+        <p>范围还没有服务 —— 「+ 选入服务」收敛,或在编排页从接口目录选接口(引用键自动进范围)</p>
       </div>
       <table v-else class="svc-table">
         <thead>
           <tr>
-            <th>引用键</th><th>注册</th><th>基础服务 / 系统</th>
+            <th>范围键</th><th>步骤</th><th>注册</th><th>基础服务 / 系统</th>
             <th>身份面</th><th>实例(当前环境)</th><th>部署地址(当前环境)</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in resolution.services" :key="row.key" :data-testid="`cfg-svc-row-${row.key}`">
+          <tr
+            v-for="row in scopeViewRows" :key="row.key"
+            :data-testid="`cfg-svc-row-${row.key}`" :class="{ 'svc-out': row.outOfScope }"
+          >
             <td class="mono svc-key">
               {{ row.key }}
+              <span v-if="row.outOfScope" class="svc-gap">步骤在用·未入范围</span>
               <button
-                type="button" class="svc-bind" :data-testid="`cfg-svc-bind-${row.key}`"
+                v-else type="button" class="c-kv-del" :data-testid="`cfg-svc-rm-${row.key}`"
+                title="移出范围(步骤在用的键仍可引用,只是不再预选)"
+                @click="removeScope(row.key)"
+              >×</button>
+              <button
+                v-if="row.stepCount > 0" type="button" class="svc-bind"
+                :data-testid="`cfg-svc-bind-${row.key}`"
                 title="到编排页该步骤的「服务」下拉改绑(目录服务 / 已登记身份面)"
                 @click="emit('bindJump', row.key)"
               >改绑</button>
             </td>
             <td>
-              <span v-if="row.registered" class="svc-ok">✓</span>
-              <button
-                v-else type="button" class="svc-gap svc-link" data-testid="cfg-svc-register"
-                title="键不在主档/条目表 —— enforce 后保存被拒;登记后回来「重新解析」"
-                @click="goServiceAdmin"
-              >未注册 · 去登记</button>
+              <span v-if="row.stepCount > 0">{{ row.stepCount }} 步在用</span>
+              <span v-else class="text-caption text-signal-muted">仅预选</span>
             </td>
-            <td>{{ row.base }}<template v-if="row.system"> · {{ row.system }}</template></td>
             <td>
-              <template v-if="row.identityEntry">
-                {{ row.identityEntry.refMode === 'username'
-                  ? `按用户 ${row.identityEntry.refUsername}` : '默认账户' }}
+              <template v-if="row.res">
+                <span v-if="row.res.registered" class="svc-ok">✓</span>
+                <button
+                  v-else type="button" class="svc-gap svc-link" data-testid="cfg-svc-register"
+                  title="键不在主档/条目表 —— enforce 后保存被拒;登记后回来「重新解析」"
+                  @click="goServiceAdmin"
+                >未注册 · 去登记</button>
               </template>
-              <span v-else class="text-caption text-signal-muted">服务键直引</span>
+              <span v-else class="text-caption text-signal-muted">保存后解析</span>
             </td>
             <td>
-              <template v-if="row.instance">
-                <span class="mono svc-login" :title="row.instance.loginUrl">
-                  {{ row.instance.loginUrl || '(登录口未配)' }}</span>
-                <template v-if="row.instance.line"> · 线 {{ row.instance.line }}</template>
+              <template v-if="row.res">
+                {{ row.res.base }}<template v-if="row.res.system"> · {{ row.res.system }}</template>
               </template>
-              <span v-else class="text-caption text-signal-muted">无实例行</span>
+              <span v-else class="text-caption text-signal-muted">保存后解析</span>
             </td>
             <td>
-              <template v-if="row.currentUrl"><span class="mono">{{ row.currentUrl }}</span></template>
-              <button
-                v-else type="button" class="svc-gap svc-link" data-testid="cfg-svc-gap-link"
-                :title="`各环境地址:${row.urls.map((u) => `${u.envName}=${u.url}`).join(' · ') || '部署表全缺'}`"
-                @click="goServiceAdmin"
-              >缺口 —— 去服务注册配置部署地址</button>
+              <template v-if="row.res">
+                <template v-if="row.res.identityEntry">
+                  {{ row.res.identityEntry.refMode === 'username'
+                    ? `按用户 ${row.res.identityEntry.refUsername}` : '默认账户' }}
+                </template>
+                <span v-else class="text-caption text-signal-muted">服务键直引</span>
+              </template>
+              <span v-else class="text-caption text-signal-muted">保存后解析</span>
+            </td>
+            <td>
+              <template v-if="row.res">
+                <template v-if="row.res.instance">
+                  <span class="mono svc-login" :title="row.res.instance.loginUrl">
+                    {{ row.res.instance.loginUrl || '(登录口未配)' }}</span>
+                  <template v-if="row.res.instance.line"> · 线 {{ row.res.instance.line }}</template>
+                </template>
+                <span v-else class="text-caption text-signal-muted">无实例行</span>
+              </template>
+              <span v-else class="text-caption text-signal-muted">保存后解析</span>
+            </td>
+            <td>
+              <template v-if="row.res">
+                <template v-if="row.res.currentUrl"><span class="mono">{{ row.res.currentUrl }}</span></template>
+                <button
+                  v-else type="button" class="svc-gap svc-link" data-testid="cfg-svc-gap-link"
+                  :title="`各环境地址:${row.res.urls.map((u) => `${u.envName}=${u.url}`).join(' · ') || '部署表全缺'}`"
+                  @click="goServiceAdmin"
+                >缺口 —— 去服务注册配置部署地址</button>
+              </template>
+              <span v-else class="text-caption text-signal-muted">保存后解析</span>
             </td>
           </tr>
         </tbody>
@@ -374,6 +445,9 @@ import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-reg
 import { isLegacyEntry } from '@/types/assertion-registry'
 import type { AuthDraftView } from '@/types/scenario-composer'
 import { getServiceResolution, type ServiceResolution } from '@/api/scenario-composer'
+import { listServices } from '@/api/services'
+import { listAllAliases } from '@/api/service-aliases'
+import { listEnvironments } from '@/api/environments'
 import UsersCard from './UsersCard.vue'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -400,6 +474,11 @@ const props = defineProps<{
   deadEntryIds?: string[]
   authDrafts?: AuthDraftView[]
   projectId?: number | null
+  /** 步骤引用键(每步一条,含重复)—— 范围自动收敛的输入(父级 computed) */
+  stepServiceKeys?: string[]
+  /** 父级保存态:saving→clean 沿自动保存链重拉解析(本地选入的键
+   *  落库后才有事实 —— 缝 1:事实列不滞留「保存后解析」) */
+  saveState?: 'clean' | 'dirty' | 'saving'
 }>()
 const emit = defineEmits<{
   'update:modelValue': [ConfigView]
@@ -434,6 +513,12 @@ const local = reactive<ConfigView>({
     : { kind: 'record' },
   retry: props.modelValue?.retry ?? null,
   vars: { ...(props.modelValue?.vars || {}) },
+  // 自动收敛(拍板:加载时收敛):挂载期并入步骤引用键 → 下次保存随
+  // 用户操作自然落库;初始化期不触发 emit → 打开场景不为收敛弄脏/保存。
+  service_scope: [...new Set([
+    ...(props.modelValue?.service_scope || []),
+    ...(props.stepServiceKeys || []),
+  ])],
 })
 
 // setup / teardown 列表 (PRD §6.4)
@@ -499,7 +584,145 @@ const ENV_SOURCE_LABELS: Record<string, string> = {
 function envSourceLabel(src: string): string {
   return ENV_SOURCE_LABELS[src] ?? src
 }
-onMounted(() => { void loadResolution() })
+onMounted(() => {
+  void loadResolution()
+  // 自动收敛落库(拍板:加载时收敛):并集 ≠ 存储值 → 上抛一次,父级
+  // definition.config 即持有收敛范围(保存/自动保存随用户操作落库);
+  // 已收敛场景二次打开 no-op,新场景空并集不发。只读项目视图只在
+  // 内存收敛(下拉即刻收敛),保存本就不开放。
+  const union = local.service_scope ?? []
+  const stored = props.modelValue?.service_scope ?? []
+  if (union.length !== stored.length
+      || union.some((k) => !stored.includes(k))) {
+    emit('update:modelValue', emitShape())
+  }
+})
+
+// 缝 1:保存落库(saving→clean,含自动保存链)后事实才在后端可见 →
+// 重拉解析,本地选入的键不再滞留「保存后解析」。
+watch(() => props.saveState, (now, was) => {
+  if (was === 'saving' && now === 'clean') void loadResolution()
+})
+
+// ── 服务范围收敛(三级收敛中坚:本卡定实例面)──────────────────
+// 行视图 = 本地 scope ∪ 步骤引用键 ∪ 后端解析键(存量三方并集):
+// pending = 不在后端解析里(本地刚选入 / 新场景未落库)→ 事实列占位。
+const stepRefCount = computed(() => {
+  const m = new Map<string, number>()
+  for (const k of props.stepServiceKeys ?? []) m.set(k, (m.get(k) ?? 0) + 1)
+  return m
+})
+const scopeViewRows = computed(() => {
+  const resOf = new Map((resolution.value?.services ?? [])
+    .map((r) => [r.key, r]))
+  const localScope = local.service_scope ?? []
+  const keys: string[] = []
+  const seen = new Set<string>()
+  const push = (k: string) => {
+    if (k && !seen.has(k)) { seen.add(k); keys.push(k) }
+  }
+  for (const k of localScope) push(k)
+  for (const k of stepRefCount.value.keys()) push(k)
+  for (const r of resolution.value?.services ?? []) push(r.key)
+  return keys.map((key) => {
+    const r = resOf.get(key)
+    // 步骤计数双源:父级步骤键(实时)优先,后端解析 stepRefs 兜底
+    // (存量引用挂载即知;props 未传时也不丢「在用」事实)
+    const n = Math.max(stepRefCount.value.get(key) ?? 0, r?.stepRefs ?? 0)
+    return {
+      key,
+      res: r,
+      pending: !resOf.has(key),
+      stepCount: n,
+      outOfScope: n > 0 && !localScope.includes(key),
+    }
+  })
+})
+
+function addScope(key: string): void {
+  const cur = local.service_scope ?? (local.service_scope = [])
+  if (!cur.includes(key)) cur.push(key)   // local 深变 → emit 链自动走
+}
+function removeScope(key: string): void {
+  if (local.service_scope) {
+    local.service_scope = local.service_scope.filter((k) => k !== key)
+  }
+}
+/** 按步骤引用收敛:移除后反悔/存量未收敛时的一键并集。 */
+function convergeFromSteps(): void {
+  const added = [...new Set(props.stepServiceKeys ?? [])].filter(
+    (k) => !(local.service_scope ?? []).includes(k))
+  for (const k of added) addScope(k)
+  if (!added.length) toast.info('步骤引用键已在范围内')
+}
+
+// 选取器:候选 = 主档服务(键直引)+ 身份面条目,按服务分组 ——
+// 「配置好的服务实例」的收敛入口;候选全来自注册表(选入即注册键,
+// 不制造未注册引用)。
+interface ScopeCandidate {
+  kind: 'svc' | 'alias'; key: string; service: string
+  system: string; envName: string; refMode: string; inScope: boolean
+}
+const scopePickerOpen = ref(false)
+const scopeQuery = ref('')
+const scopeCandidates = ref<ScopeCandidate[] | null>(null)
+const scopeLoadFailed = ref(false)
+async function loadScopeCandidates(): Promise<void> {
+  scopeLoadFailed.value = false
+  scopeCandidates.value = null
+  try {
+    const [svcPage, aliases, envs] = await Promise.all([
+      listServices(), listAllAliases(), listEnvironments(),
+    ])
+    const envNames = new Map(envs.map((e) => [e.id, e.name]))
+    const inScope = new Set(local.service_scope ?? [])
+    const out: ScopeCandidate[] = svcPage.services.map((s) => ({
+      kind: 'svc' as const, key: s.name, service: s.name,
+      system: s.system, envName: '', refMode: '',
+      inScope: inScope.has(s.name),
+    }))
+    for (const a of aliases) {
+      out.push({
+        kind: 'alias', key: a.aliasName, service: a.baseService,
+        system: '', envName: a.envId != null
+          ? (envNames.get(a.envId) ?? `#${a.envId}`) : '',
+        refMode: a.refMode === 'username'
+          ? `按用户 ${a.refUsername ?? ''}` : '默认账户',
+        inScope: inScope.has(a.aliasName),
+      })
+    }
+    scopeCandidates.value = out
+  } catch {
+    scopeLoadFailed.value = true   // FE-02:失败≠无候选,不静默
+  }
+}
+function toggleScopePicker(): void {
+  scopePickerOpen.value = !scopePickerOpen.value
+  if (scopePickerOpen.value) void loadScopeCandidates()
+}
+/** 搜索过滤 + 按服务分组(服务键行在前,条目随后)。inScope 随本地范围
+ *  实时求值(加载快照的 inScope 在选入后会过期)。 */
+const scopeGrouped = computed(() => {
+  const q = scopeQuery.value.trim().toLowerCase()
+  const inScope = new Set(local.service_scope ?? [])
+  const rows = (scopeCandidates.value ?? [])
+    .filter((c) => !q || [c.key, c.service, c.system, c.envName, c.refMode]
+      .some((f) => f.toLowerCase().includes(q)))
+    .map((c) => ({ ...c, inScope: inScope.has(c.key) }))
+  const groups = new Map<string, { service: string; system: string; rows: ScopeCandidate[] }>()
+  for (const c of rows) {
+    const g = groups.get(c.service)
+      ?? { service: c.service, system: c.system, rows: [] }
+    if (!groups.has(c.service)) groups.set(c.service, g)
+    g.rows.push(c)
+  }
+  return [...groups.values()].map((g) => ({
+    ...g,
+    rows: g.rows.sort((a, b) =>
+      (a.kind === b.kind ? a.key.localeCompare(b.key)
+        : a.kind === 'svc' ? -1 : 1)),
+  }))
+})
 
 function removeServiceAt(i: number): void {
   serviceRows.value.splice(i, 1)
@@ -532,6 +755,9 @@ function emitShape(): ConfigView {
     timePolicy: local.timePolicy,
     retry: local.retry,
     vars: varsDict,
+    // 范围键随存(空则省键 —— 与回灌侧对称,回声比较才成立)
+    ...(local.service_scope?.length
+      ? { service_scope: [...local.service_scope] } : {}),
     ...(varLocks.length ? { var_locks: varLocks } : {}),
   }
 }
@@ -549,6 +775,11 @@ watch(() => props.modelValue, (v) => {
     : { kind: 'record' }
   local.retry = v.retry ?? null
   local.vars = { ...(v.vars || {}) }
+  // 外部变更(loadScenario)→ 重建并重做自动收敛(步骤键并集)
+  local.service_scope = [...new Set([
+    ...(v.service_scope || []),
+    ...(props.stepServiceKeys || []),
+  ])]
   serviceRows.value = Object.entries(v.services || {}).map(([alias, baseUrl]) => ({ alias, baseUrl: baseUrl as string }))
   setupList.value = ((v as any).setup as any[]) || []
   teardownList.value = ((v as any).teardown as any[]) || []
@@ -723,6 +954,41 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 .svc-bind { margin-left: 0.5rem; color: var(--c-accent); }
 .svc-link:hover, .svc-bind:hover { opacity: 0.8; }
 .svc-login { font-size: 0.6875rem; }
+/* 范围收敛选取器(三级收敛:本卡定实例面) */
+.svc-picker {
+  margin-bottom: 0.75rem; padding: 0.625rem;
+  border: 1px solid var(--c-border); border-radius: 0.375rem;
+  background: var(--c-bg-secondary);
+}
+.svc-picker-q {
+  width: 100%; margin-bottom: 0.5rem; padding: 0.375rem 0.5rem;
+  border: 1px solid var(--c-border); border-radius: 0.375rem;
+  background: var(--c-surface); font-size: 0.75rem;
+}
+.svc-picker-q:focus { outline: none; border-color: var(--c-accent); }
+.svc-picker-list { max-height: 18rem; overflow-y: auto; }
+.svc-picker-group { margin-bottom: 0.5rem; }
+.svc-picker-svc {
+  margin: 0 0 0.25rem; font-size: 0.6875rem; font-weight: 600;
+  color: var(--c-text-tertiary); font-family: var(--font-mono);
+}
+.svc-picker-row {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  padding: 0.3125rem 0.5rem; border: none; border-radius: 0.25rem;
+  background: none; cursor: pointer; font-size: 0.75rem;
+  text-align: left; color: inherit;
+}
+.svc-picker-row:hover:not(:disabled) { background: var(--c-accent-soft, rgb(59 130 246 / 8%)); }
+.svc-picker-row:disabled { cursor: default; opacity: 0.55; }
+.svc-pill {
+  padding: 0.0625rem 0.375rem; border-radius: 0.25rem; font-size: 0.625rem;
+  background: var(--soft-neutral-bg, #f3f4f6);
+  color: var(--c-text-secondary); white-space: nowrap;
+}
+.svc-picker-hint { font-size: 0.75rem; color: var(--c-text-tertiary); margin: 0.25rem 0; }
+.svc-picker-foot { margin: 0.5rem 0 0; font-size: 0.6875rem; color: var(--c-text-tertiary); }
+/* 步骤在用·未入范围 行:黄底提示但保留展示(移除不等于禁用引用) */
+tr.svc-out td { background: var(--sl-warn-soft, rgb(251 191 36 / 6%)); }
 .svc-migrate {
   margin-top: 0.75rem; padding: 0.625rem; border-radius: 0.375rem;
   border: 1px solid rgb(251 191 36 / 40%);

@@ -17,6 +17,9 @@ import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
 import { getServiceResolution } from '@/api/scenario-composer'
+import { listServices } from '@/api/services'
+import { listAllAliases } from '@/api/service-aliases'
+import { listEnvironments } from '@/api/environments'
 import UsersCard from '@/components/composer/UsersCard.vue'
 import type { ConfigView } from '@/types/plate'
 
@@ -31,6 +34,10 @@ vi.mock('@/utils/catalog-services', () => ({
 vi.mock('@/api/scenario-composer', () => ({
   getServiceResolution: vi.fn(),
 }))
+// 范围选取器候选源(三级收敛):主档 / 身份面条目 / 环境名
+vi.mock('@/api/services', () => ({ listServices: vi.fn() }))
+vi.mock('@/api/service-aliases', () => ({ listAllAliases: vi.fn() }))
+vi.mock('@/api/environments', () => ({ listEnvironments: vi.fn() }))
 // 「改绑/深链」面(手选可发现性补):router/toast 模块规范 mock —— 深链
 // 断言需要拿到 push 引用(vi.hoisted 防 factory 提升竞跑);router 走部分
 // mock(import 链上 api/http.ts → router/index.ts 要真的 createRouter)
@@ -84,9 +91,25 @@ beforeEach(() => {
                        refUsername: '', envId: 1 },
       instance: { loginUrl: 'https://login', line: '1.0#1' },
       urls: [{ envId: 1, envName: '测试', url: 'https://dep' }],
-      currentUrl: 'https://dep', gap: false,
+      currentUrl: 'https://dep', gap: false, stepRefs: 1,
     }],
   })
+  vi.mocked(listServices).mockResolvedValue({
+    services: [
+      { name: 'fin-service', system: 'fin', kind: 'plate', abbr: '',
+        description: '', inCatalog: true, createdAt: null, updatedAt: null },
+    ],
+    unregistered: [], plateReachable: true,
+  } as any)
+  vi.mocked(listAllAliases).mockResolvedValue([
+    { aliasName: 'fin-service-uat', baseService: 'fin-service', slot: null,
+      kind: 'plate', envId: 1, refMode: 'default', refUsername: null,
+      display: '', createdAt: null, updatedAt: null },
+  ] as any)
+  vi.mocked(listEnvironments).mockResolvedValue([
+    { id: 1, name: '测试', description: '', lines: {},
+      owner_id: null, is_default: true },
+  ] as any)
 })
 
 describe('CaseComposerConfig — 添加行与父级 v-model 共存', () => {
@@ -317,10 +340,10 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
       services: [
         { key: 'fin-service', registered: true, base: 'fin-service', system: 'fin',
           identityEntry: null, instance: null,
-          urls: [], currentUrl: null, gap: true },
+          urls: [], currentUrl: null, gap: true, stepRefs: 1 },
         { key: 'ghost-svc', registered: false, base: 'ghost-svc', system: '',
           identityEntry: null, instance: null,
-          urls: [], currentUrl: null, gap: true },
+          urls: [], currentUrl: null, gap: true, stepRefs: 0 },
       ],
     })
     const { w } = mountWithParent(makeConfig())
@@ -337,5 +360,111 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     await w.find('[data-testid="cfg-svc-gap-link"]').trigger('click')
     expect(routerMocks.push).toHaveBeenCalledWith('/service-admin')
     w.unmount()
+  })
+
+  describe('服务范围收敛(三级收敛:本卡定实例面)', () => {
+    /** 生产用法镜像 + 步骤键/saveState 透传(收敛输入)。
+     *  stubUsers:降级用例专用 —— UsersCard 挂载也拉同一组候选 API,
+     *  会先消费 mockRejectedValueOnce(竞争消费 → 降级断言失真)。 */
+    function mountScope(initial: ConfigView, stepKeys: string[] = [],
+                        stubUsers = false) {
+      const config = ref<ConfigView>(initial)
+      const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
+      const Parent = defineComponent({
+        setup() {
+          return () => h(CaseComposerConfig, {
+            modelValue: config.value,
+            scenarioId: 'sc-cfg-test',
+            stepServiceKeys: stepKeys,
+            saveState: saveState.value,
+            'onUpdate:modelValue': (v: ConfigView) => { config.value = v },
+          })
+        },
+      })
+      const w = mount(Parent, {
+        global: { plugins: [], ...(stubUsers ? { stubs: { UsersCard: true } } : {}) },
+      })
+      return { w, config, saveState }
+    }
+
+    it('自动收敛:挂载期并入步骤引用键并上抛(加载时收敛落库语义)', async () => {
+      const { w, config } = mountScope(makeConfig(), ['fin-service', 'fin-service'])
+      await flush()
+      // 并集进 local 且上抛父级(保存/自动保存随用户操作落库)
+      expect(config.value.service_scope).toEqual(['fin-service'])
+      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
+        .toContain('2 步在用')
+      w.unmount()
+
+      // 已收敛(存储值 = 并集)→ 二次打开 no-op,不再上抛
+      const again = makeConfig()
+      again.service_scope = ['fin-service']
+      const m2 = mountScope(again, ['fin-service'])
+      await flush()
+      // 只剩 onMounted 的解析拉取,无重复 emit 风暴(上抛一次与否由
+      // 存储值差异决定 —— 这里存储值已含并集)
+      expect(m2.config.value.service_scope).toEqual(['fin-service'])
+      m2.w.unmount()
+    })
+
+    it('选取器:按服务分组列候选(服务键直引 + 身份面条目),选入去重', async () => {
+      const { w, config } = mountScope(makeConfig())
+      await w.find('[data-testid="cfg-svc-add"]').trigger('click')
+      await flush()
+      // 候选分面呈现:主档服务 + 条目(环境/引用模式 pill)
+      expect(w.find('[data-testid="cfg-svc-picker"]').exists()).toBe(true)
+      expect(w.find('[data-testid="cfg-svc-pick-fin-service"]').text())
+        .toContain('服务键直引')
+      expect(w.find('[data-testid="cfg-svc-pick-fin-service-uat"]').text())
+        .toContain('测试')
+      await w.find('[data-testid="cfg-svc-pick-fin-service-uat"]').trigger('click')
+      await flush()
+      expect(config.value.service_scope).toContain('fin-service-uat')
+      // 已在范围的候选置灰防重复
+      expect((w.find('[data-testid="cfg-svc-pick-fin-service-uat"]').element as HTMLButtonElement).disabled)
+        .toBe(true)
+      w.unmount()
+    })
+
+    it('移除/纳入:步骤在用键移除后仍列(未入范围徽标),收敛按钮一键纳入', async () => {
+      const { w, config } = mountScope(makeConfig(), ['fin-service'])
+      await flush()
+      await w.find('[data-testid="cfg-svc-rm-fin-service"]').trigger('click')
+      await flush()
+      // 生效域仍含步骤键 → 行保留,黄底「未入范围」
+      const row = w.find('[data-testid="cfg-svc-row-fin-service"]')
+      expect(row.text()).toContain('步骤在用·未入范围')
+      expect(config.value.service_scope).toBeUndefined()   // 空则省键
+      await w.find('[data-testid="cfg-svc-converge"]').trigger('click')
+      await flush()
+      expect(config.value.service_scope).toEqual(['fin-service'])
+      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
+        .toContain('1 步在用')
+      w.unmount()
+    })
+
+    it('缝 1:saveState saving→clean 沿自动保存链重拉解析(本地选入的键拿到事实)', async () => {
+      const { w, saveState } = mountScope(makeConfig(), ['fin-service'])
+      await flush()
+      expect(getServiceResolution).toHaveBeenCalledTimes(1)   // onMounted
+      saveState.value = 'saving'
+      await flush()
+      saveState.value = 'clean'
+      await flush()
+      expect(getServiceResolution).toHaveBeenCalledTimes(2)
+      // 事实列来自解析行(stepRefs 徽标)
+      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
+        .toContain('默认账户')
+      w.unmount()
+    })
+
+    it('候选拉取失败 → 降级横幅(FE-02:失败 ≠ 无候选)', async () => {
+      vi.mocked(listServices).mockRejectedValueOnce(new Error('down'))
+      const { w } = mountScope(makeConfig(), [], true)
+      await w.find('[data-testid="cfg-svc-add"]').trigger('click')
+      await flush()
+      expect(w.find('[data-testid="cfg-svc-picker-failed"]').exists()).toBe(true)
+      w.unmount()
+    })
   })
 })

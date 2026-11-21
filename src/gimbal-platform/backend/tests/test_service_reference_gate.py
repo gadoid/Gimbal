@@ -231,3 +231,109 @@ async def test_service_resolution_endpoint(client, monkeypatch):
     assert svc["urls"][0]["url"] == "https://dep1"
     assert svc["currentUrl"] == "https://dep1"
     assert svc["gap"] is False
+
+
+@pytest.mark.asyncio
+async def test_scope_keys_gated(client, monkeypatch):
+    """范围键也是引用(仅预选同样须注册):audit 头 / enforce 422;
+    scope 是纯键数组 —— 不进 declaredUrls。"""
+    await _seed_master("fin-service")
+    h = await role_headers(client, "svg-scope")
+    d = make_draft("sc-svg-scope", steps=_steps())
+    d["definition"]["config"] = {"service_scope": ["ghost-svc"]}
+
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_SERVICES", "audit")
+    r = await client.post("/api/scenarios", headers=h, json=d)
+    assert r.status_code == 201, r.text
+    warn = json.loads(r.headers["X-Service-Warnings"])
+    assert warn["unregistered"] == ["ghost-svc"]
+    assert warn["declaredUrls"] == []          # 纯键,无 URL 面
+
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_SERVICES", "enforce")
+    d2 = make_draft("sc-svg-scope-e", steps=_steps())
+    d2["definition"]["config"] = {"service_scope": ["ghost-svc"]}
+    r = await client.post("/api/scenarios", headers=h, json=d2)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "service_not_registered"
+    assert r.json()["detail"]["keys"] == ["ghost-svc"]
+
+
+@pytest.mark.asyncio
+async def test_resolution_scope_union_and_step_refs(client):
+    """解析端点:键 = 步骤引用 ∪ scope;stepRefs 区分在用/仅预选。"""
+    h = await role_headers(client, "svg-res2")
+    await _seed_master("fin-service")
+    await _seed_master("extra-svc")
+    d = make_draft("sc-svg-res2", steps=_steps() + _steps())  # fin-service×2
+    d["definition"]["config"] = {"service_scope": ["extra-svc"]}
+    r = await client.post("/api/scenarios", headers=h, json=d)
+    assert r.status_code == 201, r.text
+
+    r = await client.get("/api/scenarios/sc-svg-res2/service-resolution",
+                         headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [s["key"] for s in body["services"]] == ["extra-svc",
+                                                    "fin-service"]
+    by = {s["key"]: s for s in body["services"]}
+    assert by["fin-service"]["stepRefs"] == 2     # 步骤在用
+    assert by["extra-svc"]["stepRefs"] == 0       # 仅预选
+    assert by["extra-svc"]["registered"] is True
+
+
+@pytest.mark.asyncio
+async def test_scope_persists_through_put(client):
+    """round-trip:create 带 scope → PUT 更新 → draft 读回原样
+    (definition 自由 dict,config 键随存随取)。"""
+    h = await role_headers(client, "svg-put-sc")
+    await _seed_master("fin-service")
+    await _seed_master("extra-svc")
+    d = make_draft("sc-svg-put-sc", steps=_steps())
+    d["definition"]["config"] = {"service_scope": ["fin-service"]}
+    r = await client.post("/api/scenarios", headers=h, json=d)
+    assert r.status_code == 201, r.text
+
+    d["definition"]["config"] = {"service_scope": ["fin-service",
+                                                   "extra-svc"]}
+    r = await client.put("/api/scenarios/sc-svg-put-sc", headers=h, json=d)
+    assert r.status_code == 200, r.text
+    r = await client.get("/api/scenarios/sc-svg-put-sc/draft", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["definition"]["config"]["service_scope"] == [
+        "fin-service", "extra-svc"]
+
+
+@pytest.mark.asyncio
+async def test_import_scope_gated(client, plate_mock, monkeypatch):
+    """导入同口径:bundle 带 service_scope 未注册键 → audit
+    serviceWarnings / enforce 422(范围键与步骤键同一注册域)。"""
+    _mock_faces(plate_mock)
+    await _seed_env()
+    await _seed_master("fin-service")
+    h = await role_headers(client, "svg-imp-sc", role="admin")
+    bundle = _bundle(sid="sc-svg-imp-sc")
+    bundle["config"]["service_scope"] = ["ghost-svc"]
+
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_SERVICES", "audit")
+    r = await client.post("/api/scenarios/import", headers=h, json={
+        "bundle": bundle,
+        "mappings": [{"serviceKey": "fin-service-qa",
+                      "decision": "create"}],
+    })
+    assert r.status_code == 201, r.text
+    warn = r.json().get("serviceWarnings") or {}
+    assert "ghost-svc" in warn.get("unregistered", [])
+
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_SERVICES", "enforce")
+    bundle_e = _bundle(sid="sc-svg-imp-sc-e")
+    bundle_e["config"]["service_scope"] = ["ghost-svc"]
+    r = await client.post("/api/scenarios/import", headers=h, json={
+        "bundle": bundle_e,
+        "mappings": [{"serviceKey": "fin-service-qa",
+                      "decision": "reuse"}],
+    })
+    assert r.status_code == 422, r.text
+    det = r.json()["detail"]
+    assert det["code"] == "service_not_registered"
+    # ImportRejected 载体:键嵌 message(路由层 422 才有 keys 字段)
+    assert "ghost-svc" in det["message"]

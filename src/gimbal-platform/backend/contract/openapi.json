@@ -21464,7 +21464,7 @@
     },
     "/api/scenarios/{scenario_id}/service-resolution": {
       "get": {
-        "description": "服务引用解析预览(架构终态 2026-11-21;只读):\n\n* ``environment`` —— 执行标签链结果(``resolve_execution_tag``:\n  身份条目标签 > 项目默认 > 平台默认;混拼此处不炸,返回 null +\n  ``envMixed`` 名单,派发侧另有 409 硬拦);\n* ``services[]`` —— 步骤引用键逐键:注册态(主档 ∪ 条目表)、\n  base/系统、身份面事实(键为条目名时)、(system, 执行标签)实例\n  (登录口/版本线,``SystemEnvInstance``)、部署表**逐环境**地址、\n  当前标签地址与缺口。",
+        "description": "服务引用解析预览(架构终态 2026-11-21;只读):\n\n* ``environment`` —— 执行标签链结果(``resolve_execution_tag``:\n  身份条目标签 > 项目默认 > 平台默认;混拼此处不炸,返回 null +\n  ``envMixed`` 名单,派发侧另有 409 硬拦;混拼判定保持步骤口径,\n  预选范围不掺入 —— 预告的是派发 409,派发只看步骤);\n* ``services[]`` —— 引用键(步骤引用 ∪ ``config.service_scope``\n  预选范围)逐键:注册态(主档 ∪ 条目表)、base/系统、身份面事实\n  (键为条目名时)、(system, 执行标签)实例(登录口/版本线,\n  ``SystemEnvInstance``)、部署表**逐环境**地址、当前标签地址与\n  缺口、``stepRefs`` 步骤引用计数(0 = 仅预选)。",
         "operationId": "get_service_resolution_api_scenarios__scenario_id__service_resolution_get",
         "parameters": [
           {
