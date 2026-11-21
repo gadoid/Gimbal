@@ -890,7 +890,7 @@ async def land(
                     "identity_base_mismatch", 422,
                     "身份条目与所在步骤服务不同源:" + "、".join(
                         f"{r['identity']}({r['identityBase']})"
-                        f"@步骤{r['index']}[{r['service']}/"
+                        f"@步骤{r['index'] + 1}[{r['service']}/"
                         f"{r['serviceBase']}]" for r in bad_base)
                     + " —— 改绑同源条目,或去服务注册页核对条目归属")
             logger.warning(

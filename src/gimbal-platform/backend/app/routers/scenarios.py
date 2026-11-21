@@ -304,9 +304,17 @@ async def preview_plate(
 
 
 # ── 2) POST / (create) ─────────────────────────────────────────────
+async def _draft_base_overrides(db: AsyncSession, drafts) -> dict:
+    """手配草稿名 → 落池后条目的 base(auth_drafts.base_overrides 单源;
+    闸 extra_bases 叠层用 —— 与 materialize 同款 system→代表服务派生)。"""
+    from ..services.auth_drafts import base_overrides
+    return await base_overrides(db, list(drafts or []))
+
+
 async def _identity_registry_gate(
     db: AsyncSession, definition: dict, response: Response,
     *, extra_known: "set[str] | None" = None,
+    extra_bases: "dict[str, str] | None" = None,
 ) -> None:
     """决策 1「引用即登记」保存闸(阶段 0;identity-registry §2)+
     声明侧同 base 闸(阶段 3;TOK-07 声明面收口):
@@ -319,7 +327,10 @@ async def _identity_registry_gate(
     服务(逐步骤 ``${auth.*}``/``call.user`` 配对,``same_base_
     violations`` 单源);enforce 422 ``identity_base_mismatch``,audit
     ``X-Identity-Base-Warnings`` 头(载体同款,独立头 —— 存在性与
-    同 base 两种告警可同时成立,互不吞并)。
+    同 base 两种告警可同时成立,互不吞并)。``extra_bases`` = 手配
+    草稿名→base 叠层(auth_drafts.base_overrides,同落池派生):闸在
+    materialize 之前跑,草稿名未入库、不叠层会整体漏裁同 base 比对
+    (评审 P2-2:同主档 ≠ 同步骤服务,首次保存就要拦)。
 
     挂路由层而非 store:copy/share 等复制路径不走本闸 —— enforce 前提
     下库内已清账,直写与副本漏网由执行闸白名单(§4 两闸关系)兜底,
@@ -353,16 +364,18 @@ async def _identity_registry_gate(
             ensure_ascii=False)
         logger.warning(
             "registry gate(audit) identity_not_registered: %s", unreg)
-    # 同 base 步(阶段 3):只裁已登记条目,与手配 extra_known 无交
-    # (草稿落池条目的 base 由 422 系统闸保证同主档)。
-    bad_base = await same_base_violations(db, definition)
+    # 同 base 步(阶段 3):已登记条目照裁;手配草稿经 extra_bases
+    # 叠层参与比对(闸在 materialize 之前跑,叠层缺失 = 草稿引用整体
+    # 漏裁,跨服务首存即过 —— 评审 P2-2 时序缝;同主档 ≠ 同步骤服务)。
+    bad_base = await same_base_violations(db, definition,
+                                          extra_bases=extra_bases)
     if not bad_base:
         return
     if mode == "enforce":
         raise HTTPException(status_code=422, detail={
             "code": "identity_base_mismatch",
             "message": "身份条目与所在步骤服务不同源:" + "、".join(
-                f"{r['identity']}({r['identityBase']})@步骤{r['index']}"
+                f"{r['identity']}({r['identityBase']})@步骤{r['index'] + 1}"
                 f"[{r['service']}/{r['serviceBase']}]" for r in bad_base)
                        + " —— 改绑同源条目,或去服务注册页核对条目归属",
             "refs": bad_base})
@@ -392,9 +405,11 @@ async def create_scenario(
                 "code": e.code, "message": e.message}) from None
     # 决策 1 引用即登记(阶段 0):定义侧身份存在性闸(audit 头 /
     # enforce 422;项目门之后、store 之前 —— 不动事务,纯读)。
+    # extra_bases = 手配草稿叠层(P2-2:首存即裁同 base,不漏时序缝)。
     await _identity_registry_gate(
         db, body.definition, response,
-        extra_known={d.name for d in (body.auth_drafts or [])})
+        extra_known={d.name for d in (body.auth_drafts or [])},
+        extra_bases=await _draft_base_overrides(db, body.auth_drafts))
     # 手配落池(§3.3 阶段 2)触发的暂停实例复活:保存成功后 best-effort
     # (与 /auths create 的 _revive 同款;失败不回滚业务)。
     _made_auths = bool(body.auth_drafts)
@@ -1103,7 +1118,8 @@ async def put_scenario(
     # 引用正是 audit 态要观测的对象,update 同拦/同警示)。
     await _identity_registry_gate(
         db, body.definition, response,
-        extra_known={d.name for d in (body.auth_drafts or [])})
+        extra_known={d.name for d in (body.auth_drafts or [])},
+        extra_bases=await _draft_base_overrides(db, body.auth_drafts))
     try:
         out = await scenario_store.update(
             db,

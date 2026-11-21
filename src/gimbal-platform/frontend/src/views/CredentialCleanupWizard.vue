@@ -32,6 +32,11 @@
           后重启后端(拍板:清账完成即切;切闸是运维动作)。
         </p>
       </template>
+      <p v-else-if="loadFailed" class="cw-verdict pending"
+         data-testid="cw-load-failed">
+        ✗ 盘点读取失败 —— 余项未知,不能视作清零;请「重新盘点」(FE-02:
+        失败不悬置为「盘点中」,更不亮绿灯)
+      </p>
       <p v-else class="text-caption">盘点中…</p>
     </div>
 
@@ -175,6 +180,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const auth = useAuthStore()
 const survey = ref<CleanupSurvey | null>(null)
+const loadFailed = ref(false)
 const loading = ref(false)
 const registering = ref<string | null>(null)
 const clearing = ref<string | null>(null)
@@ -204,7 +210,9 @@ async function reload(): Promise<void> {
   loading.value = true
   try {
     survey.value = await fetchCleanupSurvey()
+    loadFailed.value = false
   } catch {
+    loadFailed.value = true
     toast.error('盘点读取失败 —— 请稍后重试(盘点失败≠已清零,不亮绿灯)')
   } finally {
     loading.value = false
@@ -220,7 +228,9 @@ async function registerName(name: string): Promise<void> {
     toast.success(`已登记条目 ${name}(default 引用)—— 重新盘点看余项`)
     await reload()
   } catch (e) {
-    toast.error(`登记 ${name} 失败:${errMsg(e)} —— base 不在主档时先到「服务注册」补主档服务`)
+    toast.error(`登记 ${name} 失败:${errMsg(e)}`
+      + ' —— plate 条目 base 须落主档/目录(先到「服务注册」补主档服务);'
+      + '第三方服务条目属 external,请直接在「服务注册」页以 external 登记后重试')
   } finally {
     registering.value = null
   }

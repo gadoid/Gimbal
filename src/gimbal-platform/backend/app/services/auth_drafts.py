@@ -38,6 +38,32 @@ def _err(code: str, message: str) -> ValueError:
     return ValueError(f"{code}: {message}")
 
 
+async def base_overrides(
+    db, drafts: list,
+) -> dict[str, str]:
+    """草稿名 → 落池后条目的 base_service(声明侧同 base 闸的 extra_bases
+    叠层,2026-11-21 评审 P2-2):派生与 ``materialize`` 同款 —— 草稿
+    system → 主档该系统字典序首个服务名(确定性;条目→系统派生只看
+    system 字段)。system 不在主档的名字**不进**映射(闸无从裁;
+    ``materialize`` 会以 ``auth_draft_system_unknown`` 422 拒整单,
+    时序上闸先跑、落池后跑,坏草稿根本到不了库里)。
+
+    闸在 materialize 之前跑、草稿名此刻未入库 —— ``same_base_
+    violations`` 的「未登记跳过」会放走全部草稿引用,跨服务步骤引用
+    手配草稿 = 首次保存双闸全过(TOK-07 泄漏形态,第二次 PUT 才拦)。
+    本映射把草稿 base 显式带给闸,首存即裁。"""
+    if not drafts:
+        return {}
+    svc_rows = (await db.execute(
+        select(Service.name, Service.system).where(
+            Service.system.in_({d.system for d in drafts})))).all()
+    by_system: dict[str, list[str]] = {}
+    for name, sysname in svc_rows:
+        by_system.setdefault(sysname, []).append(name)
+    return {d.name: sorted(by_system[d.system])[0]
+            for d in drafts if by_system.get(d.system)}
+
+
 async def materialize(
     db: AsyncSession, drafts: list[AuthDraftIn], *, owner_id: int,
 ) -> list[str]:

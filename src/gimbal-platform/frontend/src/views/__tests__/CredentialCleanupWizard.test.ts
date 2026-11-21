@@ -106,11 +106,20 @@ describe('清账向导 — 盘点渲染', () => {
     w.unmount()
   })
 
-  it('盘点读取失败 → error toast(失败≠清零,不亮绿灯)', async () => {
-    vi.mocked(fetchCleanupSurvey).mockRejectedValue(new Error('down'))
+  it('盘点读取失败 → error toast + 面板失败态(不悬置「盘点中」)', async () => {
+    vi.mocked(fetchCleanupSurvey).mockRejectedValueOnce(new Error('down'))
     const w = await mountPage()
     expect(vi.mocked(toast.error).mock.calls.length).toBeGreaterThan(0)
-    expect(w.find('[data-testid="cw-readiness"]').text()).not.toContain('三面已清零')
+    const panel = w.find('[data-testid="cw-readiness"]')
+    expect(panel.text()).not.toContain('三面已清零')
+    // FE-02:失败≠「盘点中」悬置 —— 显式失败态 + 余项未知口径
+    expect(w.find('[data-testid="cw-load-failed"]').exists()).toBe(true)
+    expect(w.find('[data-testid="cw-load-failed"]').text()).toContain('余项未知')
+    expect(panel.text()).not.toContain('盘点中…')
+    // 恢复:重盘点成功 → 失败态退场
+    await w.find('[data-testid="cw-refresh"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="cw-load-failed"]').exists()).toBe(false)
     w.unmount()
   })
 })

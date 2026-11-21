@@ -1793,6 +1793,44 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   identity_id(int)对 alias(str),debug 复现后修正为 alias_name
   join —— 未流入提交。
 
+### 评审收口轮(2026-11-21,阶段 3/4 复审:P2×2 + P3×4)
+
+- **P2-1 就绪面板三重口径分裂 → 镜像 ``_resolve_identities`` 口径**:
+  ``projectAccountReady`` 由「AuthAccount.system == base_service 直比 +
+  env 硬过滤 + 忽略 ref_mode」改为三重对齐 —— ① base_service →
+  主档 ``services.system`` 派生(条目名 ≠ 系统名时直比恒假,fin-svc/fin
+  即靶形);② ref 口径(username-ref 按 (system, username) 命中、
+  default-ref 只吃 ``is_default`` 行,池里有任意账户 ≠ 就绪);
+  ③ **无 env 硬过滤**(env 只是 ``_pick_one`` 取用偏好:同标签唯一 ∨
+  全局唯一才落,0 行/多行歧义 = 未就绪)。钉测一个用例五断言全盖
+  (①②③ + 歧义 + 主档缺行;fixture 服 uq_account_default 池×系统
+  单默认索引 —— 歧义靶改由 username-ref 同名双行构造)。
+- **P2-2 手配草稿 × 同 base 闸时序缝 → ``extra_bases`` 叠层**:闸在
+  materialize 之前跑,草稿名未入库、按「未登记跳过」整体漏裁同 base
+  比对 —— 跨系统草稿注入他服务步骤**首存双闸全过**(TOK-07 泄漏
+  形态,第二次 PUT 才拦)。收口 = ``auth_drafts.base_overrides``
+  (system→代表服务派生,与 materialize 同款字典序首个)+ 闸
+  ``same_base_violations(extra_bases=…)``:草稿名视为「将登记且 base
+  已知」参与比对;create/PUT 路由接线。钉测三态:enforce 跨系统草稿
+  **首存 422**(refs 带派生 identityBase;无落库)/ 同系统草稿首存
+  放行落池 / audit 头带叠层 base。闸注释更正:「base 由 422 系统闸
+  保证同主档」不成立 —— 同主档 ≠ 同步骤服务。
+- **P3×4**:① 向导盘点失败 → 面板显式失败态
+  (``cw-load-failed``,「余项未知」+ 不悬置「盘点中」+ 重盘点恢复,
+  FE-02 缝收口);② 一键登记失败指引点名 external 形态(第三方
+  条目走服务注册页 external 登记);③ ``revoke_grants`` 粒度
+  (按 source_promotion_id 删整行,多 promotion 共享同条目时过度删除
+  —— 现状态机不可达)**入登记册**,「撤销已批准」扩展前置修复项;
+  ④ 步骤号口径对齐:后端 422 文案改 1-based(路由 + 导入链),
+  与前端黄条 ``index+1`` 同口径(钉测断言「步骤1」)。
+- 验证:gate 簇 15(+3 草稿叠层钉)/ grants 簇 5(+1 就绪口径钉)/
+  向导 7(失败态钉)/ 契约重生双绿。
+- **终验**:后端全量 **2151 passed / 2 skipped / 0 failed** + 2
+  teardown 竞态 ERROR(s21_env_chain / projection_sinkdown —— 用例
+  本体全绿;与前轮 56f→0f 两次全量的错误位各不相同,已记档 flake
+  类的位漂移实证);前端全量 **175 文件 / 1528 用例 0 failed**;
+  vue-tsc 0;eslint(涉及面)0;契约 gen+check 双绿。
+
 ### 阶段 3/4 验证(本节时点)
 
 - 后端定向:gate 簇 12 + import/auth_drafts 36 + plate_integration/

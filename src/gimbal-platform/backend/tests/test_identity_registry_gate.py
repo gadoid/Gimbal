@@ -284,3 +284,112 @@ async def test_import_enforce_rejects_and_rolls_back(
         assert (await s.execute(select(ComposerScenario.scenario_id).where(
             ComposerScenario.scenario_id == "sc-gate-imp-enf"))
         ).scalar_one_or_none() is None
+
+
+# ── 手配草稿 × 同 base 闸时序缝(评审 P2-2:extra_bases 叠层首存即裁)──
+
+def _draft_steps_for(svc: str, ref: str) -> list[dict]:
+    """指定服务键的引用步骤(same_base 靶:草稿 base vs 该服务)。"""
+    return [{
+        "kind": "step", "endpoint": "fin.orders.get",
+        "call": {"service": svc, "method": "GET", "path": "/o",
+                 "headers": {"Authorization": f"${{auth.{ref}.token}}"}},
+        "request": {"kind": "request", "body": {}}, "strategy": [],
+    }]
+
+
+async def _seed_master(name: str, system: str) -> None:
+    from app.models import Service
+
+    async with db_module.SessionLocal() as s:
+        if (await s.execute(select(Service.id).where(
+                Service.name == name))).scalar_one_or_none() is None:
+            s.add(Service(name=name, system=system, kind="plate"))
+        await s.commit()
+
+
+def _with_draft(draft_body: dict, name: str, system: str, env_id: int) -> dict:
+    draft_body["authDrafts"] = [{
+        "name": name, "system": system, "envId": env_id,
+        "username": "u1", "password": "secret1"}]
+    return draft_body
+
+
+async def _default_env() -> int:
+    from app.models import Environment
+
+    async with db_module.SessionLocal() as s:
+        env = (await s.execute(select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.commit()
+            env = (await s.execute(select(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        return env
+
+
+@pytest.mark.asyncio
+async def test_draft_cross_base_rejected_on_first_save(
+        client, plate_mock, monkeypatch):
+    """enforce + 跨系统草稿(gitlab 系统草稿注入 fin-service 步骤):
+    extra_bases 叠层让首存即 422 identity_base_mismatch(此前时序缝 =
+    首存双闸全过,第二次 PUT 才拦,TOK-07 泄漏形态);message 步骤号
+    1-based(与前端黄条同口径)。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "enforce")
+    env = await _default_env()
+    await _seed_master("gitlab-main", system="gitlab")   # 草稿系统代表服务
+    h = await role_headers(client, "gate-draft-x")
+    body = _with_draft(make_draft(
+        "sc-gate-draft-x",
+        steps=_draft_steps_for("fin-service", "d1")), "d1", "gitlab", env)
+    r = await client.post("/api/scenarios", headers=h, json=body)
+    assert r.status_code == 422, r.text
+    d = r.json()["detail"]
+    assert d["code"] == "identity_base_mismatch"
+    assert d["refs"][0]["identity"] == "d1"
+    assert d["refs"][0]["identityBase"] == "gitlab-main"   # system→代表服务
+    assert d["refs"][0]["serviceBase"] == "fin-service"
+    assert "步骤1" in d["message"]   # 1-based(评审 P3-4 口径对齐)
+    async with db_module.SessionLocal() as s:
+        assert (await s.execute(select(ComposerScenario.scenario_id).where(
+            ComposerScenario.scenario_id == "sc-gate-draft-x"))
+        ).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_draft_same_base_saves_and_lands(
+        client, plate_mock, monkeypatch):
+    """同系统草稿(fin 草稿 → 代表服务 fin-service 步骤):首存放行,
+    条目/账户随事务落池(叠层不误伤);base header 不出现。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "enforce")
+    env = await _default_env()
+    await _seed_master("fin-service", system="fin")
+    h = await role_headers(client, "gate-draft-ok")
+    body = _with_draft(make_draft(
+        "sc-gate-draft-ok",
+        steps=_draft_steps_for("fin-service", "d2")), "d2", "fin", env)
+    r = await client.post("/api/scenarios", headers=h, json=body)
+    assert r.status_code == 201, r.text
+    assert "X-Identity-Base-Warnings" not in r.headers
+    assert r.json().get("newAuths") == ["d2"]
+
+
+@pytest.mark.asyncio
+async def test_draft_cross_base_audit_warns(client, plate_mock, monkeypatch):
+    """audit 态同缝:跨系统草稿保存放行 + X-Identity-Base-Warnings 头
+    (refs 带叠层派生的 identityBase)。"""
+    monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "audit")
+    env = await _default_env()
+    await _seed_master("gitlab-main", system="gitlab")
+    await _seed_master("fin-service", system="fin")
+    h = await role_headers(client, "gate-draft-a")
+    body = _with_draft(make_draft(
+        "sc-gate-draft-a",
+        steps=_draft_steps_for("fin-service", "d3")), "d3", "gitlab", env)
+    r = await client.post("/api/scenarios", headers=h, json=body)
+    assert r.status_code == 201, r.text
+    warn = json.loads(r.headers["X-Identity-Base-Warnings"])
+    assert warn["refs"][0] == {
+        "index": 0, "service": "fin-service", "identity": "d3",
+        "identityBase": "gitlab-main", "serviceBase": "fin-service"}

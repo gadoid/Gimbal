@@ -83,6 +83,15 @@
   audit `X-Identity-Base-Warnings` 独立头 / 导入 `identityBaseWarnings`
   键(契约 216 码)。边界:未登记名归存在闸;setup/teardown 无步骤
   锚点不比对(其存在性仍走存在闸);
+- **revoke_grants 粒度:按 source_promotion_id 删整行,多 promotion
+  共享同条目时过度删除**(2026-11-21 阶段 4 评审 P3 登记):条目 X 经
+  promotion A 授权进项目后,另一 promotion B 的场景也引用 X(B 落池
+  时幂等跳过,授权行 source 仍 = A)—— 此时若按 B 回滚,整行删除 =
+  A 的授权连带被撤。现状态机 approve 终态、reject/withdraw 均在
+  pending 态(无授权可删),不可达,``revoke_grants`` docstring 自认
+  兜底;**扩展「撤销已批准」前须先修**:按该 promotion 申请时刻的
+  analyze 引用条目集 ∩ 自己落的行删,且共享行保留(改挂后续
+  promotion 溯源);
 - ImportRejected 错误码不在契约提取面(既有缺口:tuple 赋值形态不被
   `_discover_coded_exceptions` 识别,导入侧码仅以 dynamic 位点
   `scenario_import.py:32` 兜底;阶段 0 新码 identity_not_registered

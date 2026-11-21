@@ -478,6 +478,7 @@ async def unregistered_identities(
 
 async def same_base_violations(
     db: AsyncSession, definition: dict,
+    *, extra_bases: "dict[str, str] | None" = None,
 ) -> list[dict]:
     """声明侧**同 base** 闸(TOK-07 声明面收口;评审 P2 登记,阶段 3):
     逐步骤把声明的身份引用配对到所在步骤服务,已登记条目的 base 必须
@@ -490,6 +491,11 @@ async def same_base_violations(
     模板 + ``call.user`` 直引)。刻意边界:
     * 未登记名跳过 —— 存在性是 ``unregistered_identities`` 的业务,
        本闸只裁已登记条目;否则 base 回落自身会造假阳性;
+    * **``extra_bases``**(评审 P2-2 收口,2026-11-21):手配草稿名
+       → base 的叠层(``auth_drafts.base_overrides``)。闸在落池前跑,
+       草稿名未入库、按「未登记跳过」会整体漏裁;叠层把它们视为
+       「将登记且 base 已知」参与比对 —— 跨服务引用草稿首存即拦,
+       不再等到第二次 PUT(彼时条目已入库才被裁);
     * ``config.setup``/``teardown`` 条目与无 ``call.service`` 的步骤
        跳过 —— 无步骤服务锚点,不比对(其引用仍受存在闸覆盖);
     * 步骤服务键默认命中(条目名 == 服务键)自比同 base,无信息量,
@@ -522,20 +528,26 @@ async def same_base_violations(
     base_of = dict((await db.execute(
         select(ServiceIdentity.alias_name, ServiceIdentity.base_service).where(
             ServiceIdentity.alias_name.in_(scan_names | svc_keys)))).all())
+    overrides = extra_bases or {}
     out: list[dict] = []
     seen: set[tuple[int, str, str]] = set()
     for idx, svc, name in pairs:
-        if name not in base_of:  # 未登记 → 存在闸业务,这里跳过
-            continue
+        if name in base_of:
+            id_base = base_of[name]
+        elif name in overrides:
+            # 草稿名:落池前未入库,base 由 system→代表服务派生叠进来
+            id_base = overrides[name]
+        else:
+            continue  # 未登记且非草稿 → 存在闸业务,这里跳过
         svc_base = base_of.get(svc, svc)
-        if base_of[name] == svc_base:
+        if id_base == svc_base:
             continue
         key = (idx, svc, name)
         if key in seen:
             continue
         seen.add(key)
         out.append({"index": idx, "service": svc, "identity": name,
-                    "identityBase": base_of[name], "serviceBase": svc_base})
+                    "identityBase": id_base, "serviceBase": svc_base})
     return out
 
 

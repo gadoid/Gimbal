@@ -196,14 +196,20 @@ async def _referenced_identity_entries(
     ``{aliasName, baseService, envLabel, registered, granted,
     projectAccountReady}`` —— 裁决面板 / 项目呈现与账户就绪引导的
     数据面。``slots`` 保持平铺名清单不变(向后兼容);本分区是它的
-    明细化。授权 = ``identity_project_grants`` 行(共享即授权);
-    项目池账户就绪 = 项目池存在 (base_service, env_id) 账户行
-    (呈现提示,不拦执行 —— 执行解析不查授权表,拍板照默认口径)。"""
-    from sqlalchemy import func as sa_func
+    明细化。授权 = ``identity_project_grants`` 行(共享即授权)。
 
+    ``projectAccountReady`` **镜像 ``run_prepare._resolve_identities``
+    解析口径**(评审 P2 收口):① base_service → 主档 ``services.system``
+    派生(条目名 ≠ 系统名时直比恒假);② ref 口径(username-ref 按
+    (system, username) 命中,default-ref 只吃 ``is_default`` 行)——
+    池里有任意账户 ≠ 就绪;③ **无 env 硬过滤**(执行链 env 只作
+    `_pick_one` 取用偏好:同标签唯一 ∨ 全局唯一才落)。就绪 = 解析
+    能落一行(0 行 / 多行歧义 = 未就绪)。呈现提示,不拦执行 ——
+    执行解析不查授权表,拍板照默认口径。"""
     from ..models.auth_account import AuthAccount
     from ..models.environment import Environment
     from ..models.identity_grant import IdentityProjectGrant
+    from ..models.service import Service
     from ..models.service_identity import ServiceIdentity
     from .service_aliases import exec_auth_aliases_of_definition
 
@@ -213,33 +219,59 @@ async def _referenced_identity_entries(
         return []
     rows = (await db.execute(
         select(ServiceIdentity.alias_name, ServiceIdentity.base_service,
-               ServiceIdentity.env_id, Environment.name)
+               ServiceIdentity.env_id, ServiceIdentity.ref_mode,
+               ServiceIdentity.ref_username, Environment.name)
         .outerjoin(Environment, Environment.id == ServiceIdentity.env_id)
         .where(ServiceIdentity.alias_name.in_(names)))).all()
-    registered: dict[str, tuple[str, int, str | None]] = {
-        alias: (base, env_id, env_name)
-        for alias, base, env_id, env_name in rows}
+    registered: dict[str, tuple[str, int, str, str, str | None]] = {
+        alias: (base, env_id, ref_mode, ref_username, env_name)
+        for alias, base, env_id, ref_mode, ref_username, env_name in rows}
     granted_aliases = set((await db.execute(
         select(ServiceIdentity.alias_name)
         .join(IdentityProjectGrant, IdentityProjectGrant.identity_id ==
               ServiceIdentity.id)
         .where(IdentityProjectGrant.project_id == project_id,
                ServiceIdentity.alias_name.in_(names)))).scalars())
+
+    # ① base_service → services.system 派生(主档缺行 = 解析必 missing)
+    bases = {base for base, *_ in registered.values()}
+    system_of: dict[str, str] = dict((await db.execute(
+        select(Service.name, Service.system).where(
+            Service.name.in_(bases or {"__none__"})))).all())
+    # ②③ 项目池账户一次性取(ref 口径 + 取用偏好都在内存裁)
+    pool = (await db.execute(
+        select(AuthAccount.system, AuthAccount.username,
+               AuthAccount.env_id, AuthAccount.is_default).where(
+            AuthAccount.project_id == project_id))).all()
+
+    def _pick_one(cands: list, tag: int) -> bool:
+        """镜像 run_prepare._pick_one:同标签唯一 ∨ 全局唯一 → 落行。"""
+        if len(cands) == 1:
+            return True
+        same = [c for c in cands if c[2] == tag]
+        return len(same) == 1
+
+    def _ready(base: str, env_id: int, ref_mode: str, ref_username: str) -> bool:
+        sysname = system_of.get(base)
+        if not sysname:
+            return False
+        if ref_mode == "username" and ref_username:
+            cands = [a for a in pool
+                     if a[0] == sysname and a[1] == ref_username]
+        else:  # default:吃池内默认账户(§8.3 同构)
+            cands = [a for a in pool if a[0] == sysname and a[3]]
+        return _pick_one(cands, env_id)
+
     out: list[dict] = []
     for alias in names:
-        base, env_id, env_name = registered.get(alias, ("", None, None))
-        ready = False
-        if base and env_id is not None:
-            ready = bool((await db.execute(
-                select(sa_func.count()).select_from(AuthAccount).where(
-                    AuthAccount.project_id == project_id,
-                    AuthAccount.system == base,
-                    AuthAccount.env_id == env_id))).scalar())
+        base, env_id, ref_mode, ref_username, env_name = \
+            registered.get(alias, ("", None, "default", "", None))
         out.append({
             "aliasName": alias, "baseService": base,
             "envLabel": env_name or "", "registered": alias in registered,
             "granted": alias in granted_aliases,
-            "projectAccountReady": ready,
+            "projectAccountReady": bool(base) and _ready(
+                base, env_id or 0, ref_mode, ref_username),
         })
     return out
 
