@@ -242,8 +242,12 @@
                   :data-testid="`uc-copy-${row.id}`" @click="copyRef(entriesOf(row)[0].aliasName)">复制引用</Button>
               </template>
               <template v-else>
-                <span class="no-entry" title="该凭证尚未被任何身份条目引用 —— 选用后保存场景时建条目">未设条目引用</span>
-                <Button variant="link" size="sm" class="uc-op"
+                <span class="no-entry"
+                  :title="row.system
+                    ? '该凭证尚未被任何身份条目引用 —— 选用后保存场景时建条目'
+                    : '账户缺少系统标签 —— 去「凭证管理」补全系统后才可建条目'"
+                >未设条目引用</span>
+                <Button v-if="row.system" variant="link" size="sm" class="uc-op"
                   :data-testid="`uc-pick-${row.id}`"
                   title="用该账户建一条引用条目(随场景保存同事务落库)"
                   @click="openPick(row)">选用</Button>

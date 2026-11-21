@@ -346,6 +346,22 @@ describe('UsersCard — 选用已有账户(检索面建条目,2026-11-21)', () =
     w.unmount()
   })
 
+  it('账户缺系统标签 → 不提供「选用」(条目须系统入主档);仍可去服务注册', async () => {
+    vi.mocked(list).mockResolvedValue({
+      items: [{ ...mine, id: 9, system: '', username: 'u9' }],
+      total: 1, page: 1, pageSize: 200,
+    } as any)
+    // 无场景服务 → scope 过滤不生效(空系统标签行不会被系统命中)
+    const { w } = mountCard({ projectId: 7 })
+    await w.find('[data-testid="uc-search-open"]').trigger('click')
+    await flushPromises()
+    const row = q('[data-testid="uc-pool-row-9"]')
+    expect(row.textContent).toContain('未设条目引用')
+    expect(q('[data-testid="uc-pick-9"]')).toBeFalsy()
+    expect(q('[data-testid="uc-go-registry"]')).toBeTruthy()
+    w.unmount()
+  })
+
   it('条目名撞注册表 → 拒收并提示直接引用', async () => {
     const { w, drafts } = mountCard({ projectId: 7, services })
     await w.find('[data-testid="uc-search-open"]').trigger('click')
