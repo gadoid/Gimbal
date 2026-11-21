@@ -273,17 +273,27 @@ describe('CaseComposerConfig — 变量锁(var-lock spec §2)', () => {
 })
 
 describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => {
-  it('解析行呈现:环境链 + 注册/身份面/实例/当前环境地址;拉取失败 → 降级横幅', async () => {
-    const { w } = mountWithParent(makeConfig())
+  it('范围行呈现:实例面描述 + 在用徽标;拉取失败 → 降级横幅', async () => {
+    // 真实用法形态:父级传步骤引用键(挂载自动收敛入范围)
+    const config = ref<ConfigView>(makeConfig())
+    const Parent = defineComponent({
+      setup() {
+        return () => h(CaseComposerConfig, {
+          modelValue: config.value,
+          scenarioId: 'sc-cfg-test',
+          stepServiceKeys: ['fin-service'],
+          'onUpdate:modelValue': (v: ConfigView) => { config.value = v },
+        })
+      },
+    })
+    const w = mount(Parent, { global: { plugins: [] } })
     await flush()
     expect(getServiceResolution).toHaveBeenCalled()
-    expect(w.find('[data-testid="cfg-svc-env"]').text()).toContain('测试')
-    expect(w.find('[data-testid="cfg-svc-env"]').text()).toContain('身份条目标签')
     const row = w.find('[data-testid="cfg-svc-row-fin-service"]')
     expect(row.text()).toContain('fin-service')
-    expect(row.text()).toContain('默认账户')
-    expect(row.text()).toContain('https://login')
-    expect(row.text()).toContain('https://dep')
+    // 实例面列 = 环境 · 引用模式(对齐凭证卡形态,不铺陈地址/实例事实)
+    expect(row.text()).toContain('测试 · 默认账户')
+    expect(row.text()).toContain('1 步在用')
     w.unmount()
 
     vi.mocked(getServiceResolution).mockRejectedValueOnce(new Error('down'))
@@ -291,22 +301,6 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     await flush()
     expect(w2.find('[data-testid="cfg-svc-degraded"]').exists()).toBe(true)
     w2.unmount()
-  })
-
-  it('缺口行:当前环境无地址 → 缺口徽标(指引部署表)', async () => {
-    vi.mocked(getServiceResolution).mockResolvedValueOnce({
-      environment: null, envMixed: null,
-      services: [{ key: 'ghost-svc', registered: false, base: 'ghost-svc',
-                   system: '', identityEntry: null, instance: null,
-                   urls: [], currentUrl: null, gap: true }],
-    })
-    const { w } = mountWithParent(makeConfig())
-    await flush()
-    const row = w.find('[data-testid="cfg-svc-row-ghost-svc"]')
-    expect(row.text()).toContain('未注册')
-    expect(row.text()).toContain('缺口')
-    expect(row.text()).toContain('部署地址')
-    w.unmount()
   })
 
   it('迁移面:存量 authored 声明只读列出 + 全部清除(v-model 上抛)', async () => {
@@ -322,18 +316,7 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     w.unmount()
   })
 
-  it('环境混拼:envMixed 名单呈现(派发 409 的预兆)', async () => {
-    vi.mocked(getServiceResolution).mockResolvedValueOnce({
-      environment: null, envMixed: ['a', 'b'],
-      services: [],
-    })
-    const { w } = mountWithParent(makeConfig())
-    await flush()
-    expect(w.find('[data-testid="cfg-svc-env"]').text()).toContain('混拼')
-    w.unmount()
-  })
-
-  it('手选可发现性:每行「改绑」emit bindJump(键);未注册/缺口深链服务注册', async () => {
+  it('手选可发现性:行「改绑」emit bindJump(键);未注册警示可见(登记入口在弹窗)', async () => {
     vi.mocked(getServiceResolution).mockResolvedValueOnce({
       environment: { envId: 1, source: 'platform', envName: '默认' },
       envMixed: null,
@@ -352,22 +335,21 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     // 改绑 = 上抛键,由父级切编排页 focusJump 定位步骤服务下拉
     await w.find('[data-testid="cfg-svc-bind-fin-service"]').trigger('click')
     expect(cfg.emitted('bindJump')).toEqual([['fin-service']])
-    // 未注册 → 去登记深链;缺口 → 部署地址深链(同一治理页)
-    routerMocks.push.mockClear()
-    await w.find('[data-testid="cfg-svc-register"]').trigger('click')
-    expect(routerMocks.push).toHaveBeenCalledWith('/service-admin')
-    routerMocks.push.mockClear()
-    await w.find('[data-testid="cfg-svc-gap-link"]').trigger('click')
-    expect(routerMocks.push).toHaveBeenCalledWith('/service-admin')
+    // 未注册 = 行内警示字;注册/地址事实列已随卡改造退场
+    expect(w.find('[data-testid="cfg-svc-row-ghost-svc"]').text()).toContain('未注册')
+    expect(w.find('[data-testid="cfg-svc-register"]').exists()).toBe(false)
+    expect(w.find('[data-testid="cfg-svc-gap-link"]').exists()).toBe(false)
     w.unmount()
   })
 
   describe('服务范围收敛(三级收敛:本卡定实例面)', () => {
     /** 生产用法镜像 + 步骤键/saveState 透传(收敛输入)。
      *  stubUsers:降级用例专用 —— UsersCard 挂载也拉同一组候选 API,
-     *  会先消费 mockRejectedValueOnce(竞争消费 → 降级断言失真)。 */
+     *  会先消费 mockRejectedValueOnce(竞争消费 → 降级断言失真)。
+     *  attach:Dialog 内容经 Teleport 出 wrapper → document 断言
+     *  (UsersCard 检索弹窗同款口径)。 */
     function mountScope(initial: ConfigView, stepKeys: string[] = [],
-                        stubUsers = false) {
+                        stubUsers = false, attach?: HTMLElement) {
       const config = ref<ConfigView>(initial)
       const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
       const Parent = defineComponent({
@@ -383,6 +365,7 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
       })
       const w = mount(Parent, {
         global: { plugins: [], ...(stubUsers ? { stubs: { UsersCard: true } } : {}) },
+        ...(attach ? { attachTo: attach } : {}),
       })
       return { w, config, saveState }
     }
@@ -407,33 +390,35 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
       m2.w.unmount()
     })
 
-    it('选取器:按服务分组列候选(服务键直引 + 身份面条目),选入去重', async () => {
-      const { w, config } = mountScope(makeConfig())
+    it('选取器(Dialog):按服务分组列候选(直引 + 身份面条目),选入去重并置灰', async () => {
+      const { w, config } = mountScope(makeConfig(), [], false, document.body)
+      await flush()
       await w.find('[data-testid="cfg-svc-add"]').trigger('click')
       await flush()
-      // 候选分面呈现:主档服务 + 条目(环境/引用模式 pill)
-      expect(w.find('[data-testid="cfg-svc-picker"]').exists()).toBe(true)
-      expect(w.find('[data-testid="cfg-svc-pick-fin-service"]').text())
-        .toContain('服务键直引')
-      expect(w.find('[data-testid="cfg-svc-pick-fin-service-uat"]').text())
+      const q = (sel: string) => document.querySelector(sel)
+      // 候选分面呈现:主档服务(直引 pill)+ 条目(环境 pill)
+      expect(q('[data-testid="cfg-svc-pick-fin-service"]')?.textContent)
+        .toContain('直引')
+      expect(q('[data-testid="cfg-svc-pick-fin-service-uat"]')?.textContent)
         .toContain('测试')
-      await w.find('[data-testid="cfg-svc-pick-fin-service-uat"]').trigger('click')
+      ;(q('[data-testid="cfg-svc-pick-fin-service-uat"]') as HTMLElement).click()
       await flush()
       expect(config.value.service_scope).toContain('fin-service-uat')
       // 已在范围的候选置灰防重复
-      expect((w.find('[data-testid="cfg-svc-pick-fin-service-uat"]').element as HTMLButtonElement).disabled)
+      expect(q('[data-testid="cfg-svc-pick-fin-service-uat"]')?.hasAttribute('disabled'))
         .toBe(true)
       w.unmount()
     })
 
-    it('移除/纳入:步骤在用键移除后仍列(未入范围徽标),收敛按钮一键纳入', async () => {
+    it('移除/纳入:步骤在用键移除后仍列(在用未入范围),收敛按钮一键纳入', async () => {
       const { w, config } = mountScope(makeConfig(), ['fin-service'])
       await flush()
       await w.find('[data-testid="cfg-svc-rm-fin-service"]').trigger('click')
       await flush()
-      // 生效域仍含步骤键 → 行保留,黄底「未入范围」
+      // 生效域仍含步骤键 → 行保留并给「纳入」操作
       const row = w.find('[data-testid="cfg-svc-row-fin-service"]')
-      expect(row.text()).toContain('步骤在用·未入范围')
+      expect(row.text()).toContain('在用未入范围')
+      expect(w.find('[data-testid="cfg-svc-adopt-fin-service"]').exists()).toBe(true)
       expect(config.value.service_scope).toBeUndefined()   // 空则省键
       await w.find('[data-testid="cfg-svc-converge"]').trigger('click')
       await flush()
@@ -452,18 +437,19 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
       saveState.value = 'clean'
       await flush()
       expect(getServiceResolution).toHaveBeenCalledTimes(2)
-      // 事实列来自解析行(stepRefs 徽标)
+      // 实例面列来自解析行(环境 · 引用模式)
       expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
         .toContain('默认账户')
       w.unmount()
     })
 
-    it('候选拉取失败 → 降级横幅(FE-02:失败 ≠ 无候选)', async () => {
+    it('候选拉取失败 → 弹窗降级横幅(FE-02:失败 ≠ 无候选)', async () => {
       vi.mocked(listServices).mockRejectedValueOnce(new Error('down'))
-      const { w } = mountScope(makeConfig(), [], true)
+      const { w } = mountScope(makeConfig(), [], true, document.body)
       await w.find('[data-testid="cfg-svc-add"]').trigger('click')
       await flush()
-      expect(w.find('[data-testid="cfg-svc-picker-failed"]').exists()).toBe(true)
+      expect(document.querySelector('[data-testid="cfg-svc-picker-failed"]'))
+        .toBeTruthy()
       w.unmount()
     })
   })
