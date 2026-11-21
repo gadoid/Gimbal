@@ -156,6 +156,61 @@ async def test_account_exists_conflict(client: AsyncClient, plate_mock):
 
 
 @pytest.mark.asyncio
+async def test_entry_only_draft_references_existing_account(
+        client: AsyncClient, plate_mock):
+    """检索面「选用」通道(2026-11-21):``password`` 缺省 = 只建
+    username-ref 条目,账户取自本人池既有四元组 —— 不新建账户、不碰
+    密码;条目同样随保存同事务落库,响应 newAuths 点名。"""
+    env = await _seed_base()
+    h = await role_headers(client, "ad_ref")
+    # 先手配建账户 (fin, env, u1)
+    r = await client.post("/api/scenarios", headers=h, json=_draft(
+        "sc-ad-ref1", "pay-uat", [_manual_cfg(env=env)]))
+    assert r.status_code in (200, 201), r.text
+    # 引用已有账户建第二个条目:无 password
+    r = await client.post("/api/scenarios", headers=h, json=_draft(
+        "sc-ad-ref2", "pay-uat2", [{
+            "name": "pay-uat2", "system": "fin", "envId": env,
+            "username": "u1"}]))
+    assert r.status_code in (200, 201), r.text
+    assert r.json().get("newAuths") == ["pay-uat2"]
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(sa.text(
+            "SELECT id FROM users WHERE username='ad_ref'"))).scalar()
+        ident = (await s.execute(sa.select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "pay-uat2"))).scalar_one()
+        assert (ident.ref_mode, ident.ref_username,
+                ident.base_service) == ("username", "u1", "fin-svc")
+        # 账户数不变(账户是引用,不是新建)
+        cnt = (await s.execute(sa.text(
+            "SELECT count(*) FROM auth_accounts WHERE owner_id=:u"),
+            {"u": uid})).scalar()
+        assert cnt == 1
+
+
+@pytest.mark.asyncio
+async def test_entry_only_draft_account_missing_rolls_back(
+        client: AsyncClient, plate_mock):
+    """引用已有账户但四元组不在本人池 → 422 auth_draft_account_not_found,
+    整单回滚(条目/场景都不落)。"""
+    env = await _seed_base()
+    h = await role_headers(client, "ad_refx")
+    r = await client.post("/api/scenarios", headers=h, json=_draft(
+        "sc-ad-refx", "pay-ghost", [{
+            "name": "pay-ghost", "system": "fin", "envId": env,
+            "username": "nobody"}]))
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"].startswith("auth_draft_account_not_found")
+    async with db_module.SessionLocal() as s:
+        assert (await s.execute(sa.select(ServiceIdentity.alias_name).where(
+            ServiceIdentity.alias_name == "pay-ghost"))).scalar_one_or_none() \
+            is None
+        assert (await s.execute(sa.text(
+            "SELECT count(*) FROM composer_scenarios"
+            " WHERE scenario_id='sc-ad-refx'"))).scalar() == 0
+
+
+@pytest.mark.asyncio
 async def test_system_unknown_and_env_missing(client: AsyncClient,
                                               plate_mock):
     """手配条目 base_service 须落主档既有服务(admin 目录面):

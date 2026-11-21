@@ -165,7 +165,12 @@ class AuthDraftIn(BaseModel):
     **同事务**落本人池 + 建 username-ref 条目(引用名 = 场景引用的条目名,
     ${auth.<name>.*} / call.user 直接可用)。同名条目冲突走「直接引用 /
     去认证管理改」(行为规则①),不静默覆盖;密码过 ``require_maskable_
-    password`` 掩码闸(与 /auths 同单源)。"""
+    password`` 掩码闸(与 /auths 同单源)。
+
+    **引用已有账户(2026-11-21,检索面「选用」通道)**:``password``
+    缺省(None)= 只建 username-ref 条目,账户取自本人池既有
+    (owner × system × env × username)四元组 —— 不新建账户、不碰密码;
+    四元组未命中 → 422 ``auth_draft_account_not_found``。"""
     model_config = _CAMEL
 
     name: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$",
@@ -174,7 +179,8 @@ class AuthDraftIn(BaseModel):
                         description="系统名(须已有主档服务)")
     env_id: int = Field(ge=1, alias="envId")
     username: str = Field(min_length=1, max_length=128)
-    password: str = Field(min_length=6, max_length=256)
+    # None = 引用本人池已有账户(只建条目);给定 = 新建账户 + 条目并落池
+    password: str | None = Field(default=None, min_length=6, max_length=256)
     account_fields: dict[str, str] = Field(
         default_factory=dict, alias="accountFields", max_length=32)
 

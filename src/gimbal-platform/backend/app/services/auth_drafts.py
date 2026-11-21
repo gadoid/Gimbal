@@ -16,6 +16,8 @@ base_service 必须取自主档既有服务(未知系统 422,指引服务注册)
 规则④)。冲突码(调用方映射):
 
 * ``auth_draft_env_not_found`` / ``auth_draft_system_unknown`` → 422;
+* ``auth_draft_account_not_found``(引用已有账户但四元组不在本人池)
+  → 422(检索面「选用」通道,2026-11-21);
 * ``auth_draft_alias_taken`` / ``auth_draft_account_exists`` → 409
   (行为规则①:提示「直接引用 / 去认证管理修改」,不静默覆盖);
 * ``auth_draft_name_duplicated``(同一请求内重名)→ 422。
@@ -123,7 +125,10 @@ async def materialize(
             "引用名已登记:" + "、".join(sorted(taken))
             + " —— 直接引用该条目,或去认证管理修改")
 
-    # 账户四元组冲突(owner × system × env × username)
+    # 账户四元组(owner × system × env × username):
+    # * 新建账户(password 给定)撞四元组 → 409 不静默覆盖(规则①);
+    # * 引用已有账户(password 缺省)四元组必须命中 → 否则 422
+    #   (检索面「选用」通道:只建条目,账户须已在本人池)。
     for d in drafts:
         hit = (await db.execute(
             select(AuthAccount.id).where(
@@ -131,19 +136,29 @@ async def materialize(
                 AuthAccount.system == d.system,
                 AuthAccount.env_id == d.env_id,
                 AuthAccount.username == d.username))).scalar_one_or_none()
-        if hit is not None:
+        if d.password is None:
+            if hit is None:
+                raise _err(
+                    "auth_draft_account_not_found",
+                    f"账户 {d.username!r} 在系统 {d.system!r} × 环境"
+                    f"#{d.env_id} 不在本人凭证池 —— 请先手配或去凭证管理添加")
+        elif hit is not None:
             raise _err(
                 "auth_draft_account_exists",
                 f"账户 {d.username!r} 在系统 {d.system!r} × 环境"
                 f"#{d.env_id} 已存在 —— 直接引用同名条目,或去认证管理修改")
 
-    # 校验全过 → 掩码闸 + 落行(不 commit,事务归调用方)
+    # 校验全过 → 掩码闸(仅新建账户)+ 落行(不 commit,事务归调用方)
     for d in drafts:
-        require_maskable_password(d.password)
+        if d.password is not None:
+            require_maskable_password(d.password)
+    for d in drafts:
         base = sorted(by_system[d.system])[0]
         db.add(ServiceIdentity(
             alias_name=d.name, base_service=base, env_id=d.env_id,
             ref_mode="username", ref_username=d.username))
+        if d.password is None:
+            continue    # 引用已有账户:只建条目,不碰账户行
         # 未显式置默认时与 /auths 同口径:该 system 首账户即默认
         has_default = (await db.execute(
             select(AuthAccount.id).where(

@@ -290,6 +290,51 @@ describe('UsersCard — 检索凭证池(双源 + scope)', () => {
   })
 })
 
+describe('UsersCard — 选用已有账户(检索面建条目,2026-11-21)', () => {
+  const services = { 'fin-svc': 'http://fin' }
+
+  it('未设条目账户「选用」→ 预填条目名 → emit 条目草稿(password 缺省)+ 卡片「已有账户」徽标', async () => {
+    const { w, drafts } = mountCard({ projectId: 7, services })
+    await w.find('[data-testid="uc-search-open"]').trigger('click')
+    await flushPromises()
+    // 项目池 svc1 无条目 → 选用入口在场(不再只有「去服务注册」死路)
+    ;(q('[data-testid="uc-pick-2"]') as HTMLElement).click()
+    await flushPromises()
+    const name = q('[data-testid="uc-pick-name"]') as HTMLInputElement
+    expect(name.value).toBe('fin-svc1')   // <system>-<username> 建议名
+    name.value = 'pay-svc01'
+    name.dispatchEvent(new Event('input'))
+    await flush()
+    ;(q('[data-testid="uc-pick-submit"]') as HTMLElement).click()
+    await flush()
+    expect(drafts.value).toHaveLength(1)
+    expect(drafts.value[0]).toMatchObject({
+      name: 'pay-svc01', system: 'fin', envId: 1, username: 'svc1',
+    })
+    // 引用已有账户:不携带 password(后端只建条目,不新建账户)
+    expect(drafts.value[0].password).toBeUndefined()
+    await vi.waitFor(() => expect(w.text()).toContain('已有账户'))
+    w.unmount()
+  })
+
+  it('条目名撞注册表 → 拒收并提示直接引用', async () => {
+    const { w, drafts } = mountCard({ projectId: 7, services })
+    await w.find('[data-testid="uc-search-open"]').trigger('click')
+    await flushPromises()
+    ;(q('[data-testid="uc-pick-2"]') as HTMLElement).click()
+    await flushPromises()
+    const name = q('[data-testid="uc-pick-name"]') as HTMLInputElement
+    name.value = 'qa1'
+    name.dispatchEvent(new Event('input'))
+    await flush()
+    ;(q('[data-testid="uc-pick-submit"]') as HTMLElement).click()
+    await flush()
+    expect(drafts.value).toHaveLength(0)
+    expect(q('[data-testid="uc-pick-err"]')!.textContent).toContain('已在注册表')
+    w.unmount()
+  })
+})
+
 describe('UsersCard — 快照导入退役(§3.7 TOK-05 接力)', () => {
   it('旧入口整体退场:无「从凭证池导入」/「+ 添加用户」;新场景空态引导检索/手配', async () => {
     const { w } = mountCard({})

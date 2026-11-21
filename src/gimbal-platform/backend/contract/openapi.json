@@ -1013,7 +1013,7 @@
         "type": "object"
       },
       "AuthDraftIn": {
-        "description": "凭证治理 §3.3 手配(阶段 2;拍板 2026-11-20 方案 A):随场景保存\n**同事务**落本人池 + 建 username-ref 条目(引用名 = 场景引用的条目名,\n${auth.<name>.*} / call.user 直接可用)。同名条目冲突走「直接引用 /\n去认证管理改」(行为规则①),不静默覆盖;密码过 ``require_maskable_\npassword`` 掩码闸(与 /auths 同单源)。",
+        "description": "凭证治理 §3.3 手配(阶段 2;拍板 2026-11-20 方案 A):随场景保存\n**同事务**落本人池 + 建 username-ref 条目(引用名 = 场景引用的条目名,\n${auth.<name>.*} / call.user 直接可用)。同名条目冲突走「直接引用 /\n去认证管理改」(行为规则①),不静默覆盖;密码过 ``require_maskable_\npassword`` 掩码闸(与 /auths 同单源)。\n\n**引用已有账户(2026-11-21,检索面「选用」通道)**:``password``\n缺省(None)= 只建 username-ref 条目,账户取自本人池既有\n(owner × system × env × username)四元组 —— 不新建账户、不碰密码;\n四元组未命中 → 422 ``auth_draft_account_not_found``。",
         "properties": {
           "accountFields": {
             "additionalProperties": {
@@ -1035,10 +1035,17 @@
             "type": "string"
           },
           "password": {
-            "maxLength": 256,
-            "minLength": 6,
-            "title": "Password",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 6,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
           },
           "system": {
             "description": "系统名(须已有主档服务)",
@@ -1058,8 +1065,7 @@
           "name",
           "system",
           "envId",
-          "username",
-          "password"
+          "username"
         ],
         "title": "AuthDraftIn",
         "type": "object"

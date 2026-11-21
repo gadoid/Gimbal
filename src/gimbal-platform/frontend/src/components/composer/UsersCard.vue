@@ -15,7 +15,8 @@
         <h3>凭证与调用身份</h3>
         <p class="c-head-desc">
           场景只存条目名引用(<code class="c-code">${auth.&lt;条目名&gt;.*}</code>);
-          凭证本体在凭证池加密保存 —— 检索选用已有凭证,或手配新凭证(保存时入池)
+          凭证本体在凭证池加密保存 —— 检索里「选用」已有账户建条目、
+          或手配新凭证(均随保存同事务落库)
         </p>
       </div>
     </div>
@@ -51,7 +52,13 @@
         <thead><tr><th>条目名</th><th>系统</th><th>环境</th><th>username</th><th></th></tr></thead>
         <tbody>
           <tr v-for="d in drafts" :key="d.name">
-            <td><code class="alias">{{ d.name }}</code></td>
+            <td>
+              <code class="alias">{{ d.name }}</code>
+              <span
+                v-if="d.password === undefined" class="src-badge src-own draft-src"
+                title="引用已有账户:保存时只建 username-ref 条目,不新建凭证"
+              >已有账户</span>
+            </td>
             <td>{{ d.system }}</td>
             <td>{{ envName(d.envId) }}</td>
             <td>{{ d.username }}</td>
@@ -62,7 +69,7 @@
           </tr>
         </tbody>
       </table>
-      <p class="draft-hint">保存场景时同事务入本人池(Fernet 加密)并新建 username-ref 条目;失败整单回滚。</p>
+      <p class="draft-hint">保存场景时同事务处理:新凭证入本人池(Fernet 加密);「已有账户」只建 username-ref 条目。失败整单回滚。</p>
     </template>
 
     <div class="users-actions">
@@ -165,6 +172,36 @@
       </DialogContent>
     </Dialog>
 
+    <!-- ── 选用已有账户(检索面,2026-11-21):只建引用条目 ——
+         随场景保存同事务建 username-ref(不新建账户、不碰密码)── -->
+    <Dialog :open="pickOpen" @update:open="pickOpen = $event">
+      <DialogContent class="max-w-[32.5rem]">
+        <DialogHeader><DialogTitle>选用已有账户</DialogTitle></DialogHeader>
+        <p class="import-hint">
+          只建引用条目(username-ref),不新建凭证、不碰密码 —— 保存场景时
+          同事务落库。条目名即 <code class="c-code">${auth.&lt;name&gt;}</code> 引用名。
+        </p>
+        <div v-if="pickTarget" class="pick-meta">
+          <span class="src-badge" :class="pickTarget.source === 'project' ? 'src-proj' : 'src-own'">
+            {{ pickTarget.source === 'project' ? '项目池' : '我的池' }}
+          </span>
+          <span class="pick-line">
+            {{ pickTarget.system }} · {{ envName(pickTarget.envId) }} ·
+            <code class="pool-user">{{ pickTarget.username }}</code>
+          </span>
+        </div>
+        <div class="search-row">
+          <Input v-model="pickName" data-testid="uc-pick-name"
+            placeholder="条目名(1-64 位字母数字下划线连字符)" class="h-8" />
+        </div>
+        <p v-if="pickError" class="pick-err" data-testid="uc-pick-err">{{ pickError }}</p>
+        <DialogFooter class="mt-1">
+          <Button type="button" variant="outline" @click="pickOpen = false">取消</Button>
+          <Button type="button" data-testid="uc-pick-submit" @click="submitPick">加入待建条目</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <!-- ── 检索凭证池(双源:本人池 + 场景项目池;scope 过滤)── -->
     <Dialog :open="searchOpen" @update:open="searchOpen = $event">
       <DialogContent class="max-w-[40rem]">
@@ -205,7 +242,11 @@
                   :data-testid="`uc-copy-${row.id}`" @click="copyRef(entriesOf(row)[0].aliasName)">复制引用</Button>
               </template>
               <template v-else>
-                <span class="no-entry" title="该凭证尚未被任何身份条目引用 —— 去服务注册登记条目后即可按名引用">未设条目引用</span>
+                <span class="no-entry" title="该凭证尚未被任何身份条目引用 —— 选用后保存场景时建条目">未设条目引用</span>
+                <Button variant="link" size="sm" class="uc-op"
+                  :data-testid="`uc-pick-${row.id}`"
+                  title="用该账户建一条引用条目(随场景保存同事务落库)"
+                  @click="openPick(row)">选用</Button>
                 <Button variant="link" size="sm" class="uc-op" data-testid="uc-go-registry"
                   @click="goRegistry">去服务注册</Button>
               </template>
@@ -414,7 +455,60 @@ watch(searchQ, () => {
 
 async function openSearch() {
   searchOpen.value = true
+  // 注册表随检索重取:上一轮保存新建的条目要能立刻看到引用名
+  // (挂载只取一次会滞留在旧快照)
+  void listAllAliases()
+    .then((rows) => { registryRows.value = rows })
+    .catch(() => { /* 注册表不可达 → 引用名列空,不阻塞检索 */ })
   await refreshPool()
+}
+
+// ── 选用已有账户(检索面):条目草稿,随场景保存同事务落库 ─────────
+// 与手配共用 authDrafts 通道;password 缺省 = 后端只建 username-ref
+// 条目、不新建账户(AuthDraftIn.password=None 分支,2026-11-21)。
+const pickOpen = ref(false)
+const pickTarget = ref<AuthSession | null>(null)
+const pickName = ref('')
+const pickError = ref('')
+
+/** 条目名建议:<system>-<username>(清洗为合法字符,≤64);可改。 */
+function suggestName(row: AuthSession): string {
+  return `${row.system}-${row.username}`
+    .replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 64)
+}
+
+function openPick(row: AuthSession) {
+  pickTarget.value = row
+  pickName.value = suggestName(row)
+  pickError.value = ''
+  searchOpen.value = false   // 一次一个弹窗:先收起检索面
+  pickOpen.value = true
+}
+
+function submitPick() {
+  const row = pickTarget.value
+  if (!row) return
+  const name = pickName.value.trim()
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) {
+    pickError.value = '条目名须 1-64 位字母数字下划线连字符'
+    return
+  }
+  if (nameTaken(name)) {
+    pickError.value = `条目名 ${name} 已在注册表 — 直接检索引用即可,不做覆盖`
+    return
+  }
+  if (drafts.value.length >= 16) {
+    pickError.value = '单次保存条目上限 16 条 — 请先保存本批再继续'
+    return
+  }
+  setDrafts([...drafts.value, {
+    name,
+    system: row.system,
+    envId: row.envId,
+    username: row.username,
+  }])
+  toast.success(`已加入待建条目:${name}(保存场景时建条目)`)
+  pickOpen.value = false
 }
 
 async function refreshPool() {
@@ -521,6 +615,16 @@ function goRegistry() {
   font-size: 0.6875rem;
   color: var(--c-text-secondary, var(--color-text-secondary));
 }
+
+.draft-src { margin-left: 0.375rem; }
+
+/* 选用已有账户:目标账户摘要行 + 行内校验错误 */
+.pick-meta {
+  display: flex; gap: 0.5rem; align-items: center;
+  margin-bottom: 0.5rem; font-size: 0.75rem;
+}
+.pick-line { color: var(--c-text-secondary, var(--color-text-secondary)); }
+.pick-err { margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--sl-bad); }
 
 .import-hint {
   margin: 0 0 0.625rem;

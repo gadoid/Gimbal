@@ -45,8 +45,10 @@ export interface AuthDraftView {
   /** 环境标签 id(实体键第四位) */
   envId: number
   username: string
-  /** 明文密码(≥6 位;仅保存链传输,不落场景 payload) */
-  password: string
+  /** 明文密码(≥6 位;仅保存链传输,不落场景 payload)。**缺省 =
+   *  引用本人池已有账户(只建 username-ref 条目,不新建账户、不碰密码)**
+   *  —— 检索面「选用」通道(2026-11-21);给定 = 手配新凭证。 */
+  password?: string
   /** 账号级自定义字段(${slot.<name>.<field>} 消费;≤32 键;
    *  后端 dict[str, str],表单只产字符串值) */
   accountFields?: Record<string, string>

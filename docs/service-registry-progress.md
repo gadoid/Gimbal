@@ -2019,6 +2019,21 @@ uitest_draft1 提交成功)—— 用户「只能检索」疑为看旧部署/折
 **FE 全量 1539 passed / 1 skip(nav-N5 删)· vue-tsc 0 · eslint 0**;
 dist 重建。
 
+**检索面「选用已有账户」建条目(2026-11-21,用户截图为证:池里有账户
+但未设条目,只有「去服务注册」死路)**:拍板走**保存期同事务**通道。
+① 后端 `AuthDraftIn.password` 可空(`None` = 引用本人池已有账户,只建
+username-ref 条目、不建账户、不碰密码;四元组未命中 → 新码
+`auth_draft_account_not_found` 422);`auth_drafts.materialize` 分支
+落行。② 前端检索弹窗「未设条目引用」行加「选用」→ 条目命名弹窗
+(建议名 `<system>-<username>` 可改,撞注册表/上限 16 条即时拒)→
+条目草稿进 authDrafts 通道,卡片行显「已有账户」徽标;检索打开时
+注册表随取(保存后新条目立即可见)。③ 门闸零改动(extra_known/
+extra_bases 本就覆盖草稿名)。实测:API E2E 201 → 条目绑定已有账户、
+账户池无新增;5173 UI 全链(检索→选用→命名→草稿徽标)通过。
+**后端 2165 passed / 2 skip**(1 例 xdist 偶发 test_reconcile_cancel_shape,
+单跑绿)· **FE 1541 passed / 1 skip** · vue-tsc 0 · eslint 0 ·
+契约 gen+check 双绿(新错误码入快照)· dist 重建。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
