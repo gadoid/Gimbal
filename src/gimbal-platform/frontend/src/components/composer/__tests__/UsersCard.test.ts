@@ -264,6 +264,35 @@ describe('UsersCard — 检索凭证池(双源 + scope)', () => {
     w.unmount()
   })
 
+  it('主档系统映射:自定义服务(不在 plate 目录)的条目也命中账户,不误报未设引用', async () => {
+    // 用户实测复现:账户 system='fin-service'(主档自定义系统),已有同名
+    // 条目;plate 目录映射里没有该服务 → 旧实现误报「未设条目引用」,
+    // 选用时又提示「已在注册表」。系统取值必须主档优先(与后端连表同源)。
+    vi.mocked(loadCatalogSystemByService).mockResolvedValue(new Map())
+    vi.mocked(listServices).mockResolvedValue({
+      services: [{ name: 'fin-service', system: 'fin-service' }],
+      unregistered: [], plateReachable: true,
+    } as any)
+    vi.mocked(listAllAliases).mockResolvedValue([{
+      ...registry[0], aliasName: 'fin-service-18180789650',
+      baseService: 'fin-service', refUsername: '18180789650',
+    }] as any)
+    vi.mocked(list).mockResolvedValue({
+      items: [{ ...mine, id: 3, system: 'fin-service', username: '18180789650' }],
+      total: 1, page: 1, pageSize: 200,
+    } as any)
+    const { w } = mountCard({ projectId: 7, services: { 'fin-service': 'http://fin' } })
+    await w.find('[data-testid="uc-search-open"]').trigger('click')
+    await flushPromises()
+    const row = q('[data-testid="uc-pool-row-3"]')
+    // scope 过滤同样以主档系统判定 → 行在;条目名直接展示
+    expect(row).toBeTruthy()
+    expect(row.textContent).toContain('fin-service-18180789650')
+    expect(row.textContent).not.toContain('未设条目引用')
+    expect(q('[data-testid="uc-pick-3"]')).toBeFalsy()
+    w.unmount()
+  })
+
   it('池读取失败 → 降级横幅(FE-02:失败≠空态)', async () => {
     vi.mocked(list).mockRejectedValue(new Error('pool down'))
     const { w } = mountCard({ projectId: 7, services })

@@ -2034,6 +2034,18 @@ extra_bases 本就覆盖草稿名)。实测:API E2E 201 → 条目绑定已有�
 单跑绿)· **FE 1541 passed / 1 skip** · vue-tsc 0 · eslint 0 ·
 契约 gen+check 双绿(新错误码入快照)· dist 重建。
 
+**修:账户已有条目误报「未设条目引用」(2026-11-21,用户实测:账户
+18180789650 有 4 个条目,列表却显示未设引用,选用又提示已在注册表)**:
+根因 = UsersCard `entriesOf` 用 **plate 端点目录映射** 推条目系统,
+自定义主档服务(fin-service,不在 plate 目录)映射为空 → 条目↔账户
+永远不匹配。后端 `auth_references.identities_for_account` 的口径是
+**服务主档 Service.system 连表** —— 前端改为**主档优先、目录兜底**
+(`masterSystemByName` 来自 listServices,挂载与每次检索打开时刷新);
+`scenarioSystems`(检索 scope 过滤)同批改主档优先、anchor 名集并集。
+钉:FE 新回归用例(自定义系统 `fin-service` 条目命中、无「选用」、
+scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
+**FE 1542 passed / 1 skip** · vue-tsc 0 · eslint 0 · dist 重建。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |

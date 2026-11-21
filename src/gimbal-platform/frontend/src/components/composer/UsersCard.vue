@@ -327,16 +327,29 @@ async function clearLegacy() {
 const envRows = ref<EnvironmentRow[]>([])
 const serviceSystems = ref<string[]>([])
 const registryRows = ref<ServiceAliasRow[]>([])
-/** base 服务 → 系统(目录权威映射;失败 = 空表,scope 降级为全量) */
+/** base 服务 → 系统(plate 目录映射;失败 = 空表,scope 降级为全量) */
 const systemByService = ref<Map<string, string>>(new Map())
+/** base 服务 → 系统(**服务主档**,与后端 auth_references 同源:
+ *  Service.system)。自定义服务(不在 plate 端点目录,如 fin-service)
+ *  只有主档有映射 —— 条目↔账户匹配必须以它为准,否则会误报
+ *  「未设条目引用」(用户实测:账户已有 4 个条目仍提示未设)。 */
+const masterSystemByName = ref<Map<string, string>>(new Map())
 
-onMounted(() => {
-  listEnvironments().then((rows) => { envRows.value = rows }).catch(() => { /* 环境名回退 id 显示 */ })
+/** 主档服务/系统(挂载与每次检索打开时刷新 —— 服务注册页新登记的
+ *  服务/系统要能立刻参与条目匹配与 scope 过滤)。 */
+function loadMasterServices(): void {
   listServices()
     .then((page) => {
       serviceSystems.value = [...new Set(page.services.map((s) => s.system))].sort()
+      masterSystemByName.value = new Map(
+        page.services.map((s) => [s.name, s.system]))
     })
     .catch(() => { /* 主档不可达 → 手配系统位降级手输(选择器化不门控读面) */ })
+}
+
+onMounted(() => {
+  listEnvironments().then((rows) => { envRows.value = rows }).catch(() => { /* 环境名回退 id 显示 */ })
+  loadMasterServices()
   listAllAliases()
     .then((rows) => { registryRows.value = rows })
     .catch(() => { /* 注册表不可达 → 引用名列空,不阻塞检索 */ })
@@ -433,15 +446,18 @@ const pool = ref<AuthSession[]>([])
 const searchQ = ref('')
 const scopeOnly = ref(true)
 
-/** 场景服务键 → 系统集合(alias 直命中目录;否则 base 归锚后再查)。
- *  computed:目录映射异步到达即自动重算,无时序窗口。 */
+/** 场景服务键 → 系统集合(主档优先、目录兜底;alias 归 base 后再查)。
+ *  computed:两份映射异步到达即自动重算,无时序窗口。 */
 const scenarioSystems = computed(() => {
   const out = new Set<string>()
-  const catalogNames = new Set(systemByService.value.keys())
+  const anchorNames = new Set([
+    ...systemByService.value.keys(), ...masterSystemByName.value.keys(),
+  ])
+  const sysOf = (name: string): string | undefined =>
+    masterSystemByName.value.get(name) ?? systemByService.value.get(name)
   for (const key of Object.keys(props.services ?? {})) {
-    const base = deriveBase(key, catalogNames)
-    const sys = systemByService.value.get(key)
-      ?? (base ? systemByService.value.get(base) : undefined)
+    const base = deriveBase(key, anchorNames)
+    const sys = sysOf(key) ?? (base ? sysOf(base) : undefined)
     if (sys) out.add(sys)
   }
   return out
@@ -455,8 +471,9 @@ watch(searchQ, () => {
 
 async function openSearch() {
   searchOpen.value = true
-  // 注册表随检索重取:上一轮保存新建的条目要能立刻看到引用名
-  // (挂载只取一次会滞留在旧快照)
+  // 注册表/主档随检索重取:上一轮保存新建的条目、服务注册新登记的服务
+  // 要能立刻参与匹配(挂载只取一次会滞留在旧快照)
+  loadMasterServices()
   void listAllAliases()
     .then((rows) => { registryRows.value = rows })
     .catch(() => { /* 注册表不可达 → 引用名列空,不阻塞检索 */ })
@@ -539,12 +556,20 @@ const filteredPool = computed(() => {
   return pool.value.filter((r) => scenarioSystems.value.has(r.system))
 })
 
+/** 条目 → 系统(主档权威,与后端 auth_references 的 Service.system 连表
+ *  同源;plate 目录映射仅兜底)。 */
+function entrySystem(r: ServiceAliasRow): string | undefined {
+  return masterSystemByName.value.get(r.baseService)
+    ?? systemByService.value.get(r.baseService)
+}
+
 /** 装载该账户的身份条目(客户端镜像 auth_references.identities_for_account:
  *  只看 system + ref,不看标签 —— username-ref 认用户名,default-ref 认
- *  该系统默认账户)。 */
+ *  该系统默认账户)。自定义服务(不在 plate 目录)也只有主档映射 ——
+ *  系统取值必须主档优先,否则会把已有条目误报成「未设条目引用」。 */
 function entriesOf(acc: AuthSession): ServiceAliasRow[] {
   return registryRows.value.filter((r) => {
-    if (systemByService.value.get(r.baseService) !== acc.system) return false
+    if (entrySystem(r) !== acc.system) return false
     if (r.refMode === 'username') return r.refUsername === acc.username
     return acc.isDefault === true
   })
