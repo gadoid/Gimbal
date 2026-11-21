@@ -163,6 +163,26 @@ describe('ImportScenarioDialog 状态机', () => {
     w.unmount()
   })
 
+  it('服务引用闸 audit 黄条(架构终态):未注册键 + 内嵌地址点名', async () => {
+    importPrecheck.mockResolvedValue(pre())
+    importScenario.mockResolvedValue({
+      scenarioId: 'sc-import-abc', idMode: 'new',
+      serviceWarnings: { unregistered: ['ghost-svc'],
+                         declaredUrls: ['fin-service'] },
+    })
+    const w = mountDialog('alias.write')
+    await flushPromises()
+    await w.find('[data-testid="import-confirm"]').trigger('click')
+    await flushPromises()
+
+    const warn = w.find('[data-testid="import-service-warnings"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('未注册:ghost-svc')
+    expect(warn.text()).toContain('内嵌地址:fin-service')
+    expect(warn.text()).toContain('服务注册')
+    w.unmount()
+  })
+
   it('同 base 闸 audit 黄条(阶段 3):identityBaseWarnings 点名跨源引用', async () => {
     importPrecheck.mockResolvedValue(pre())
     importScenario.mockResolvedValue({

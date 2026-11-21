@@ -703,35 +703,29 @@ class TestRunScope:
 
     async def test_out_of_scope_direct_recorded_not_blocked(self, client,
                                                             monkeypatch):
-        """D15:直连地址(①②层)只记录不拦截 —— outOfScope 标记。"""
+        """架构终态(2026-11-21):② 直连层退役 → 引用键一律别名形态进令牌
+        范围(D15 范围外标记随层消失)。声明地址的裸键无别名行 =
+        范围缺失 → 403(与别名被删同分类)。"""
         h = await _register_role(client, "rs4", "admin")
         draft = _draft("sc-rs5", steps=[GET_STEP])
         draft["definition"]["config"]["services"] = {"svc": "https://direct.local"}
         await client.post("/api/scenarios", headers=h, json=draft)
         _, plain = await mk_token(user_id=await _user_id("rs4"))
-        from app.services import run_dispatcher as rd
-
-        async def _fake_fanout(*, db_factory, execution_id, **kw):
-            await rd.transition_with_retry(
-                db_factory, execution_id, rd.STATUS_DONE)
-
-        monkeypatch.setattr(rd, "_fanout", _fake_fanout)
         r = await client.post("/api/runs", headers=_gtk(plain), json={
             "scenarioId": "sc-rs5"})
-        assert r.status_code == 201, r.text
-        await _exec_done(r.json()["executionId"])
-        from app.models.execution import Execution
-        async with db_module.SessionLocal() as s:
-            ex = await s.get(Execution, r.json()["executionId"])
-            oos = ex.config_json.get("outOfScope")
-            assert any(t["service"] == "svc" and t["source"] == "authored"
-                       for t in oos["targets"])
+        assert r.status_code == 403, r.text
+        assert {"kind": "alias", "name": "svc",
+                "deleted": True} in r.json()["detail"]["missing"]
 
     async def test_setup_teardown_auth_refs_in_scope(self, client,
                                                      monkeypatch):
         """§3.2:config.setup/teardown 条目的 ${auth.*} 计入凭证集。"""
         h = await _register_role(client, "rs5", "admin")
         cred_id = await _add_credential("rs5", alias="setup-cred")
+        fs_uid = await _user_id("rs5")
+        # 条目 + 取用账户(非默认,避开与 setup-cred 的 svc 默认账户撞车)
+        await seed_alias("free-svc", base_url="https://direct.local")
+        fs_acc = await _seed_alias_account("free-svc", "fs-u", fs_uid)
         draft = _draft("sc-rs6", steps=[dict(GET_STEP, call=dict(
             GET_STEP["call"], service="free-svc"))])
         draft["definition"]["config"]["services"] = {
@@ -749,7 +743,8 @@ class TestRunScope:
                 "deleted": False} in r.json()["detail"]["missing"]
         # 纳入范围后放行
         _, plain2 = await mk_token(user_id=await _user_id("rs5"),
-                                   scope_auths=[cred_id])
+                                   scope_auths=[cred_id, fs_acc],
+                                   scope_aliases=["free-svc"])  # 终态:别名形态进范围,账户亦授权
         from app.services import run_dispatcher as rd
 
         async def _fake_fanout(*, db_factory, execution_id, **kw):

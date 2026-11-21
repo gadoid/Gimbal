@@ -150,6 +150,7 @@ describe('清账向导 — 登记 / 清账操作', () => {
     } as any)
     vi.mocked(updateScenario).mockResolvedValue({
       scenario: {} as any, identityWarnings: [], baseWarnings: [],
+      serviceWarnings: { unregistered: [], declaredUrls: [] },
     })
     const w = await mountPage()
     await w.find('[data-testid="cw-clear-sc-snap-1"]').trigger('click')

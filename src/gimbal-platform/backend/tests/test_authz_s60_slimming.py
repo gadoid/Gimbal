@@ -119,11 +119,12 @@ async def test_scheme_preview_overlay_reject_retired_fields(
 async def test_rerun_scrubs_legacy_bindings(
         client, plate_mock: PlateMock, monkeypatch):
     """归档 config_json 带退役的 url/authAlias → 重跑剥离(不 422)。
-    M3 §8.5:场景带 ② 声明地址过派发硬门(私有区直连生效)。"""
+    架构终态:地址来源 = 部署表(声明不再供址,私有区同口径)。"""
     plate_mock.behaviour = "echo"
     h = await _member(client, "s60rerun")
     await _seed(client, h, "sc-s60-rerun",
                 config={"services": {"fin-service": "http://direct"}})
+    await _seed_dep()   # 架构终态:地址来源 = 部署表(声明不再供址)
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
     r = await client.post("/api/runs", headers=h, json=_run_payload(
@@ -186,6 +187,31 @@ async def test_alias_router_slimmed(client):
 
 # ── ③ 原 5 区规则 ─────────────────────────────────────────────────
 
+# 架构终态(2026-11-21):authored 声明不再供地址 —— 场景引用走
+# 部署表(标签链环境)。保留同值声明仅作 audit 面(服务闸测试缺省
+# off 不拦);_seed_dep 为 (fin-service, 默认环境) 落部署行。
+async def _seed_dep() -> None:
+    """(fin-service, 默认环境) 部署行 —— 架构终态的执行地址来源。"""
+    from app.core import db as db_module
+    from app.models import Environment
+    from app.models.deployment import Deployment
+
+    async with db_module.SessionLocal() as s:
+        env = (await s.execute(sa.select(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if env is None:
+            s.add(Environment(name="测试", is_default=True))
+            await s.flush()
+            env = (await s.execute(sa.select(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        if (await s.execute(sa.select(Deployment.id).where(
+                Deployment.base_service == "fin-service",
+                Deployment.env_id == env))).scalar_one_or_none() is None:
+            s.add(Deployment(base_service="fin-service", env_id=env,
+                             base_url="http://authored"))
+        await s.commit()
+
+
 _ZONE_CFG = {"services": {"fin-service": "http://authored"},
              "users": {"builtin": {"url": "http://auth", "username": "u",
                                    "password": "p",
@@ -197,6 +223,7 @@ async def test_private_zone_keeps_direct_and_builtin(
     plate_mock.behaviour = "echo"
     h = await _member(client, "s60priv")
     await _seed(client, h, "sc-s60-priv", config=_ZONE_CFG)
+    await _seed_dep()
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
     r = await client.post("/api/runs", headers=h, json=_run_payload(
@@ -215,6 +242,7 @@ async def test_project_zone_ignores_direct_and_builtin(
     plate_mock.behaviour = "echo"
     h = await _member(client, "s60pub")
     await _seed(client, h, "sc-s60-pub", config=_ZONE_CFG)
+    await _seed_dep()
     await _move_to_project("sc-s60-pub", "s60pub")
     async with db_module.SessionLocal() as s:
         await seed_deployment(s, "fin-service", "http://deploy")
@@ -238,12 +266,13 @@ async def test_project_zone_ignores_direct_and_builtin(
 
 async def test_project_zone_precheck_and_token_scope_no_direct(
         client, fresh_db):
-    """项目区 authored 不算落点(预检缺口如实报)/ 令牌范围不按直连放过。"""
+    """架构终态:地址/范围全区一态(部署表供址;引用键一律进范围)。"""
     from app.services import access_token as at_svc, scheme_store
     from app.services.scenario_store import definition_from_payload
 
     h = await _member(client, "s60pre")
     await _seed(client, h, "sc-s60-pre", config=_ZONE_CFG)
+    await _seed_dep()
     await _move_to_project("sc-s60-pre", "s60pre")
     async with db_module.SessionLocal() as s:
         sch = await scheme_store.create_scheme(
@@ -251,7 +280,9 @@ async def test_project_zone_precheck_and_token_scope_no_direct(
     r = await client.post("/api/run/precheck", headers=h, json=[
         {"scenarioId": "sc-s60-pre", "schemeId": sch["schemeId"]}])
     assert r.status_code == 200, r.text
-    assert r.json()[0]["unboundServices"] == ["fin-service"]
+    # 架构终态:部署表已供址(_seed_dep)→ 预检不缺;旧断言
+    # 「项目区不吃声明 → unbound」随 ② 层退役(全区一态)。
+    assert r.json()[0]["unboundServices"] == []
 
     async with db_module.SessionLocal() as s:
         scen = (await s.execute(sa.select(ComposerScenario).where(
@@ -261,8 +292,10 @@ async def test_project_zone_precheck_and_token_scope_no_direct(
             s, defn, {}, project_id=scen.project_id)
         priv = await at_svc.used_sets_for_definition(
             s, defn, {}, project_id=None)
-    assert "fin-service" in pub.aliases          # 进范围判定
-    assert "fin-service" not in priv.aliases     # 私有区 authored = 直连
+    # 架构终态:引用键一律别名形态进范围 —— 公共/私有同集(区规则
+    # 随 ② 直连层退役消失)。
+    assert "fin-service" in pub.aliases
+    assert "fin-service" in priv.aliases
 
 
 async def test_graph_units_get_deployment_address(client, monkeypatch):

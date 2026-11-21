@@ -135,6 +135,7 @@ export async function createScenario(
     scenario: r.data,
     identityWarnings: identityWarningsOf(r),
     baseWarnings: identityBaseWarningsOf(r),
+    serviceWarnings: serviceWarningsOf(r),
   }
 }
 
@@ -146,6 +147,7 @@ export async function updateScenario(
     scenario: r.data,
     identityWarnings: identityWarningsOf(r),
     baseWarnings: identityBaseWarningsOf(r),
+    serviceWarnings: serviceWarningsOf(r),
   }
 }
 
@@ -170,6 +172,18 @@ export interface SaveScenarioResult {
   /** 声明侧同 base 闸 audit 态(阶段 3):X-Identity-Base-Warnings 头
    *  (JSON {code, refs})点名跨 base 引用;enforce 态 422 到不了这。 */
   baseWarnings: IdentityBaseRef[]
+  /** 服务引用注册化 audit 态(架构终态):X-Service-Warnings 头
+   *  (JSON {unregistered, declaredUrls})—— 未注册键 + 待迁移声明;
+   *  enforce 态 422 到不了这。 */
+  serviceWarnings: ServiceRefWarnings
+}
+
+/** 服务引用闸 audit 载体(架构终态 2026-11-21)。 */
+export interface ServiceRefWarnings {
+  /** 步骤引用但不在注册域(主档 ∪ 条目表)的键。 */
+  unregistered: string[]
+  /** 带 authored URL 的引用键(② 层退役的迁移对象)。 */
+  declaredUrls: string[]
 }
 
 /** X-Identity-Warnings 头解析(缺头/坏 JSON → 空数组,保守不吵)。
@@ -189,6 +203,57 @@ function identityWarningsOf(r: AxiosResponse<Scenario>): string[] {
 
 /** X-Identity-Base-Warnings 头解析(阶段 3;缺头/坏 JSON/形状漂移 →
  *  空数组,保守不吵 —— 与 identityWarningsOf 同口径)。 */
+/** X-Service-Warnings 头解析(缺头/坏 JSON → 空载体,保守不吵)。 */
+function serviceWarningsOf(r: AxiosResponse<Scenario>): ServiceRefWarnings {
+  const empty: ServiceRefWarnings = { unregistered: [], declaredUrls: [] }
+  const raw: unknown = r.headers?.['x-service-warnings']
+  if (typeof raw !== 'string' || !raw) return empty
+  try {
+    const parsed = JSON.parse(raw) as {
+      unregistered?: unknown; declaredUrls?: unknown
+    }
+    return {
+      unregistered: Array.isArray(parsed.unregistered)
+        ? parsed.unregistered.filter(
+            (x): x is string => typeof x === 'string') : [],
+      declaredUrls: Array.isArray(parsed.declaredUrls)
+        ? parsed.declaredUrls.filter(
+            (x): x is string => typeof x === 'string') : [],
+    }
+  } catch {
+    return empty
+  }
+}
+
+// ── 服务引用解析预览(架构终态;场景 = 纯引用容器)───────────────
+export interface ServiceResolutionEntry {
+  identityEntry: { aliasName: string; refMode: string; refUsername: string; envId: number } | null
+  instance: { loginUrl: string; line: string } | null
+  key: string
+  registered: boolean
+  base: string
+  system: string
+  urls: Array<{ envId: number; envName: string; url: string }>
+  currentUrl: string | null
+  gap: boolean
+}
+
+export interface ServiceResolution {
+  environment: { envId: number; source: string; envName: string } | null
+  envMixed: string[] | null
+  services: ServiceResolutionEntry[]
+}
+
+/** GET /scenarios/{id}/service-resolution(只读:标签链 + 逐键注册
+ *  事实/身份面/实例/逐环境地址/缺口)。 */
+export function getServiceResolution(
+  scenarioId: string,
+): Promise<ServiceResolution> {
+  return http.get<ServiceResolution>(
+    `/scenarios/${enc(scenarioId)}/service-resolution`)
+    .then((r) => r.data)
+}
+
 function identityBaseWarningsOf(r: AxiosResponse<Scenario>): IdentityBaseRef[] {
   const raw: unknown = r.headers?.['x-identity-base-warnings']
   if (typeof raw !== 'string' || !raw) return []

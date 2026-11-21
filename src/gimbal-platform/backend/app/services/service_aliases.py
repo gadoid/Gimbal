@@ -476,6 +476,48 @@ async def unregistered_identities(
     return sorted(set(names) - known)
 
 
+def _usable_declared_url_v(value: object) -> bool:
+    """authored 声明值可用性(与 run_materialize._usable_declared_url
+    同口径):非空字符串且非全空白;空/空白视同缺。"""
+    return isinstance(value, str) and bool(value.strip())
+
+
+async def service_reference_audit(
+    db: AsyncSession, definition: dict,
+) -> tuple[list[str], list[str]]:
+    """服务引用注册化审计(架构终态,2026-11-21):返回
+    ``(unregistered_keys, declared_url_keys)`` —— 步骤引用的服务键
+    diff 注册域 + 带 authored URL 的引用键。调用方(路由闸/导入链)
+    按 ``REGISTRY_ONLY_SERVICES`` 三态分派;本函数只报事实。
+
+    * 引用键集 = ``referenced_services(steps)`` 单源(执行链地址解析
+      同口径;setup/teardown 无地址面不进集合);
+    * 注册域 = 主档 ``services.name`` ∪ 条目表 ``alias_name``
+      (DB-only,不依赖 plate 目录可达性 —— 目录未同步主档的键按
+      未注册报,指引服务注册页同步/登记);
+    * authored URL = ``config.services[键]`` 非空值(② 层退役的清理
+      对象;空白值视同缺,不算活跃声明)。
+    """
+    from .run_materialize import referenced_services
+
+    defn = definition or {}
+    keys = sorted(set(referenced_services(defn.get("steps") or [])))
+    if not keys:
+        return [], []
+    known: set[str] = set()
+    if keys:
+        known.update((await db.execute(
+            select(Service.name).where(Service.name.in_(keys)))).scalars())
+        known.update((await db.execute(
+            select(ServiceIdentity.alias_name).where(
+                ServiceIdentity.alias_name.in_(keys)))).scalars())
+    declared = (defn.get("config") or {}).get("services")
+    declared = declared if isinstance(declared, dict) else {}
+    with_url = sorted(k for k in keys
+                      if _usable_declared_url_v(declared.get(k)))
+    return sorted(set(keys) - known), with_url
+
+
 async def same_base_violations(
     db: AsyncSession, definition: dict,
     *, extra_bases: "dict[str, str] | None" = None,

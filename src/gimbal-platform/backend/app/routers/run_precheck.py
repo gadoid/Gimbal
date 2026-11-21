@@ -393,35 +393,28 @@ async def _precheck_one(
 async def _gate_unbound_services(
     db: AsyncSession, *, project_id, definition: dict, env,
 ) -> list[str]:
-    """未落点的服务引用(steps 引用 × 三层地址链皆缺)—— 与执行期
-    地址链同口径:②authored 声明 > ③ 标签部署地址 > ④ 缺口引擎报错
-    (① 绑定 url 随 S6 退役)。落点判定共用
-    ``run_materialize.service_url_resolved``(物化 ``_apply_services``
-    同一实现,规则不第二份重写);③ 层命中按需查询(只查 ② 后仍有
-    缺口的候选,不整表拉)。混拼/无标签时不给 ③(地址无从选,宁可
-    多报缺)。"""
-    from ..services.run_prepare import zone_allows_direct
+    """未落点的服务引用(steps 引用 × 地址链皆缺)—— 与执行期地址链
+    同口径:③ 标签部署地址 > ④ 缺口引擎报错(① 绑定 url 随 S6 退役;
+    ② authored 声明随架构终态 2026-11-21 退役,场景不持有地址)。
+    落点判定共用 ``run_materialize.service_url_resolved``(物化
+    ``_apply_services`` 同一实现,规则不第二份重写);③ 层按需查询
+    (不整表拉)。混拼/无标签时不给 ③(地址无从选,宁可多报缺)。"""
     from ..services.run_materialize import service_url_resolved
 
     steps = definition.get("steps") or []
-    declared = (definition.get("config") or {}).get("services")
-    declared = declared if isinstance(declared, dict) else {}
-    if not zone_allows_direct(project_id):
-        declared = {}        # 原 5:项目/公共区直连地址不生效
     candidates = [
         svc for svc in referenced_services(steps)
-        if not service_url_resolved(svc, declared=declared,
-                                    alias_base_urls={})
+        if not service_url_resolved(svc, alias_base_urls={})
     ]
     if candidates and env is not None and env.env_id is not None:
         try:
             from ..services import service_aliases
             alias_urls = await service_aliases.base_urls_for(
                 db, candidates, env=env)
-        except Exception:  # noqa: BLE001 — 查表失败退回 ② 口径(不误放行)
+        except Exception:  # noqa: BLE001 — 查表失败保守多报(不误放行)
             alias_urls = {}
         candidates = [s for s in candidates if not service_url_resolved(
-            s, declared=declared, alias_base_urls=alias_urls)]
+            s, alias_base_urls=alias_urls)]
     return candidates
 
 

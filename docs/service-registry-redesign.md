@@ -576,3 +576,58 @@ resolve_execution_tag:
 - **字段配置呈现**(用户拍板):所选身份的字段只读概览 + 深链(坐标/
   ref 列已有;carry 值在服务注册实例档、账户字段在凭证管理),本页不
   恢复编辑(v3 退场决策延续)。
+
+
+## 9. 服务引用注册化(架构终态;2026-11-21 落地)
+
+### 定位
+
+场景是**纯引用容器**:步骤引用服务键(注册域 = 主档 ``services``
+∪ 身份条目表),凭证引用条目名;**地址/环境/实例是执行期事实**
+(部署表 × 标签链),一律不进场景 payload。本节 = 第 ② 层
+(``config.services`` authored 直连地址)的整体退役 —— 与 §4
+解析链的终态收敛、与身份条目「引用即登记」(enforce)同一治理
+口径在服务域的对偶。
+
+### 终态形态
+
+* **数据**:``definition.config.services`` 不再承载地址(存量已全清,
+  保存闸 enforce 拒收带值声明 ``service_url_declared``);裸键
+  (不在注册域)同样拒收 ``service_not_registered``。
+* **解析链**(唯一组装点 ``run_materialize._apply_services``):
+  ③ 环境部署地址 > ④ 缺口引擎显式报错(① 绑定 url 随 M2a S6、
+  ② authored 随本终态先后退役;区规则 direct_addresses 一并消失,
+  全区域一态)。
+* **编辑面**:配置页「服务引用与解析」卡 = 步骤引用键 × 注册事实/
+  身份面/实例/逐环境地址/缺口(只读;``GET /{id}/service-resolution``
+  单源投影);改绑在步骤侧下拉(已登记条目);「自建服务」= 服务
+  注册页登记(Admin+;编排器内联创建器改深链,不再场景内写声明)。
+* **执行环境**:标签链(身份条目 > 项目默认 > 平台默认)在预览/
+  解析面只读呈现;要固定 = 治理动作(换条目标签/项目默认),
+  场景无「固定环境」字段。
+
+### 保存闸(``REGISTRY_ONLY_SERVICES`` 三态)
+
+off(测试缺省)/ audit(``X-Service-Warnings`` 头,导入响应
+``serviceWarnings`` 键)/ enforce(422 两码,未注册先报)。挂路由层
+create/PUT + 导入链(与身份闸同位);copy/share 不走闸,enforce
+前提下库内已清账,口径闭环。**生产 .env 已切 enforce(2026-11-21,
+清账三面 0/0/0 亲验后)**。
+
+### 迁移记录(2026-11-21 执行)
+
+审计(``scripts/audit_authored_services.py``):45 场景 / 2 键 ——
+``fin-service``(9 场景 3 值)+ ``platform-service``(36 场景,
+bootstrap 自拨测,未注册)。清账(``cleanup_authored_services.py
+--apply --force``):注册 platform-service 入主档;fin-service
+部署表对齐主流声明值(``https://fin-tidb.21eflag.com/``);43 场景
+声明经属主保存链清空;2 个噪音值场景(模板串 / 一次性测试地址)
+人工裁决清声明;重审计 **0/0/0**。
+
+### 刻意不做
+
+* 场景级「固定环境」字段(环境 = 标签链事实,快照化即失效);
+* 部署表/主档的写权限下放(全局共享资源,Admin+ 治理与身份条目
+  同口径;普通用户的自建诉求走申请/管理员登记);
+* ``config.services`` 键域的新编辑入口(引用键只能来自步骤,
+  卡内只呈现与迁移清除)。

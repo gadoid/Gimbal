@@ -870,6 +870,7 @@ async def land(
     # Warnings 头同款载体)。
     identity_warnings: list[str] = []
     identity_base_warnings: list[dict] = []
+    service_warnings: dict = {}
     _mode = settings.REGISTRY_ONLY_IDENTITIES
     if _mode in ("audit", "enforce"):
         unreg = await alias_svc.unregistered_identities(db, defn)
@@ -897,6 +898,33 @@ async def land(
                 "registry gate(audit,import) identity_base_mismatch: %s",
                 bad_base)
             identity_base_warnings = bad_base
+
+    # ── 服务引用注册化(架构终态,2026-11-21):独立于身份闸的开关
+    # (REGISTRY_ONLY_SERVICES)—— 键注册域 + authored URL ② 层退役;
+    # enforce 422 两码,audit 以 serviceWarnings 键随响应(与路由层
+    # X-Service-Warnings 头同款载体)。
+    _svc_mode = settings.REGISTRY_ONLY_SERVICES
+    if _svc_mode in ("audit", "enforce"):
+        unreg_keys, url_keys = await alias_svc.service_reference_audit(
+            db, defn)
+        if _svc_mode == "enforce" and unreg_keys:
+            raise ImportRejected(
+                "service_not_registered", 422,
+                "服务键未注册:" + "、".join(unreg_keys)
+                + " —— 去服务注册页登记(或同步目录到主档)后引用;"
+                  "地址由部署表按环境给出")
+        if _svc_mode == "enforce" and url_keys:
+            raise ImportRejected(
+                "service_url_declared", 422,
+                "导入包携带内嵌服务地址:" + "、".join(url_keys)
+                + " —— 场景不持有地址;地址请配置到「服务注册」的"
+                  "部署表(按环境)")
+        if unreg_keys or url_keys:
+            logger.warning(
+                "service gate(audit,import) unregistered=%s "
+                "declaredUrls=%s", unreg_keys, url_keys)
+            service_warnings = {"unregistered": unreg_keys,
+                                "declaredUrls": url_keys}
 
     draft = ScenarioDraft(definition=defn)
     try:
@@ -933,6 +961,8 @@ async def land(
         out["identityWarnings"] = identity_warnings
     if identity_base_warnings:
         out["identityBaseWarnings"] = identity_base_warnings
+    if service_warnings:
+        out["serviceWarnings"] = service_warnings
     return out
 
 

@@ -129,6 +129,17 @@ class Settings(BaseSettings):
     # 运行方案保存的登记闸 = validate_binding_aliases 既有覆盖(绑定值
     # 存在 + 同基础服务),无定义侧引用面,不重复挂。
     REGISTRY_ONLY_IDENTITIES: str = "off"
+    # ── 服务引用注册化(架构终态;2026-11-21)─────────────────────
+    # 场景 = 纯引用容器:步骤服务键须落注册域(主档 services ∪ 身份
+    # 条目表),authored URL(config.services 第 ② 层)整体退役 ——
+    # 地址事实只在部署表(③ 层,按执行标签解析)。三态与身份闸同款:
+    #   off    = 不校验(缺省);
+    #   audit  = 保存放行 + X-Service-Warnings 头(unregistered /
+    #            declaredUrls 两组,前端黄条);
+    #   enforce= 422 service_not_registered / service_url_declared
+    #            硬拦。切换前置 = 存量清账完成
+    #            (scripts/cleanup_authored_services.py)。
+    REGISTRY_ONLY_SERVICES: str = "off"
     # ── 周期对账(P0-3.2,webhook 设计 v3)───────────────────────
     # 僵尸执行(job 已终态/不存在而执行仍 queued/running)的周期收口:
     # 间隔 5 分钟一拍;宽限 10 分钟内的单不动(可能与正在收尾的执行抢

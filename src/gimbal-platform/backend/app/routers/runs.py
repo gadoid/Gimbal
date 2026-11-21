@@ -719,12 +719,7 @@ async def _resolved_services(db, scen, body: RunRequest,
         _env = None          # 派发侧会 409;追溯面不抢先报错
     base_urls = await sa_svc.base_urls_for(
         db, referenced_services(steps), env=_env)
-    from ..services.run_prepare import zone_allows_direct
-    declared = (definition.get("config") or {}).get("services")
-    if scen is not None and not zone_allows_direct(scen.project_id):
-        declared = None      # 原 5:项目/公共区直连地址不生效
-    return resolve_service_sources(
-        steps, declared=declared, alias_base_urls=base_urls)
+    return resolve_service_sources(steps, alias_base_urls=base_urls)
 
 
 async def _build_trace(

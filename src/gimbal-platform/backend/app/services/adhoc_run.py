@@ -257,7 +257,7 @@ async def check_addresses(
                             extra={"identities": e.entries}) from None
     alias_base_urls = await _sa.base_urls_for(db, list(services), env=_env)
     missing = [s for s in services if not service_url_resolved(
-        s, declared={}, alias_base_urls=alias_base_urls)]
+        s, alias_base_urls=alias_base_urls)]
     if missing:
         raise AdhocRejected(
             "adhoc_service_unresolved",

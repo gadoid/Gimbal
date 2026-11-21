@@ -324,13 +324,15 @@ class TestExportZoneRules:
             from tests.helpers import seed_legacy_users
             await seed_legacy_users(sid, dict(_USERS))
 
-        # 私有区(属主本人):内置凭证与直连地址照旧(Q3 口径不变)
+        # 架构终态(2026-11-21):② 直连层退役 —— 本用例场景无步骤
+        # 引用,声明键(unreferenced)不再随导出保留;导出 services
+        # 只含 ③ 层命中的引用键(此处 = 空)。内置凭证仍守属主口径。
         await _seed("sc-r5-priv")
         r = await client.get("/api/scenarios/sc-r5-priv/export", headers=h)
         assert r.status_code == 200, r.text
         cfg = r.json()["config"]
         assert cfg["users"] == _USERS
-        assert cfg["services"]["svc"]["baseUrl"] == "http://direct-inner"
+        assert cfg.get("services") in ({}, None)
         # 项目区(属主本人创建):导出守区规则 —— 内置凭证当空、直连
         # 地址不生效(修前:属主导出带出明文)
         await _seed("sc-r5-proj")
@@ -347,4 +349,5 @@ class TestExportZoneRules:
         assert r.status_code == 200, r.text
         cfg = r.json()["config"]
         assert cfg["users"] == {}
-        assert "svc" not in (cfg.get("services") or {})
+        # 地址全区一态:同私有区(无引用 → 空;内置凭证守区保留)
+        assert cfg.get("services") in ({}, None)

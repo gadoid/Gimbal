@@ -247,7 +247,6 @@ async def _materialized_executable(
         built_in_users=prep.built_in_users,
         carry_context=prep.carry_ctx,
         alias_base_urls=prep.alias_base_urls,
-        direct_addresses=prep.direct_addresses,
     )
 
 
@@ -386,6 +385,56 @@ async def _identity_registry_gate(
         "registry gate(audit) identity_base_mismatch: %s", bad_base)
 
 
+async def _service_reference_gate(
+    db: AsyncSession, definition: dict, response: Response,
+) -> None:
+    """服务引用注册化保存闸(架构终态,2026-11-21):
+    ``REGISTRY_ONLY_SERVICES`` 三态 —— off(缺省)不校验;audit 保存
+    成功 + ``X-Service-Warnings`` 头(unregistered / declaredUrls 两组,
+    前端黄条);enforce 422 硬拦,两个码按根本性先报:
+
+    * ``service_not_registered`` —— 步骤服务键不在注册域(主档
+      services ∪ 身份条目表);指引服务注册页登记/同步;
+    * ``service_url_declared`` —— 引用键带 authored URL(② 层退役:
+      场景不持有地址,地址事实在部署表按执行标签解析);指引部署表。
+
+    挂路由层与身份闸同位(store 之前,纯读);copy/share 不走本闸 ——
+    enforce 前提下库内已清账,副本漏网与身份闸同款口径闭环。"""
+    import json
+    from ..core.config import settings
+    mode = settings.REGISTRY_ONLY_SERVICES
+    if mode not in ("audit", "enforce"):
+        if mode != "off":
+            logger.warning(
+                "REGISTRY_ONLY_SERVICES 取值 %r 不在 off/audit/enforce,"
+                "按 off 处理", mode)
+        return
+    from ..services.service_aliases import service_reference_audit
+    unreg, with_url = await service_reference_audit(db, definition)
+    if not unreg and not with_url:
+        return
+    if mode == "enforce":
+        if unreg:
+            raise HTTPException(status_code=422, detail={
+                "code": "service_not_registered",
+                "message": "服务键未注册:" + "、".join(unreg)
+                           + " —— 去服务注册页登记(或同步目录到主档)"
+                             "后引用;地址由部署表按环境给出",
+                "keys": unreg})
+        raise HTTPException(status_code=422, detail={
+            "code": "service_url_declared",
+            "message": "场景不再接受内嵌服务地址:" + "、".join(with_url)
+                       + " —— 地址请配置到「服务注册」的部署表"
+                         "(按环境),场景只存服务引用",
+            "keys": with_url})
+    response.headers["X-Service-Warnings"] = json.dumps(
+        {"unregistered": unreg, "declaredUrls": with_url},
+        ensure_ascii=False)
+    logger.warning(
+        "service gate(audit) unregistered=%s declaredUrls=%s",
+        unreg, with_url)
+
+
 @router.post("", response_model=Scenario, status_code=status.HTTP_201_CREATED)
 async def create_scenario(
     user: CurrentUser, db: DbSession, body: ScenarioDraft,
@@ -410,6 +459,8 @@ async def create_scenario(
         db, body.definition, response,
         extra_known={d.name for d in (body.auth_drafts or [])},
         extra_bases=await _draft_base_overrides(db, body.auth_drafts))
+    # 服务引用注册化(架构终态):键注册域 + authored URL ② 层退役闸
+    await _service_reference_gate(db, body.definition, response)
     # 手配落池(§3.3 阶段 2)触发的暂停实例复活:保存成功后 best-effort
     # (与 /auths create 的 _revive 同款;失败不回滚业务)。
     _made_auths = bool(body.auth_drafts)
@@ -1075,6 +1126,106 @@ async def get_scenario(
         raise key_error_404(e)
 
 
+# ── 5.05) GET /{id}/service-resolution — 服务引用解析预览(架构终态)──
+# 场景 = 纯引用容器:本端点把「引用键 → 注册事实 → 逐环境部署地址 →
+# 执行标签链结果 → 缺口」一次给全(只读,编排器配置页/步骤侧消费)。
+@router.get("/{scenario_id}/service-resolution")
+async def get_service_resolution(
+    user: CurrentUser, db: DbSession, scenario_id: str,
+) -> dict:
+    """服务引用解析预览(架构终态 2026-11-21;只读):
+
+    * ``environment`` —— 执行标签链结果(``resolve_execution_tag``:
+      身份条目标签 > 项目默认 > 平台默认;混拼此处不炸,返回 null +
+      ``envMixed`` 名单,派发侧另有 409 硬拦);
+    * ``services[]`` —— 步骤引用键逐键:注册态(主档 ∪ 条目表)、
+      base/系统、身份面事实(键为条目名时)、(system, 执行标签)实例
+      (登录口/版本线,``SystemEnvInstance``)、部署表**逐环境**地址、
+      当前标签地址与缺口。
+    """
+    from ..models.deployment import Deployment
+    from ..models.environment import Environment
+    from ..models.service import Service
+    from ..models.service_identity import ServiceIdentity
+    from ..models.system_env_instance import SystemEnvInstance
+    from ..services.env_chain import EnvMixed, resolve_execution_tag
+    from ..services.run_materialize import referenced_services
+    from ..services.scenario_store import definition_from_payload
+    from ..services.service_aliases import exec_auth_aliases_of_definition
+
+    from sqlalchemy import select as _sel
+
+    row = await _load_row(db, scenario_id)
+    await _require_reader_async(db, user, row)
+    definition = definition_from_payload(row.payload)
+    keys = sorted(set(referenced_services(definition.get("steps") or [])))
+
+    ident_rows = (await db.execute(
+        _sel(ServiceIdentity.alias_name, ServiceIdentity.base_service,
+               ServiceIdentity.env_id, ServiceIdentity.ref_mode,
+               ServiceIdentity.ref_username)
+        .where(ServiceIdentity.alias_name.in_(keys or ["__none__"]))
+    )).all()
+    entry_of = {r[0]: r for r in ident_rows}
+    bases = {r[1] for r in ident_rows} | (set(keys) - set(entry_of))
+    system_of = dict((await db.execute(
+        _sel(Service.name, Service.system).where(
+            Service.name.in_(bases or {"__none__"})))).all())
+    deps = (await db.execute(
+        _sel(Deployment.base_service, Deployment.env_id,
+               Deployment.base_url).where(
+            Deployment.base_service.in_(bases or {"__none__"})))).all()
+    envs = {eid: name for eid, name in (await db.execute(
+        _sel(Environment.id, Environment.name))).all()}
+
+    env_mixed: list[str] | None = None
+    environment: dict | None = None
+    env_id: int | None = None
+    try:
+        names = await exec_auth_aliases_of_definition(db, definition)
+        tag = await resolve_execution_tag(
+            db, identity_names=names, project_id=row.project_id)
+        env_id = tag.env_id
+        environment = ({"envId": tag.env_id, "source": tag.source,
+                        "envName": envs.get(tag.env_id, "")}
+                       if tag.env_id is not None else None)
+    except EnvMixed as e:
+        env_mixed = sorted(e.entries)
+
+    instances = {(r.system, r.env_id): r for r in (await db.execute(
+        _sel(SystemEnvInstance).where(
+            SystemEnvInstance.system.in_(
+                {s for s in system_of.values() if s}
+                or {"__none__"})))).scalars()}
+
+    out_services: list[dict] = []
+    for key in keys:
+        entry = entry_of.get(key)
+        base = entry[1] if entry else key
+        system = system_of.get(base)
+        urls = [{"envId": d_env, "envName": envs.get(d_env, ""),
+                 "url": url}
+                for b, d_env, url in deps if b == base]
+        current = next((u["url"] for u in urls if u["envId"] == env_id),
+                       None)
+        inst = instances.get((system, env_id)) if system else None
+        out_services.append({
+            "key": key,
+            "registered": key in entry_of or base in system_of,
+            "base": base, "system": system or "",
+            "identityEntry": ({
+                "aliasName": entry[0], "refMode": entry[3],
+                "refUsername": entry[4], "envId": entry[2],
+            } if entry else None),
+            "instance": ({"loginUrl": inst.login_url, "line": inst.line}
+                         if inst else None),
+            "urls": urls, "currentUrl": current,
+            "gap": current is None,
+        })
+    return {"environment": environment, "envMixed": env_mixed,
+            "services": out_services}
+
+
 # ── 5.1) GET /{id}/draft — 返回完整 ScenarioDraft (含 config/resource) ───
 # 用于"从场景库行级导出已保存场景":普通 GET 不带 config/resource 因为
 # 列表场景里这份数据量大;draft 是按需调用的。
@@ -1120,6 +1271,8 @@ async def put_scenario(
         db, body.definition, response,
         extra_known={d.name for d in (body.auth_drafts or [])},
         extra_bases=await _draft_base_overrides(db, body.auth_drafts))
+    # 服务引用注册化(架构终态):键注册域 + authored URL ② 层退役闸
+    await _service_reference_gate(db, body.definition, response)
     try:
         out = await scenario_store.update(
             db,

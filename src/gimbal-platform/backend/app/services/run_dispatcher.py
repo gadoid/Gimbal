@@ -2486,7 +2486,7 @@ async def _fanout(
                         built_in_users=built_in_users,
                         carry_context=carry_ctx,
                         alias_base_urls=prep.alias_base_urls,
-                        direct_addresses=prep.direct_addresses,
+
                     )
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)

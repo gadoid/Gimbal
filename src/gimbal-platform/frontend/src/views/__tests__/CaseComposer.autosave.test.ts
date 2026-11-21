@@ -67,9 +67,11 @@ function sampleScenario(expire = false): Scenario {
   }
 }
 
-/** api.updateScenario/createScenario 自 2c 起返回 {scenario, identityWarnings, baseWarnings}。 */
+/** api.updateScenario/createScenario 自 2c 起返回 {scenario, identityWarnings,
+ *  baseWarnings, serviceWarnings}。 */
 function saved(s: Scenario) {
-  return { scenario: s, identityWarnings: [] as string[], baseWarnings: [] }
+  return { scenario: s, identityWarnings: [] as string[], baseWarnings: [],
+    serviceWarnings: { unregistered: [], declaredUrls: [] } }
 }
 
 let router: Router

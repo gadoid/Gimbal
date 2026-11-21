@@ -58,6 +58,11 @@
             ⚠ 仍有未登记引用(已按 audit 放行):<b class="mono">{{ result.identityWarnings.join('、') }}</b>
             —— 请到「服务注册」登记条目,或改绑已有条目;enforce 后保存将被拒。
           </p>
+          <p v-if="result.serviceWarnings?.unregistered?.length || result.serviceWarnings?.declaredUrls?.length"
+             class="imp-warn" data-testid="import-service-warnings">
+            ⚠ 服务引用(已按 audit 放行):<b class="mono">{{ [result.serviceWarnings.unregistered.length ? `未注册:${result.serviceWarnings.unregistered.join('、')}` : '', result.serviceWarnings.declaredUrls.length ? `内嵌地址:${result.serviceWarnings.declaredUrls.join('、')}` : ''].filter(Boolean).join(';') }}</b>
+            —— 服务到「服务注册」登记,地址配置到部署表;enforce 后保存将被拒。
+          </p>
           <p v-if="result.identityBaseWarnings?.length" class="imp-warn" data-testid="import-base-warnings">
             ⚠ 跨源引用(已按 audit 放行):<b class="mono">{{ result.identityBaseWarnings.map((r) => `${r.identity}(${r.identityBase})@步骤${r.index + 1}[${r.service}]`).join('、') }}</b>
             —— 条目与所在步骤服务不同源,请改绑同源条目;enforce 后保存将被拒。
@@ -304,7 +309,9 @@ function builtinUserLabel(u: ImportBuiltinUser): string {
 function hasReport(r: ImportResult): boolean {
   return !!(r.authEntries?.length || r.authRenames?.length
     || r.undeclaredUsers?.length || r.droppedUsers?.length
-    || r.identityWarnings?.length || r.identityBaseWarnings?.length)
+    || r.identityWarnings?.length || r.identityBaseWarnings?.length
+    || r.serviceWarnings?.unregistered?.length
+    || r.serviceWarnings?.declaredUrls?.length)
 }
 /** 已装载 → 检索定位;未装载 → 按条目登记坐标深链(条目自主档派生
  *  system+env;悬空条目无坐标,退普通入口)。 */

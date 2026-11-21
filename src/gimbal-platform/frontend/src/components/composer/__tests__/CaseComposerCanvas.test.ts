@@ -922,7 +922,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     w.unmount()
   })
 
-  it('内联创建:后缀+URL → 拼全串双写(update:services + api.service 切换);后缀含 - 拦截', async () => {
+  it('内联创建已改深链(架构终态):__create__ → 指引 + 跳服务注册,不在场景内写声明/URL(update:services 零发)', async () => {
     const steps = [stepOf('fin-service')]
     const { w } = mountCanvas({
       steps,
@@ -931,19 +931,10 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
     await w.find('.svc-ref-select').setValue('__create__')
-    await w.find('.alias-suffix').setValue('qa2')
-    await w.find('.alias-url').setValue('https://qa2.fin.local')
-    await w.find('.alias-create-confirm').trigger('click')
-    const svc = canvas.emitted('update:services')![0][0] as Record<string, string>
-    expect(svc['fin-service-qa2']).toBe('https://qa2.fin.local')
-    expect(svc['fin-service']).toBe('https://a')          // 既有声明保留
-    // 双写另一面:引用同步切到全串(local 直改)
-    expect(steps[0].call?.service).toBe('fin-service-qa2')
-    // 拦截:后缀含 "-"
-    await w.find('.svc-ref-select').setValue('__create__')
-    await w.find('.alias-suffix').setValue('a-b')
-    await w.find('.alias-create-confirm').trigger('click')
-    expect(canvas.emitted('update:services')).toHaveLength(1)  // 未再发
+    await w.find('[data-testid="svc-register-link"]').trigger('click')
+    // 终态:身份面登记归服务注册页 —— 场景不写地址不写声明
+    expect(canvas.emitted('update:services')).toBeUndefined()
+    expect(steps[0].call?.service).toBe('fin-service')
     w.unmount()
   })
 

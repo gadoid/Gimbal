@@ -146,11 +146,13 @@ def _steps(svc: str) -> list:
 
 
 def test_b8_priority_chain():
-    # ② authored > ③ 环境部署地址 > ④ 缺口(① 绑定 url 随 authz M2a S6 退役)
+    # 架构终态:③ 环境部署地址 > ④ 缺口(①② 先后随 M2a S6/2026-11-21 退役)
+    # 架构终态(2026-11-21):② authored 随层退役 —— 声明值无视,
+    # ③ 是唯一来源(「authored 不被 ③ 覆盖」语义随层消失)
     cfg = {"services": {"svc": "http://authored"}}
     _apply_services(cfg, steps=_steps("svc"),
                     alias_base_urls={"svc": "http://alias"})
-    assert cfg["services"]["svc"] == "http://authored", "authored 不被 ③ 覆盖"
+    assert cfg["services"]["svc"] == "http://alias", "③ 唯一层"
 
     cfg = {"services": {}}
     _apply_services(cfg, steps=_steps("svc"),

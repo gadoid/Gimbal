@@ -1166,6 +1166,22 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
         duration: 8000,
       })
     }
+    // 服务引用注册化 audit 态(架构终态):未注册键 + 待迁移声明 ——
+    // 保存已放行,黄条指引进注册/部署表;enforce 态保存直接 422 到不了这
+    if (result.serviceWarnings.unregistered.length
+        || result.serviceWarnings.declaredUrls.length) {
+      const parts: string[] = []
+      if (result.serviceWarnings.unregistered.length) {
+        parts.push(`未注册服务键:${result.serviceWarnings.unregistered.join('、')}`)
+      }
+      if (result.serviceWarnings.declaredUrls.length) {
+        parts.push(`内嵌地址声明待迁移:${result.serviceWarnings.declaredUrls.join('、')}`)
+      }
+      toast.warning({
+        message: parts.join(';') + ' — 服务请到「服务注册」登记,地址配置到部署表(按环境)',
+        duration: 8000,
+      })
+    }
     // 新建场景后拉一次数据集列表(空列表,但保持状态一致)
     if (!dataSets.value.length) await loadDataSets()
     lastSavedAt.value = new Date()

@@ -166,6 +166,11 @@ async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
     # auth_drafts / admin_cleanup_survey 等),不受环境配置漂移影响。
     monkeypatch.setattr(_settings, "REGISTRY_ONLY_IDENTITIES", "off",
                         raising=True)
+    # 服务引用注册化同款(架构终态,2026-11-21):生产 .env 已切
+    # enforce —— 套件缺省钉 off,闸行为由专项用例显式三态
+    # (test_service_reference_gate.py),不受环境配置漂移影响。
+    monkeypatch.setattr(_settings, "REGISTRY_ONLY_SERVICES", "off",
+                        raising=True)
 
     import uuid
 

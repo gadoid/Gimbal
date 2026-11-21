@@ -607,8 +607,24 @@ class TestDispatchSplitEquivalence:
     async def test_dispatch_run_equals_dispatch_target(self, client, monkeypatch):
         h = await _register(client, "ad_eq")
         uid = await _user_id("ad_eq")
-        # M3 §8.5:对拍场景带 ② 声明地址过派发硬门(私有区直连生效;
-        # 对拍意图是配方等价,地址来源不影响)
+        # 架构终态(2026-11-21):② 声明地址退役 —— svc 落主档 +
+        # 默认环境部署行(对拍意图是配方等价,地址来源统一 ③)
+        from app.models import Environment
+        from sqlalchemy import select as _sel
+        async with db_module.SessionLocal() as s0:
+            _env = (await s0.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one_or_none()
+            if _env is None:
+                s0.add(Environment(name="eq-env", is_default=True))
+                await s0.flush()
+                _env = (await s0.execute(_sel(Environment.id).where(
+                    Environment.is_default.is_(True)))).scalar_one()
+            if (await s0.execute(_sel(Service.id).where(
+                    Service.name == "svc"))).scalar_one_or_none() is None:
+                s0.add(Service(name="svc", system="svc", kind="plate"))
+            s0.add(Deployment(base_service="svc", env_id=_env,
+                              base_url="http://eq"))
+            await s0.commit()
         _eq_draft = _draft("sc-eq", steps=[GET_STEP])
         _eq_draft["definition"]["config"] = {"services": {"svc": "http://eq"}}
         await client.post("/api/scenarios", headers=h, json=_eq_draft)
@@ -654,7 +670,10 @@ class TestDispatchSplitEquivalence:
             "schemeName", "batchId", "reportDefinitionId", "chain",
             # 分层④:执行配置终值快照(重跑回放依据;空 = 当时无覆盖);
             # 决策 1 阶段 1 起圈定集终值一并落快照(重跑照查)
-            "execSlotMap", "execCarryOverrides", "execCircledAliases"}
+            "execSlotMap", "execCarryOverrides", "execCircledAliases",
+            # 架构终态(2026-11-21):默认环境落地后标签链可解析 →
+            # 环境快照键随解析出现(两条派发路径同有,c1==c2 已对拍)
+            "environmentId", "environmentSource"}
         assert c1["scenarioId"] == "sc-eq" and c1["chain"] == "legacy"
         assert c1["dataSetIds"] == [] and c1["serviceBindings"] == {}
         ds = cap[0]["datasets"]

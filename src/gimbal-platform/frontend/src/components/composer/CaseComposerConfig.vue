@@ -209,44 +209,93 @@
       <button class="c-add" @click="addVar">+ 添加变量</button>
     </div>
 
-    <!-- 服务 -->
+    <!-- 服务引用与解析(架构终态:场景 = 纯引用容器)—— 引用键来自步骤,
+         注册/身份面/实例/逐环境地址全只读呈现;地址事实在部署表(③ 层),
+         场景不再持有(authored 声明只剩迁移清除面)。 -->
     <div class="c-card svc-card">
       <div class="c-card-head">
         <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M2 8h20M8 2v20"/></svg>
         <div>
-          <h3>服务映射 (services) — 按系统分组</h3>
-          <p class="c-head-desc">步骤的 <code class="c-code">service</code> 字段会从这里查找 baseUrl (例: <code class="c-code">fin.tidb-test</code>)</p>
+          <h3>服务引用与解析</h3>
+          <p class="c-head-desc">步骤引用的服务 × 注册事实 / 身份面 / 实例 / 逐环境部署地址;改绑在步骤面板的服务下拉</p>
+        </div>
+        <button type="button" class="c-add" data-testid="cfg-svc-refresh" :disabled="resolutionLoading" @click="loadResolution">重新解析</button>
+      </div>
+
+      <!-- 执行环境预览(标签链:身份条目 > 项目默认 > 平台默认;纯展示) -->
+      <div class="svc-env" data-testid="cfg-svc-env">
+        <template v-if="resolution?.environment">
+          执行环境:<b>{{ resolution.environment.envName || `#${resolution.environment.envId}` }}</b>
+          <span class="svc-env-src">({{ envSourceLabel(resolution.environment.source) }})</span>
+        </template>
+        <template v-else-if="resolution?.envMixed?.length">
+          <span class="svc-gap">环境混拼:{{ resolution.envMixed.join('、') }} —— 统一条目标签或用默认环境(派发会 409)</span>
+        </template>
+        <template v-else-if="resolution">执行环境:<span class="svc-gap">(无 —— 平台未设默认环境,地址链无 ③ 层)</span></template>
+        <span v-else class="text-caption text-signal-muted">解析中…</span>
+      </div>
+      <div v-if="resolutionFailed" class="svc-degraded" data-testid="cfg-svc-degraded">
+        解析读取失败 —— 引用事实未知(≠无引用);请「重新解析」(FE-02:失败不静默)
+      </div>
+
+      <div v-if="!resolution" class="c-empty"><p>解析中…</p></div>
+      <div v-else-if="!resolution.services.length" class="c-empty">
+        <p>步骤还没有服务引用</p>
+      </div>
+      <table v-else class="svc-table">
+        <thead>
+          <tr>
+            <th>引用键</th><th>注册</th><th>基础服务 / 系统</th>
+            <th>身份面</th><th>实例(当前环境)</th><th>部署地址(当前环境)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in resolution.services" :key="row.key" :data-testid="`cfg-svc-row-${row.key}`">
+            <td class="mono">{{ row.key }}</td>
+            <td>
+              <span v-if="row.registered" class="svc-ok">✓</span>
+              <span v-else class="svc-gap" title="键不在主档/条目表 —— enforce 后保存被拒">未注册</span>
+            </td>
+            <td>{{ row.base }}<template v-if="row.system"> · {{ row.system }}</template></td>
+            <td>
+              <template v-if="row.identityEntry">
+                {{ row.identityEntry.refMode === 'username'
+                  ? `按用户 ${row.identityEntry.refUsername}` : '默认账户' }}
+              </template>
+              <span v-else class="text-caption text-signal-muted">服务键直引</span>
+            </td>
+            <td>
+              <template v-if="row.instance">
+                <span class="mono svc-login" :title="row.instance.loginUrl">
+                  {{ row.instance.loginUrl || '(登录口未配)' }}</span>
+                <template v-if="row.instance.line"> · 线 {{ row.instance.line }}</template>
+              </template>
+              <span v-else class="text-caption text-signal-muted">无实例行</span>
+            </td>
+            <td>
+              <template v-if="row.currentUrl"><span class="mono">{{ row.currentUrl }}</span></template>
+              <span v-else class="svc-gap" :title="`各环境地址:${row.urls.map((u) => `${u.envName}=${u.url}`).join(' · ') || '部署表全缺'}`">
+                缺口 —— 去服务注册配置部署地址
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 迁移面:存量 authored 声明(② 层退役)—— 只能清除,不能新增 -->
+      <div v-if="declaredRows.length" class="svc-migrate" data-testid="cfg-svc-migrate">
+        <p class="svc-migrate-head">
+          ⚠ 待迁移的内嵌地址声明({{ declaredRows.length }} 键)—— 场景不再持有地址:
+          地址请配置到「服务注册」的部署表(按环境);保存前清除声明,否则 enforce 后保存被拒。
+          <button type="button" class="c-kv-del svc-clear-all" data-testid="cfg-svc-clear-all" @click="clearAllDeclared">全部清除</button>
+        </p>
+        <div v-for="(s, i) in declaredRows" :key="s.alias" class="c-kv-row svc-row">
+          <span class="mono">{{ s.alias }}</span>
+          <span class="c-kv-sep">→</span>
+          <span class="mono svc-url">{{ s.baseUrl }}</span>
+          <button class="c-kv-del" :data-testid="`cfg-svc-clear-${s.alias}`" @click="removeServiceAt(i)">×</button>
         </div>
       </div>
-      <div v-if="!serviceRows.length" class="c-empty">
-        <p>还没有服务映射</p>
-      </div>
-      <div v-else class="c-ns-grid">
-        <div v-for="(group, sys) in servicesBySystem" :key="sys" class="c-ns-group">
-          <div class="c-ns-head">
-            <span class="c-ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
-            <span class="c-ns-count">{{ group.length }} services</span>
-          </div>
-          <div v-for="(s, i) in group" :key="i" class="c-kv-row svc-row">
-            <Input
-              :model-value="s.alias"
-              @update:model-value="(val) => (s.alias = String(val))"
-              placeholder="alias (例: tidb-test-service)"
-              class="h-8"
-            />
-            <span class="svc-owner" :title="ownerLabel(s.alias)">{{ ownerLabel(s.alias) }}</span>
-            <span class="c-kv-sep">→</span>
-            <Input
-              :model-value="s.baseUrl"
-              @update:model-value="(val) => (s.baseUrl = String(val))"
-              placeholder="baseUrl"
-              class="svc-url"
-            />
-            <button class="c-kv-del" @click="removeService(sys, i)">×</button>
-          </div>
-        </div>
-      </div>
-      <button class="c-add" @click="addService">+ 添加服务</button>
     </div>
 
     <!-- 凭证与调用身份(凭证治理 §3.3 双入口):场景只存引用,检索/手配 -->
@@ -307,12 +356,11 @@ import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import type { ConfigView, RetryPolicyView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
-import { deriveBase } from '@/utils/service-alias'
-import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { scenarioSchemesUrl } from '@/utils/links'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import type { AuthDraftView } from '@/types/scenario-composer'
+import { getServiceResolution, type ServiceResolution } from '@/api/scenario-composer'
 import UsersCard from './UsersCard.vue'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -403,25 +451,39 @@ const varsBySystem = computed(() => {
   }
   return out
 })
-const servicesBySystem = computed(() => {
-  const out: Record<string, Array<{ alias: string; baseUrl: string }>> = {}
-  for (const s of serviceRows.value) {
-    const sys = namespaceOf(s.alias || 'common')
-    if (!out[sys]) out[sys] = []
-    out[sys].push(s)
-  }
-  return out
-})
+/** 迁移面行 = 存量 authored 声明(② 层退役,只能清除)。 */
+const declaredRows = computed(() => serviceRows.value.filter((r) => r.alias))
 
-// ── 别名归属列(spec §1.4/§1.3):前缀派生只读标签,无手填 ──────────
-const catalogNames = ref<Set<string>>(new Set())
-onMounted(() => {
-  loadCatalogServiceNames()
-    .then((ns) => { catalogNames.value = new Set(ns) })
-    .catch(() => { /* 目录不可达 → 全部显示未挂目录,不阻塞编辑 */ })
-})
-function ownerLabel(alias: string): string {
-  return deriveBase(alias, catalogNames.value) ?? '未挂目录'
+// ── 服务引用解析(架构终态:卡内自拉 /scenarios/{id}/service-resolution;
+//    步切换重挂载 = 每次进入配置页都是新解析)──────────────────────
+const resolution = ref<ServiceResolution | null>(null)
+const resolutionLoading = ref(false)
+const resolutionFailed = ref(false)
+async function loadResolution(): Promise<void> {
+  if (!props.scenarioId || props.scenarioId === 'new') return
+  resolutionLoading.value = true
+  try {
+    resolution.value = await getServiceResolution(props.scenarioId)
+    resolutionFailed.value = false
+  } catch {
+    resolutionFailed.value = true   // FE-02:失败≠无引用,不静默
+  } finally {
+    resolutionLoading.value = false
+  }
+}
+const ENV_SOURCE_LABELS: Record<string, string> = {
+  identity: '身份条目标签', project: '项目默认环境', default: '平台默认环境',
+}
+function envSourceLabel(src: string): string {
+  return ENV_SOURCE_LABELS[src] ?? src
+}
+onMounted(() => { void loadResolution() })
+
+function removeServiceAt(i: number): void {
+  serviceRows.value.splice(i, 1)
+}
+function clearAllDeclared(): void {
+  serviceRows.value = []
 }
 
 /**
@@ -511,13 +573,8 @@ function parseVarValue(s: string): unknown {
   }
   return s
 }
-function addService() { serviceRows.value.push({ alias: '', baseUrl: '' }) }
-function removeService(sys: string, i: number) {
-  const list = (servicesBySystem.value as any)[sys]
-  if (!list) return
-  const target = list[i]
-  serviceRows.value = serviceRows.value.filter(s => s !== target)
-}
+// 服务引用与解析(终态):addService/按组 removeService 随自由编辑形态
+// 退役 —— 声明只剩迁移清除面(removeServiceAt/clearAllDeclared)。
 function addSetup() { setupList.value.push({ name: '', kind: '', payload: {} }) }
 function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: {} }) }
 </script>

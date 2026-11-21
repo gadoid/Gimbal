@@ -123,6 +123,22 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
     await _mk_scenario(client, h, "sc-s0r", PLAIN_STEPS, declared=_declared)
     await _mk_scenario(client, h, "sc-s0v", PLAIN_STEPS,
                        declared=_declared)   # "他人"场景
+    # 架构终态(2026-11-21):authored 声明不再供地址 —— (svc, 默认
+    # 环境) 落部署行,集成链地址走 ③。
+    from app.models import Environment
+    from app.models.deployment import Deployment
+    from sqlalchemy import select as _sel
+    async with db_module.SessionLocal() as db:
+        _env = (await db.execute(_sel(Environment.id).where(
+            Environment.is_default.is_(True)))).scalar_one_or_none()
+        if _env is None:
+            db.add(Environment(name="测试", is_default=True))
+            await db.flush()
+            _env = (await db.execute(_sel(Environment.id).where(
+                Environment.is_default.is_(True)))).scalar_one()
+        db.add(Deployment(base_service="svc", env_id=_env,
+                          base_url="http://s0-direct"))
+        await db.commit()
     # sc-s0r 回退落点 = 场景创建时自动生成的默认方案(不另插,
     # uq_run_scheme_default 唯一)
     await _insert_dataset("sc-s0r", "ds-own", [{"who": "me"}])

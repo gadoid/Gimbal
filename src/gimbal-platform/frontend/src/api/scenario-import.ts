@@ -71,6 +71,9 @@ export interface ImportResult {
   /** 声明侧同 base 闸 audit 态(阶段 3):已登记条目与所在步骤服务跨
    *  base 的引用行 —— 保存已放行,前端黄条提示;enforce 态直接 422。 */
   identityBaseWarnings?: IdentityBaseRef[]
+  /** 服务引用闸 audit 态(架构终态):未注册键 + 导入包携带的内嵌
+   *  地址 —— 保存已放行,前端黄条提示;enforce 态直接 422。 */
+  serviceWarnings?: { unregistered: string[]; declaredUrls: string[] }
 }
 
 /** 重锚定报告条目(#323):reason 为 null 才是已锚。not_in_revision 等

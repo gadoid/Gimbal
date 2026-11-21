@@ -1,6 +1,7 @@
 """materialize_run_copy — POST-convert 物化纯函数(执行/导出同源)。
 
-地址链:场景 authored > ③ 部署地址(绑定 url 层随 authz M2a S6 退役)。
+地址链:③ 部署地址单层(① 绑定 url 随 authz M2a S6、② authored 随
+架构终态 2026-11-21 先后退役)。
 users 合并固定 merge 语义(spec §10:merge_policy 退役)。
 """
 import inspect
@@ -39,8 +40,9 @@ def test_binding_url_layer_retired() -> None:
 
 
 def test_authored_kept_when_no_binding() -> None:
+    """架构终态(2026-11-21):② authored 随层退役 —— 声明不进物化副本。"""
     out = materialize_run_copy(_converted())
-    assert out["config"]["services"]["fin-service"] == "https://authored"
+    assert "fin-service" not in out["config"]["services"]
 
 
 def test_no_env_leaves_gap_visible() -> None:
@@ -104,10 +106,12 @@ def test_pure_function_input_not_mutated() -> None:
 
 
 def test_unreferenced_service_keys_preserved() -> None:
+    """架构终态(2026-11-21):物化副本从空起步 —— 未引用键(连同引用
+    键的声明值)一概不保留;副本只含 ③ 层命中的引用键。"""
     src = _converted()
     src["config"]["services"]["legacy-svc"] = "https://legacy"
     out = materialize_run_copy(src)
-    assert out["config"]["services"]["legacy-svc"] == "https://legacy"
+    assert out["config"]["services"] == {}
 
 
 def test_no_env_layer_authored_only() -> None:
@@ -115,9 +119,9 @@ def test_no_env_layer_authored_only() -> None:
     # env 层不存在:签名已无 env_base_url 参数
     assert "env_base_url" not in inspect.signature(materialize_run_copy).parameters
 
-    # 已有声明(authored)→ 原样保留
+    # authored 声明不再进物化副本(场景不持有地址)
     out = materialize_run_copy(_converted())
-    assert out["config"]["services"]["fin-service"] == "https://authored"
+    assert "fin-service" not in out["config"]["services"]
 
     # 未声明 → 留空(引擎显式报错语义,RunDialog 并集行提前发现)
     out = materialize_run_copy(_converted())
@@ -134,10 +138,11 @@ def test_alias_base_url_fills_undeclared_gap() -> None:
 
 
 def test_alias_base_url_never_overrides_authored() -> None:
-    """优先级链 ② authored > ③(① 绑定 url 随 S6 退役)。"""
+    """优先级链单层化(架构终态 2026-11-21):② authored 随层退役 ——
+    ③ 部署地址是唯一来源,「覆盖声明」语义不复存在。"""
     out = materialize_run_copy(
         _converted(), alias_base_urls={"fin-service": "https://alias"})
-    assert out["config"]["services"]["fin-service"] == "https://authored"  # ② 赢
+    assert out["config"]["services"]["fin-service"] == "https://alias"   # ③ 唯一层
 
 
 def test_alias_entry_without_url_stays_gap() -> None:
@@ -156,26 +161,19 @@ def test_empty_declaration_falls_through_to_alias() -> None:
     按 strip 不算、物化面按真值算 —— 预检放行、执行引擎报错)。"""
     from app.services.run_materialize import service_url_resolved
 
-    # 判定面:空/空白/None 声明 = 未落点;有③层命中即算可解析
-    assert not service_url_resolved(
-        "s", declared={"s": ""})
-    assert not service_url_resolved(
-        "s", declared={"s": "  "})
-    assert not service_url_resolved(
-        "s", declared={"s": None})
-    assert service_url_resolved(
-        "s", declared={"s": ""}, alias_base_urls={"s": "https://a"})
+    # 判定面:只看 ③(声明不参与)
+    assert not service_url_resolved("s")
+    assert service_url_resolved("s", alias_base_urls={"s": "https://a"})
 
-    # 物化面:空与全空白声明都被③层盖掉(与预检 strip 口径一致);
-    # 无③层保持原值留缺口(引擎显式报错)
-    for bad in ("", "   "):
+    # 物化面:声明值(非空/空白/模板)一概不进副本;③ 命中即填
+    for declared_val in ("https://authored", "", "  ", "${var.x}"):
         src = _converted()
-        src["config"]["services"]["fin-service"] = bad
+        src["config"]["services"]["fin-service"] = declared_val
         out = materialize_run_copy(
             src, alias_base_urls={"fin-service": "https://alias"})
-        assert out["config"]["services"]["fin-service"] == "https://alias", bad
+        assert out["config"]["services"]["fin-service"] == "https://alias",             declared_val
         out = materialize_run_copy(src, alias_base_urls={})
-        assert out["config"]["services"]["fin-service"] == bad
+        assert "fin-service" not in out["config"]["services"], declared_val
 
 
 # ─── carry 填充(spec §4)────────────────────────────────────────

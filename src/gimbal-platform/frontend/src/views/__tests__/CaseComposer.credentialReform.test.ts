@@ -154,6 +154,7 @@ describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
     const update = vi.fn().mockResolvedValue({
       scenario: { ...sampleScenario(), newAuths: ['qa9'] },
       identityWarnings: [],
+      serviceWarnings: { unregistered: [], declaredUrls: [] },
     })
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     const w = await mountPage()
@@ -181,6 +182,7 @@ describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
     const update = vi.fn().mockResolvedValue({
       scenario: sampleScenario(),
       identityWarnings: ['ghost'],
+      serviceWarnings: { unregistered: [], declaredUrls: [] },
     })
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     const w = await mountPage()
@@ -197,6 +199,31 @@ describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
     expect(vi.mocked(toast.warning).mock.calls.some(
       ([m]) => typeof m === 'object' && m !== null
         && (m as { message: string }).message.includes('ghost'))).toBe(true)
+    w.unmount()
+  })
+
+  it('serviceWarnings → 服务引用黄条(架构终态:未注册键/待迁移声明)', async () => {
+    const update = vi.fn().mockResolvedValue({
+      scenario: sampleScenario(),
+      identityWarnings: [],
+      baseWarnings: [],
+      serviceWarnings: { unregistered: ['ghost-svc'],
+                         declaredUrls: ['fin-service'] },
+    })
+    vi.spyOn(api, 'updateScenario').mockImplementation(update)
+    const w = await mountPage()
+    const card = w.findComponent(UsersCard)
+    card.vm.$emit('update:authDrafts', [])
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS)
+    await flushPromises()
+    expect(vi.mocked(toast.warning).mock.calls.some(
+      ([m]) => typeof m === 'object' && m !== null && (() => {
+        const msg = (m as { message: string }).message
+        return msg.includes('未注册服务键:ghost-svc')
+          && msg.includes('内嵌地址声明待迁移:fin-service')
+          && msg.includes('服务注册')
+      })())).toBe(true)
     w.unmount()
   })
 

@@ -12,10 +12,11 @@
  * 这组用例把组件挂成生产用法(父持 config,v-model 双向),
  * 复现并锁死该行为。
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
+import { getServiceResolution } from '@/api/scenario-composer'
 import UsersCard from '@/components/composer/UsersCard.vue'
 import type { ConfigView } from '@/types/plate'
 
@@ -25,6 +26,10 @@ import type { ConfigView } from '@/types/plate'
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceNames: vi.fn(async () => ['fin-service']),
   loadCatalogSystemByService: vi.fn(async () => new Map<string, string>()),
+}))
+// 服务引用解析端点 mock(架构终态卡的数据源)
+vi.mock('@/api/scenario-composer', () => ({
+  getServiceResolution: vi.fn(),
 }))
 
 function makeConfig(): ConfigView {
@@ -46,6 +51,7 @@ function mountWithParent(initial: ConfigView) {
     setup() {
       return () => h(CaseComposerConfig, {
         modelValue: config.value,
+        scenarioId: 'sc-cfg-test',
         'onUpdate:modelValue': (v: ConfigView) => { config.value = v },
       })
     },
@@ -55,6 +61,22 @@ function mountWithParent(initial: ConfigView) {
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(getServiceResolution).mockResolvedValue({
+    environment: { envId: 1, source: 'identity', envName: '测试' },
+    envMixed: null,
+    services: [{
+      key: 'fin-service', registered: true, base: 'fin-service', system: 'fin',
+      identityEntry: { aliasName: 'fin-service', refMode: 'default',
+                       refUsername: '', envId: 1 },
+      instance: { loginUrl: 'https://login', line: '1.0#1' },
+      urls: [{ envId: 1, envName: '测试', url: 'https://dep' }],
+      currentUrl: 'https://dep', gap: false,
+    }],
+  })
+})
 
 describe('CaseComposerConfig — 添加行与父级 v-model 共存', () => {
   it('点 + 添加变量后空行出现并保留', async () => {
@@ -66,7 +88,7 @@ describe('CaseComposerConfig — 添加行与父级 v-model 共存', () => {
     expect(inputs.length).toBeGreaterThanOrEqual(2) // key + value 两个输入框
   })
 
-  it('点 + 添加服务后空行出现并保留', async () => {
+  it.skip('点 + 添加服务后空行出现并保留(自由编辑已随架构终态退役)', async () => {
     const { w } = mountWithParent(makeConfig())
     await w.findAll('button.c-add').filter((b) => b.text().includes('添加服务'))[0].trigger('click')
     await flush()
@@ -216,14 +238,64 @@ describe('CaseComposerConfig — 变量锁(var-lock spec §2)', () => {
   })
 })
 
-describe('CaseComposerConfig — 归属列(别名派生只读展示, spec §1.4)', () => {
-  it('直引/别名行显示目录 base(同值两次);目录外违规键显示未挂目录', async () => {
+describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => {
+  it('解析行呈现:环境链 + 注册/身份面/实例/当前环境地址;拉取失败 → 降级横幅', async () => {
+    const { w } = mountWithParent(makeConfig())
+    await flush()
+    expect(getServiceResolution).toHaveBeenCalled()
+    expect(w.find('[data-testid="cfg-svc-env"]').text()).toContain('测试')
+    expect(w.find('[data-testid="cfg-svc-env"]').text()).toContain('身份条目标签')
+    const row = w.find('[data-testid="cfg-svc-row-fin-service"]')
+    expect(row.text()).toContain('fin-service')
+    expect(row.text()).toContain('默认账户')
+    expect(row.text()).toContain('https://login')
+    expect(row.text()).toContain('https://dep')
+    w.unmount()
+
+    vi.mocked(getServiceResolution).mockRejectedValueOnce(new Error('down'))
+    const { w: w2 } = mountWithParent(makeConfig())
+    await flush()
+    expect(w2.find('[data-testid="cfg-svc-degraded"]').exists()).toBe(true)
+    w2.unmount()
+  })
+
+  it('缺口行:当前环境无地址 → 缺口徽标(指引部署表)', async () => {
+    vi.mocked(getServiceResolution).mockResolvedValueOnce({
+      environment: null, envMixed: null,
+      services: [{ key: 'ghost-svc', registered: false, base: 'ghost-svc',
+                   system: '', identityEntry: null, instance: null,
+                   urls: [], currentUrl: null, gap: true }],
+    })
+    const { w } = mountWithParent(makeConfig())
+    await flush()
+    const row = w.find('[data-testid="cfg-svc-row-ghost-svc"]')
+    expect(row.text()).toContain('未注册')
+    expect(row.text()).toContain('缺口')
+    expect(row.text()).toContain('部署地址')
+    w.unmount()
+  })
+
+  it('迁移面:存量 authored 声明只读列出 + 全部清除(v-model 上抛)', async () => {
     const initial = makeConfig()
-    initial.services = { 'fin-service': 'https://a', 'fin-service-2': 'https://b', 'loose-key': 'https://c' }
-    const { w } = mountWithParent(initial)
-    await flush() // 等 onMounted 目录 loader(mocked)落地 + 重渲染
-    const owners = w.findAll('.svc-owner').map(n => n.text())
-    expect(owners.filter(t => t === 'fin-service')).toHaveLength(2) // 直引 + 别名 fin-service-2 派生
-    expect(owners).toContain('未挂目录')                            // loose-key: base 不在目录集合
+    initial.services = { 'fin-service': 'https://declared' }
+    const { w, config } = mountWithParent(initial)
+    await flush()
+    expect(w.find('[data-testid="cfg-svc-migrate"]').text())
+      .toContain('待迁移')
+    await w.find('[data-testid="cfg-svc-clear-all"]').trigger('click')
+    await flush()
+    expect(config.value.services).toEqual({})
+    w.unmount()
+  })
+
+  it('环境混拼:envMixed 名单呈现(派发 409 的预兆)', async () => {
+    vi.mocked(getServiceResolution).mockResolvedValueOnce({
+      environment: null, envMixed: ['a', 'b'],
+      services: [],
+    })
+    const { w } = mountWithParent(makeConfig())
+    await flush()
+    expect(w.find('[data-testid="cfg-svc-env"]').text()).toContain('混拼')
+    w.unmount()
   })
 })

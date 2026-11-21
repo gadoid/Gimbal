@@ -271,7 +271,9 @@ async def test_gate_precheck_soft_signals_stay_soft(client, plate_mock: PlateMoc
     assert r.status_code == 200, r.text          # 软面:恒 200
     out = r.json()[0]
     assert out["scopeMissing"] and out["schemeValid"] is False
-    assert out["outOfScopeTargets"]              # 只记录
+    # 架构终态(2026-11-21):② 直连层退役 → 范围外标记(D15)恒空
+    # —— 声明不参与范围判定,引用键一律别名形态进范围。
+    assert out["outOfScopeTargets"] == []
 
 
 async def test_gate_suites_validate_stays_warn(client, plate_mock: PlateMock):

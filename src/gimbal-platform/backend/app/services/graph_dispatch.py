@@ -327,9 +327,6 @@ async def materialize_graph(
                 project_id=r["scenario_row"].project_id),
             carry_context=carry_ctxs[i],
             alias_base_urls=unit_urls.get(r["unit"]["ref"], {}),
-            # 原 5:单元场景在项目/公共区 → 直连地址不生效
-            direct_addresses=run_prepare.zone_allows_direct(
-                r["scenario_row"].project_id),
         )
         unit_payloads[r["unit"]["ref"]] = materialized
 

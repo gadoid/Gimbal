@@ -249,10 +249,13 @@ async def _env_and_commit(name: str) -> int:
 
 async def test_dispatch_environment_id_ignored(client, plate_mock: PlateMock):
     """旧客户端多发 environmentId(含不存在的 id):静默忽略,不再 404
-    —— 标签一律自动解析(本场景无身份且无默认 → 无标签,201 照发)。
-    M3 §8.5:场景带 ② 声明地址过派发硬门(无标签 = 无 ③,直连生效)。"""
+    —— 标签一律自动解析。架构终态(2026-11-21):② 声明地址退役,
+    条目 _ALIAS 落地(标签钉 s21-miss 环境 + 该环境部署行)后 201;
+    客户端的 99999 被忽略,快照记录的是标签链解析出的真实环境。"""
     plate_mock.behaviour = "echo"
     h = await _member(client, "s21miss")
+    env_id = await _seed_addresses("s21-miss", deploy_url="http://dep-miss")
+    await _seed_pool_account("s21miss", env_id)   # 条目 default-ref 需池内账户
     draft = _draft("sc-s21-miss", steps=[_STEP])
     draft["definition"]["config"] = {"services": {_ALIAS: "http://direct"}}
     r = await client.post("/api/scenarios", headers=h, json=draft)
@@ -261,7 +264,7 @@ async def test_dispatch_environment_id_ignored(client, plate_mock: PlateMock):
         scenarioId="sc-s21-miss", dataSetIds=[], environmentId=99999))
     assert r.status_code == 201, r.text
     cfg, _ = await _last_config_json()
-    assert "environmentId" not in cfg
+    assert cfg.get("environmentId") == env_id   # 真实标签,非客户端 99999
 
 
 # ── ④ 预检:按身份标签判缺口 ───────────────────────────────────────

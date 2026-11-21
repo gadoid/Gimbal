@@ -173,10 +173,10 @@
               </select>
               <span v-if="refWarning" class="svc-ref-warn" :class="refWarning.level">{{ refWarning.text }}</span>
               <div v-if="creatingAlias" class="alias-create">
-                <span class="alias-prefix">{{ serviceAnchor }}-</span>
-                <input v-model="aliasSuffix" placeholder="后缀(不含 -)" class="alias-suffix" />
-                <input v-model="aliasUrl" placeholder="baseUrl(如 https://qa2.fin.local)" class="alias-url" />
-                <button type="button" class="ghost-btn alias-create-confirm" @click="confirmAliasCreate(currentStep)">创建并切换</button>
+                <span class="alias-hint">身份面在「服务注册」登记(全局共享,Admin+):
+                登记后回到此下拉选「已登记」即可换用 —— 场景不写地址,地址由部署表按环境给出。</span>
+                <button type="button" class="ghost-btn alias-create-confirm" data-testid="svc-register-link"
+                        @click="goRegisterService">去服务注册登记 →</button>
                 <button type="button" class="ghost-btn" @click="creatingAlias = false">取消</button>
               </div>
               <div class="svc-ref-url" data-testid="svc-ref-url">URL: {{ svcUrlHint }}</div>
@@ -657,6 +657,9 @@ const props = defineProps<{
    *  (落池前「将登记」放行,与后端登记闸 extra_known 同口径)。 */
   authDrafts?: AuthDraftView[]
 }>()
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
   'update:orchestration': [Orchestration]
@@ -2077,29 +2080,14 @@ function onServiceRefChange(step: StepView, value: string) {
   }
 }
 
-// 内联创建器:前缀(目录名)固定不可改,只收后缀 + URL(spec §1.3)
+// 内联创建器(架构终态改深链,2026-11-21):身份面 = 全局注册表条目,
+// 登记归服务注册页(Admin+;场景侧内联写 URL 的旧形态随 ② 层退役)。
 const creatingAlias = ref(false)
-const aliasSuffix = ref('')
-const aliasUrl = ref('')
 
-function confirmAliasCreate(step: StepView) {
-  const anchor = serviceAnchor.value
-  const suffix = aliasSuffix.value.trim()
-  const url = aliasUrl.value.trim()
-  if (!anchor) { toast.warning('未知目录服务,无法创建别名'); return }
-  if (!suffix) { toast.warning('后缀不能为空'); return }
-  if (suffix.includes('-')) { toast.warning('后缀不能含 "-"(分隔符保留)'); return }
-  const full = `${anchor}-${suffix}`
-  if (full in (props.services ?? {})) { toast.warning(`别名 ${full} 已存在`); return }
-  if (!url) { toast.warning('baseUrl 不能为空'); return }
-  // 一次动作双写 ①声明(config.services,经 emit 由父级落 definition)
-  // ②引用(steps[k].call.service,local 直改经既有 watch 传播)
-  emit('update:services', { ...(props.services ?? {}), [full]: url })
-  stepCall(step)!.service = full      // 引用切换(call 唯一形态)
+function goRegisterService() {
   creatingAlias.value = false
-  aliasSuffix.value = ''
-  aliasUrl.value = ''
-  toast.success(`已创建别名 ${full} 并切换引用`)
+  toast.info('已跳转服务注册 —— 登记身份面后回来在下拉选「已登记」')
+  void router?.push('/service-admin')   // 测试环境无路由时只提示不跳
 }
 
 /** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */

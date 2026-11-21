@@ -487,10 +487,11 @@ def built_in_user_aliases(scenario_payload: dict | None) -> list[str]:
 
 
 def zone_allows_direct(project_id: int | None) -> bool:
-    """原 5(authz M2a S6):场景内的直连地址(``config.services``)与内置
-    凭证(``config.users``)只在**私有区**生效;项目区 / 公共区(场景
-    ``project_id`` 非空)一律不生效 —— 地址只来自环境部署表,凭证只来自
-    执行人的账户装载。执行 / 导出 / 预检 / 生效预览 / 令牌范围同口径。"""
+    """原 5(authz M2a S6):场景内置凭证(``config.users``)只在**私有区**
+    生效;项目区 / 公共区(场景 ``project_id`` 非空)一律不生效 —— 凭证
+    只来自执行人的账户装载。直连地址(``config.services``)随架构终态
+    (2026-11-21 ② 层退役)不再有区规则 —— 地址恒来自环境部署表,
+    本判定只剩内置凭证语义。"""
     return project_id is None
 
 
@@ -615,8 +616,6 @@ class ExecPrep:
     alias_base_urls: dict[str, str] = field(default_factory=dict)   # 地址③层数据源
     carry_ctx: Any = None                                    # CarryContext | None
     built_in_users: dict[str, Any] = field(default_factory=dict)
-    # 原 5:场景直连地址(authored)是否生效 —— 私有区 True,项目/公共区 False
-    direct_addresses: bool = True
     meta_plate: dict[str, str] = field(default_factory=dict)  # 生效修订(已写回 definition)
     plate_pins: dict[str, str] = field(default_factory=dict)
     # 台账输入(resolve_mode="single" 时随修订解析一并产出,供执行侧
@@ -682,8 +681,7 @@ async def prepare_exec(
     prep = ExecPrep(
         built_in_users=built_in_users(
             scenario_payload, executor_id=owner_id,
-            scenario_owner_id=scenario_owner_id, project_id=project_id),
-        direct_addresses=zone_allows_direct(project_id))
+            scenario_owner_id=scenario_owner_id, project_id=project_id))
 
     # 分层②:显式选定配置的绑定 → {声明条目: 池取用条目}(换池内
     # 命中哪条;注入标签不变)。解析失败不阻塞(缺条目由既有 fail-fast
@@ -832,17 +830,12 @@ async def resolve_effective_config(
                                   resolve_service_sources)
 
     steps = definition.get("steps") or []
-    declared = (definition.get("config") or {}).get("services")
-    declared = declared if isinstance(declared, dict) else {}
-    if not zone_allows_direct(project_id):
-        declared = {}        # 原 5:项目/公共区不吃直连地址
     env = environment if isinstance(environment, EnvChoice) else None
 
-    # 地址:② authored(私有区)> ③ 环境部署表(S6 起唯一 ③ 来源)
+    # 地址:③ 环境部署表(架构终态:② authored 退役,全区域一态)
     svcs = referenced_services(steps)
     full = await service_aliases.base_urls_for(db, svcs, env=env)
-    sources = resolve_service_sources(
-        steps, declared=declared, alias_base_urls=full)
+    sources = resolve_service_sources(steps, alias_base_urls=full)
     services_out: dict[str, dict] = {}
     for svc, info in sources.items():
         out = dict(info)

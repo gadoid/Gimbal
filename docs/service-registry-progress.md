@@ -1875,6 +1875,70 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   denied —— 远端 dist 替换 + 生产切换待目标恢复或人工执行。
 
 
+### 服务引用注册化 —— 架构终态落地(2026-11-21,🟢 双闸 enforce 已上线本地)
+
+用户拍板「一次性处理完,完善为整体的架构设计,不留临时方案」—— 本节
+为服务映射问题的终局答案(前期调研/方案讨论存档于会话,设计入
+redesign §9)。
+
+**B0 审计**(`scripts/audit_authored_services.py`,新增):45 场景带
+authored URL / 2 distinct 键 —— `fin-service`(9 场景 3 值;部署表
+已有行 = 「声明遮蔽部署表」活例)/ `platform-service`(36 场景,
+bootstrap 自拨测,未注册);同键多值冲突 2。
+
+**B1 保存闸**(`REGISTRY_ONLY_SERVICES` 三态,独立于身份闸):码
+`service_not_registered`(键 ∉ 主档 ∪ 条目表;DB-only 判定域,不依赖
+plate 目录可达)/ `service_url_declared`(引用键带 authored URL,②
+层退役对象);挂 create/PUT(路由层,`_service_reference_gate`)+
+导入链(`serviceWarnings` 响应键;enforce 422 同码)。
+
+**B2 执行链 ② 层退役**:`materialize_run_copy` 物化副本
+`config.services` 从空起步、只填 ③(`_apply_services` 唯一组装点);
+`service_url_resolved`/`resolve_service_sources` 去 declared 参;
+`direct_addresses` 参数与 `ExecPrep` 字段整体退位(4 调用方:
+执行/导出/suite/集成);预检 `_gate_unbound_services`、adhoc
+`check_addresses`、runs 追溯面、令牌范围(access_token 引用键一律
+别名形态进范围,D15 范围外标记随层退役)、生效预览面全部收敛单层。
+
+**B3 解析预览端点**:`GET /scenarios/{id}/service-resolution`(只读)
+—— 标签链结果(envMixed 混拼名单不炸,派发侧另有 409)+ 逐键
+注册态/base/系统/身份面(ref 模式)/实例(登录口/版本线)/逐环境
+部署地址/当前环境地址与缺口。
+
+**B4 前端终态**:配置页「服务映射」自由 KV 卡 → 「服务引用与解析」
+卡(引用键 × 注册/身份面/实例/逐环境地址只读 + 环境预览头 + 缺口
+徽标 + 解析失败降级横幅;存量声明只剩迁移清除面,无新增入口);
+Canvas 内联创建器去 baseUrl 改深链服务注册(`svc-register-link`);
+保存/导入 serviceWarnings 黄条接线(与 identity/base 黄条同款三联)。
+
+**B5 清账 → enforce**:噪音值 2 场景人工裁决清声明(模板串/
+一次性测试地址,运维动作记录在案)→ `cleanup_authored_services.py
+--apply --force`:platform-service 注册入主档 + fin-service 部署表
+对齐主流声明值 + 43 场景属主链清声明 → **重审计 0/0/0 亲验** →
+`.env REGISTRY_ONLY_SERVICES=enforce` + 栈重启(与身份闸双 enforce,
+health 绿,两脚本 dry-run 复读闸态)。
+
+**B6 翻转与验证**:conftest 缺省钉 off(套件与 .env 解耦,同
+EXEC_CHAIN/身份闸先例);翻转四类收口 —— ① run_materialize authored
+五用例(kept/unref/no-env/override/empty 判定面单参化);②
+batch0 B8 优先级链单层化;③ s60 区划系(_seed_dep 部署行供址 +
+unbound/scope 全区一态断言);④ access_tokens D15(直连裸键 →
+403 范围缺失)与 setup 面(别名+账户+令牌双授权,非默认账户避
+uq_account_default);另 access_token 生产码 `resolved` 残留清零。
+契约重生 **218 码/445 位点/35 动态**(+`service_not_registered`/
+`service_url_declared`;openapi +service-resolution 端点)。
+
+**翻转续收(全量首跑 15 failed 的余项)**:integration_s0(svc 部署
+行)/ r5 导出(无步骤场景 → 未引用声明键不再随导出保留,两区同空)/
+s21 派发(条目+池账户落地,环境快照记真实标签)/ adhoc 对拍(主档+
+部署行;config_json 键集 +environmentId/Source —— 默认环境落地后
+标签链可解析,两派发路径同有)。
+
+**终验**:后端全量 **2160 passed / 2 skipped / 0 failed / 0 errors**
+(完全干净 —— 本轮连惯常 teardown 竞态都未现);前端全量
+**175 文件 / 1532 用例 0 failed**(+1 skip = 自由编辑退役用例标注);
+vue-tsc 0;全量 eslint 0;契约 gen+check 双绿。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
