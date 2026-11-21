@@ -1863,11 +1863,16 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   **前端全量 vitest:175 文件 / 1528 用例 0 failed**;vue-tsc 0;
   全量 eslint 0;契约 gen+check 终态双绿(216 码/443 位点/35 动态,
   与 README 计数一致)。
-- **部署**:本地栈三服务已带全部代码重启(backend .env=enforce +
-  迁移 0064 已应用;/api/health 绿)。远端部署仍阻断:三 SSH 目标
-  探测 140.210.92.250:26675 connection refused /
-  192.168.229.130 timeout / 118.31.5.88 publickey denied —— 远端
-  dist 替换 + 生产 enforce 切换待目标恢复或人工执行。
+- **部署(本地,2026-11-21 拍板「直接在本地环境部署」)**:三服务
+  全部带最新代码 —— backend uvicorn 8000 重启(editable install 同源
+  = 工作树 8ba55f4e;运行进程 import 面实证 ``base_overrides`` 存在
+  + ``same_base_violations(extra_bases=…)`` 签名在位;/api/health 绿);
+  vite 5173 dev 直服现源 + **dist 重建**(index-xJCY3gCl.js;旧 Nov-19
+  版被 vite build 直覆盖未留 .bak —— 已过两代低于现役基线,如实记档);
+  plate 8890 沿用。live 库态复核:闸态 = enforce(脚本 dry-run 回读)
+  + 迁移 0064 head + /openapi.json 含 cleanup-survey。
+  远端部署仍阻断:三 SSH 目标探测 refused / timeout / publickey
+  denied —— 远端 dist 替换 + 生产切换待目标恢复或人工执行。
 
 
 ## 5. 已知风险与待决
