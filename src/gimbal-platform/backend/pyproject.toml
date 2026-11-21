@@ -47,6 +47,10 @@ packages = ["app"]
 # Treat every ``async def test_*`` as an asyncio test (no per-test decorator).
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# 套件提速(2026-11-21):pytest-xdist 并行缺省(依赖 requirements-dev;
+# 单进程跑 -n0)。隔离模型自洽:每进程池 schema(pid 命名,conftest
+# 启动清扫死残留)+ bcrypt 轮数钉 4。
+addopts = "-n auto"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

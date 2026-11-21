@@ -17,3 +17,9 @@ asyncpg==0.31.0
 alembic==1.20.0
 psycopg==3.3.6
 psycopg-binary==3.3.6
+
+# ── 测试套件并行（2026-11-21 提速轮）─────────────────────────────────
+# pytest-xdist: pyproject [tool.pytest.ini_options] addopts=-n auto 的
+# 依赖;套件隔离模型为每进程池 schema(pid 命名),xdist 安全。单进程跑
+# 加 -n0。版本钉准与本地验证轮一致(3.8.0 / 2164 用例 2:41)。
+pytest-xdist==3.8.0

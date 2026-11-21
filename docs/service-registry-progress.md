@@ -1971,6 +1971,27 @@ authoring):① 解析行「改绑」→ `bindJump` 上抛,父级切 ④ 编排�
 `index-N_GXLq6d.js`;后端 uvicorn 8000 重启(health 200,路由
 service-resolution 在位)。
 
+**后端套件提速(2026-11-21,用户要求「30 分钟跑不动」)**:墙钟
+**30:12 → 2:01(15×,默认命令 auto=24 workers;-n 12 = 2:41)**,
+默认命令即并行(pyproject `addopts=-n auto` + `pytest-xdist==3.8.0`
+入 constraints)。三刀:① 病根 = 每测试
+`CREATE SCHEMA + create_all(42 表)+ DROP SCHEMA CASCADE` ≈ 0.6s/测
+——改**进程内池 schema**(`t_pool_<pid>` 首建全套,每测一条
+`TRUNCATE ... RESTART IDENTITY CASCADE` + 公共项目种子重种 = 同一张
+白纸;sessionfinish 落删,硬崩溃残留启动清扫(死 pid 才删,活进程
+池不动;旧 uuid 格式一并清);PG16 无 `CREATE SCHEMA ... TEMPLATE`
+(17 才有)故走池化;引擎仍每测新建 —— asyncpg 连接绑事件循环,
+pytest-asyncio 每测一个 loop,池跨 loop 必炸);② bcrypt 12 轮 ≈
+哈希/校验各 ~170ms,每测注册+登录 ≈ 0.34s —— conftest 钉 4 轮
+(仍真 bcrypt,语义不变),此项独占 ≈ 12 分钟;③ xdist 并行(每
+进程池 schema 天然并行安全;迁移/空库自建自用独立 schema 不经池)。
+定向对比:test_service_reference_gate 12 例 15.0s → 7.07s(2.1×,
+setup 0.71→0.03s + bcrypt 归零)。剩余 TRUNCATE ≈ 0.18s/测是 42 表
+逐表锁/目录开销(实测 `synchronous_commit=off` 无效、DELETE 多语句
+prepared 协议拒收),已接受。验证:定向簇(3 文件 -n 4)绿 →
+全量 -n 12 绿(2:41)→ 全量默认命令(auto)绿;`t_pool_*`/旧格式
+残留双零亲验;历史 uuid 残留 21 个一次清空。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |

@@ -12,6 +12,7 @@ test. SQLite 方言已退役(2026-10-14)。
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import AsyncGenerator
@@ -56,6 +57,22 @@ from app.models import AuthAccount, ServiceIdentity  # noqa: E402,F401  explicit
 from app.core import db as db_module  # noqa: E402
 from app.core.db import Base  # noqa: E402
 from app.main import create_app  # noqa: E402
+
+# ── 套件提速(2026-11-21):bcrypt 轮数钉 4 ─────────────────────────
+# 缺省 12 轮 ≈ 哈希/校验各 ~170ms;大量用例每测注册+登录(哈希 1 次 +
+# 校验 1 次)≈ 0.34s/测,2164 用例仅此一项 ≈ 12 分钟。钉 4 轮后各
+# ~1ms —— 仍是真 bcrypt(格式/校验语义不变;authz 用例覆盖的是流程
+# 与令牌,不是计算成本)。显式传 rounds 的调用不受影响(只抬缺省)。
+import bcrypt as _bcrypt  # noqa: E402
+
+_gensalt_real = _bcrypt.gensalt
+
+
+def _gensalt_fast(rounds: int = 4, prefix: bytes = b"2b", **kw):  # noqa: ANN001, ANN002
+    return _gensalt_real(rounds=max(rounds, 4), prefix=prefix, **kw)
+
+
+_bcrypt.gensalt = _gensalt_fast  # type: ignore[assignment]
 
 # P1-7 迁移期垫片(旧模块名 service_alias/auth_session/service_meta →
 # 新模型)已随 Phase 3 文案清账删除 —— 全部消费方已切 ServiceIdentity/
@@ -144,13 +161,132 @@ async def _make_pg_engine(dsn: str, search_path: str | None = None):
                                connect_args=connect_args)
 
 
+# ── schema 池(2026-11-21 套件提速)───────────────────────────────
+# 原「每测试 CREATE SCHEMA + create_all(几十张表)+ DROP SCHEMA
+# CASCADE」≈ 0.6s/测,是 30 分钟套件的最大单项。PG16 无 CREATE
+# SCHEMA ... TEMPLATE(17 才有)→ 进程内单池:每进程一个池 schema
+# (首次进入建全套结构),此后每测一条 ``TRUNCATE ... RESTART
+# IDENTITY CASCADE`` 复位 —— 行清零 + 序列归 1 + 公共项目种子重种
+# = 与「每测新 schema」同一张白纸。fresh_db 消费面只把 schema 当
+# 行存储:迁移/空库自举测试自建独立 schema 不经此池。池 schema
+# 会话结束(sessionfinish)落删;硬崩溃残留由下次会话启动清扫
+# (pid 已死的才删,活进程的池不动 —— 并行 pytest 会话安全)。
+_POOL_SCHEMA = f"t_pool_{os.getpid()}"
+_pool_built = False
+
+# M2a S1.1:公共项目行是运行时依赖(迁移链 0040/0041 种子;测试走
+# create_all 不跑迁移 → 补同一颗种子,幂等)。建池与每测复位共用。
+_PUBLIC_PROJECT_SEED_SQL = (
+    "INSERT INTO projects (name, kind, description, created_at) "
+    "SELECT '公共', 'public', '', now() WHERE NOT EXISTS ("
+    "  SELECT 1 FROM projects WHERE kind = 'public')")
+
+
+async def _drop_schemas(names: list[str]) -> None:
+    if not names:
+        return
+    admin = await _make_pg_engine(TEST_DATABASE_URL)
+    try:
+        async with admin.begin() as conn:
+            for n in names:
+                await conn.exec_driver_sql(f'DROP SCHEMA IF EXISTS "{n}" CASCADE')
+    finally:
+        await admin.dispose()
+
+
+def _pid_alive(pid: int) -> bool:
+    """Windows 侧活进程探测(清扫只删死 pid 的残留池)。"""
+    import ctypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    try:
+        h = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            return False
+        ctypes.windll.kernel32.CloseHandle(h)
+        return True
+    except Exception:  # noqa: BLE001 — 探测失败按死处理(残留惰性,不急)
+        return False
+
+
+async def _sweep_stale_pools() -> None:
+    """清扫硬崩溃残留的池 schema(t_pool_<pid>,pid 已死才删)。
+
+    只在非 xdist worker 进程执行:xdist 下 controller 收集期先于
+    worker spawn 导入本文件 → controller 扫一次,worker 不扫,
+    避免互删活跃池。"""
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        return
+    admin = await _make_pg_engine(TEST_DATABASE_URL)
+    try:
+        async with admin.begin() as conn:
+            rows = (await conn.exec_driver_sql(
+                "SELECT nspname FROM pg_namespace "
+                "WHERE nspname LIKE 't\\_pool\\_%' "
+                "   OR nspname ~ '^t_[0-9a-f]{32}$'")).scalars().all()
+    finally:
+        await admin.dispose()
+    stale = []
+    for name in rows:
+        name = str(name)
+        # 旧 uuid 格式(t_<32hex>)是上一代隔离设计的残留 —— 该设计已
+        # 随池化退役,一律视为死物;池格式按 pid 探活。
+        if name.startswith("t_pool_"):
+            try:
+                pid = int(name.rsplit("_", 1)[-1])
+            except ValueError:
+                continue
+            if pid == os.getpid() or _pid_alive(pid):
+                continue
+        stale.append(name)
+    if stale:
+        logger.info("清扫死进程残留池 schema:%s", ", ".join(stale))
+        await _drop_schemas(stale)
+
+
+async def _ensure_pool_schema() -> None:
+    """首次进入建池:全套 DDL + 公共项目种子 + suite 触发器(幂等)。"""
+    global _pool_built
+    if _pool_built:
+        return
+    from sqlalchemy import text
+
+    from app.services.zone import SUITE_ZONE_TRIGGER_DDL
+
+    admin = await _make_pg_engine(TEST_DATABASE_URL)
+    try:
+        async with admin.begin() as conn:
+            await conn.exec_driver_sql(
+                f'DROP SCHEMA IF EXISTS "{_POOL_SCHEMA}" CASCADE')
+            await conn.exec_driver_sql(f'CREATE SCHEMA "{_POOL_SCHEMA}"')
+    finally:
+        await admin.dispose()
+
+    build = await _make_pg_engine(
+        TEST_DATABASE_URL, search_path=f"{_POOL_SCHEMA},public")
+    try:
+        async with build.begin() as conn:
+            # checkfirst 必须关(同旧口径:search_path 含 public 时同名
+            # 误判「已存在」→ 一张不建 → 读写穿透到 public 生产表)。
+            await conn.run_sync(
+                lambda ddl: Base.metadata.create_all(ddl, checkfirst=False))
+            await conn.execute(text(_PUBLIC_PROJECT_SEED_SQL))
+            # M2a S1.5:suite_members 同区触发器(迁移链由 0042 挂;
+            # 测试库走 create_all → 同一 DDL 单源补挂)
+            for stmt in SUITE_ZONE_TRIGGER_DDL:
+                await conn.execute(text(stmt))
+    finally:
+        await build.dispose()
+    _pool_built = True
+
+
 @pytest.fixture
 async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
-    """Swap the global DB engine for a per-test isolated schema + create_all.
+    """Swap the global DB engine onto the process's pooled schema(每测行级白纸).
 
-    PG-only(SQLite 已退役):每测试一个独立 schema,连进来的会话
-    search_path 钉在该 schema 上;TEST_DATABASE_URL 缺失在 conftest
-    导入期即中止会话。
+    PG-only(SQLite 已退役):连进来的会话 search_path 钉在池 schema
+    上;TEST_DATABASE_URL 缺失在 conftest 导入期即中止会话。
     """
     # P3.6:默认链已切 server(生产),测试钉回 legacy —— 大量用例按
     # legacy 假引擎(monkeypatch gimbal_launcher.launch)编写,默认拉真
@@ -172,61 +308,53 @@ async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
     monkeypatch.setattr(_settings, "REGISTRY_ONLY_SERVICES", "off",
                         raising=True)
 
-    import uuid
+    await _ensure_pool_schema()
 
-    schema = f"t_{uuid.uuid4().hex}"
-    admin = await _make_pg_engine(TEST_DATABASE_URL)
-    async with admin.begin() as conn:
-        await conn.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
-    await admin.dispose()
-
+    # 引擎仍每测新建:asyncpg 连接绑定事件循环,pytest-asyncio 每测
+    # 一个 loop → 池跨 loop 复用必炸。每测一次 connect(~10ms),
+    # 相比原 3 引擎 + 全套 DDL 已省 95%+。
     test_engine = await _make_pg_engine(
-        TEST_DATABASE_URL, search_path=f"{schema},public"
-    )
+        TEST_DATABASE_URL, search_path=f"{_POOL_SCHEMA},public")
     test_session_factory = async_sessionmaker(
-        test_engine, expire_on_commit=False, class_=AsyncSession
-    )
+        test_engine, expire_on_commit=False, class_=AsyncSession)
     monkeypatch.setattr(db_module, "engine", test_engine, raising=True)
     monkeypatch.setattr(db_module, "SessionLocal", test_session_factory,
                         raising=True)
 
     async with test_engine.begin() as conn:
-        # checkfirst 必须关:search_path 含 public 时,checkfirst 会把
-        # public 里的同名表误判为"已存在"→ 一张不建 → 读写全部穿透
-        # 到 public(生产表)。全新 schema 无需 checkfirst。
-        await conn.run_sync(
-            lambda ddl: Base.metadata.create_all(ddl, checkfirst=False),
-        )
-        # M2a S1.1:公共项目行是运行时依赖(迁移链 0040/0041 种子;
-        # 测试走 create_all 不跑迁移 → 补同一颗种子,幂等)
+        # 白纸复位:一条 TRUNCATE(CASCADE 解 FK;RESTART IDENTITY
+        # 归序列)—— 语义等价「每测新 schema」。
+        tables = ", ".join(
+            f'"{t.name}"' for t in Base.metadata.sorted_tables)
+        await conn.exec_driver_sql(
+            f"TRUNCATE {tables} RESTART IDENTITY CASCADE")
         from sqlalchemy import text
 
-        await conn.execute(text(
-            "INSERT INTO projects (name, kind, description, created_at) "
-            "SELECT '公共', 'public', '', now() WHERE NOT EXISTS ("
-            "  SELECT 1 FROM projects WHERE kind = 'public')"))
-        # M2a S1.5:suite_members 同区触发器(迁移链由 0042 挂;测试
-        # 库走 create_all → 同一 DDL 单源补挂,端点测试获得与生产
-        # 一致的库层兜底)
-        from app.services.zone import SUITE_ZONE_TRIGGER_DDL
-
-        for stmt in SUITE_ZONE_TRIGGER_DDL:
-            await conn.execute(text(stmt))
+        await conn.execute(text(_PUBLIC_PROJECT_SEED_SQL))
 
     try:
         yield
     finally:
-        # dispatcher 后台行落库与 DROP SCHEMA 的互锁防御:先等收尾
+        # dispatcher 后台行落库与下一测 TRUNCATE 的互锁防御:先等收尾
+        # (后台尾巴若晚到,写的是已复位的行表,不再与 DDL 互锁)。
         from app.services.run_dispatcher import wait_dispatchers_quiescent
 
         await wait_dispatchers_quiescent()
         await test_engine.dispose()
-        cleaner = await _make_pg_engine(TEST_DATABASE_URL)
-        try:
-            async with cleaner.begin() as conn:
-                await conn.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
-        finally:
-            await cleaner.dispose()
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    """池 schema 落删:每测不删、会话统一删(新起循环;失败不盖结果
+    —— 硬崩溃残留由下次会话启动清扫兜底)。"""
+    global _pool_built
+    if not _pool_built:
+        return
+    _pool_built = False
+    try:
+        asyncio.run(_drop_schemas([_POOL_SCHEMA]))
+    except Exception:  # noqa: BLE001 — 清理失败不盖测试结果
+        logger.warning("池 schema 落删失败(下次启动清扫兜底)",
+                       exc_info=True)
 
 
 @pytest.fixture(autouse=True)
@@ -445,3 +573,12 @@ def plate():
         yield mock
     finally:
         mock.uninstall()
+
+
+# 启动清扫(硬崩溃残留的死进程池;xdist:controller 收集期先于 worker
+# spawn 执行,worker 侧自短路 —— 见 _sweep_stale_pools)。失败不阻断会话。
+try:
+    asyncio.run(_sweep_stale_pools())
+except Exception:  # noqa: BLE001 — 清扫失败不阻断测试
+    logger.warning("池残留清扫失败(不影响测试;残留 schema 下次再清)",
+                   exc_info=True)
