@@ -435,6 +435,23 @@ async def _service_reference_gate(
         unreg, with_url)
 
 
+async def _service_scope_gate(db: DbSession, definition: dict) -> None:
+    """范围形状/环境严格校验(与注册化闸开关无关 —— 形状错误恒拒)。
+
+    保存/导入都必须在写库前跑:旧 ``string[]`` 形态由一次性迁移脚本
+    转换,新写面只接受 ``{service, envId}`` 对象(envId 必填 —— 服务级
+    引用已退役)。
+    """
+    from ..services.service_scope import validate_service_scope
+    try:
+        await validate_service_scope(db, definition)
+    except ValueError as e:
+        raise value_error_http(e, {
+            "invalid_service_scope": 422,
+            "service_scope_env_not_found": 422,
+        }) from None
+
+
 @router.post("", response_model=Scenario, status_code=status.HTTP_201_CREATED)
 async def create_scenario(
     user: CurrentUser, db: DbSession, body: ScenarioDraft,
@@ -455,6 +472,7 @@ async def create_scenario(
     # 决策 1 引用即登记(阶段 0):定义侧身份存在性闸(audit 头 /
     # enforce 422;项目门之后、store 之前 —— 不动事务,纯读)。
     # extra_bases = 手配草稿叠层(P2-2:首存即裁同 base,不漏时序缝)。
+    await _service_scope_gate(db, body.definition)
     await _identity_registry_gate(
         db, body.definition, response,
         extra_known={d.name for d in (body.auth_drafts or [])},
@@ -480,11 +498,10 @@ async def create_scenario(
             # 手配落池(§3.3 阶段 2,auth_drafts.materialize 单源):
             # 环境/系统/重名 422,同名条目/账户冲突 409,属主闸 403
             "auth_draft_env_not_found": 422,
-            "auth_draft_system_unknown": 422,
+            "auth_draft_service_unknown": 422,
             "auth_draft_name_duplicated": 422,
             "auth_draft_account_not_found": 422,
             "auth_draft_alias_taken": 409,
-            "auth_draft_account_exists": 409,
             "auth_draft_owner_required": 403,
         })
     if _made_auths:
@@ -1141,10 +1158,10 @@ async def get_service_resolution(
       ``envMixed`` 名单,派发侧另有 409 硬拦;混拼判定保持步骤口径,
       预选范围不掺入 —— 预告的是派发 409,派发只看步骤);
     * ``services[]`` —— 引用键(步骤引用 ∪ ``config.service_scope``
-      预选范围)逐键:注册态(主档 ∪ 条目表)、base/系统、身份面事实
-      (键为条目名时)、(system, 执行标签)实例(登录口/版本线,
-      ``SystemEnvInstance``)、部署表**逐环境**地址、当前标签地址与
-      缺口、``stepRefs`` 步骤引用计数(0 = 仅预选)。
+      范围实例派生出的身份条目/服务级键)逐键:注册态(主档 ∪ 条目表)、
+      base/系统、身份面事实(键为条目名时)、(system, 执行标签)实例
+      (登录口/版本线,``SystemEnvInstance``)、部署表**逐环境**地址、
+      当前标签地址与缺口、``stepRefs`` 步骤引用计数(0 = 仅范围预选)。
     """
     from ..models.deployment import Deployment
     from ..models.environment import Environment
@@ -1155,13 +1172,15 @@ async def get_service_resolution(
     from ..services.run_materialize import referenced_services
     from ..services.scenario_store import definition_from_payload
     from ..services.service_aliases import exec_auth_aliases_of_definition
+    from ..services.service_scope import iter_scope_refs, scope_identity_keys
 
     from sqlalchemy import select as _sel
 
     row = await _load_row(db, scenario_id)
     await _require_reader_async(db, user, row)
     definition = definition_from_payload(row.payload)
-    # stepRefs = 逐键步骤计数(在用/仅预选的判别面);键集 = 步骤 ∪ scope
+    # stepRefs = 逐键步骤计数(在用/仅预选的判别面);键集 = 步骤 ∪
+    # 范围实例派生键(实例 → 身份条目;服务级 → 服务键)。
     step_refs: dict[str, int] = {}
     for _s in definition.get("steps") or []:
         if not isinstance(_s, dict):
@@ -1170,10 +1189,9 @@ async def get_service_resolution(
         _svc = _call.get("service") if isinstance(_call, dict) else None
         if isinstance(_svc, str) and _svc:
             step_refs[_svc] = step_refs.get(_svc, 0) + 1
-    scope = (definition.get("config") or {}).get("service_scope")
-    scope = [k for k in (scope if isinstance(scope, list) else [])
-             if isinstance(k, str) and k.strip()]
-    keys = sorted(set(step_refs) | set(scope))
+    scope_refs = iter_scope_refs(definition)
+    scope_keys = await scope_identity_keys(db, scope_refs)
+    keys = sorted(set(step_refs) | set(scope_keys))
 
     ident_rows = (await db.execute(
         _sel(ServiceIdentity.alias_name, ServiceIdentity.base_service,
@@ -1283,6 +1301,7 @@ async def put_scenario(
     # 决策 1 引用即登记(阶段 0):与 create 同一道闸(存量的「只对新建
     # 生效」口径属本案 config.users 422,不适用于登记闸 —— 存量未登记
     # 引用正是 audit 态要观测的对象,update 同拦/同警示)。
+    await _service_scope_gate(db, body.definition)
     await _identity_registry_gate(
         db, body.definition, response,
         extra_known={d.name for d in (body.auth_drafts or [])},
@@ -1308,11 +1327,10 @@ async def put_scenario(
             "plaintext_users_rejected": 422,
             # 手配落池(§3.3 阶段 2)同 create 一组码
             "auth_draft_env_not_found": 422,
-            "auth_draft_system_unknown": 422,
+            "auth_draft_service_unknown": 422,
             "auth_draft_name_duplicated": 422,
             "auth_draft_account_not_found": 422,
             "auth_draft_alias_taken": 409,
-            "auth_draft_account_exists": 409,
             "auth_draft_owner_required": 403,
         })
     if body.auth_drafts:

@@ -20,8 +20,12 @@ async def _get_execution(execution_id: int):
         ).scalar_one()
 
 
-async def _wait_terminal(execution_id: int, timeout_s: float = 5.0):
-    """轮询 Execution 至终态(done/failed/canceled)后返回该行。"""
+async def _wait_terminal(execution_id: int, timeout_s: float = 30.0):
+    """轮询 Execution 至终态(done/failed/canceled)后返回该行。
+
+    30s 预算(2026-11-22):满载 xdist 下 fanout 调度 + plate 探针
+    (connect timeout 逐行计费)把终态化拖过 5s —— 伪引擎用例正常
+    1-3s 收口,预算只放宽等待耐心,不改断言。"""
     for _ in range(int(timeout_s / 0.05)):
         row = await _get_execution(execution_id)
         if row.status in ("done", "failed", "canceled"):

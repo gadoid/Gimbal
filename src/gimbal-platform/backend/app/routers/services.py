@@ -15,14 +15,16 @@ import uuid
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser, MemberUser
 from ..models import Service, SystemEnvInstance
+from ..models.deployment import Deployment
 from ..models.environment import Environment
+from ..models.service_identity import ServiceIdentity
 
 router = APIRouter(prefix="/services", tags=["services"])
 
@@ -137,6 +139,103 @@ class InstanceTagsIn(BaseModel):
     tags: list[str] = Field(min_length=1, max_length=30)
 
 
+# ── 服务实例(service × env 组合视图;编排器数据源)────────────────────
+class InstanceIdentityOut(BaseModel):
+    """实例下的调用身份条目(不含账户/密码)。"""
+
+    model_config = _CAMEL
+
+    alias_name: str = Field(alias="aliasName")
+    ref_mode: Literal["default", "username"] = Field(
+        default="default", alias="refMode")
+    ref_username: str = Field(default="", alias="refUsername")
+    display: str = ""
+
+
+class ServiceInstanceOut(BaseModel):
+    """服务×环境实例(组合 deployments + system_env_instances + identities)。"""
+
+    model_config = _CAMEL
+
+    env_id: int = Field(alias="envId")
+    env_name: str = Field(default="", alias="envName")
+    # 同组标签行 = 一个实例的多枚环境 tag(服务注册页同款口径);
+    # 无系统实例行时为空串(前端按 env 自成一实例)。
+    group_id: str = Field(default="", alias="groupId")
+    tags: list[str] = Field(default_factory=list)
+    base_url: str = Field(default="", alias="baseUrl")
+    login_url: str = Field(default="", alias="loginUrl")
+    line: str = ""
+    note: str = ""
+    identities: list[InstanceIdentityOut] = Field(default_factory=list)
+
+
+class ServiceWithInstancesOut(BaseModel):
+    model_config = _CAMEL
+
+    name: str
+    system: str
+    kind: Literal["plate", "external", "integration"] = "plate"
+    instances: list[ServiceInstanceOut] = Field(default_factory=list)
+
+
+class ServiceInstanceOverviewOut(BaseModel):
+    model_config = _CAMEL
+
+    services: list[ServiceWithInstancesOut] = Field(default_factory=list)
+
+
+class InstanceIdentityIn(BaseModel):
+    """创建实例时可选携带的一条调用身份。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    alias_name: str = Field(min_length=1, max_length=64,
+                            alias="aliasName",
+                            pattern=r"^[A-Za-z0-9_-]+$")
+    ref_mode: Literal["default", "username"] = Field(
+        default="default", alias="refMode")
+    ref_username: str = Field(default="", max_length=128,
+                              alias="refUsername")
+    display: str = Field(default="", max_length=128)
+
+    @model_validator(mode="after")
+    def _username_ref_requires_name(self) -> "InstanceIdentityIn":
+        if self.ref_mode == "username" and not self.ref_username.strip():
+            raise ValueError(
+                "ref_username_required: refMode=username 必须填写引用用户名")
+        return self
+
+
+class ServiceInstancePut(BaseModel):
+    """创建/编辑一个服务×环境实例。
+
+    * ``envId`` / ``envTag`` 二选一(自由标签不存在时自动登记);
+    * ``baseUrl`` 写 deployments(API 地址);
+    * ``loginUrl``/``line``/``note`` 写 system_env_instances(登录口按
+      系统×环境共享);
+    * ``identity`` 可选:同时登记一条调用身份(别名全局唯一)。
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    env_id: int | None = Field(default=None, ge=1, alias="envId")
+    env_tag: str | None = Field(default=None, max_length=64, alias="envTag")
+    base_url: str | None = Field(default=None, max_length=512,
+                                 alias="baseUrl")
+    login_url: str | None = Field(default=None, max_length=512,
+                                  alias="loginUrl")
+    line: str | None = Field(default=None, max_length=64)
+    note: str | None = Field(default=None, max_length=256)
+    identity: InstanceIdentityIn | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_env(self) -> "ServiceInstancePut":
+        if (self.env_id is None) == (self.env_tag is None):
+            raise ValueError("exactly one of envId / envTag is required")
+        return self
+
+
 async def _find_or_create_env_by_tag(db: Any, tag: str, user: Any) -> Any:
     """标签 → 环境行(不存在则登记;幂等)。写面与其它环境写门同源:
     调用方已过 MemberUser(ops.write)。"""
@@ -184,13 +283,154 @@ async def _instance_out(db: Any, inst: SystemEnvInstance) -> InstanceOut:
 
     env_name = (await db.execute(
         select(Env.name).where(Env.id == inst.env_id))).scalar() or ""
-    tags = (await _tags_by_group(db, {inst.group_id})).get(inst.group_id, [])
+    tags = await _tags_by_group(db, {inst.group_id})
     return InstanceOut(
         system=inst.system, env_id=inst.env_id, env_name=env_name,
-        group_id=inst.group_id, tags=tags,
+        group_id=inst.group_id, tags=tags.get(inst.group_id, []),
         login_url=inst.login_url, line=inst.line, note=inst.note,
         updated_at=(inst.updated_at.isoformat()
                     if inst.updated_at else None))
+
+
+async def _sync_instance_fields(
+    db: Any, system: str, env_id: int, *,
+    login_url: str | None = None,
+    line: str | None = None,
+    note: str | None = None,
+) -> SystemEnvInstance:
+    """upsert (system, env) 实例配置并同步同组标签行(**不 commit**)。
+
+    登录口/版本线/说明是系统×环境共享事实;``None`` = 不修改该字段。
+    """
+    inst = (await db.execute(
+        select(SystemEnvInstance).where(
+            SystemEnvInstance.system == system,
+            SystemEnvInstance.env_id == env_id))).scalar_one_or_none()
+    if inst is None:
+        inst = SystemEnvInstance(system=system, env_id=env_id,
+                                 group_id=uuid.uuid4().hex)
+        db.add(inst)
+        group_rows = [inst]
+    else:
+        group_rows = (await db.execute(
+            select(SystemEnvInstance).where(
+                SystemEnvInstance.system == system,
+                SystemEnvInstance.group_id == inst.group_id))).scalars().all()
+    for row in group_rows:
+        if login_url is not None:
+            row.login_url = login_url
+        if line is not None:
+            row.line = line
+        if note is not None:
+            row.note = note
+    await db.flush()
+    return inst
+
+
+def _checked_login_url(value: str | None) -> str | None:
+    """loginUrl scheme 闸(口径与 baseUrl 一致,2026-11-21)。
+
+    登录口由引擎登录流程直接当 URL 消费,任意串入库会在执行期被打
+    出去 —— 非空必须以 http:// 或 https:// 开头;空串/None = 清空/
+    不改,放行。返回去空格后的值(写侧与 baseUrl 同款去空格口径)。
+    """
+    if value is None:
+        return None
+    url = value.strip()
+    if url and not url.startswith(("http://", "https://")):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, {
+                "code": "login_url_invalid",
+                "message": "登录口地址必须以 http:// 或 https:// 开头,"
+                           "(留空 = 清除登录口)"})
+    return url
+
+
+def _instance_integrity_conflict(e: Exception) -> tuple[str, str]:
+    """提交点 IntegrityError → (code, message),按约束名分派。
+
+    同 scenario_store._integrity_conflict_code 教训(评审 2026-11-20)
+    的复发修复:提交点冲突多源 —— 身份别名唯一 / 部署 (service, env)
+    唯一 / 系统实例行唯一,一律映射「身份撞名」会把 deployment 竞态
+    误报成调用身份名已登记。别名唯一 → service_instance_identity_taken;
+    其余保守回落 service_instance_conflict(409 不 500,消息带约束名
+    便于诊断)。
+    """
+    orig = getattr(e, "orig", None)
+    name = str(getattr(orig, "constraint_name", "")
+               or getattr(getattr(orig, "diag", None),
+                          "constraint_name", "") or "")
+    if "service_identities" in name or "alias_name" in name:
+        return ("service_instance_identity_taken",
+                "并发冲突:调用身份名刚被他处登记")
+    return ("service_instance_conflict",
+            f"并发冲突({name or '唯一约束'}):实例事实刚被他处写入,"
+            "请重试")
+
+
+async def _load_instance_overview(
+    db: Any, *, service_name: str | None = None,
+) -> list[ServiceWithInstancesOut]:
+    """服务×环境实例组合读模型(一次批量,不做逐服务 N+1)。
+
+    实例存在性 = 该服务在该环境有 deployment 或 identity;登录口/
+    版本线/说明/tags 从 system_env_instances 按 (service.system, env)
+    联表 —— 同一系统下多个服务共享登录口。
+    """
+    svc_stmt = select(Service).order_by(Service.system, Service.name)
+    if service_name is not None:
+        svc_stmt = svc_stmt.where(Service.name == service_name)
+    services = list((await db.execute(svc_stmt)).scalars())
+    if not services:
+        return []
+
+    deps = list((await db.execute(select(Deployment))).scalars())
+    idents = list((await db.execute(select(ServiceIdentity))).scalars())
+    insts = list((await db.execute(select(SystemEnvInstance))).scalars())
+    envs = {e.id: e.name for e in
+            (await db.execute(select(Environment))).scalars()}
+    tags_by_group = await _tags_by_group(
+        db, {i.group_id for i in insts})
+
+    dep_map = {(d.base_service, d.env_id): d.base_url for d in deps}
+    ident_map: dict[tuple[str, int], list[ServiceIdentity]] = {}
+    for ident in idents:
+        ident_map.setdefault(
+            (ident.base_service, ident.env_id), []).append(ident)
+    inst_map = {(i.system, i.env_id): i for i in insts}
+
+    out: list[ServiceWithInstancesOut] = []
+    for svc in services:
+        env_ids = {d.env_id for d in deps
+                   if d.base_service == svc.name}
+        env_ids |= {i.env_id for i in idents
+                    if i.base_service == svc.name}
+        instances: list[ServiceInstanceOut] = []
+        for env_id in sorted(env_ids):
+            inst = inst_map.get((svc.system, env_id))
+            rows = sorted(ident_map.get((svc.name, env_id), []),
+                          key=lambda r: r.alias_name)
+            instances.append(ServiceInstanceOut(
+                env_id=env_id, env_name=envs.get(env_id, ""),
+                group_id=(inst.group_id if inst is not None else ""),
+                tags=(tags_by_group.get(inst.group_id, [])
+                      if inst is not None else []),
+                base_url=dep_map.get((svc.name, env_id), ""),
+                login_url=inst.login_url if inst is not None else "",
+                line=inst.line if inst is not None else "",
+                note=inst.note if inst is not None else "",
+                identities=[InstanceIdentityOut(
+                    alias_name=r.alias_name,
+                    ref_mode=r.ref_mode,  # type: ignore[arg-type]
+                    ref_username=r.ref_username or "",
+                    display=r.display or "",
+                ) for r in rows],
+            ))
+        out.append(ServiceWithInstancesOut(
+            name=svc.name, system=svc.system,
+            kind=svc.kind,  # type: ignore[arg-type]
+            instances=instances))
+    return out
 
 
 @router.get("", response_model=ServiceListOut)
@@ -384,6 +624,20 @@ async def delete_service(
 
 
 # ── 实例(环境×系统部署事实)────────────────────────────────────
+@router.get("/instance-overview", response_model=ServiceInstanceOverviewOut)
+async def service_instance_overview(
+    user: CurrentUser, db: DbSession,
+) -> ServiceInstanceOverviewOut:
+    """服务×环境实例组合读模型(编排器「服务范围/凭证映射」数据源)。
+
+    实例 = 有 deployment 或 identity 的 (service, env);登录口/版本线/
+    说明/tags 按 (service.system, env) 从 system_env_instances 联表。
+    读全员;写面见 ``PUT /{service}/instances``。
+    """
+    return ServiceInstanceOverviewOut(
+        services=await _load_instance_overview(db))
+
+
 @router.get("/instances", response_model=list[InstanceOut])
 async def list_instances(
     user: CurrentUser, db: DbSession,
@@ -428,27 +682,10 @@ async def put_instance(
     if await db.get(Env, env_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"environment not found: {env_id}")
-    inst = (await db.execute(
-        select(SystemEnvInstance).where(
-            SystemEnvInstance.system == system,
-            SystemEnvInstance.env_id == env_id))).scalar_one_or_none()
-    if inst is None:
-        inst = SystemEnvInstance(system=system, env_id=env_id,
-                                 group_id=uuid.uuid4().hex)
-        db.add(inst)
-        group_rows = [inst]
-    else:
-        group_rows = (await db.execute(
-            select(SystemEnvInstance).where(
-                SystemEnvInstance.system == system,
-                SystemEnvInstance.group_id == inst.group_id))).scalars().all()
-    for row in group_rows:
-        if body.login_url is not None:
-            row.login_url = body.login_url
-        if body.line is not None:
-            row.line = body.line
-        if body.note is not None:
-            row.note = body.note
+    inst = await _sync_instance_fields(
+        db, system, env_id,
+        login_url=_checked_login_url(body.login_url),
+        line=body.line, note=body.note)
     await db.commit()
     await db.refresh(inst)
     from ..services import audit as audit_svc
@@ -459,6 +696,144 @@ async def put_instance(
         resource_id=f"{system}/{env_id}",
         detail={"fn": "put", "loginUrl": inst.login_url, "line": inst.line})
     return await _instance_out(db, inst)
+
+
+@router.put("/{service}/instances", response_model=ServiceInstanceOut)
+async def put_service_instance(
+    service: str, body: ServiceInstancePut,
+    user: MemberUser, db: DbSession,
+) -> ServiceInstanceOut:
+    """创建/编辑「服务×环境」实例(ops.write,单事务)。
+
+    * envId / envTag 二选一;自由标签不存在时自动登记为环境定义;
+    * baseUrl → deployments(API 地址);
+    * loginUrl/line/note → system_env_instances(登录口按系统×环境共享);
+    * identity → 可选同时登记一条调用身份(别名全局唯一;只建声明,
+      不建账户 —— 凭证走 ``POST /auths`` / 项目凭证端点)。
+
+    新建实例至少要有 baseUrl 或 identity(否则没有可组合的实例事实)。
+    任一写入失败整单回滚。
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from ..services.service_aliases import (
+        UnknownBaseService, create_alias_in_transaction)
+
+    svc = (await db.execute(select(Service).where(
+        Service.name == service))).scalar_one_or_none()
+    if svc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, {
+            "code": "service_not_found",
+            "message": f"服务不在主档:{service} —— 请先在服务注册页登记"})
+
+    if body.env_id is not None:
+        env = await db.get(Environment, body.env_id)
+        if env is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, {
+                "code": "environment_not_found",
+                "message": f"环境不存在:{body.env_id}"})
+    else:
+        env = await _find_or_create_env_by_tag(
+            db, body.env_tag or "", user)
+    env_id = int(env.id)
+
+    existing_dep = (await db.execute(
+        select(Deployment.id).where(
+            Deployment.base_service == service,
+            Deployment.env_id == env_id).limit(1))).scalar()
+    existing_ident = (await db.execute(
+        select(ServiceIdentity.id).where(
+            ServiceIdentity.base_service == service,
+            ServiceIdentity.env_id == env_id).limit(1))).scalar()
+    if (body.base_url is None and body.identity is None
+            and existing_dep is None and existing_ident is None):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, {
+            "code": "service_instance_empty",
+            "message": "新建实例至少需要 API 地址或一条调用身份"})
+
+    login_url = _checked_login_url(body.login_url)
+
+    if body.base_url is not None:
+        url = body.base_url.strip()
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, {
+                    "code": "deployment_url_invalid",
+                    "message": "API 地址必须以 http:// 或 https:// 开头"})
+        dep = (await db.execute(select(Deployment).where(
+            Deployment.base_service == service,
+            Deployment.env_id == env_id))).scalar_one_or_none()
+        if dep is None:
+            db.add(Deployment(base_service=service, env_id=env_id,
+                              base_url=url))
+        else:
+            dep.base_url = url
+
+    if any(v is not None
+           for v in (login_url, body.line, body.note)):
+        if not svc.system:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, {
+                    "code": "service_system_missing",
+                    "message": f"服务 {service} 未设置 system,"
+                               "无法登记登录口/版本线"})
+        await _sync_instance_fields(
+            db, svc.system, env_id,
+            login_url=login_url, line=body.line, note=body.note)
+
+    if body.identity is not None:
+        ident = body.identity
+        taken = (await db.execute(
+            select(ServiceIdentity.id).where(
+                ServiceIdentity.alias_name == ident.alias_name).limit(1)
+        )).scalar()
+        if taken is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, {
+                "code": "service_instance_identity_taken",
+                "message": f"调用身份名已登记:{ident.alias_name}"})
+        try:
+            await create_alias_in_transaction(
+                db, alias_name=ident.alias_name, kind=svc.kind,
+                base_service=service, env_id=env_id,
+                ref_mode=ident.ref_mode, ref_username=ident.ref_username,
+                display=ident.display)
+        except UnknownBaseService as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, {
+                "code": "unknown_base_service", "message": str(e)}) from e
+        except ValueError as e:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                str(e)) from e
+
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        # 按约束名分派(见 _instance_integrity_conflict):deployment/
+        # 系统实例行竞态不再误报成身份撞名
+        code, message = _instance_integrity_conflict(e)
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            {"code": code, "message": message}) from None
+
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id, actor_name=user.display_name or user.username,
+        action="service_registry.write", resource_type="service_instance",
+        resource_id=f"{service}/{env_id}",
+        detail={"fn": "put", "baseUrl": body.base_url,
+                "loginUrl": login_url,
+                "identity": (body.identity.alias_name
+                             if body.identity is not None else None)})
+
+    overview = await _load_instance_overview(db, service_name=service)
+    for svc_out in overview:
+        for inst in svc_out.instances:
+            if inst.env_id == env_id:
+                return inst
+    raise HTTPException(  # 理论不可达:写入后组合视图缺失
+        status.HTTP_404_NOT_FOUND,
+        f"instance not found after write: {service}/{env_id}")
 
 
 @router.put("/instances/{system}/{env_id}/tags", response_model=InstanceOut)

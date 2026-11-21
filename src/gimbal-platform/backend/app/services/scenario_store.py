@@ -110,11 +110,11 @@ async def enforce_meta_plate(definition: dict,
 def _integrity_conflict_code(e: IntegrityError) -> str:
     """IntegrityError → 冲突码(并发冲突码精确化,评审 P2 2026-11-20)。
 
-    手配落池(§3.3)与场景行同事务后,create/update 提交点的完整性
-    冲突不再只有场景 PK 一个来源 —— 条目名唯一(service_identities)、
-    账户四元组/默认位唯一(auth_accounts)按约束名分派回 auth_draft
-    家族码(路由侧既有 409 映射,「同名直接引用」语义一致),其余保守
-    回落 scenario_id_exists(旧行为;FK 竞态等罕见面宁 409 不 500)。
+    调用身份草稿与场景行同事务后,create/update 提交点的完整性冲突
+    不再只有场景 PK 一个来源 —— 条目名唯一(service_identities)按
+    约束名分派回 auth_draft 家族码(路由侧既有 409 映射,「同名直接
+    引用」语义一致),其余保守回落 scenario_id_exists(旧行为;FK
+    竞态等罕见面宁 409 不 500)。
     """
     orig = getattr(e, "orig", None)
     name = str(getattr(orig, "constraint_name", "")
@@ -122,15 +122,13 @@ def _integrity_conflict_code(e: IntegrityError) -> str:
                           "constraint_name", "") or "")
     if "service_identities" in name or "alias_name" in name:
         return "auth_draft_alias_taken"
-    if "uq_account" in name or "ck_account" in name or "auth_accounts" in name:
-        return "auth_draft_account_exists"
     return "scenario_id_exists"
 
 
 def _integrity_message(code: str, scenario_id: str) -> str:
     if code == "scenario_id_exists":
         return f"scenario_id_exists: {scenario_id}"
-    return (f"{code}: 并发冲突(他处刚登记同名条目/账户)—— "
+    return (f"{code}: 并发冲突(他处刚登记同名条目)—— "
             "同名即直接引用,或改条目名后重试")
 
 
@@ -171,16 +169,17 @@ async def create_in_transaction(
             "(definition.config.users)——引用请改为身份条目名"
             "(${auth.*} 模板 / call.user),手配凭证请走认证管理或"
             "配置页落池后引用")
-    # 凭证治理 §3.3 手配(阶段 2,拍板方案 A):随保存**同事务**落池 +
-    # 建 username-ref 条目;校验失败在场景行 add 之前整单 ValueError,
-    # 调用方映射后回滚 —— 池无孤儿行(行为规则④)。owner_id 缺省
-    # (系统管道)不收手配;属主闸在 update 路径(user_id vs row.owner)。
+    # 调用身份草稿:随保存**同事务**建 username-ref 条目(不建账户、
+    # 不碰密码 —— 凭证走 POST /auths)。校验失败在场景行 add 之前整单
+    # ValueError,调用方映射后回滚。owner_id 缺省(系统管道)不收草稿;
+    # 属主闸在 update 路径(user_id vs row.owner)。
     if draft.auth_drafts:
         if owner_id is None:
             raise ValueError(
-                "auth_draft_owner_required: 手配凭证须保存者即场景属主")
+                "auth_draft_owner_required: 调用身份草稿须保存者即场景属主")
         from .auth_drafts import materialize
-        await materialize(db, draft.auth_drafts, owner_id=owner_id)
+        await materialize(db, draft.auth_drafts, owner_id=owner_id,
+                          project_id=project_id)
     # 入站参数契约写时校验(设计 2026-11-13 §2.1):槽位 ⊆ vars 标量键
     run_params.validate_param_slots(
         draft.definition,
@@ -321,16 +320,17 @@ async def update(
             "(definition.config.users)——引用请改为身份条目名"
             "(${auth.*} 模板 / call.user),手配凭证请走认证管理或"
             "配置页落池后引用")
-    # 凭证治理 §3.3 手配(阶段 2):§3.8 拍板 —— 维护者/admin 改他人
-    # 场景只能手填名字,不带手配(属主单判与 _require_owner 表 B 同源,
-    # 私有区写权本就归属主;公共/项目区维护者可写但不代属主落池)。
+    # 调用身份草稿:§3.8 拍板 —— 维护者/admin 改他人场景只能手填名字,
+    # 不带草稿(属主单判与 _require_owner 表 B 同源,私有区写权本就归
+    # 属主;公共/项目区维护者可写但不代属主登记全局条目)。
     if draft.auth_drafts:
         if user_id is None or user_id != row.owner_id:
             raise ValueError(
-                "auth_draft_owner_required: 手配凭证仅场景属主可随保存"
+                "auth_draft_owner_required: 调用身份草稿仅场景属主可随保存"
                 "创建(维护者改他人场景请手填引用名)")
         from .auth_drafts import materialize
-        await materialize(db, draft.auth_drafts, owner_id=user_id)
+        await materialize(db, draft.auth_drafts, owner_id=user_id,
+                          project_id=row.project_id)
     # 入站参数契约缺键保留(设计 2026-11-13 挂账:前端契约编辑面本期
     # 不接线):**逐键**判定 —— 请求未携带该键而存量行有值则保留存量
     # (防前端整包保存/适配操作把 API 侧维护的契约抹掉);显式携带

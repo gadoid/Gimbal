@@ -163,12 +163,6 @@ export interface Config {
   services?: {
     [k: string]: string;
   };
-  /**
-   * 服务范围收敛面(三级收敛:目录定服务 → 配置定实例面 → 步骤定凭证):
-   * 本场景预选的服务/身份面条目键(纯引用,不含地址/环境/实例);
-   * 步骤下拉的域 = service_scope ∪ 步骤引用键(自动收敛)
-   */
-  service_scope?: string[];
   setup?: Setup[];
   teardown?: Teardown[];
   timePolicy?: (TimeoutPolicy | RecordPolicy) | null;

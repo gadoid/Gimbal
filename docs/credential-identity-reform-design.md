@@ -150,31 +150,38 @@ config.users + authRefs 对照本人池(P2)。**场景快照已经只服务属�
 - 跨服务通用凭证(统一认证中心):现状每行单 system —— 同密多行
   即可表达,**不引入「不限」空值语义**(2026-11-20 拍板:多行同密)。
 
-### 3.3 UsersCard 双入口(表单字段按现模型修正)
+### 3.3 UsersCard = 实例 → 调用身份 → 凭证映射(2026-11-21 架构一致性轮重构)
 
-- **检索**:按条目/系统检索池(scope 过滤),选中即引用,场景只存名。
-  检索源 = 多源带徽标,**双源(我的 + 项目池)已拍板进本期**
-  (2026-11-20;项目池已建成,只缺检索面,§9);
-- **选用已有账户(2026-11-21 补)**:检索面「未设条目引用」的账户
-  点「选用」→ 填条目名(建议 `<system>-<username>` 可改)→ 条目草稿
-  随场景保存同事务只建 username-ref 条目(``AuthDraftIn.password``
-  缺省 = 引用已有账户,不新建账户、不碰密码;四元组未命中 → 422
-  ``auth_draft_account_not_found``)。填平「账户已在池但无条目」的
-  死胡同(截图为证:原检索面只有「去服务注册」一跳);
-- **手配**:填 (system, env, username, password, account_fields…)
-  ——**无 url**(登录口属环境实例)、无 token_type/expires_in(引擎
-  侧按签名器/会话处理);保存即新凭证入本人池(Fernet),场景存名;
-- 同名冲突不静默覆盖(§3.4);手配进池后是普通池凭证,任何场景可检索;
-- `config.users` 不落明文快照,不发明第三种存储形态。
+- **左栏 = 服务范围里的实例及其调用身份**:实例来自
+  ``GET /services/instance-overview``(服务×环境:API 地址 + 登录口
+  + 身份);身份 = 注册表条目 + 待保存草稿,显示当前映射账户/状态。
+- **右栏 = 选中身份所属 system 的可见凭证池**(本人池 + 项目池;
+  来源徽标/搜索/200 截断提示);system 由选中实例派生,不再从
+  ``config.services`` 推断。
+- **绑定 = 身份条目的 username 引用**:
+  * Admin:确认后 ``PATCH /service-aliases/{alias}``
+    (``refMode=username`` + ``refUsername``;全局共享声明,改绑影响
+    所有引用场景);
+  * 非 Admin:不能改全局条目 → 追加 ``authDrafts``
+    (``{name, baseService, envId, username}``),随场景保存同事务
+    建一条 username-ref 条目。
+- **新建凭证**:``POST /auths`` 即时写入本人池(system/env 由选中
+  实例派生,表单只留 username/password,accountFields 收进高级);
+  凭证是独立资产,不再随场景保存同事务落池。
+- **新建身份**:Admin 即时 ``POST /service-aliases``(可 default /
+  username,含 display);非 Admin 只能保存期草稿(username-ref)。
+- **同名冲突不静默覆盖**(§3.4);``config.users`` 不落明文快照。
 
-### 3.4 行为规则(维持 v1 四条;2026-11-20 拍板照默认定档)
+### 3.4 行为规则(2026-11-21 修订第 4 条)
 
 1. 同名冲突:提示「直接引用 / 去认证管理修改」,不覆盖;
 2. 编辑已引用行 = 改池本体,显形爆炸半径「影响另外 N 处引用」
    (auth_references 计数现成);
 3. 删除行 = 只移除引用,不删池凭证;凭证删除仍走认证管理拦截;
-4. 落池随场景保存同事务,保存结果列出本次新建凭证
-   (连带触发 revive_paused_instances,见 §4.4)。
+4. **凭证独立写池**(``POST /auths``,即时);**身份草稿随场景保存
+   同事务**(仅 username-ref,不建账户、不碰密码;保存结果列出本次
+   新建身份并触发 revive_paused_instances)。
+
 
 ### 3.5 保存闸:场景侧 config.users 收口(v2 新增,补 v1 漏项)
 

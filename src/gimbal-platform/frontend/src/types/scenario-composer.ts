@@ -33,25 +33,20 @@ export interface Orchestration {
 }
 
 // ─── 平台草稿容器 ──────────────────────────────────────────────────
-/** 手配草稿(凭证治理 §3.3 / 阶段 2 落地):随场景保存**同事务**落本人池
- *  账户(Fernet)+ username-ref 身份条目;字段对齐后端 AuthDraftIn。
- *  保存期通道 —— 不进存储容器(后端 exclude=True;name 即落池后的
- *  条目名,场景里以 ``${auth.<name>}`` 引用)。 */
+/** 调用身份草稿(保存期通道;架构一致性轮 2026-11-21 收窄):
+ *  只建 username-ref 身份条目,不创建账户、不碰密码 —— 凭证由
+ *  `POST /auths` 即时写入池;Admin 走服务注册,非 Admin 随场景保存
+ *  同事务建条目。`baseService` = 用户选中的服务实例锚(不再是 system)。 */
 export interface AuthDraftView {
   /** 条目名(= 场景引用名;全局唯一,重名 409 auth_draft_alias_taken) */
   name: string
-  /** plate 系统名(须命中主档既有服务,未知系统 422) */
-  system: string
-  /** 环境标签 id(实体键第四位) */
+  /** 服务锚(须已在主档登记;未知服务 422 auth_draft_service_unknown) */
+  baseService: string
+  /** 环境标签 id(身份条目的执行标签) */
   envId: number
   username: string
-  /** 明文密码(≥6 位;仅保存链传输,不落场景 payload)。**缺省 =
-   *  引用本人池已有账户(只建 username-ref 条目,不新建账户、不碰密码)**
-   *  —— 检索面「选用」通道(2026-11-21);给定 = 手配新凭证。 */
-  password?: string
-  /** 账号级自定义字段(${slot.<name>.<field>} 消费;≤32 键;
-   *  后端 dict[str, str],表单只产字符串值) */
-  accountFields?: Record<string, string>
+  /** 展示名/角色(可选) */
+  display?: string
 }
 
 export interface ScenarioDraft {
@@ -63,7 +58,7 @@ export interface ScenarioDraft {
   assertion_registry?: AssertionRegistry
   /** M4/Q18:编辑器状态(定义之外)—— fieldStates 按步骤位置索引 */
   ui?: { fieldStates?: Record<string, Record<string, FieldState>> }
-  /** 手配凭证(§3.3):保存期通道,同事务落池;见 AuthDraftView */
+  /** 调用身份草稿(保存期通道,仅 username-ref;见 AuthDraftView) */
   authDrafts?: AuthDraftView[]
 }
 

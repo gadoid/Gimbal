@@ -127,22 +127,29 @@ async def create_alias_in_transaction(
     """
     if env_id is None:
         env_id = await _default_env_id(db)
-    if kind == "external":
-        # external 不派生 —— base_service 必须是主档登记的第三方服务
-        # (重构:校验源从 plate 目录切主档,external 不受可达性影响)
-        if not base_service:
-            raise ValueError(
-                "base_service_required: kind=external 须显式选择 base_service"
-                "(主档登记的第三方服务名;不再派生 alias_name)")
+    if base_service:
+        # 显式服务锚(架构一致性轮):以服务主档为唯一权威 —— 同系统
+        # 多服务时由用户选中的实例决定 base,不再靠别名前缀猜。
+        # external 仍要求 base 指向主档第三方服务;plate/integration
+        # 只要求主档已登记(目录派生是「无 base」时的兜底)。
         svc = (await db.execute(
             select(Service).where(Service.name == base_service)
         )).scalar_one_or_none()
-        if svc is None or svc.kind not in ("external", "integration"):
+        if svc is None:
+            raise UnknownBaseService(
+                f"unknown_base_service: {base_service!r} 不在服务主档")
+        if kind == "external" and svc.kind not in ("external", "integration"):
             raise UnknownBaseService(
                 f"unknown_base_service: {base_service!r} 不在服务主档的"
                 "第三方服务内(external 条目须指向主档 external 服务;"
                 "sut 服务请建 plate 条目)")
-        base = base_service
+        base = svc.name
+    elif kind == "external":
+        # external 不派生 —— base_service 必须是主档登记的第三方服务
+        # (重构:校验源从 plate 目录切主档,external 不受可达性影响)
+        raise ValueError(
+            "base_service_required: kind=external 须显式选择 base_service"
+            "(主档登记的第三方服务名;不再派生 alias_name)")
     elif kind == "plate":
         # sut 派生候选 = plate 目录 sut 子集 ∪ 主档 plate 行
         # (重构:主档注册簿参与派生域)
@@ -490,9 +497,9 @@ async def service_reference_audit(
     diff 注册域 + 带 authored URL 的引用键。调用方(路由闸/导入链)
     按 ``REGISTRY_ONLY_SERVICES`` 三态分派;本函数只报事实。
 
-    * 引用键集 = ``referenced_services(steps)`` ∪ ``config.service_scope``
-      (范围收敛面:场景预选的服务/实例面键也是引用 —— 同样须注册;
-      scope 是纯键数组不参与 same_base 闸,envMixed 亦保持 steps 口径);
+    * 引用键集 = ``referenced_services(steps)`` ∪ range 服务名 ∪ range
+      实例派生出的身份条目名(范围收敛面:范围里的服务/实例也是引用 ——
+      同样须注册;scope 不参与 same_base 闸,envMixed 亦保持 steps 口径);
     * 注册域 = 主档 ``services.name`` ∪ 条目表 ``alias_name``
       (DB-only,不依赖 plate 目录可达性 —— 目录未同步主档的键按
       未注册报,指引服务注册页同步/登记);
@@ -500,13 +507,15 @@ async def service_reference_audit(
       对象;空白值视同缺,不算活跃声明)。
     """
     from .run_materialize import referenced_services
+    from .service_scope import (iter_scope_refs, scope_identity_keys,
+                                scope_service_names)
 
     defn = definition or {}
-    scope = (defn.get("config") or {}).get("service_scope")
-    scope = [k for k in (scope if isinstance(scope, list) else [])
-             if isinstance(k, str) and k.strip()]
-    keys = sorted(set(referenced_services(defn.get("steps") or []))
-                  | set(scope))
+    refs = iter_scope_refs(defn)
+    keys = sorted(
+        set(referenced_services(defn.get("steps") or []))
+        | set(scope_service_names(refs))
+        | set(await scope_identity_keys(db, refs)))
     if not keys:
         return [], []
     known: set[str] = set()

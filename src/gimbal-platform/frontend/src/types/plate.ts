@@ -301,11 +301,27 @@ type WithRequired<T, K extends keyof T> = T & Required<Pick<T, K>>
 
 /** 平台采集面保证 tags/system 在场 */
 export type MetaView = WithRequired<Meta, 'system' | 'tags'>
-/** 平台侧 Config:setup/teardown 平台不建模(opaque 透传);users 为平台表单形态;var_locks 平台旁挂 */
+
+/** 服务范围引用(平台扩展;plate schema 不含此键)。
+ *
+ *  * `envId` = 钉定该服务在该环境的实例;
+ *  * 服务级引用已退役(2026-11-21);`envId` 保持可选只为兼容旧存量
+ *    读取,前端加载收敛会丢弃无 `envId` 的 ref,保存闸也拒收。
+ *
+ *  实例下可用的调用身份由注册表 `(baseService, envId)` 派生,不落
+ *  范围 payload —— 范围是预选/凭证映射域,不是执行承诺。 */
+export interface ServiceScopeRef {
+  service: string
+  envId?: number
+}
+
+/** 平台侧 Config:setup/teardown 平台不建模(opaque 透传);users 为平台表单形态;
+ *  var_locks / service_scope 为平台旁挂(不进 M2 生成物)。 */
 export type ConfigView = Omit<WithRequired<Config,
   'services' | 'users' | 'timePolicy' | 'retry' | 'vars'>,
   'setup' | 'teardown' | 'users' | 'timePolicy'> & {
     setup: unknown[]; teardown: unknown[]; var_locks?: string[];
+    service_scope?: ServiceScopeRef[];
     users: Record<string, UserAuthView>;
     timePolicy: TimeoutPolicy | RecordPolicy;
   }

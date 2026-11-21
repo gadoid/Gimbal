@@ -17,7 +17,7 @@ import FieldForm from '@/components/composer/FieldForm.vue'
 import {
   getFullEndpoint, resolveResponsePaths, validateEndpointFieldStates,
 } from '@/api/scenario-composer'
-import type { FieldState, StepView } from '@/types/plate'
+import type { FieldState, StepView, ServiceScopeRef } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { _resetEndpointFullCacheForTest, FULL_TTL_MS } from '@/composables/useEndpointFull'
@@ -361,13 +361,13 @@ let activePinia: ReturnType<typeof createPinia>
 type CanvasMountOpts = {
   steps: StepView[]
   services?: Record<string, string>
-  /** 三级收敛:存储范围(config.service_scope)—— 下拉收敛域输入 */
-  serviceScope?: string[]
+  /** 三级收敛:存储范围(config.service_scope)—— 实例引用 */
+  serviceScope?: ServiceScopeRef[]
   /** W11 三态:M1 plateRefOf + 无锚服务分类 */
   plateRefOf?: (system: string) => string
   serviceKinds?: Record<string, 'plate' | 'external' | 'unknown'>
-  /** 2c:手配草稿名进悬空判定已知集(将登记放行) */
-  authDrafts?: Array<{ name: string; system: string; envId: number; username: string; password: string }>
+  /** 2c:待保存身份草稿名进悬空判定已知集(将登记放行) */
+  authDrafts?: Array<{ name: string; baseService: string; envId: number; username: string }>
 }
 
 /** M3 归一:历史种子把锚点写在 call.view_hints —— 就地上提为
@@ -778,7 +778,7 @@ describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25;2c 口径翻
         view_hints: { endpoint_id: 'ep-1' },
       },
     })
-    const { w: w0 } = mountCanvas({ steps: [s0], authDrafts: [{ name: 'draft-pending-1', system: 'fin', envId: 1, username: 'u', password: 'x' }] })
+    const { w: w0 } = mountCanvas({ steps: [s0], authDrafts: [{ name: 'draft-pending-1', baseService: 'fin', envId: 1, username: 'u' }] })
     await flushPromises()
     const chips0 = w0.findAll('.ref-chip')
     expect(chips0.length).toBe(1)
@@ -786,7 +786,7 @@ describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25;2c 口径翻
     expect(chips0[0].classes()).toContain('dangling')
     w0.unmount()
     // 手配待保存名(步骤 2):不悬空(将登记,落池前与登记闸 extra_known 同口径)
-    const { w: w1 } = mountCanvas({ steps: [s1], authDrafts: [{ name: 'draft-pending-1', system: 'fin', envId: 1, username: 'u', password: 'x' }] }, 0)
+    const { w: w1 } = mountCanvas({ steps: [s1], authDrafts: [{ name: 'draft-pending-1', baseService: 'fin', envId: 1, username: 'u' }] }, 0)
     await flushPromises()
     const chips1 = w1.findAll('.ref-chip')
     expect(chips1.length).toBe(1)
@@ -928,7 +928,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     w.unmount()
   })
 
-  it('内联创建已改深链(架构终态):__create__ → 指引 + 跳服务注册,不在场景内写声明/URL(update:services 零发)', async () => {
+  it('内联创建改走配置页(架构一致性):__create__ → emit manageScope,不在场景内写声明/URL', async () => {
     const steps = [stepOf('fin-service')]
     const { w } = mountCanvas({
       steps,
@@ -937,8 +937,8 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
     await w.find('.svc-ref-select').setValue('__create__')
-    await w.find('[data-testid="svc-register-link"]').trigger('click')
-    // 终态:身份面登记归服务注册页 —— 场景不写地址不写声明
+    expect(canvas.emitted('manageScope')).toBeTruthy()
+    // 身份面/实例创建归配置页 —— 场景不写地址不写声明
     expect(canvas.emitted('update:services')).toBeUndefined()
     expect(steps[0].call?.service).toBe('fin-service')
     w.unmount()
@@ -959,7 +959,11 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     const { w } = mountCanvas({
       steps: [stepOf('fin-service')],
       services: { 'fin-service': 'https://a', 'order-svc-1': 'https://c' },
-      serviceScope: ['fin-service', 'fin-service-uat', 'order-svc-uat'],
+      serviceScope: [
+        { service: 'fin-service' },
+        { service: 'fin-service', envId: 1 },
+        { service: 'order-svc', envId: 1 },
+      ],
     })
     await flushPromises()
     const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
@@ -996,7 +1000,10 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
             method: 'GET', path: '/x', headers: {},
             view_hints: { endpoint_id: 'ep-1' } },
         })],
-        serviceScope: ['fin-service', 'fin-service-uat'],
+        serviceScope: [
+          { service: 'fin-service' },
+          { service: 'fin-service', envId: 1 },
+        ],
       })
       await flushPromises()
       const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
@@ -1013,7 +1020,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     const steps0 = [stepOf('fin-service')]
     const { w } = mountCanvas({
       steps: steps0,
-      serviceScope: ['fin-service'],
+      serviceScope: [{ service: 'fin-service' }],
     })
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
@@ -1043,7 +1050,7 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
       },
     })
     const { w } = mountCanvas({ steps: [s0], services: { 'fin-service': 'https://a' },
-      serviceScope: ['fin-service-uat'] })
+      serviceScope: [{ service: 'fin-service', envId: 1 }] })
     await flushPromises()
     await w.find('.svc-ref-select').setValue('fin-service-uat')
     expect(s0.call?.service).toBe('fin-service-uat')
@@ -1074,7 +1081,10 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     const { w } = mountCanvas({
       steps: [s0],
       services: { 'fin-service': 'https://a' },
-      serviceScope: ['fin-service', 'fin-service-bare', 'fin-service-uat'],
+      serviceScope: [
+        { service: 'fin-service' },
+        { service: 'fin-service', envId: 1 },
+      ],
     })
     await flushPromises()
     // 任一已登记条目都注入(条目名即 ${auth.X} 域;条目必 ref 账户)

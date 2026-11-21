@@ -239,6 +239,43 @@ def slow_sut():
         srv.server_close()
 
 
+# ── 取消形态的闸门被测系统(窗口确定性钉固)────────────────────────
+
+def _make_gate_sut() -> tuple[str, threading.Event, ThreadingHTTPServer]:
+    """一枚独立闸门被测系统:首行 SUT 调用阻塞到闸门放行才应答。
+
+    取消窗口由测试**显式构造**而非靠时长余量对抗负载延迟:事件屏障
+    (首行已有**引擎事件**入库 ⟹ 首行已准入在飞,见测试 docstring)
+    命中 + 取消位落定后才 ``set()`` 放行 —— 首行飞行期必然覆盖取消
+    落位,行边界消费取消(余行准入见位记 canceled)成为结构性保证。
+    90s 上限 > 屏障 80s 死线(闸门放行点恒晚于屏障命中点,取消必然
+    落在闸门内);超限照常应答(兜底,后续断言诚实报错)。
+
+    每链一枚独立闸门:双 worker 下两链 fanout 并行,共享二元闸门会
+    互相泄漏(彼链 set 放走本链被持调用 / 本链 clear 误持彼链调用)。
+    """
+    gate = threading.Event()
+
+    class _GateSut(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self):  # noqa: N802
+            gate.wait(90.0)
+            out = json.dumps({"code": "0"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+        def log_message(self, *a):  # noqa: D102
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _GateSut)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{srv.server_address[1]}", gate, srv
+
+
 async def _summaries(ex_l: Execution, ex_s: Execution) -> tuple[dict, dict]:
     return (
         {"status": ex_l.status, "total": ex_l.total_runs,
@@ -418,9 +455,26 @@ async def test_reconcile_step_timeout_shape(client, monkeypatch, slow_sut):
 
 @pytest.mark.skipif(not _engine_available(),
                     reason="真 gimbal 引擎不可用(GIMBAL_BIN / importable gimbal)")
-async def test_reconcile_cancel_shape(client, monkeypatch, slow_sut):
+async def test_reconcile_cancel_shape(client, monkeypatch):
     """取消形态:3 行串行,首行在飞时取消 → 在飞行自然跑完、余行 canceled,
-    执行 canceled —— 双链语义一致(C11 协作取消:行边界消费)。"""
+    执行 canceled —— 双链语义一致(C11 协作取消:行边界消费)。
+
+    满载 xdist 偶发修复(2026-11-21,窗口确定性钉固),三步定位:
+    ① EXEC_WORKERS 缺省 1 —— 第二链任务等第一链整个 fanout 出清才被
+    认领,满载下单链拉到分钟级,任何固定屏障预算都被跨链串行化吃光
+    (探针实测:单进程 server 链 1.9s 事件可见,xdist 下 50s 干等);
+    ② 屏障若数「任意事件行」,server 链在 fanout 起点拉起引擎服务,
+    其 boot 日志行(event_type NULL)先于首行准入入库 —— 命中即取消
+    会落空成 passed==0;③ 取消窗口靠时长余量对抗负载延迟,本质是
+    概率游戏。修复(结构性):
+    * ``start_workers(2)`` 双 worker —— 两链并行,屏障只欠自己链;
+    * 屏障只认**引擎事件**(event_type 非空)—— 引擎事件只随 case
+      run 入流(POST /runs 在行准入之后),证明首行已准入在飞;
+    * 每链一枚独立闸门被测系统(闸门 90s > 屏障 80s 死线)—— 命中
+      即取消、取消落定才放行,余行准入见位记 canceled 恒成立;
+    * 步骤显式 timeout=120s > 闸门上限 > 引擎默认 30s,不触发超时
+      形态;屏障未命中 assert 拒绝盲发取消(启动前落位 = passed==0
+      假阴性,宁可显式报屏障超时)。"""
     from app.services import plate_client as pc
 
     async def _fake_convert(scenario: dict) -> dict:
@@ -428,29 +482,66 @@ async def test_reconcile_cancel_shape(client, monkeypatch, slow_sut):
 
     monkeypatch.setattr(pc, "convert", _fake_convert)
     monkeypatch.setattr(settings, "GIMBAL_BIN", "")
+    execution_queue.start_workers(2)
+    steps = [{"kind": "step",
+        "call": {"kind": "call", "protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/ping", "timeout": 120},
+        "request": {"kind": "request", "body": {}},
+        "strategy": [],
+    }]
 
-    async def _dispatch_and_cancel(username: str, chain: str) -> int:
+    gates: list[tuple[threading.Event, ThreadingHTTPServer]] = []
+
+    def _gate() -> tuple[str, threading.Event]:
+        url, gate, srv = _make_gate_sut()
+        gates.append((gate, srv))
+        gate.clear()
+        return url, gate
+
+    async def _dispatch_and_cancel(username: str, chain: str,
+                                   sut_url: str, gate: threading.Event) -> int:
         eid = await _dispatch_chain(
             client, username, dataset_rows=[{"a": "1"}, {"a": "2"}, {"a": "3"}],
-            parallel=1, chain=chain, sut_url=slow_sut)
-        # 等首行真实开跑(首批事件入库)再取消 —— 命中"在飞行"窗口
-        for _ in range(300):
+            parallel=1, chain=chain, sut_url=sut_url, steps=steps)
+        # 事件屏障:首行已有**引擎事件**入库 ⟹ 首行已准入在飞(引擎
+        # 事件只随 case run 入流;boot 日志行 event_type NULL,server
+        # 链在 fanout 起点就入库,先于首行准入 —— 不作数,见 docstring)。
+        # 屏障未命中不盲发取消 —— 启动前落位会走「取消先于启动」口径
+        # (passed==0 假阴性),宁可显式报屏障超时。80s 死线:闸门(90s,
+        # 自调用抵达起算)放行恒晚于屏障命中,时序不变量与死线解耦。
+        deadline = asyncio.get_event_loop().time() + 80.0
+        n = 0
+        while asyncio.get_event_loop().time() < deadline:
             async with db_module.SessionLocal() as s:
                 n = (await s.execute(
-                    sa.select(sa.func.count())
-                    .where(ExecutionEvent.execution_id == eid))).scalar()
+                    sa.select(sa.func.count()).where(
+                        ExecutionEvent.execution_id == eid,
+                        ExecutionEvent.event_type.is_not(None)))).scalar()
             if n:
                 break
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.1)
+        assert n, "事件屏障超时(80s):首行迟迟未产生引擎事件,取消窗口无法钉固"
         async with db_module.SessionLocal() as s:
             await execution_queue.request_cancel(s, eid)
             await s.commit()
+        # 取消已落定(hint 镜像在 request_cancel 内同步加入,行准入
+        # 直读进程内集合)→ 放行闸门:首行跑完,余行准入即见取消位
+        gate.set()
         return eid
 
-    eid_l = await _dispatch_and_cancel("p35m", "legacy")
-    eid_s = await _dispatch_and_cancel("p35n", "server")
-    ex_l, ex_s = await _wait_final(eid_l, timeout_s=120), \
-        await _wait_final(eid_s, timeout_s=120)
+    try:
+        url_l, gate_l = _gate()
+        eid_l = await _dispatch_and_cancel("p35m", "legacy", url_l, gate_l)
+        url_s, gate_s = _gate()
+        eid_s = await _dispatch_and_cancel("p35n", "server", url_s, gate_s)
+    finally:
+        for gate, srv in gates:      # 兜底放行 + 收服,不留悬挂连接
+            gate.set()
+            srv.shutdown()
+            srv.server_close()
+
+    ex_l, ex_s = await _wait_final(eid_l, timeout_s=240), \
+        await _wait_final(eid_s, timeout_s=240)
     assert ex_l.status == "canceled" and ex_s.status == "canceled"
     assert ex_l.passed == ex_s.passed == 1   # 在飞首行双链都自然跑完
 

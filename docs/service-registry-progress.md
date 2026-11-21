@@ -2046,6 +2046,93 @@ extra_bases 本就覆盖草稿名)。实测:API E2E 201 → 条目绑定已有�
 scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
 **FE 1542 passed / 1 skip** · vue-tsc 0 · eslint 0 · dist 重建。
 
+**服务范围/凭证卡架构一致性改造(2026-11-21,用户拍板「按架构一致性
+处理,不要临时方案」)**:把编排器压扁的「服务 + 身份条目」两层还原为
+**服务 → 实例(服务×环境)→ 调用身份 → 凭证**。
+
+- **数据**:`config.service_scope` 从 `string[]` 改为
+  `Array<{service, envId}>`(**只存实例引用;服务级引用退役**);
+  一次性脚本 `scripts/normalize_service_scope.py` 已跑(丢弃服务级/
+  未知键,只保留可解析实例引用;`jira/jira-x` 合并到同一实例);
+  保存/导入闸严格拒收旧形态
+  (`invalid_service_scope` / `service_scope_env_not_found`)。
+- **实例 = 组合读模型(不新增表)**:新增
+  `GET /services/instance-overview`(服务→实例→身份,deployments +
+  system_env_instances + service_identities 组合)与
+  `PUT /services/{service}/instances`(Admin 单事务写地址/登录口/可选
+  身份,写入即出现在服务注册页;空实例 422、URL 非法 422、身份重名 409)。
+- **身份草稿收窄**:`AuthDraftIn` 改 `baseService`(不再 system),
+  只建 username-ref 身份、**不建账户/不碰密码**;凭证改由
+  `POST /auths` 即时入池;账户可见性 = 本人池 ∪ 场景项目池(env 只作
+  执行偏好,不作门槛),修掉「检索可见项目池凭证但保存 422」。
+- **前端**:服务范围卡 = 两层选择器(服务→实例;**实例按 groupId
+  聚合、环境作为 tag**,服务列表只显示服务名)+ Admin「创建实例」直接
+  表单(选服务 + 环境/URL/登录口/版本线/可选默认身份)+ 实例行
+  (服务+tags/URL/身份数/「×」移除);服务级引用入口退役(历史 ref 在
+  收敛期清掉);凭证卡 = **一行一个身份→凭证映射**的紧凑表
+  (实例+「+」再加同实例一行 / 身份下拉 / 凭证下拉 /「×」删行),
+  Admin 选中凭证即 PATCH、非 Admin 新建草稿;Canvas 步骤下拉按范围
+  实例派生身份键,`__create__` 切配置页。
+- **契约归位**:`service_scope` 从手写的生成物 `types/m2.ts` 移到
+  `ConfigView`(平台扩展),`gen_m2.py gen/check --targets ts` 双绿。
+- **验证**:后端 **2173 passed / 2 skipped**;前端 **1539 passed /
+  1 skip**;vue-tsc 0 · eslint 0;契约 gen+check 双绿;迁移脚本
+  dry-run/apply 实测。
+
+### 复审修复轮(2026-11-21 晚:P1 取消竞态 + P2 完整性误报 + 口径两则)
+
+- **test_reconcile_cancel_shape 满载偶发 → 窗口确定性钉固(P1)**:
+  全量 xdist 下取消位可见延迟会穿透首行飞行窗口 → 余行获准入自然
+  跑完,`passed==1` 抖成 2/3 或取消先于启动抖成 passed==0(此前
+  「全绿」是负载运气)。探针单进程对照 + 三次满载复跑锁出**三个
+  叠加根因**:① `EXEC_WORKERS` 缺省 1 —— 第二链任务等第一链整个
+  fanout 出清才被认领,满载下单链拉到分钟级,任何固定屏障预算都被
+  跨链串行化吃光(单进程 server 链 1.9s 事件可见,xdist 下 50s 干
+  等);② 屏障若数「任意事件行」,server 链在 fanout 起点拉起引擎
+  服务,boot 日志行(event_type NULL)先于首行准入入库 —— 命中即
+  取消落空成 passed==0;③ 取消窗口靠时长余量对抗负载延迟(12s 慢
+  SUT 实测仍穿透),本质是概率游戏。修复(结构性,不变量与死线
+  数值解耦):**`start_workers(2)` 双 worker**(两链并行,屏障只欠
+  自己链)+ **屏障只认引擎事件**(event_type 非空 —— 引擎事件只随
+  case run 入流,POST /runs 在行准入之后,证明首行已准入在飞)+
+  **每链一枚独立闸门被测系统**(首行 SUT 调用阻塞到测试放行;双
+  worker 下两链 fanout 并行,共享二元闸门会互相泄漏)。命中即取消、
+  取消落定(request_cancel 同步写进程内 hint,行准入直读)才放行
+  —— 余行准入见位记 canceled 恒成立。闸门 90s(自调用抵达起算)>
+  屏障 80s 死线;步骤显式 timeout=120s > 闸门上限 > 引擎默认 30s,
+  不触发超时形态;屏障未命中 assert 拒绝盲发取消。
+- **put_service_instance 提交点完整性冲突按约束名分派(P2)**:
+  commit 点 IntegrityError 一律映射 `service_instance_identity_taken`
+  —— deployment `(service, env)` 唯一/系统实例行唯一竞态会被误报成
+  「调用身份名已登记」(scenario_store `_integrity_conflict_code` 教训
+  同款复发)。新增 `_instance_integrity_conflict`:别名唯一约束 →
+  identity_taken,其余保守回落新码 `service_instance_conflict`
+  (409 不 500,消息带约束名便于诊断);单测钉四类约束名分派。
+- **loginUrl scheme 闸(口径对齐 baseUrl)**:登录口被引擎登录流程
+  直接当 URL 消费,此前任意串入库;两个写面(旧端点
+  `PUT /services/instances/{system}/{env}` 环境配置页 + 新端点
+  `PUT /services/{service}/instances`)非空必须 http(s) 开头,新码
+  `login_url_invalid` 422;空串 = 清除放行;写侧同 baseUrl 去空格。
+- **范围注释漂移修正**:「`{service, envId?}`」四处(scenarios 门闸
+  docstring / scenario_import / Config / Canvas)改回「envId 必填,
+  服务级引用已退役」,与 service_scope strict 口径一致。
+- **同病邻治:满载等待预算三处放宽 + counterDrift 出排(2026-11-22)**:
+  取消用例收口后的连续满载复跑暴露同款「等待耐心 < 满载调度延迟」
+  的邻例(各自偶发 1 次,均非本轮改动面):`test_run_plate_resilience`
+  `_wait_terminal` 5s→30s、`test_run_cross_matrix` `_await_final`
+  10s→30s、`test_run_bindings_injection` 三处 `wait_until` 缺省
+  5s→显式 30s —— 伪引擎用例正常 1-3s 收口,预算只放宽等待耐心,
+  断言不变;`test_adhoc_run` 双链对拍 `volatile_cfg` 补排
+  `counterDrift`(该键本就被注释钉为「终态对账标记,与派发无关」,
+  满载下单侧 finalize 早于计数落库会单侧出现)。其余 44 处
+  `wait_until`/终态等待点未动(未在满载复跑中现身);若后续再现身,
+  按「后台扇出落库等待 ≥30s」口径逐点放宽。
+- **验证**:定向(instance create 9 例 + 四文件 29 例 + adhoc 30 例)绿;
+  契约 gen+check 双绿(新码入快照);vue-tsc 0 · eslint 0;**满载 xdist
+  全量复跑 10 轮**:取消用例修复后连绿 9 轮(run2-10),邻例预算放宽
+  与 counterDrift 出排后 **run9/run10 全量连绿**(2175 passed /
+  2 skipped);dev 后端已重启(登录口闸 401 路由在位)。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |

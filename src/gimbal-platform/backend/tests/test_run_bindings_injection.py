@@ -114,7 +114,9 @@ async def test_binding_alias_switches_identity(client, plate_mock: PlateMock,
         serviceBindings={"fin-service": {"alias": "fin-service-maker"}},
     ))
     assert r.status_code == 201, r.text
-    await _wait(lambda: len(cases) >= 1)
+    # 30s 预算(2026-11-22):满载 xdist 下 fanout 落 case 慢于 5s
+    # 缺省 —— 等待耐心放宽,断言不变。
+    await _wait(lambda: len(cases) >= 1, timeout_s=30)
 
     users = cases[0]["config"].get("users") or {}
     assert "qa1" in users and "fin-service-maker" in users   # 扫描 ∪ 绑定换用
@@ -142,7 +144,9 @@ async def test_template_scan_without_binding_injects(client, plate_mock: PlateMo
 
     r = await client.post("/api/runs", headers=bob, json=_run_payload(dataSetIds=[]))
     assert r.status_code == 201, r.text
-    await _wait(lambda: len(cases) >= 1)
+    # 30s 预算(2026-11-22):满载 xdist 下 fanout 落 case 慢于 5s
+    # 缺省 —— 等待耐心放宽,断言不变。
+    await _wait(lambda: len(cases) >= 1, timeout_s=30)
     config_json = await _last_config_json()
     assert config_json["injectedAuths"] == ["qa1"]
     assert config_json["serviceBindings"] == {}
@@ -163,7 +167,9 @@ async def test_legacy_payload_fields_silently_ignored(client, plate_mock: PlateM
                     "mergePolicy": "override", "injectCredentials": False})
     r = await client.post("/api/runs", headers=bob, json=payload)
     assert r.status_code == 201, r.text
-    await _wait(lambda: len(cases) >= 1)
+    # 30s 预算(2026-11-22):满载 xdist 下 fanout 落 case 慢于 5s
+    # 缺省 —— 等待耐心放宽,断言不变。
+    await _wait(lambda: len(cases) >= 1, timeout_s=30)
     cfg = cases[0]["config"]
     assert (cfg.get("vars") or {}).get("order_no_prefix") is None   # prefix 失效
 

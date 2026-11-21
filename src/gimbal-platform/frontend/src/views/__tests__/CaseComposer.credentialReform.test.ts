@@ -33,6 +33,7 @@ vi.mock('@/api/executions', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
   listAll: vi.fn(() => Promise.resolve([])),
+  create: vi.fn(),
 }))
 vi.mock('@/api/constants', () => ({
   list: vi.fn(() => Promise.resolve([])),
@@ -44,6 +45,8 @@ vi.mock('@/api/services', () => ({
   listServices: vi.fn(() => Promise.resolve({
     services: [], unregistered: [], plateReachable: true,
   })),
+  listServiceInstanceOverview: vi.fn(() => Promise.resolve({ services: [] })),
+  putServiceInstance: vi.fn(),
 }))
 vi.mock('@/api/environments', () => ({
   listEnvironments: vi.fn(() => Promise.resolve([])),
@@ -51,6 +54,8 @@ vi.mock('@/api/environments', () => ({
 vi.mock('@/api/service-aliases', () => ({
   listAllAliases: vi.fn(() => Promise.resolve([])),
   listAliases: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
+  createAlias: vi.fn(),
+  patchAlias: vi.fn(),
 }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogSystemByService: vi.fn(() => Promise.resolve(new Map())),
@@ -72,7 +77,7 @@ function sampleScenario(): Scenario {
 }
 
 const DRAFT: AuthDraftView = {
-  name: 'qa9', system: 'fin', envId: 1, username: 'ua', password: 'pw12345',
+  name: 'qa9', baseService: 'fin-service', envId: 1, username: 'ua',
 }
 
 let router: Router
@@ -100,6 +105,9 @@ beforeEach(() => {
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({} as any)
   vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario())
   vi.spyOn(api, 'listStrategyKinds').mockResolvedValue([])
+  vi.spyOn(api, 'getServiceResolution').mockResolvedValue({
+    environment: null, envMixed: null, services: [],
+  } as any)
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 })
 afterEach(() => {
@@ -150,7 +158,7 @@ describe('CaseComposer — 手配草稿保存链(凭证治理 2c)', () => {
     expect((await api.updateScenario('sc-demo', {} as any)).baseWarnings).toEqual([])
   })
 
-  it('UsersCard 手配草稿 → 随自动保存 PUT 进 authDrafts;newAuths 回包清草稿 + 点名新建', async () => {
+  it('调用身份草稿 → 随自动保存 PUT 进 authDrafts;newAuths 回包清草稿 + 点名新建', async () => {
     const update = vi.fn().mockResolvedValue({
       scenario: { ...sampleScenario(), newAuths: ['qa9'] },
       identityWarnings: [],

@@ -41,9 +41,10 @@ _ALLOWLIST: dict[str, int] = {
 #  AuthSession→AuthAccount 系同域改名,个人凭证数据类不变)
     'routers/access_tokens.py:.where(AuthAccount.owner_id == holder)': 1,
     'routers/activity.py:.where(Execution.owner_id == user.id)': 1,
-    # 凭证治理阶段 2(2026-11-20):手配落池 services/auth_drafts ——
-    # 个人池终态同款(本人池行的存在/默认位查询,与 auth_sessions 同类)
-    'services/auth_drafts.py:AuthAccount.owner_id == owner_id,': 2,
+    # 凭证治理阶段 2(2026-11-20)/架构一致性轮(2026-11-21):身份草稿的
+    # 账户可见性 = 本人池 ∪ 场景项目池(pool_clause 单点;只决定「能否
+    # 引用该账户」,不是权限闸放宽 —— 执行仍按 credentialSource 解析)。
+    'services/auth_drafts.py:and_(AuthAccount.owner_id == owner_id,': 1,
     # 凭证治理阶段 2c(2026-11-20):双源检索的池谓词 —— pool_clause 单点
     # 收编(all 源 = or_ 个人池 ∪ 项目池;检索是独立口径,非权限闸放宽);
     # 旧 tt_counts 续行 .where(AuthAccount.owner_id == user.id) 同步换形删除

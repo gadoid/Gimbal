@@ -392,8 +392,8 @@ const dataSets = ref<DataSetSummary[]>([])
 // M4:字段状态增量(payload.ui.fieldStates,按步骤位置索引)——
 // field_states 已出 step,Canvas 唯一写入方经 v-model 同步到这里。
 const uiFieldStates = ref<Record<string, Record<string, FieldState>>>({})
-/** 手配凭证草稿(凭证治理 §3.3;2c 前端接线):配置页 UsersCard 维护,
- *  saveDraft 组进 ScenarioDraft.authDrafts —— 保存成功即落池并清空。 */
+/** 调用身份草稿(保存期通道):配置页 UsersCard 维护,
+ *  saveDraft 组进 ScenarioDraft.authDrafts —— 保存成功即登记并清空。 */
 const authDrafts = ref<AuthDraftView[]>([])
 
 /** M1(6.1):系统 → meta.plate 声明的修订 —— Canvas 按它读契约/投影。 */
@@ -568,7 +568,7 @@ const progressPct = computed(() => {
 // 但 dirty 置位;保存成功后据此不清 dirty,防抖再存最新草稿(编辑不被吞)。
 let suppressDirty = false
 let editsDuringSave = false
-// authDrafts 入脏链(2c):手配草稿增删 = 未保存改动 —— 触发自动保存与
+// authDrafts 入脏链:身份草稿增删 = 未保存改动 —— 触发自动保存与
 // 离开拦截,防「配了凭证没保存」静默丢失。
 watch([definition, orchestration, authDrafts], () => {
   if (suppressDirty) return
@@ -1148,11 +1148,10 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
     if (route.params.scenarioId === 'new') {
       router.replace(composerUrl(saved.meta.scenarioId, stepIdx.value + 1))
     }
-    // 手配落池(行为规则④):保存结果点名本次新建的凭证/条目 → toast +
-    // 清草稿 + bump 注册表版本(Canvas registeredAliases 随之刷新,新名
-    // 的引用悬空判定即刻恢复准确)
+    // 身份草稿落库:保存结果点名本次新建的身份 → toast + 清草稿 +
+    // bump 注册表版本(Canvas registeredAliases 随之刷新)
     if (saved.newAuths?.length) {
-      toast.success(`已新建凭证/条目:${saved.newAuths.join('、')}(已入本人池)`)
+      toast.success(`已新建调用身份:${saved.newAuths.join('、')}(已入服务注册)`)
       authDrafts.value = []
       store.bumpRegistryRev()
     }

@@ -654,8 +654,11 @@ class TestDispatchSplitEquivalence:
         assert a == b
         e1, e2 = await _execution(ex1), await _execution(ex2)
         # resolvedServices/builtinAuths 是路由层算出的 §7.1 追溯块,
-        # 直调 dispatch_target 不带 —— 对拍只比派发层自身的配方面
-        volatile_cfg = {"runId", "resolvedServices", "builtinAuths"}
+        # 直调 dispatch_target 不带 —— 对拍只比派发层自身的配方面。
+        # counterDrift 是终态对账标记(下方键集断言同款口径):满载下
+        # 单侧 finalize 早于计数落库会单侧出现,与派发路径无关。
+        volatile_cfg = {"runId", "resolvedServices", "builtinAuths",
+                        "counterDrift"}
         c1 = {k: v for k, v in e1.config_json.items() if k not in volatile_cfg}
         c2 = {k: v for k, v in e2.config_json.items() if k not in volatile_cfg}
         assert c1 == c2

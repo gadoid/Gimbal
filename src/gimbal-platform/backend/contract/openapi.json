@@ -1013,15 +1013,20 @@
         "type": "object"
       },
       "AuthDraftIn": {
-        "description": "凭证治理 §3.3 手配(阶段 2;拍板 2026-11-20 方案 A):随场景保存\n**同事务**落本人池 + 建 username-ref 条目(引用名 = 场景引用的条目名,\n${auth.<name>.*} / call.user 直接可用)。同名条目冲突走「直接引用 /\n去认证管理改」(行为规则①),不静默覆盖;密码过 ``require_maskable_\npassword`` 掩码闸(与 /auths 同单源)。\n\n**引用已有账户(2026-11-21,检索面「选用」通道)**:``password``\n缺省(None)= 只建 username-ref 条目,账户取自本人池既有\n(owner × system × env × username)四元组 —— 不新建账户、不碰密码;\n四元组未命中 → 422 ``auth_draft_account_not_found``。",
+        "description": "调用身份草稿(保存期通道;架构一致性轮 2026-11-21 收窄)。\n\n只建 **username-ref 身份条目**,不创建账户、不碰密码 —— 凭证是\n独立资产,由 ``POST /auths`` 即时写入本人池/项目池;身份是全局\n声明,Admin 走 ``POST /service-aliases``,非 Admin 随场景保存\n同事务建 username-ref 条目(本通道)。\n\n``baseService`` 是服务实例的服务锚(不再是 ``system``)——\n同系统多服务时由用户选中的实例决定,不再取字典序第一个服务。\n账户校验覆盖本人池 + 场景项目池(``owner_id`` / ``project_id``),\nenv 只作执行偏好,不作账户门槛(§8.3)。",
         "properties": {
-          "accountFields": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "maxProperties": 32,
-            "title": "Accountfields",
-            "type": "object"
+          "baseService": {
+            "description": "服务实例的服务锚(须已在主档登记)",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Baseservice",
+            "type": "string"
+          },
+          "display": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Display",
+            "type": "string"
           },
           "envId": {
             "minimum": 1.0,
@@ -1034,26 +1039,6 @@
             "title": "Name",
             "type": "string"
           },
-          "password": {
-            "anyOf": [
-              {
-                "maxLength": 256,
-                "minLength": 6,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Password"
-          },
-          "system": {
-            "description": "系统名(须已有主档服务)",
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "System",
-            "type": "string"
-          },
           "username": {
             "maxLength": 128,
             "minLength": 1,
@@ -1063,7 +1048,7 @@
         },
         "required": [
           "name",
-          "system",
+          "baseService",
           "envId",
           "username"
         ],
@@ -4678,6 +4663,78 @@
         "title": "InstanceCredentialMatchOut",
         "type": "object"
       },
+      "InstanceIdentityIn": {
+        "additionalProperties": false,
+        "description": "创建实例时可选携带的一条调用身份。",
+        "properties": {
+          "aliasName": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Aliasname",
+            "type": "string"
+          },
+          "display": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Display",
+            "type": "string"
+          },
+          "refMode": {
+            "default": "default",
+            "enum": [
+              "default",
+              "username"
+            ],
+            "title": "Refmode",
+            "type": "string"
+          },
+          "refUsername": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Refusername",
+            "type": "string"
+          }
+        },
+        "required": [
+          "aliasName"
+        ],
+        "title": "InstanceIdentityIn",
+        "type": "object"
+      },
+      "InstanceIdentityOut": {
+        "description": "实例下的调用身份条目(不含账户/密码)。",
+        "properties": {
+          "aliasName": {
+            "title": "Aliasname",
+            "type": "string"
+          },
+          "display": {
+            "default": "",
+            "title": "Display",
+            "type": "string"
+          },
+          "refMode": {
+            "default": "default",
+            "enum": [
+              "default",
+              "username"
+            ],
+            "title": "Refmode",
+            "type": "string"
+          },
+          "refUsername": {
+            "default": "",
+            "title": "Refusername",
+            "type": "string"
+          }
+        },
+        "required": [
+          "aliasName"
+        ],
+        "title": "InstanceIdentityOut",
+        "type": "object"
+      },
       "InstanceMove": {
         "additionalProperties": false,
         "description": "实例改标签(2026-11-18 环境降级交互补齐;标签即环境)。\n\n目标环境二选一:``envId``(既有环境)或 ``envTag``(自由标签,不存在\n则自动登记为环境定义)。登录口/版本线/说明随行;API 地址\n(deployments)与身份条目按各自环境维护,不随搬移。",
@@ -7635,6 +7692,167 @@
         "title": "ServiceGrid",
         "type": "object"
       },
+      "ServiceInstanceOut": {
+        "description": "服务×环境实例(组合 deployments + system_env_instances + identities)。",
+        "properties": {
+          "baseUrl": {
+            "default": "",
+            "title": "Baseurl",
+            "type": "string"
+          },
+          "envId": {
+            "title": "Envid",
+            "type": "integer"
+          },
+          "envName": {
+            "default": "",
+            "title": "Envname",
+            "type": "string"
+          },
+          "groupId": {
+            "default": "",
+            "title": "Groupid",
+            "type": "string"
+          },
+          "identities": {
+            "items": {
+              "$ref": "#/components/schemas/InstanceIdentityOut"
+            },
+            "title": "Identities",
+            "type": "array"
+          },
+          "line": {
+            "default": "",
+            "title": "Line",
+            "type": "string"
+          },
+          "loginUrl": {
+            "default": "",
+            "title": "Loginurl",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "envId"
+        ],
+        "title": "ServiceInstanceOut",
+        "type": "object"
+      },
+      "ServiceInstanceOverviewOut": {
+        "properties": {
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceWithInstancesOut"
+            },
+            "title": "Services",
+            "type": "array"
+          }
+        },
+        "title": "ServiceInstanceOverviewOut",
+        "type": "object"
+      },
+      "ServiceInstancePut": {
+        "additionalProperties": false,
+        "description": "创建/编辑一个服务×环境实例。\n\n* ``envId`` / ``envTag`` 二选一(自由标签不存在时自动登记);\n* ``baseUrl`` 写 deployments(API 地址);\n* ``loginUrl``/``line``/``note`` 写 system_env_instances(登录口按\n  系统×环境共享);\n* ``identity`` 可选:同时登记一条调用身份(别名全局唯一)。",
+        "properties": {
+          "baseUrl": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseurl"
+          },
+          "envId": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Envid"
+          },
+          "envTag": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Envtag"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstanceIdentityIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "loginUrl": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loginurl"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "ServiceInstancePut",
+        "type": "object"
+      },
       "ServiceKindsOut": {
         "description": "W11 三态分类读面(编排器徽标/保存告警数据源;kind 自主档)。",
         "properties": {
@@ -7794,6 +8012,41 @@
           }
         },
         "title": "ServicePatch",
+        "type": "object"
+      },
+      "ServiceWithInstancesOut": {
+        "properties": {
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceInstanceOut"
+            },
+            "title": "Instances",
+            "type": "array"
+          },
+          "kind": {
+            "default": "plate",
+            "enum": [
+              "plate",
+              "external",
+              "integration"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "system": {
+            "title": "System",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "system"
+        ],
+        "title": "ServiceWithInstancesOut",
         "type": "object"
       },
       "ShareCopyOut": {
@@ -21470,7 +21723,7 @@
     },
     "/api/scenarios/{scenario_id}/service-resolution": {
       "get": {
-        "description": "服务引用解析预览(架构终态 2026-11-21;只读):\n\n* ``environment`` —— 执行标签链结果(``resolve_execution_tag``:\n  身份条目标签 > 项目默认 > 平台默认;混拼此处不炸,返回 null +\n  ``envMixed`` 名单,派发侧另有 409 硬拦;混拼判定保持步骤口径,\n  预选范围不掺入 —— 预告的是派发 409,派发只看步骤);\n* ``services[]`` —— 引用键(步骤引用 ∪ ``config.service_scope``\n  预选范围)逐键:注册态(主档 ∪ 条目表)、base/系统、身份面事实\n  (键为条目名时)、(system, 执行标签)实例(登录口/版本线,\n  ``SystemEnvInstance``)、部署表**逐环境**地址、当前标签地址与\n  缺口、``stepRefs`` 步骤引用计数(0 = 仅预选)。",
+        "description": "服务引用解析预览(架构终态 2026-11-21;只读):\n\n* ``environment`` —— 执行标签链结果(``resolve_execution_tag``:\n  身份条目标签 > 项目默认 > 平台默认;混拼此处不炸,返回 null +\n  ``envMixed`` 名单,派发侧另有 409 硬拦;混拼判定保持步骤口径,\n  预选范围不掺入 —— 预告的是派发 409,派发只看步骤);\n* ``services[]`` —— 引用键(步骤引用 ∪ ``config.service_scope``\n  范围实例派生出的身份条目/服务级键)逐键:注册态(主档 ∪ 条目表)、\n  base/系统、身份面事实(键为条目名时)、(system, 执行标签)实例\n  (登录口/版本线,``SystemEnvInstance``)、部署表**逐环境**地址、\n  当前标签地址与缺口、``stepRefs`` 步骤引用计数(0 = 仅范围预选)。",
         "operationId": "get_service_resolution_api_scenarios__scenario_id__service_resolution_get",
         "parameters": [
           {
@@ -22166,6 +22419,33 @@
         ]
       }
     },
+    "/api/services/instance-overview": {
+      "get": {
+        "description": "服务×环境实例组合读模型(编排器「服务范围/凭证映射」数据源)。\n\n实例 = 有 deployment 或 identity 的 (service, env);登录口/版本线/\n说明/tags 按 (service.system, env) 从 system_env_instances 联表。\n读全员;写面见 ``PUT /{service}/instances``。",
+        "operationId": "service_instance_overview_api_services_instance_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceInstanceOverviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Service Instance Overview",
+        "tags": [
+          "services"
+        ]
+      }
+    },
     "/api/services/instances": {
       "get": {
         "description": "实例列表(可按环境过滤;环境配置页数据源)。\n\n一实例多标签:每个 (system, env) 行回带同组标签集(tags),前端按\n标签聚合展示。",
@@ -22614,6 +22894,64 @@
         "summary": "Service Grid",
         "tags": [
           "service-profile"
+        ]
+      }
+    },
+    "/api/services/{service}/instances": {
+      "put": {
+        "description": "创建/编辑「服务×环境」实例(ops.write,单事务)。\n\n* envId / envTag 二选一;自由标签不存在时自动登记为环境定义;\n* baseUrl → deployments(API 地址);\n* loginUrl/line/note → system_env_instances(登录口按系统×环境共享);\n* identity → 可选同时登记一条调用身份(别名全局唯一;只建声明,\n  不建账户 —— 凭证走 ``POST /auths`` / 项目凭证端点)。\n\n新建实例至少要有 baseUrl 或 identity(否则没有可组合的实例事实)。\n任一写入失败整单回滚。",
+        "operationId": "put_service_instance_api_services__service__instances_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service",
+            "required": true,
+            "schema": {
+              "title": "Service",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceInstancePut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceInstanceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Put Service Instance",
+        "tags": [
+          "services"
         ]
       }
     },

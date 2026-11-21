@@ -161,28 +161,27 @@ class ParamSlot(BaseModel):
 
 
 class AuthDraftIn(BaseModel):
-    """凭证治理 §3.3 手配(阶段 2;拍板 2026-11-20 方案 A):随场景保存
-    **同事务**落本人池 + 建 username-ref 条目(引用名 = 场景引用的条目名,
-    ${auth.<name>.*} / call.user 直接可用)。同名条目冲突走「直接引用 /
-    去认证管理改」(行为规则①),不静默覆盖;密码过 ``require_maskable_
-    password`` 掩码闸(与 /auths 同单源)。
+    """调用身份草稿(保存期通道;架构一致性轮 2026-11-21 收窄)。
 
-    **引用已有账户(2026-11-21,检索面「选用」通道)**:``password``
-    缺省(None)= 只建 username-ref 条目,账户取自本人池既有
-    (owner × system × env × username)四元组 —— 不新建账户、不碰密码;
-    四元组未命中 → 422 ``auth_draft_account_not_found``。"""
+    只建 **username-ref 身份条目**,不创建账户、不碰密码 —— 凭证是
+    独立资产,由 ``POST /auths`` 即时写入本人池/项目池;身份是全局
+    声明,Admin 走 ``POST /service-aliases``,非 Admin 随场景保存
+    同事务建 username-ref 条目(本通道)。
+
+    ``baseService`` 是服务实例的服务锚(不再是 ``system``)——
+    同系统多服务时由用户选中的实例决定,不再取字典序第一个服务。
+    账户校验覆盖本人池 + 场景项目池(``owner_id`` / ``project_id``),
+    env 只作执行偏好,不作账户门槛(§8.3)。"""
     model_config = _CAMEL
 
     name: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$",
                       description="引用名(条目名,全局唯一)")
-    system: str = Field(min_length=1, max_length=128,
-                        description="系统名(须已有主档服务)")
+    base_service: str = Field(
+        min_length=1, max_length=128, alias="baseService",
+        description="服务实例的服务锚(须已在主档登记)")
     env_id: int = Field(ge=1, alias="envId")
     username: str = Field(min_length=1, max_length=128)
-    # None = 引用本人池已有账户(只建条目);给定 = 新建账户 + 条目并落池
-    password: str | None = Field(default=None, min_length=6, max_length=256)
-    account_fields: dict[str, str] = Field(
-        default_factory=dict, alias="accountFields", max_length=32)
+    display: str = Field(default="", max_length=128)
 
 
 class ScenarioDraft(BaseModel):

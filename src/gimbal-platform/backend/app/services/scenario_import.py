@@ -871,6 +871,14 @@ async def land(
     identity_warnings: list[str] = []
     identity_base_warnings: list[dict] = []
     service_warnings: dict = {}
+    # 范围形状/环境严格校验(与注册化开关无关):新契约只接受
+    # {service, envId} 对象(envId 必填);旧 string[] 由一次性迁移脚本转换。
+    from .service_scope import validate_service_scope
+    try:
+        await validate_service_scope(db, defn)
+    except ValueError as e:
+        code = str(e).split(":", 1)[0]
+        raise ImportRejected(code, 422, str(e)) from e
     _mode = settings.REGISTRY_ONLY_IDENTITIES
     if _mode in ("audit", "enforce"):
         unreg = await alias_svc.unregistered_identities(db, defn)

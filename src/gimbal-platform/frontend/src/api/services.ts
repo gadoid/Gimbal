@@ -161,3 +161,95 @@ export function deleteInstance(
     .delete(`/services/instances/${encodeURIComponent(system)}/${envId}`)
     .then(() => undefined)
 }
+
+// ── 服务×环境实例组合视图(编排器数据源)────────────────────────
+/** 实例下的调用身份条目(不含账户/密码)。 */
+export interface ServiceInstanceIdentity {
+  aliasName: string
+  refMode: 'default' | 'username'
+  refUsername: string
+  display: string
+}
+
+/** 服务×环境实例 = deployment 地址 + 系统×环境登录口 + 身份条目。 */
+export interface ServiceInstanceView {
+  envId: number
+  envName: string
+  /** 同组标签行 = 一个实例的多枚环境 tag;空串 = 无系统实例行 */
+  groupId: string
+  tags: string[]
+  baseUrl: string
+  loginUrl: string
+  line: string
+  note: string
+  identities: ServiceInstanceIdentity[]
+}
+
+/** 「凭证与调用身份」左栏视图:身份补上所属环境(服务级引用展开后
+ *  每个身份都能落到具体 env,草稿/映射才有环境坐标)。 */
+export interface ScopedServiceIdentityView extends ServiceInstanceIdentity {
+  envId: number
+  envName: string
+}
+
+/** 范围实例视图(编排器内部;一个实例 = 同 groupId 的若干环境 tag)。
+ *  envId/envName = 主环境(首个 tag),新建凭证/身份时的默认坐标;
+ *  envIds 为该实例在范围内实际选中的环境集合。 */
+export interface ScopedServiceInstanceView {
+  service: string
+  system: string
+  groupId: string
+  envId: number | null
+  envName: string
+  tags: string[]
+  envIds: number[]
+  baseUrl: string
+  loginUrl: string
+  line: string
+  identities: ScopedServiceIdentityView[]
+}
+
+export interface ServiceWithInstances {
+  name: string
+  system: string
+  kind: ServiceKind
+  instances: ServiceInstanceView[]
+}
+
+export interface ServiceInstanceOverview {
+  services: ServiceWithInstances[]
+}
+
+/** 创建/编辑实例:envId / envTag 二选一;地址/登录口可选;
+ *  identity 可选(同时登记一条调用身份,别名全局唯一)。 */
+export interface ServiceInstancePutIn {
+  envId?: number
+  envTag?: string
+  baseUrl?: string
+  loginUrl?: string
+  line?: string
+  note?: string
+  identity?: {
+    aliasName: string
+    refMode?: 'default' | 'username'
+    refUsername?: string
+    display?: string
+  }
+}
+
+/** 全量服务×环境实例组合读模型(编排器「服务范围/凭证映射」)。 */
+export function listServiceInstanceOverview(): Promise<ServiceInstanceOverview> {
+  return http
+    .get<ServiceInstanceOverview>('/services/instance-overview')
+    .then(({ data }) => data)
+}
+
+/** 创建/编辑一个服务×环境实例(Admin;单事务写地址/登录口/身份)。 */
+export function putServiceInstance(
+  service: string, payload: ServiceInstancePutIn,
+): Promise<ServiceInstanceView> {
+  return http
+    .put<ServiceInstanceView>(
+      `/services/${encodeURIComponent(service)}/instances`, payload)
+    .then(({ data }) => data)
+}

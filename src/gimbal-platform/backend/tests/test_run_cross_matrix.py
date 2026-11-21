@@ -73,12 +73,14 @@ def _isolate_data_dir(tmp_path, monkeypatch):
 
 
 async def _await_final(client, headers, exec_id: int) -> None:
-    for _ in range(200):
+    # 30s 预算(2026-11-22):满载 xdist 下 fanout 终态化被调度拖过
+    # 10s;伪引擎行本身秒级收口,预算只放宽等待耐心,不改断言。
+    for _ in range(600):
         ex = (await client.get(f"/api/executions/{exec_id}", headers=headers)).json()
         if ex["status"] in _EXEC_FINAL:
             return
         await asyncio.sleep(0.05)
-    raise AssertionError("execution not final in 10s")
+    raise AssertionError("execution not final in 30s")
 
 
 _LIVE_ENTRY = {

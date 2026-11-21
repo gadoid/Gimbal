@@ -26,11 +26,12 @@ from __future__ import annotations
 import json
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core import db as db_module
 from app.core.config import settings
 from app.models.composer_scenario import ComposerScenario
+from app.models.auth_account import AuthAccount
 from app.models.service_identity import ServiceIdentity
 
 from .helpers import make_draft, role_headers
@@ -308,11 +309,27 @@ async def _seed_master(name: str, system: str) -> None:
         await s.commit()
 
 
-def _with_draft(draft_body: dict, name: str, system: str, env_id: int) -> dict:
+def _with_draft(
+    draft_body: dict, name: str, base_service: str, env_id: int,
+) -> dict:
     draft_body["authDrafts"] = [{
-        "name": name, "system": system, "envId": env_id,
-        "username": "u1", "password": "secret1"}]
+        "name": name, "baseService": base_service, "envId": env_id,
+        "username": "u1"}]
     return draft_body
+
+
+async def _seed_account_for(
+    owner: str, *, system: str, env_id: int, username: str = "u1",
+) -> None:
+    """草稿只引用账户,不创建 —— 预先在本人池种一枚。"""
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(
+            text("SELECT id FROM users WHERE username=:u"),
+            {"u": owner})).scalar()
+        s.add(AuthAccount(
+            owner_id=uid, project_id=None, system=system, env_id=env_id,
+            username=username, password_enc="enc", is_default=True))
+        await s.commit()
 
 
 async def _default_env() -> int:
@@ -332,17 +349,18 @@ async def _default_env() -> int:
 @pytest.mark.asyncio
 async def test_draft_cross_base_rejected_on_first_save(
         client, plate_mock, monkeypatch):
-    """enforce + 跨系统草稿(gitlab 系统草稿注入 fin-service 步骤):
+    """enforce + 跨服务草稿(gitlab-main 草稿注入 fin-service 步骤):
     extra_bases 叠层让首存即 422 identity_base_mismatch(此前时序缝 =
     首存双闸全过,第二次 PUT 才拦,TOK-07 泄漏形态);message 步骤号
     1-based(与前端黄条同口径)。"""
     monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "enforce")
     env = await _default_env()
-    await _seed_master("gitlab-main", system="gitlab")   # 草稿系统代表服务
+    await _seed_master("gitlab-main", system="gitlab")
     h = await role_headers(client, "gate-draft-x")
     body = _with_draft(make_draft(
         "sc-gate-draft-x",
-        steps=_draft_steps_for("fin-service", "d1")), "d1", "gitlab", env)
+        steps=_draft_steps_for("fin-service", "d1")),
+        "d1", "gitlab-main", env)
     r = await client.post("/api/scenarios", headers=h, json=body)
     assert r.status_code == 422, r.text
     d = r.json()["detail"]
@@ -360,15 +378,17 @@ async def test_draft_cross_base_rejected_on_first_save(
 @pytest.mark.asyncio
 async def test_draft_same_base_saves_and_lands(
         client, plate_mock, monkeypatch):
-    """同系统草稿(fin 草稿 → 代表服务 fin-service 步骤):首存放行,
-    条目/账户随事务落池(叠层不误伤);base header 不出现。"""
+    """同服务草稿(fin-service 草稿 → fin-service 步骤):首存放行,
+    条目随事务落库(叠层不误伤);base header 不出现。"""
     monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "enforce")
     env = await _default_env()
     await _seed_master("fin-service", system="fin")
     h = await role_headers(client, "gate-draft-ok")
+    await _seed_account_for("gate-draft-ok", system="fin", env_id=env)
     body = _with_draft(make_draft(
         "sc-gate-draft-ok",
-        steps=_draft_steps_for("fin-service", "d2")), "d2", "fin", env)
+        steps=_draft_steps_for("fin-service", "d2")),
+        "d2", "fin-service", env)
     r = await client.post("/api/scenarios", headers=h, json=body)
     assert r.status_code == 201, r.text
     assert "X-Identity-Base-Warnings" not in r.headers
@@ -377,16 +397,19 @@ async def test_draft_same_base_saves_and_lands(
 
 @pytest.mark.asyncio
 async def test_draft_cross_base_audit_warns(client, plate_mock, monkeypatch):
-    """audit 态同缝:跨系统草稿保存放行 + X-Identity-Base-Warnings 头
+    """audit 态同缝:跨服务草稿保存放行 + X-Identity-Base-Warnings 头
     (refs 带叠层派生的 identityBase)。"""
     monkeypatch.setattr(settings, "REGISTRY_ONLY_IDENTITIES", "audit")
     env = await _default_env()
     await _seed_master("gitlab-main", system="gitlab")
     await _seed_master("fin-service", system="fin")
     h = await role_headers(client, "gate-draft-a")
+    await _seed_account_for("gate-draft-a", system="gitlab",
+                            env_id=env)
     body = _with_draft(make_draft(
         "sc-gate-draft-a",
-        steps=_draft_steps_for("fin-service", "d3")), "d3", "gitlab", env)
+        steps=_draft_steps_for("fin-service", "d3")),
+        "d3", "gitlab-main", env)
     r = await client.post("/api/scenarios", headers=h, json=body)
     assert r.status_code == 201, r.text
     warn = json.loads(r.headers["X-Identity-Base-Warnings"])

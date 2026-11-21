@@ -14,33 +14,39 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
-import { mount } from '@vue/test-utils'
+import { mount, DOMWrapper } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
 import { getServiceResolution } from '@/api/scenario-composer'
-import { listServices } from '@/api/services'
-import { listAllAliases } from '@/api/service-aliases'
+import {
+  listServiceInstanceOverview, putServiceInstance,
+} from '@/api/services'
 import { listEnvironments } from '@/api/environments'
+import { list as listAuths } from '@/api/auth_sessions'
+import { useAuthStore } from '@/stores/auth'
 import UsersCard from '@/components/composer/UsersCard.vue'
 import type { ConfigView } from '@/types/plate'
 
-// 目录服务名加载器 mock(归属列 deriveBase 的唯一外部输入)—— 用例不碰
-// /plate 网络;直引 / 别名派生 base / 未挂目录 全由该集合决定。
-// 2c:UsersCard(凭证双入口)的 scope 派生用 — 空映射 = 检索退全量口径。
-vi.mock('@/utils/catalog-services', () => ({
-  loadCatalogServiceNames: vi.fn(async () => ['fin-service']),
-  loadCatalogSystemByService: vi.fn(async () => new Map<string, string>()),
-}))
-// 服务引用解析端点 mock(架构终态卡的数据源)
+// 服务引用解析端点 mock(执行环境横幅)
 vi.mock('@/api/scenario-composer', () => ({
   getServiceResolution: vi.fn(),
 }))
-// 范围选取器候选源(三级收敛):主档 / 身份面条目 / 环境名
-vi.mock('@/api/services', () => ({ listServices: vi.fn() }))
-vi.mock('@/api/service-aliases', () => ({ listAllAliases: vi.fn() }))
+// 实例组合读模型 + 创建用例
+vi.mock('@/api/services', () => ({
+  listServiceInstanceOverview: vi.fn(),
+  putServiceInstance: vi.fn(),
+}))
 vi.mock('@/api/environments', () => ({ listEnvironments: vi.fn() }))
-// 「改绑/深链」面(手选可发现性补):router/toast 模块规范 mock —— 深链
-// 断言需要拿到 push 引用(vi.hoisted 防 factory 提升竞跑);router 走部分
-// mock(import 链上 api/http.ts → router/index.ts 要真的 createRouter)
+// UsersCard 挂载即拉凭证池(空池即可)
+vi.mock('@/api/auth_sessions', () => ({
+  list: vi.fn(),
+  create: vi.fn(),
+}))
+vi.mock('@/api/service-aliases', () => ({
+  createAlias: vi.fn(),
+  patchAlias: vi.fn(),
+}))
+// 「去服务注册」深链:router/toast 模块规范 mock
 const routerMocks = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock('vue-router', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -74,43 +80,61 @@ function mountWithParent(initial: ConfigView) {
       })
     },
   })
-  const w = mount(Parent, { global: { plugins: [] } })
+  const w = mount(Parent, { global: { plugins: [activePinia] } })
   return { w, config }
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
+let activePinia: ReturnType<typeof createPinia>
+
+function overviewFixture() {
+  return {
+    services: [
+      {
+        name: 'fin-service', system: 'fin', kind: 'plate',
+        instances: [{
+          envId: 1, envName: '测试', groupId: 'g-fin', tags: ['测试'],
+          baseUrl: 'https://dep', loginUrl: 'https://login',
+          line: '1.0#1', note: '',
+          identities: [{
+            aliasName: 'fin-service-uat', refMode: 'default',
+            refUsername: '', display: '',
+          }],
+        }],
+      },
+      { name: 'extra-svc', system: 'extra', kind: 'plate', instances: [] },
+    ],
+  } as any
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  activePinia = createPinia()
+  setActivePinia(activePinia)
   vi.mocked(getServiceResolution).mockResolvedValue({
     environment: { envId: 1, source: 'identity', envName: '测试' },
     envMixed: null,
-    services: [{
-      key: 'fin-service', registered: true, base: 'fin-service', system: 'fin',
-      identityEntry: { aliasName: 'fin-service', refMode: 'default',
-                       refUsername: '', envId: 1 },
-      instance: { loginUrl: 'https://login', line: '1.0#1' },
-      urls: [{ envId: 1, envName: '测试', url: 'https://dep' }],
-      currentUrl: 'https://dep', gap: false, stepRefs: 1,
-    }],
+    services: [],
   })
-  vi.mocked(listServices).mockResolvedValue({
-    services: [
-      { name: 'fin-service', system: 'fin', kind: 'plate', abbr: '',
-        description: '', inCatalog: true, createdAt: null, updatedAt: null },
-    ],
-    unregistered: [], plateReachable: true,
-  } as any)
-  vi.mocked(listAllAliases).mockResolvedValue([
-    { aliasName: 'fin-service-uat', baseService: 'fin-service', slot: null,
-      kind: 'plate', envId: 1, refMode: 'default', refUsername: null,
-      display: '', createdAt: null, updatedAt: null },
-  ] as any)
+  vi.mocked(listServiceInstanceOverview).mockResolvedValue(overviewFixture())
   vi.mocked(listEnvironments).mockResolvedValue([
     { id: 1, name: '测试', description: '', lines: {},
       owner_id: null, is_default: true },
   ] as any)
+  vi.mocked(listAuths).mockResolvedValue({
+    items: [], total: 0, page: 1, pageSize: 200, tokenTypeCounts: {},
+  } as any)
+  vi.mocked(putServiceInstance).mockResolvedValue({
+    envId: 2, envName: 'qa', groupId: 'g-qa', tags: ['qa'],
+    baseUrl: 'https://qa', loginUrl: '', line: '', note: '',
+    identities: [],
+  } as any)
 })
+
+function setCapabilities(caps: string[]) {
+  useAuthStore().capabilities = caps
+}
 
 describe('CaseComposerConfig — 添加行与父级 v-model 共存', () => {
   it('点 + 添加变量后空行出现并保留', async () => {
@@ -272,34 +296,160 @@ describe('CaseComposerConfig — 变量锁(var-lock spec §2)', () => {
   })
 })
 
-describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => {
-  it('范围行呈现:服务名 + URL 两列;拉取失败 → 降级横幅', async () => {
-    // 真实用法形态:父级传步骤引用键(挂载自动收敛入范围)
-    const config = ref<ConfigView>(makeConfig())
+describe('CaseComposerConfig — 服务范围(实例层)', () => {
+  /** 生产用法镜像 + 步骤键/saveState 透传(收敛输入)。 */
+  function mountScope(
+    initial: ConfigView, stepKeys: string[] = [],
+    stubUsers = false, attach?: HTMLElement,
+  ) {
+    const config = ref<ConfigView>(initial)
+    const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
     const Parent = defineComponent({
       setup() {
         return () => h(CaseComposerConfig, {
           modelValue: config.value,
           scenarioId: 'sc-cfg-test',
-          stepServiceKeys: ['fin-service'],
+          stepServiceKeys: stepKeys,
+          saveState: saveState.value,
           'onUpdate:modelValue': (v: ConfigView) => { config.value = v },
         })
       },
     })
-    const w = mount(Parent, { global: { plugins: [] } })
-    await flush()
-    expect(getServiceResolution).toHaveBeenCalled()
-    const row = w.find('[data-testid="cfg-svc-row-fin-service"]')
-    expect(row.text()).toContain('fin-service')
-    // URL 列 = 解析事实(注册表部署表按执行标签链解出的当前地址)
-    expect(row.text()).toContain('https://dep')
-    w.unmount()
+    const w = mount(Parent, {
+      global: {
+        plugins: [activePinia],
+        ...(stubUsers ? { stubs: { UsersCard: true } } : {}),
+      },
+      ...(attach ? { attachTo: attach } : {}),
+    })
+    return { w, config, saveState }
+  }
 
-    vi.mocked(getServiceResolution).mockRejectedValueOnce(new Error('down'))
-    const { w: w2 } = mountWithParent(makeConfig())
+  it('范围行:实例事实来自 overview;自动收敛把步骤键解析为实例引用', async () => {
+    const { w, config } = mountScope(
+      makeConfig(), ['fin-service-uat', 'fin-service'])
     await flush()
-    expect(w2.find('[data-testid="cfg-svc-degraded"]').exists()).toBe(true)
-    w2.unmount()
+    // 身份键 → {service, envId};服务名不再构造服务级范围
+    expect(config.value.service_scope).toEqual([
+      { service: 'fin-service', envId: 1 },
+    ])
+    const instRow = w.find('[data-testid="cfg-svc-row-fin-service:g-fin"]')
+    expect(instRow.exists()).toBe(true)
+    expect(instRow.text()).toContain('fin-service')
+    expect(instRow.text()).toContain('测试')
+    expect(instRow.text()).toContain('https://dep')
+    expect(instRow.text()).toContain('1 条')
+    expect(w.find('[data-testid="cfg-svc-row-fin-service:svc"]').exists())
+      .toBe(false)
+    w.unmount()
+  })
+
+  it('已收敛二次打开 no-op(不再上抛)', async () => {
+    const initial = makeConfig()
+    initial.service_scope = [{ service: 'fin-service', envId: 1 }]
+    const { w, config } = mountScope(initial, ['fin-service-uat'])
+    await flush()
+    expect(config.value.service_scope).toEqual([
+      { service: 'fin-service', envId: 1 }])
+    w.unmount()
+  })
+
+  it('两层选择器:先服务、再实例;选入去重并置灰', async () => {
+    const { w, config } = mountScope(makeConfig(), [], true, document.body)
+    await flush()
+    await w.find('[data-testid="cfg-svc-add"]').trigger('click')
+    await flush()
+    const q = (sel: string) => document.querySelector(sel) as HTMLElement | null
+    // 第一层:服务
+    expect(q('[data-testid="cfg-svc-open-fin-service"]')).toBeTruthy()
+    q('[data-testid="cfg-svc-open-fin-service"]')!.click()
+    await flush()
+    // 第二层:实例(同 groupId 的环境聚合成一行,环境是 tag)
+    expect(q('[data-testid="cfg-svc-inst-fin-service:g-fin"]')?.textContent)
+      .toContain('https://dep')
+    q('[data-testid="cfg-svc-pick-fin-service:g-fin"]')!.click()
+    await flush()
+    expect(config.value.service_scope)
+      .toContainEqual({ service: 'fin-service', envId: 1 })
+    expect(q('[data-testid="cfg-svc-pick-fin-service:g-fin"]')
+      ?.hasAttribute('disabled')).toBe(true)
+    w.unmount()
+  })
+
+  it('创建实例(Admin):直接表单(选服务+环境) → putServiceInstance + 加入范围', async () => {
+    setCapabilities(['ops.write'])
+    const { w, config } = mountScope(makeConfig(), [], true, document.body)
+    await flush()
+    await w.find('[data-testid="cfg-svc-create"]').trigger('click')
+    await flush()
+    const q = (sel: string) => document.querySelector(sel) as HTMLElement | null
+    // 直接表单:服务选择器在场(不是两层选择器)
+    expect(q('[data-testid="cfg-svc-create-service"]')).toBeTruthy()
+    expect(q('[data-testid="cfg-svc-open-fin-service"]')).toBeNull()
+    await new DOMWrapper(q('[data-testid="cfg-svc-create-baseurl"]')!)
+      .setValue('https://qa')
+    await new DOMWrapper(q('[data-testid="cfg-svc-create-alias"]')!)
+      .setValue('fin-service-qa')
+    q('[data-testid="cfg-svc-create-submit"]')!.click()
+    await flush()
+    expect(putServiceInstance).toHaveBeenCalledWith(
+      'fin-service',
+      expect.objectContaining({
+        envId: 1,
+        baseUrl: 'https://qa',
+        identity: expect.objectContaining({ aliasName: 'fin-service-qa' }),
+      }),
+    )
+    expect(config.value.service_scope)
+      .toContainEqual({ service: 'fin-service', envId: 2 })
+    w.unmount()
+  })
+
+  it('非 Admin 不显示创建实例入口', async () => {
+    setCapabilities([])
+    const { w } = mountScope(makeConfig(), [], true, document.body)
+    await flush()
+    expect(w.find('[data-testid="cfg-svc-create"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('移除:行即出范围(空则省键)', async () => {
+    const initial = makeConfig()
+    initial.service_scope = [{ service: 'fin-service', envId: 1 }]
+    const { w, config } = mountScope(initial, [])
+    await flush()
+    await w.find('[data-testid="cfg-svc-rm-fin-service:g-fin"]').trigger('click')
+    await flush()
+    expect(w.find('[data-testid="cfg-svc-row-fin-service:g-fin"]').exists())
+      .toBe(false)
+    expect(config.value.service_scope).toBeUndefined()
+    w.unmount()
+  })
+
+  it('缝 1:saveState saving→clean 重拉 overview + resolution', async () => {
+    const { w, saveState } = mountScope(makeConfig(), ['fin-service-uat'])
+    await flush()
+    expect(listServiceInstanceOverview).toHaveBeenCalledTimes(1)
+    expect(getServiceResolution).toHaveBeenCalledTimes(1)
+    saveState.value = 'saving'
+    await flush()
+    saveState.value = 'clean'
+    await flush()
+    expect(listServiceInstanceOverview).toHaveBeenCalledTimes(2)
+    expect(getServiceResolution).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('overview 失败 → 降级横幅 + 选择器降级(FE-02)', async () => {
+    vi.mocked(listServiceInstanceOverview).mockRejectedValue(new Error('down'))
+    const { w } = mountScope(makeConfig(), [], true, document.body)
+    await flush()
+    expect(w.find('[data-testid="cfg-svc-degraded"]').exists()).toBe(true)
+    await w.find('[data-testid="cfg-svc-add"]').trigger('click')
+    await flush()
+    expect(document.querySelector(
+      '[data-testid="cfg-svc-picker-failed"]')).toBeTruthy()
+    w.unmount()
   })
 
   it('迁移面:存量 authored 声明只读列出 + 全部清除(v-model 上抛)', async () => {
@@ -313,144 +463,5 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     await flush()
     expect(config.value.services).toEqual({})
     w.unmount()
-  })
-
-  it('未注册警示:范围内未注册键行内警示 + 缺口行提示;改绑/纳入随步骤语义退场', async () => {
-    vi.mocked(getServiceResolution).mockResolvedValueOnce({
-      environment: { envId: 1, source: 'platform', envName: '默认' },
-      envMixed: null,
-      services: [
-        { key: 'fin-service', registered: true, base: 'fin-service', system: 'fin',
-          identityEntry: null, instance: null,
-          urls: [], currentUrl: null, gap: true, stepRefs: 1 },
-        { key: 'ghost-svc', registered: false, base: 'ghost-svc', system: '',
-          identityEntry: null, instance: null,
-          urls: [], currentUrl: null, gap: true, stepRefs: 0 },
-      ],
-    })
-    const initial = makeConfig()
-    initial.service_scope = ['ghost-svc']
-    const { w } = mountWithParent(initial)
-    await flush()
-    // 未注册 = 行内警示字;缺口 = URL 列占位警示(去注册表补部署)
-    const row = w.find('[data-testid="cfg-svc-row-ghost-svc"]')
-    expect(row.text()).toContain('未注册')
-    expect(row.text()).toContain('未配置地址')
-    // 步骤语义已退出本卡:改绑/纳入/收敛入口不复存在
-    expect(w.find('[data-testid^="cfg-svc-bind-"]').exists()).toBe(false)
-    expect(w.find('[data-testid^="cfg-svc-adopt-"]').exists()).toBe(false)
-    expect(w.find('[data-testid="cfg-svc-converge"]').exists()).toBe(false)
-    w.unmount()
-  })
-
-  describe('服务范围收敛(三级收敛:本卡定实例面)', () => {
-    /** 生产用法镜像 + 步骤键/saveState 透传(收敛输入)。
-     *  stubUsers:降级用例专用 —— UsersCard 挂载也拉同一组候选 API,
-     *  会先消费 mockRejectedValueOnce(竞争消费 → 降级断言失真)。
-     *  attach:Dialog 内容经 Teleport 出 wrapper → document 断言
-     *  (UsersCard 检索弹窗同款口径)。 */
-    function mountScope(initial: ConfigView, stepKeys: string[] = [],
-                        stubUsers = false, attach?: HTMLElement) {
-      const config = ref<ConfigView>(initial)
-      const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
-      const Parent = defineComponent({
-        setup() {
-          return () => h(CaseComposerConfig, {
-            modelValue: config.value,
-            scenarioId: 'sc-cfg-test',
-            stepServiceKeys: stepKeys,
-            saveState: saveState.value,
-            'onUpdate:modelValue': (v: ConfigView) => { config.value = v },
-          })
-        },
-      })
-      const w = mount(Parent, {
-        global: { plugins: [], ...(stubUsers ? { stubs: { UsersCard: true } } : {}) },
-        ...(attach ? { attachTo: attach } : {}),
-      })
-      return { w, config, saveState }
-    }
-
-    it('自动收敛:挂载期并入步骤引用键并上抛(加载时收敛落库语义)', async () => {
-      const { w, config } = mountScope(makeConfig(), ['fin-service', 'fin-service'])
-      await flush()
-      // 并集进 local 且上抛父级(保存/自动保存随用户操作落库)
-      expect(config.value.service_scope).toEqual(['fin-service'])
-      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').exists()).toBe(true)
-      w.unmount()
-
-      // 已收敛(存储值 = 并集)→ 二次打开 no-op,不再上抛
-      const again = makeConfig()
-      again.service_scope = ['fin-service']
-      const m2 = mountScope(again, ['fin-service'])
-      await flush()
-      // 只剩 onMounted 的解析拉取,无重复 emit 风暴(上抛一次与否由
-      // 存储值差异决定 —— 这里存储值已含并集)
-      expect(m2.config.value.service_scope).toEqual(['fin-service'])
-      m2.w.unmount()
-    })
-
-    it('选取器(Dialog):按服务分组列候选(直引 + 身份面条目),选入去重并置灰', async () => {
-      const { w, config } = mountScope(makeConfig(), [], false, document.body)
-      await flush()
-      await w.find('[data-testid="cfg-svc-add"]').trigger('click')
-      await flush()
-      const q = (sel: string) => document.querySelector(sel)
-      // 候选分面呈现:主档服务(直引 pill)+ 条目(环境 pill)
-      expect(q('[data-testid="cfg-svc-pick-fin-service"]')?.textContent)
-        .toContain('直引')
-      expect(q('[data-testid="cfg-svc-pick-fin-service-uat"]')?.textContent)
-        .toContain('测试')
-      ;(q('[data-testid="cfg-svc-pick-fin-service-uat"]') as HTMLElement).click()
-      await flush()
-      expect(config.value.service_scope).toContain('fin-service-uat')
-      // 已在范围的候选置灰防重复
-      expect(q('[data-testid="cfg-svc-pick-fin-service-uat"]')?.hasAttribute('disabled'))
-        .toBe(true)
-      w.unmount()
-    })
-
-    it('移除:行即出范围(空则省键);步骤在用键下次打开自动并回(收敛语义不丢)', async () => {
-      const { w, config } = mountScope(makeConfig(), ['fin-service'])
-      await flush()
-      await w.find('[data-testid="cfg-svc-rm-fin-service"]').trigger('click')
-      await flush()
-      // 步骤语义不进卡:移除后行直接消失(在用键由挂载自动收敛兜回)
-      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').exists()).toBe(false)
-      expect(config.value.service_scope).toBeUndefined()   // 空则省键
-      w.unmount()
-
-      // 下次打开:挂载期自动并回步骤引用键(加载时收敛)
-      const m2 = mountScope(makeConfig(), ['fin-service'])
-      await flush()
-      expect(m2.config.value.service_scope).toEqual(['fin-service'])
-      expect(m2.w.find('[data-testid="cfg-svc-row-fin-service"]').exists()).toBe(true)
-      m2.w.unmount()
-    })
-
-    it('缝 1:saveState saving→clean 沿自动保存链重拉解析(本地选入的键拿到事实)', async () => {
-      const { w, saveState } = mountScope(makeConfig(), ['fin-service'])
-      await flush()
-      expect(getServiceResolution).toHaveBeenCalledTimes(1)   // onMounted
-      saveState.value = 'saving'
-      await flush()
-      saveState.value = 'clean'
-      await flush()
-      expect(getServiceResolution).toHaveBeenCalledTimes(2)
-      // URL 列来自解析行(注册表部署表按执行标签链解出的当前地址)
-      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
-        .toContain('https://dep')
-      w.unmount()
-    })
-
-    it('候选拉取失败 → 弹窗降级横幅(FE-02:失败 ≠ 无候选)', async () => {
-      vi.mocked(listServices).mockRejectedValueOnce(new Error('down'))
-      const { w } = mountScope(makeConfig(), [], true, document.body)
-      await w.find('[data-testid="cfg-svc-add"]').trigger('click')
-      await flush()
-      expect(document.querySelector('[data-testid="cfg-svc-picker-failed"]'))
-        .toBeTruthy()
-      w.unmount()
-    })
   })
 })

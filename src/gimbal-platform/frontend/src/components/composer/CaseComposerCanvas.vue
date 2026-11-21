@@ -171,13 +171,6 @@
                 <option v-for="o in serviceOptions" :key="o.value" :value="o.value" :class="{ dim: o.dim }">{{ o.label }}</option>
               </select>
               <span v-if="refWarning" class="svc-ref-warn" :class="refWarning.level">{{ refWarning.text }}</span>
-              <div v-if="creatingAlias" class="alias-create">
-                <span class="alias-hint">身份面在「服务注册」登记(全局共享,Admin+):
-                登记后回到此下拉选「已登记」即可换用 —— 场景不写地址,地址由部署表按环境给出。</span>
-                <button type="button" class="ghost-btn alias-create-confirm" data-testid="svc-register-link"
-                        @click="goRegisterService">去服务注册登记 →</button>
-                <button type="button" class="ghost-btn" @click="creatingAlias = false">取消</button>
-              </div>
               <div class="svc-ref-url" data-testid="svc-ref-url">URL: {{ svcUrlHint }}</div>
             </div>
           </div>
@@ -627,6 +620,7 @@ import type { CarrySource, CarryValues } from '@/utils/carry-hint'
 import type {
   StepView, IOFieldBinding, EndpointFullView,
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
+  ServiceScopeRef,
 } from '@/types/plate'
 import type { Extract } from '@/types/m2'
 import { stepCall, stepEndpointId, stepHeaders, stepService, stepMethod, stepPath } from '@/types/plate'
@@ -652,16 +646,13 @@ const props = defineProps<{
    *  CaseComposer 按锚定系统集拉取;未拉到/未命中按 plate 展示,
    *  不让读面故障变成整列红)。 */
   serviceKinds?: Record<string, 'plate' | 'external' | 'unknown'>
-  /** 手配草稿名(凭证治理 2c):悬空判定已知集 = 注册表 ∪ 待保存手配名
-   *  (落池前「将登记」放行,与后端登记闸 extra_known 同口径)。 */
+  /** 身份草稿名(将登记):悬空判定已知集 = 注册表 ∪ 待保存草稿名 */
   authDrafts?: AuthDraftView[]
-  /** 服务范围(三级收敛,config.service_scope):步骤下拉的收敛域输入;
-   *  生效域 = scope ∪ 步骤引用键(自动收敛),空 = 未收敛(现状全量)。 */
-  serviceScope?: string[]
+  /** 服务范围(config.service_scope):实例引用 {service, envId}
+   *  (envId 必填,服务级引用已退役);步骤下拉的收敛域 = 范围实例下
+   *  的身份条目 ∪ 服务级键 ∪ 步骤引用键。 */
+  serviceScope?: ServiceScopeRef[]
 }>()
-import { useRouter } from 'vue-router'
-
-const router = useRouter()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
   'update:orchestration': [Orchestration]
@@ -1981,15 +1972,31 @@ function carryInjectable(step: StepView): Map<string, CarrySource> {
 }
 
 /**
- * 生效域 = 存储 scope ∪ 步骤引用键(自动收敛:目录新建步骤的锚点键
- * 自动进域 —— 范围永不卡死步骤既有引用)。空 = 未收敛(新场景)→
- * 下拉保持全量现状;模板「当前值域外」兜底 option 的文案也随此切换。
+ * 生效域 = 范围实例派生键 ∪ 步骤引用键。
+ *
+ * * 服务级 ref(envId 缺省)→ 服务键(默认凭证直引);
+ * * 实例 ref → 该 (service, env) 下已登记的身份条目名;
+ * * 注册表降级时实例 ref 回退为服务键(至少保留服务级入口)。
+ * 空 = 未收敛(新场景)→ 下拉保持全量现状。
  */
 const effectiveServiceScope = computed(() => {
-  const stepKeys = local
-    .map((s) => stepService(s))
-    .filter((k): k is string => !!k)
-  return [...new Set([...(props.serviceScope ?? []), ...stepKeys])]
+  const keys = new Set<string>()
+  for (const ref of props.serviceScope ?? []) {
+    if (ref.envId == null || registryDegraded.value) {
+      keys.add(ref.service)
+      continue
+    }
+    for (const a of registeredAliases.value) {
+      if (a.baseService === ref.service && a.envId === ref.envId) {
+        keys.add(a.aliasName)
+      }
+    }
+  }
+  for (const s of local) {
+    const k = stepService(s)
+    if (k) keys.add(k)
+  }
+  return [...keys]
 })
 
 /**
@@ -2100,9 +2107,12 @@ const svcUrlHint = computed(() => {
 })
 
 function onServiceRefChange(step: StepView, value: string) {
-  if (value === '__create__') { creatingAlias.value = true; return }
+  if (value === '__create__') {
+    emit('manageScope')
+    toast.info('在配置页的「服务范围 / 凭证与调用身份」新建实例或调用身份')
+    return
+  }
   if (value === '__manage__') { emit('manageScope'); return }
-  creatingAlias.value = false
   const call = stepCall(step)!       // call 唯一形态;local 直改经既有 watch 传播
   call.service = value
   // F4(registry 口径):选中已登记身份条目 → headers 直接注入
@@ -2121,16 +2131,6 @@ function onServiceRefChange(step: StepView, value: string) {
   if (reg) {
     ;(headers as Record<string, unknown>).Authorization = `$\{auth.${value}.token}`
   }
-}
-
-// 内联创建器(架构终态改深链,2026-11-21):身份面 = 全局注册表条目,
-// 登记归服务注册页(Admin+;场景侧内联写 URL 的旧形态随 ② 层退役)。
-const creatingAlias = ref(false)
-
-function goRegisterService() {
-  creatingAlias.value = false
-  toast.info('已跳转服务注册 —— 登记身份面后回来在下拉选「已登记」')
-  void router?.push('/service-admin')   // 测试环境无路由时只提示不跳
 }
 
 /** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */
@@ -2604,30 +2604,6 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 .svc-src-tag.src-cfg { color: #1d4ed8; background: rgb(59 130 246 / 10%); border-color: rgb(59 130 246 / 35%); }
 .svc-src-tag.src-reg { color: var(--sl-ok); background: rgb(34 197 94 / 10%); border-color: rgb(34 197 94 / 40%); }
 .svc-src-tag.src-override { color: #7e22ce; background: rgb(168 85 247 / 10%); border-color: rgb(168 85 247 / 35%); }
-/* 内联创建器:前缀(目录名)固定只读,后缀 + URL 两输入 */
-.alias-create {
-  display: flex; align-items: center; gap: 0.375rem; flex-wrap: wrap;
-  width: 100%;
-  padding: 0.375rem;
-  background: var(--c-surface);
-  border: 1px dashed var(--c-border);
-  border-radius: 0.375rem;
-}
-.alias-prefix {
-  font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700;
-  color: var(--c-text-secondary);
-}
-.alias-suffix, .alias-url {
-  border: 1px solid var(--c-border);
-  border-radius: 0.3125rem;
-  background: var(--c-bg-secondary);
-  font-size: 0.6875rem; font-family: var(--font-mono);
-  padding: 0.1875rem 0.375rem;
-  outline: none;
-}
-.alias-suffix { width: 6.875rem; }
-.alias-url { flex: 1; min-width: 11.25rem; }
-.alias-suffix:focus, .alias-url:focus { border-color: var(--c-accent); }
 .svc-ref-url {
   width: 100%;
   font-family: var(--font-mono); font-size: 0.625rem;
