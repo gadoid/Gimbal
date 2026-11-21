@@ -2007,6 +2007,18 @@ prepared 协议拒收),已接受。验证:定向簇(3 文件 -n 4)绿 →
 两例(列已退场)。**FE 全量 1540 passed / 1 skip · vue-tsc 0 ·
 eslint 0**;dist 重建 `index-C-KouVOq.js`。
 
+**服务范围卡两列化(2026-11-21,用户拍板「步骤没意义、保留移除就行」)**:
+步骤语义整体退出本卡 —— 行 = **服务名 + URL** 两列(URL = resolution
+`currentUrl` 按执行标签链解出,缺口行「未配置地址」警示、悬浮列
+逐环境清单;未落库键「保存后解析」占位),行操作仅**移除**(改绑/
+纳入/「按步骤引用收敛」按钮退役;在用键由挂载自动收敛并回,移除
+只影响预选)。死代码同批清:`bindJump` 接线(Config emit →
+CaseComposer 切页定位 → Canvas focusJump svcKey 分支与 nav-N5 用例)。
+实测旁证(5173):「凭证与调用身份」手配入口在现源可用(草稿
+uitest_draft1 提交成功)—— 用户「只能检索」疑为看旧部署/折叠区。
+**FE 全量 1539 passed / 1 skip(nav-N5 删)· vue-tsc 0 · eslint 0**;
+dist 重建。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |

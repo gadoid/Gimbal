@@ -273,7 +273,7 @@ describe('CaseComposerConfig — 变量锁(var-lock spec §2)', () => {
 })
 
 describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => {
-  it('范围行呈现:实例面描述 + 在用徽标;拉取失败 → 降级横幅', async () => {
+  it('范围行呈现:服务名 + URL 两列;拉取失败 → 降级横幅', async () => {
     // 真实用法形态:父级传步骤引用键(挂载自动收敛入范围)
     const config = ref<ConfigView>(makeConfig())
     const Parent = defineComponent({
@@ -291,9 +291,8 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     expect(getServiceResolution).toHaveBeenCalled()
     const row = w.find('[data-testid="cfg-svc-row-fin-service"]')
     expect(row.text()).toContain('fin-service')
-    // 实例面列 = 环境 · 引用模式(对齐凭证卡形态,不铺陈地址/实例事实)
-    expect(row.text()).toContain('测试 · 默认账户')
-    expect(row.text()).toContain('1 步在用')
+    // URL 列 = 解析事实(注册表部署表按执行标签链解出的当前地址)
+    expect(row.text()).toContain('https://dep')
     w.unmount()
 
     vi.mocked(getServiceResolution).mockRejectedValueOnce(new Error('down'))
@@ -316,7 +315,7 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     w.unmount()
   })
 
-  it('手选可发现性:行「改绑」emit bindJump(键);未注册警示可见(登记入口在弹窗)', async () => {
+  it('未注册警示:范围内未注册键行内警示 + 缺口行提示;改绑/纳入随步骤语义退场', async () => {
     vi.mocked(getServiceResolution).mockResolvedValueOnce({
       environment: { envId: 1, source: 'platform', envName: '默认' },
       envMixed: null,
@@ -329,16 +328,18 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
           urls: [], currentUrl: null, gap: true, stepRefs: 0 },
       ],
     })
-    const { w } = mountWithParent(makeConfig())
+    const initial = makeConfig()
+    initial.service_scope = ['ghost-svc']
+    const { w } = mountWithParent(initial)
     await flush()
-    const cfg = w.getComponent(CaseComposerConfig)
-    // 改绑 = 上抛键,由父级切编排页 focusJump 定位步骤服务下拉
-    await w.find('[data-testid="cfg-svc-bind-fin-service"]').trigger('click')
-    expect(cfg.emitted('bindJump')).toEqual([['fin-service']])
-    // 未注册 = 行内警示字;注册/地址事实列已随卡改造退场
-    expect(w.find('[data-testid="cfg-svc-row-ghost-svc"]').text()).toContain('未注册')
-    expect(w.find('[data-testid="cfg-svc-register"]').exists()).toBe(false)
-    expect(w.find('[data-testid="cfg-svc-gap-link"]').exists()).toBe(false)
+    // 未注册 = 行内警示字;缺口 = URL 列占位警示(去注册表补部署)
+    const row = w.find('[data-testid="cfg-svc-row-ghost-svc"]')
+    expect(row.text()).toContain('未注册')
+    expect(row.text()).toContain('未配置地址')
+    // 步骤语义已退出本卡:改绑/纳入/收敛入口不复存在
+    expect(w.find('[data-testid^="cfg-svc-bind-"]').exists()).toBe(false)
+    expect(w.find('[data-testid^="cfg-svc-adopt-"]').exists()).toBe(false)
+    expect(w.find('[data-testid="cfg-svc-converge"]').exists()).toBe(false)
     w.unmount()
   })
 
@@ -375,8 +376,7 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
       await flush()
       // 并集进 local 且上抛父级(保存/自动保存随用户操作落库)
       expect(config.value.service_scope).toEqual(['fin-service'])
-      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
-        .toContain('2 步在用')
+      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').exists()).toBe(true)
       w.unmount()
 
       // 已收敛(存储值 = 并集)→ 二次打开 no-op,不再上抛
@@ -410,22 +410,22 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
       w.unmount()
     })
 
-    it('移除/纳入:步骤在用键移除后仍列(在用未入范围),收敛按钮一键纳入', async () => {
+    it('移除:行即出范围(空则省键);步骤在用键下次打开自动并回(收敛语义不丢)', async () => {
       const { w, config } = mountScope(makeConfig(), ['fin-service'])
       await flush()
       await w.find('[data-testid="cfg-svc-rm-fin-service"]').trigger('click')
       await flush()
-      // 生效域仍含步骤键 → 行保留并给「纳入」操作
-      const row = w.find('[data-testid="cfg-svc-row-fin-service"]')
-      expect(row.text()).toContain('在用未入范围')
-      expect(w.find('[data-testid="cfg-svc-adopt-fin-service"]').exists()).toBe(true)
+      // 步骤语义不进卡:移除后行直接消失(在用键由挂载自动收敛兜回)
+      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').exists()).toBe(false)
       expect(config.value.service_scope).toBeUndefined()   // 空则省键
-      await w.find('[data-testid="cfg-svc-converge"]').trigger('click')
-      await flush()
-      expect(config.value.service_scope).toEqual(['fin-service'])
-      expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
-        .toContain('1 步在用')
       w.unmount()
+
+      // 下次打开:挂载期自动并回步骤引用键(加载时收敛)
+      const m2 = mountScope(makeConfig(), ['fin-service'])
+      await flush()
+      expect(m2.config.value.service_scope).toEqual(['fin-service'])
+      expect(m2.w.find('[data-testid="cfg-svc-row-fin-service"]').exists()).toBe(true)
+      m2.w.unmount()
     })
 
     it('缝 1:saveState saving→clean 沿自动保存链重拉解析(本地选入的键拿到事实)', async () => {
@@ -437,9 +437,9 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
       saveState.value = 'clean'
       await flush()
       expect(getServiceResolution).toHaveBeenCalledTimes(2)
-      // 实例面列来自解析行(环境 · 引用模式)
+      // URL 列来自解析行(注册表部署表按执行标签链解出的当前地址)
       expect(w.find('[data-testid="cfg-svc-row-fin-service"]').text())
-        .toContain('默认账户')
+        .toContain('https://dep')
       w.unmount()
     })
 

@@ -3014,54 +3014,6 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
     }
   })
 
-  it('nav-N5: focusJump svcKey 形态(服务引用卡「改绑」)→ 切步 + 滚「服务」行聚焦下拉,不滚策略卡', async () => {
-    const { listStrategyKinds } = await import('@/api/scenario-composer')
-    const kindsMock = (listStrategyKinds as any).getMockImplementation()
-    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
-    const origScroll = Element.prototype.scrollIntoView
-    Element.prototype.scrollIntoView = function () {}
-    try {
-      const s0 = mkStep()
-      const s1 = mkStep({
-        strategy: [
-          { kind: 'assertion', target: '$.call.response.body.code', operator: 'eq', expected: '0' } as any,
-        ],
-      })
-      const orch = ref<Orchestration>(mkOrch(2))
-      const inserter = useInsertTarget()
-      const Parent = defineComponent({
-        setup() {
-          provide(INSERT_TARGET_KEY, inserter)
-          return () => h(CaseComposerCanvas, {
-            steps: [s0, s1],
-            orchestration: orch.value,
-            focusJump: { stepIdx: 1, strategyIdx: -1, svcKey: 'fin-service' },
-            'onUpdate:steps': () => {},
-            'onUpdate:orchestration': () => {},
-          })
-        },
-      })
-      const w = mount(Parent, {
-        global: { plugins: [activePinia] },
-        attachTo: document.body,
-      })
-      await flushPromises()
-      await flush()
-      // 切步到 s2 + 「服务」行在场且下拉拿到焦点(手选面在此)
-      expect((w.find('.title-input').element as HTMLInputElement).value).toBe('s2')
-      expect(w.find('.svc-ref-select').exists()).toBe(true)
-      expect(document.activeElement).toBe(w.find('.svc-ref-select').element)
-      // 策略卡形态不混入:s1 有断言卡但既不展开也不 flash
-      const card0 = document.getElementById('strategy-card-0')
-      expect(card0?.classList.contains('sf-flash')).toBe(false)
-      expect(w.find('#strategy-card-0 .sf-body').isVisible()).toBe(false)
-      w.unmount()
-    } finally {
-      ;(listStrategyKinds as any).mockImplementation(kindsMock)
-      Element.prototype.scrollIntoView = origScroll
-    }
-  })
-
   it('multi-N3: 多视图前移提示 — 同 var 引用字段声明视图 >1 → 软提示(§5.1)', async () => {
     const [a, b] = await Promise.all([
       import('@/api/scenario-composer'),

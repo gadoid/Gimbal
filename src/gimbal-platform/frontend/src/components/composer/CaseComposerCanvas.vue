@@ -641,7 +641,7 @@ const props = defineProps<{
   /** 场景服务声明 dict(config.services)—— 别名下拉/双写消费(spec §1.4) */
   services?: Record<string, string>
   /** 跨路由跳转消费(spec §5.3 期望列头→断言卡):挂载后一次性切步+定位 */
-  focusJump?: { stepIdx: number; strategyIdx: number; svcKey?: string } | null
+  focusJump?: { stepIdx: number; strategyIdx: number } | null
   /** M4:字段状态增量(payload.ui.fieldStates,按步骤位置索引)——
    *  field_states 已出 step,Canvas 是唯一写入方(§3.1 稀疏增量)。 */
   fieldStates?: Record<string, Record<string, FieldState>>
@@ -1669,17 +1669,6 @@ watch([() => props.focusJump, () => props.steps?.length], ([j]) => {
   focusApplied = true
   const maxIdx = Math.max(0, props.steps!.length - 1)
   activeStepIdx.value = Math.min(Math.max(0, j.stepIdx), maxIdx)
-  // svcKey 形态(服务引用卡「改绑」):滚到该步骤的「服务」行并聚焦下拉
-  // —— 手选面在此(目录服务/已登记身份面),不在配置页监视卡;策略卡
-  // 滚动是另一形态,不混用。
-  if (j.svcKey) {
-    void nextTick(() => {
-      document.querySelector('.svc-ref')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      ;(document.querySelector('.svc-ref-select') as HTMLSelectElement | null)?.focus()
-    })
-    return
-  }
   nextTick(() => onStrategyJump(Math.max(0, j.strategyIdx)))
 }, { immediate: true })
 
