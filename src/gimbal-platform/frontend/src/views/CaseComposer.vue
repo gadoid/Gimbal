@@ -162,6 +162,7 @@
               :assertion-entries="registry.entries"
               :dead-entry-ids="deadEntryIds"
               @run-entry="onRunEntry"
+              @bind-jump="onServiceBindJump"
             />
 
             <!-- ④ Canvas -->
@@ -335,8 +336,18 @@ const store = useScenarioComposerStore()
 
 const stepIdx = ref(0)
 /** 跨路由定位(spec §5.3 期望列头→断言卡):focusStep/focusStrategy query
- *  解析产物,Canvas 挂载后一次性消费;null = 无跳转意图 */
-const focusJump = ref<{ stepIdx: number; strategyIdx: number } | null>(null)
+ *  解析产物,Canvas 挂载后一次性消费;null = 无跳转意图。svcKey = 服务
+ * 引用卡「改绑」的定位形态(滚到该步骤「服务」下拉,不滚策略卡)。 */
+const focusJump = ref<{ stepIdx: number; strategyIdx: number; svcKey?: string } | null>(null)
+
+/** 服务引用卡「改绑」(终态:手选面 = 步骤面板的「服务」下拉,配置页
+ *  的卡是只读监视面):切 ④ 编排页,定位首个引用该键的步骤。 */
+function onServiceBindJump(key: string) {
+  const idx = (definition.value.steps ?? []).findIndex((s) => stepService(s) === key)
+  stepIdx.value = 3
+  if (idx >= 0) focusJump.value = { stepIdx: idx, strategyIdx: -1, svcKey: key }
+  else toast.info('没有步骤引用该键 —— 在步骤面板的「服务」下拉选择')
+}
 const scenarioId = computed(() => route.params.scenarioId as string | undefined)
 /** 收拢态判定(C 组去重):统一面包屑在 CollapsedTopbar,页面 crumb 隐藏 */
 const chromeMode = computed(() => (route.meta?.chromeMode as 'full' | 'collapsed' | undefined) ?? 'full')

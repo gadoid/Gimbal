@@ -31,6 +31,17 @@ vi.mock('@/utils/catalog-services', () => ({
 vi.mock('@/api/scenario-composer', () => ({
   getServiceResolution: vi.fn(),
 }))
+// 「改绑/深链」面(手选可发现性补):router/toast 模块规范 mock —— 深链
+// 断言需要拿到 push 引用(vi.hoisted 防 factory 提升竞跑);router 走部分
+// mock(import 链上 api/http.ts → router/index.ts 要真的 createRouter)
+const routerMocks = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, useRouter: () => ({ push: routerMocks.push }) }
+})
+vi.mock('@/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}))
 
 function makeConfig(): ConfigView {
   return {
@@ -296,6 +307,35 @@ describe('CaseComposerConfig — 服务引用与解析卡(架构终态)', () => 
     const { w } = mountWithParent(makeConfig())
     await flush()
     expect(w.find('[data-testid="cfg-svc-env"]').text()).toContain('混拼')
+    w.unmount()
+  })
+
+  it('手选可发现性:每行「改绑」emit bindJump(键);未注册/缺口深链服务注册', async () => {
+    vi.mocked(getServiceResolution).mockResolvedValueOnce({
+      environment: { envId: 1, source: 'platform', envName: '默认' },
+      envMixed: null,
+      services: [
+        { key: 'fin-service', registered: true, base: 'fin-service', system: 'fin',
+          identityEntry: null, instance: null,
+          urls: [], currentUrl: null, gap: true },
+        { key: 'ghost-svc', registered: false, base: 'ghost-svc', system: '',
+          identityEntry: null, instance: null,
+          urls: [], currentUrl: null, gap: true },
+      ],
+    })
+    const { w } = mountWithParent(makeConfig())
+    await flush()
+    const cfg = w.getComponent(CaseComposerConfig)
+    // 改绑 = 上抛键,由父级切编排页 focusJump 定位步骤服务下拉
+    await w.find('[data-testid="cfg-svc-bind-fin-service"]').trigger('click')
+    expect(cfg.emitted('bindJump')).toEqual([['fin-service']])
+    // 未注册 → 去登记深链;缺口 → 部署地址深链(同一治理页)
+    routerMocks.push.mockClear()
+    await w.find('[data-testid="cfg-svc-register"]').trigger('click')
+    expect(routerMocks.push).toHaveBeenCalledWith('/service-admin')
+    routerMocks.push.mockClear()
+    await w.find('[data-testid="cfg-svc-gap-link"]').trigger('click')
+    expect(routerMocks.push).toHaveBeenCalledWith('/service-admin')
     w.unmount()
   })
 })

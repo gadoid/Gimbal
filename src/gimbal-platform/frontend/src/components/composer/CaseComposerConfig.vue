@@ -240,7 +240,7 @@
 
       <div v-if="!resolution" class="c-empty"><p>解析中…</p></div>
       <div v-else-if="!resolution.services.length" class="c-empty">
-        <p>步骤还没有服务引用</p>
+        <p>步骤还没有服务引用 —— 在编排页步骤面板的「服务」下拉选目录服务或已登记身份面</p>
       </div>
       <table v-else class="svc-table">
         <thead>
@@ -251,10 +251,21 @@
         </thead>
         <tbody>
           <tr v-for="row in resolution.services" :key="row.key" :data-testid="`cfg-svc-row-${row.key}`">
-            <td class="mono">{{ row.key }}</td>
+            <td class="mono svc-key">
+              {{ row.key }}
+              <button
+                type="button" class="svc-bind" :data-testid="`cfg-svc-bind-${row.key}`"
+                title="到编排页该步骤的「服务」下拉改绑(目录服务 / 已登记身份面)"
+                @click="emit('bindJump', row.key)"
+              >改绑</button>
+            </td>
             <td>
               <span v-if="row.registered" class="svc-ok">✓</span>
-              <span v-else class="svc-gap" title="键不在主档/条目表 —— enforce 后保存被拒">未注册</span>
+              <button
+                v-else type="button" class="svc-gap svc-link" data-testid="cfg-svc-register"
+                title="键不在主档/条目表 —— enforce 后保存被拒;登记后回来「重新解析」"
+                @click="goServiceAdmin"
+              >未注册 · 去登记</button>
             </td>
             <td>{{ row.base }}<template v-if="row.system"> · {{ row.system }}</template></td>
             <td>
@@ -274,9 +285,11 @@
             </td>
             <td>
               <template v-if="row.currentUrl"><span class="mono">{{ row.currentUrl }}</span></template>
-              <span v-else class="svc-gap" :title="`各环境地址:${row.urls.map((u) => `${u.envName}=${u.url}`).join(' · ') || '部署表全缺'}`">
-                缺口 —— 去服务注册配置部署地址
-              </span>
+              <button
+                v-else type="button" class="svc-gap svc-link" data-testid="cfg-svc-gap-link"
+                :title="`各环境地址:${row.urls.map((u) => `${u.envName}=${u.url}`).join(' · ') || '部署表全缺'}`"
+                @click="goServiceAdmin"
+              >缺口 —— 去服务注册配置部署地址</button>
             </td>
           </tr>
         </tbody>
@@ -392,6 +405,7 @@ const emit = defineEmits<{
   'update:modelValue': [ConfigView]
   'runEntry': [id: string]
   'update:authDrafts': [AuthDraftView[]]
+  'bindJump': [key: string]
 }>()
 
 const router = useRouter()
@@ -400,6 +414,14 @@ const router = useRouter()
 function goTestData() {
   if (!props.scenarioId || props.scenarioId === 'new') { toast.warning('请先保存场景'); return }
   router.push(scenarioSchemesUrl(props.scenarioId))
+}
+
+/** 未注册/地址缺口深链(终态:登记与部署地址都是服务注册页的治理事实,
+ *  场景侧不写 —— 与 Canvas goRegisterService 同款口径:跳走即离开未保存
+ *  草稿,toast 提示登记后回来「重新解析」刷新事实)。 */
+function goServiceAdmin() {
+  toast.info('已跳转服务注册 —— 登记后回来「重新解析」')
+  router.push('/service-admin')
 }
 
 const local = reactive<ConfigView>({
@@ -668,6 +690,45 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
   /* 与共享层 .c-kv-sep 同款降级:窄屏收起归属列,退回 2 列行为 */
   .svc-row .svc-owner { display: none; }
 }
+
+/* ── 服务引用与解析(终态监视面):环境行 / 事实表 / 迁移横幅 ──
+ * 终态批次只落了模板类名没落规则(表格裸奔);此处补齐 + 改绑/深链行内钮。 */
+.svc-env { margin: 0.25rem 0 0.625rem; font-size: 0.75rem; color: var(--c-text-secondary); }
+.svc-env b { font-weight: 600; }
+.svc-env-src { color: var(--c-text-tertiary); }
+.svc-degraded {
+  margin-bottom: 0.5rem; padding: 0.375rem 0.625rem; font-size: 0.75rem;
+  border: 1px solid var(--color-border-tertiary, #e5e7eb);
+  background: var(--soft-neutral-bg, #f9fafb); border-radius: 0.375rem;
+}
+.svc-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+.svc-table th {
+  text-align: left; font-size: 0.6875rem; font-weight: 600;
+  color: var(--c-text-tertiary); padding: 0.375rem 0.5rem;
+  border-bottom: 1px solid var(--c-border); white-space: nowrap;
+}
+.svc-table td {
+  padding: 0.4375rem 0.5rem; border-bottom: 1px solid var(--c-border);
+  vertical-align: top; word-break: break-all;
+}
+.svc-ok { color: var(--sl-ok); font-weight: 600; }
+.svc-gap { color: var(--sl-warn); }
+.svc-key { white-space: nowrap; }
+/* 手选入口的两枚行内文字钮:「改绑」回编排页下拉;未注册/缺口深链服务注册 */
+.svc-bind, .svc-link {
+  border: none; background: none; padding: 0; cursor: pointer;
+  font-size: inherit; font-family: inherit; white-space: nowrap;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.svc-bind { margin-left: 0.5rem; color: var(--c-accent); }
+.svc-link:hover, .svc-bind:hover { opacity: 0.8; }
+.svc-login { font-size: 0.6875rem; }
+.svc-migrate {
+  margin-top: 0.75rem; padding: 0.625rem; border-radius: 0.375rem;
+  border: 1px solid rgb(251 191 36 / 40%);
+  background: var(--sl-warn-soft, rgb(251 191 36 / 8%));
+}
+.svc-migrate-head { font-size: 0.75rem; color: var(--sl-warn); margin: 0 0 0.5rem; }
 .c-ns-grid { display: flex; flex-direction: column; gap: 0.75rem; }
 .c-ns-group .c-kv-row:last-child { margin-bottom: 0; }
 
