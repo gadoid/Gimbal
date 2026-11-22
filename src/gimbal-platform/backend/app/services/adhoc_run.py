@@ -21,7 +21,7 @@ from ..models.service import Service
 from ..models.service_identity import ServiceIdentity
 from . import plate_client
 from .run_materialize import service_url_resolved
-from .run_prepare import build_adhoc_payload, pick_bindings
+from .run_prepare import build_adhoc_payload, pick_bindings_full
 from .run_semantics import PIN, ref_category
 
 MAX_STEPS = 10
@@ -397,14 +397,23 @@ async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str,
     # 项目归属)—— 此前缺账户静默漏到引擎层匿名调用;与场景派发
     # identity_missing 硬门同口径(422 是 adhoc 的拒发通道)。排在
     # 结构/地址/版本校验之后(未种条目的存量用例先吃 adhoc_* 422)。
-    _picked = await pick_bindings(db, user_id, list(rows))
-    _missing_ids = sorted(set(rows) - {r.slot for r in _picked})
+    # D3 收口(2026-11-22):missing/ambiguous 分类报 —— 差集统一报
+    # 「未登记」把 account_ambiguous 误标,排障指向错误修复面。
+    _picked, _missing_ids, _ambig_ids = await pick_bindings_full(
+        db, user_id, list(rows))
     if _missing_ids:
         raise AdhocRejected(
             "identity_missing",
             "以下身份条目在你的个人凭证池未登记,请先在「凭证管理」"
             "登记后再发起临时调用:" + "、".join(_missing_ids),
             extra={"aliases": _missing_ids})
+    if _ambig_ids:
+        raise AdhocRejected(
+            "identity_ambiguous",
+            "以下身份条目命中多个候选账户(同引用多行且无同标签唯一"
+            "命中),请调整条目环境标签或清理同名账户后重试:"
+            + "、".join(_ambig_ids),
+            extra={"aliases": _ambig_ids})
     payload = build_adhoc_payload(
         steps, run_id=run_id, meta_plate=meta_plate,
         # 条目名即注入键(call.user = 条目名,users 按名注入;P1 缺陷

@@ -732,8 +732,10 @@ async def rollback_batch(db: AsyncSession, batch_id: str,
     # S7.6:公共层值表被回滚恢复 → 同键遮蔽通知(值变更与通知同判)
     for change in carry_changes:
         await _notify_carry_shadow(db, batch, change)
+    # 响应状态镜像 batch 实收(复核收口 2026-11-22:旧硬编码
+    # "rolled_back" —— 全冲突零还原时 batch 未收口,响应误报已回滚)
     return {
-        "batchId": batch_id, "status": "rolled_back",
+        "batchId": batch_id, "status": batch.status,
         "restored": restored, "conflicts": conflicts,
     }
 
@@ -1743,10 +1745,14 @@ async def submit_adaptation(
                 "save_mode": "copy", "batch_id": batch_id,
                 "similar_applied": similar_applied}
 
-    # ③ 直接保存:单事务(快照 → 方案态落库 → 引用索引)
+    # ③ 直接保存:单事务(快照 → 方案态落库 → 引用索引)。写面闸单源
+    # (2026-11-22 收口:row.payload 直改此前绕过 store.update 提交链
+    # —— prev_meta_plate 防抖、§3.5 明文闸、verified→effective 后链
+    # 三面皆漏;闸经 store.gates_for_mutation,后链经 post_save_chain,
+    # 与 store.update 同源)。
     before = copy.deepcopy(payload)
-    await scenario_store.enforce_meta_plate(
-        (planned or {}).get("definition") or {})
+    await scenario_store.gates_for_mutation(
+        (planned or {}).get("definition") or {}, prev_payload=payload)
     row.payload = planned
     db.add(AdaptationSnapshot(
         batch_id=batch_id, entity_type="scenario", entity_id=scenario_id,
@@ -1764,6 +1770,7 @@ async def submit_adaptation(
         operator_name=operator_name, closed_at=_utcnow()))
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()
+    await scenario_store.post_save_chain(db, row)
 
     await activity_svc.record(
         db, actor_id=getattr(user, "id", None),

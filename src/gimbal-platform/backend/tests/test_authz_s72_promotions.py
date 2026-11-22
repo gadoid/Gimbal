@@ -181,7 +181,16 @@ class TestNoConflictDirectCopy:
                         .get("users")), "项目副本不落内置凭证明文"
             assert row.forked_from_id == "sc-s72-d"
             n = (await db.execute(sa_select(ProjectPromotion))).scalars().all()
-            assert n == [], "直通路径不落申请行"
+            # C1 收口(2026-11-22):直通不落**申请**(pending)行,但
+            # approved 行落库留痕 —— resolution(decidedBy/decidedAt)
+            # 持久,grants 溯源挂得上(旧瞬态对象 + 溯源 NULL 已废)。
+            pend = [p for p in n if p.status == "pending"]
+            assert pend == [], "直通路径不落申请(pending)行"
+            appr = [p for p in n if p.status == "approved"]
+            assert len(appr) == 1
+            assert appr[0].resolution.get("immediate") is True
+            assert appr[0].resolution.get("decidedBy") is not None
+            assert appr[0].resolution.get("decidedAt") is not None
         # 原件保持私有、可用
         r = await client.get("/api/scenarios/sc-s72-d/draft", headers=h_m)
         assert r.status_code == 200

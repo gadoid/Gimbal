@@ -183,8 +183,9 @@ class ExecutionRow(Base):
     ``unit_id``（别名+展开序号，与执行器事件标签一致）、``branch``
     （分支维度）、``attempts``（乘法执行次数）成为主键面，dataset/
     injection/row_index 保留为单元属性。写入点 = 每单元终态即 upsert
-    （P2-04 起由执行器事件投影，平台不再自行写行状态）。存量行
-    unit_id=''（行级时代写入，读侧兼容）。
+    （P2-04 起由执行器事件投影，平台不再自行写行状态）。行级时代的
+    空.unit_id 存量行已随 pre-M6 执行清除下线（2026-11-22 复核收口：
+    开发期数据直接改造，不留读侧兼容）。
     """
 
     __tablename__ = "execution_rows"
@@ -194,7 +195,7 @@ class ExecutionRow(Base):
         BigInteger, ForeignKey("executions.id", ondelete="CASCADE")
     )
     seq: Mapped[int] = mapped_column(Integer)
-    # P2-01:单元标识(与执行器 unit 标签一致);存量行 '' = 行级时代
+    # P2-01:单元标识(与执行器 unit 标签一致;恒非空)
     unit_id: Mapped[str] = mapped_column(String(255), default="")
     # P2-01:分支维度(graph 括号/主体;单场景恒 main)
     branch: Mapped[str] = mapped_column(String(16), default="main")

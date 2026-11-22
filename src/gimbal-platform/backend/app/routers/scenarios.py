@@ -310,110 +310,76 @@ async def _draft_base_overrides(db: AsyncSession, drafts) -> dict:
     return await base_overrides(db, list(drafts or []))
 
 
-async def _identity_registry_gate(
+async def _registry_gates(
     db: AsyncSession, definition: dict, response: Response,
     *, extra_known: "set[str] | None" = None,
     extra_bases: "dict[str, str] | None" = None,
 ) -> None:
     """决策 1「引用即登记」保存闸(阶段 0;identity-registry §2)+
-    声明侧同 base 闸(阶段 3;TOK-07 声明面收口):
-    ``REGISTRY_ONLY_IDENTITIES`` 三态 —— off(缺省)不校验;audit 保存
-    成功 + ``X-Identity-Warnings`` 头(前端黄条随阶段 2 选取器接入);
-    enforce 422 ``identity_not_registered`` 硬拦(切换前置 = 存量清账
-    完成,时点由阶段 0 审计数字定)。
+    声明侧同 base 闸(阶段 3;TOK-07 声明面收口)+ 服务引用注册化闸
+    (架构终态,2026-11-21)—— 判定单源 2026-11-22 收口:三态解析与
+    判定分支在 ``service_aliases.registry_gate_outcome``(导入面共用,
+    此前 import 侧重实现且未知取值静默放行);本函数只做**载体映射**:
 
-    同 base 步(阶段 3):已登记条目的 base 须 == 所在步骤服务的基础
-    服务(逐步骤 ``${auth.*}``/``call.user`` 配对,``same_base_
-    violations`` 单源);enforce 422 ``identity_base_mismatch``,audit
-    ``X-Identity-Base-Warnings`` 头(载体同款,独立头 —— 存在性与
-    同 base 两种告警可同时成立,互不吞并)。``extra_bases`` = 手配
-    草稿名→base 叠层(auth_drafts.base_overrides,同落池派生):闸在
-    materialize 之前跑,草稿名未入库、不叠层会整体漏裁同 base 比对
-    (评审 P2-2:同主档 ≠ 同步骤服务,首次保存就要拦)。
+    * identity:enforce 422 ``identity_not_registered`` /
+      ``identity_base_mismatch``;audit ``X-Identity-Warnings`` /
+      ``X-Identity-Base-Warnings`` 头(前端黄条随阶段 2 选取器接入)。
+    * service:enforce 422 ``service_not_registered`` /
+      ``service_url_declared``(按根本性先报);audit
+      ``X-Service-Warnings`` 头(unregistered / declaredUrls 两组)。
 
+    ``extra_bases`` = 手配草稿名→base 叠层(auth_drafts.base_overrides,
+    同落池派生):闸在 materialize 之前跑,草稿名未入库、不叠层会整体
+    漏裁同 base 比对(评审 P2-2:同主档 ≠ 同步骤服务,首次保存就要拦)。
     挂路由层而非 store:copy/share 等复制路径不走本闸 —— enforce 前提
     下库内已清账,直写与副本漏网由执行闸白名单(§4 两闸关系)兜底,
-    口径闭环。未知取值一律按 off 处理并告警(闸失效最坏退化为现状,
-    不因配置手误把保存面炸死)。"""
+    口径闭环。"""
     import json
-    from ..core.config import settings
-    mode = settings.REGISTRY_ONLY_IDENTITIES
-    if mode not in ("audit", "enforce"):
-        if mode != "off":
-            logger.warning(
-                "REGISTRY_ONLY_IDENTITIES 取值 %r 不在 off/audit/enforce,"
-                "按 off 处理", mode)
-        return
-    from ..services.service_aliases import same_base_violations, \
-        unregistered_identities
-    unreg = await unregistered_identities(db, definition)
-    if extra_known:
-        # 手配(§3.3 阶段 2)随保存同事务建条目 —— 引用名此刻未入库,
-        # 闸判定时视为「将登记」(时序:本闸在 store 落池之前)。
-        unreg = [n for n in unreg if n not in extra_known]
-    if unreg:
-        if mode == "enforce":
+
+    from ..services.service_aliases import registry_gate_outcome
+
+    out = await registry_gate_outcome(
+        db, definition, extra_known=extra_known, extra_bases=extra_bases)
+    # ── identity 载体 ─────────────────────────────────────────────
+    if out.unregistered:
+        if out.identity_mode == "enforce":
             raise HTTPException(status_code=422, detail={
                 "code": "identity_not_registered",
-                "message": "引用的身份条目未登记:" + "、".join(unreg)
+                "message": "引用的身份条目未登记:"
+                           + "、".join(out.unregistered)
                            + " —— 去服务注册页登记,或改绑已有条目",
-                "identities": unreg})
+                "identities": out.unregistered})
         response.headers["X-Identity-Warnings"] = json.dumps(
-            {"code": "identity_not_registered", "identities": unreg},
+            {"code": "identity_not_registered",
+             "identities": out.unregistered},
             ensure_ascii=False)
         logger.warning(
-            "registry gate(audit) identity_not_registered: %s", unreg)
-    # 同 base 步(阶段 3):已登记条目照裁;手配草稿经 extra_bases
-    # 叠层参与比对(闸在 materialize 之前跑,叠层缺失 = 草稿引用整体
-    # 漏裁,跨服务首存即过 —— 评审 P2-2 时序缝;同主档 ≠ 同步骤服务)。
-    bad_base = await same_base_violations(db, definition,
-                                          extra_bases=extra_bases)
-    if not bad_base:
+            "registry gate(audit) identity_not_registered: %s",
+            out.unregistered)
+    if out.base_violations:
+        if out.identity_mode == "enforce":
+            raise HTTPException(status_code=422, detail={
+                "code": "identity_base_mismatch",
+                "message": "身份条目与所在步骤服务不同源:" + "、".join(
+                    f"{r['identity']}({r['identityBase']})"
+                    f"@步骤{r['index'] + 1}"
+                    f"[{r['service']}/{r['serviceBase']}]"
+                    for r in out.base_violations)
+                           + " —— 改绑同源条目,或去服务注册页核对条目归属",
+                "refs": out.base_violations})
+        response.headers["X-Identity-Base-Warnings"] = json.dumps(
+            {"code": "identity_base_mismatch", "refs": out.base_violations},
+            ensure_ascii=False)
+        logger.warning(
+            "registry gate(audit) identity_base_mismatch: %s",
+            out.base_violations)
+    # ── service 载体 ──────────────────────────────────────────────
+    if out.service_mode not in ("audit", "enforce"):
         return
-    if mode == "enforce":
-        raise HTTPException(status_code=422, detail={
-            "code": "identity_base_mismatch",
-            "message": "身份条目与所在步骤服务不同源:" + "、".join(
-                f"{r['identity']}({r['identityBase']})@步骤{r['index'] + 1}"
-                f"[{r['service']}/{r['serviceBase']}]" for r in bad_base)
-                       + " —— 改绑同源条目,或去服务注册页核对条目归属",
-            "refs": bad_base})
-    response.headers["X-Identity-Base-Warnings"] = json.dumps(
-        {"code": "identity_base_mismatch", "refs": bad_base},
-        ensure_ascii=False)
-    logger.warning(
-        "registry gate(audit) identity_base_mismatch: %s", bad_base)
-
-
-async def _service_reference_gate(
-    db: AsyncSession, definition: dict, response: Response,
-) -> None:
-    """服务引用注册化保存闸(架构终态,2026-11-21):
-    ``REGISTRY_ONLY_SERVICES`` 三态 —— off(缺省)不校验;audit 保存
-    成功 + ``X-Service-Warnings`` 头(unregistered / declaredUrls 两组,
-    前端黄条);enforce 422 硬拦,两个码按根本性先报:
-
-    * ``service_not_registered`` —— 步骤服务键不在注册域(主档
-      services ∪ 身份条目表);指引服务注册页登记/同步;
-    * ``service_url_declared`` —— 引用键带 authored URL(② 层退役:
-      场景不持有地址,地址事实在部署表按执行标签解析);指引部署表。
-
-    挂路由层与身份闸同位(store 之前,纯读);copy/share 不走本闸 ——
-    enforce 前提下库内已清账,副本漏网与身份闸同款口径闭环。"""
-    import json
-    from ..core.config import settings
-    mode = settings.REGISTRY_ONLY_SERVICES
-    if mode not in ("audit", "enforce"):
-        if mode != "off":
-            logger.warning(
-                "REGISTRY_ONLY_SERVICES 取值 %r 不在 off/audit/enforce,"
-                "按 off 处理", mode)
-        return
-    from ..services.service_aliases import service_reference_audit
-    unreg, with_url = await service_reference_audit(db, definition)
+    unreg, with_url = out.service_unregistered, out.service_authored_urls
     if not unreg and not with_url:
         return
-    if mode == "enforce":
+    if out.service_mode == "enforce":
         if unreg:
             raise HTTPException(status_code=422, detail={
                 "code": "service_not_registered",
@@ -472,13 +438,12 @@ async def create_scenario(
     # 决策 1 引用即登记(阶段 0):定义侧身份存在性闸(audit 头 /
     # enforce 422;项目门之后、store 之前 —— 不动事务,纯读)。
     # extra_bases = 手配草稿叠层(P2-2:首存即裁同 base,不漏时序缝)。
+    # 服务引用注册化(架构终态)同批:判定单源 + 载体映射(_registry_gates)。
     await _service_scope_gate(db, body.definition)
-    await _identity_registry_gate(
+    await _registry_gates(
         db, body.definition, response,
         extra_known={d.name for d in (body.auth_drafts or [])},
         extra_bases=await _draft_base_overrides(db, body.auth_drafts))
-    # 服务引用注册化(架构终态):键注册域 + authored URL ② 层退役闸
-    await _service_reference_gate(db, body.definition, response)
     # 手配落池(§3.3 阶段 2)触发的暂停实例复活:保存成功后 best-effort
     # (与 /auths create 的 _revive 同款;失败不回滚业务)。
     _made_auths = bool(body.auth_drafts)
@@ -587,13 +552,19 @@ async def scenario_signals(
         v = cfg.get("schemeId")
         return v if isinstance(v, str) else None
 
+    from ..services.zone import public_project_id
+    public_project_id_cache = await public_project_id(db)
+
     out: dict[str, dict] = {}
     for sid in sid_list:
         row = by_sid.get(sid)
         if row is None:
             out[sid] = {"trend": [], "lastRun": None}
             continue
-        is_public = row.project_id is not None
+        # C3 收口(2026-11-22):公共判定对齐公共项目单源 —— 旧
+        # 「project_id 非空 = public」宽口径令普通项目场景免默认方案锁,
+        # SignalDots 混入非默认执行。
+        is_public = row.project_id == public_project_id_cache
         execs = by_sid_execs.get(sid, [])
         if not is_public:
             lock = default_scheme.get(sid)
@@ -769,11 +740,13 @@ async def list_scenarios(
             )
         ds_counts = await scenario_store.dataset_counts(db)
         sch_counts = await scheme_store.scheme_counts(db)
+        from ..services.zone import derive_visibility
         items = [
             scenario_store.to_list_item_shape(
                 r, starred_ids=user_star_ids,
                 data_set_count=ds_counts.get(r.scenario_id, 0),
                 scheme_count=sch_counts.get(r.scenario_id, 0),
+                visibility=await derive_visibility(db, r.project_id),
             )
             for r in page_rows
         ]
@@ -834,12 +807,14 @@ async def list_scenarios(
 
     ds_counts = await scenario_store.dataset_counts(db)
     sch_counts = await scheme_store.scheme_counts(db)
+    from ..services.zone import derive_visibility
     items = [
         scenario_store.to_list_item_shape(
             r,
             starred_ids=user_star_ids,
             data_set_count=ds_counts.get(r.scenario_id, 0),
             scheme_count=sch_counts.get(r.scenario_id, 0),
+            visibility=await derive_visibility(db, r.project_id),
         )
         for r in page_rows
     ]
@@ -1302,12 +1277,10 @@ async def put_scenario(
     # 生效」口径属本案 config.users 422,不适用于登记闸 —— 存量未登记
     # 引用正是 audit 态要观测的对象,update 同拦/同警示)。
     await _service_scope_gate(db, body.definition)
-    await _identity_registry_gate(
+    await _registry_gates(
         db, body.definition, response,
         extra_known={d.name for d in (body.auth_drafts or [])},
         extra_bases=await _draft_base_overrides(db, body.auth_drafts))
-    # 服务引用注册化(架构终态):键注册域 + authored URL ② 层退役闸
-    await _service_reference_gate(db, body.definition, response)
     try:
         out = await scenario_store.update(
             db,

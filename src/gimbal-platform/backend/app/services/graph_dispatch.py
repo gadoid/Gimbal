@@ -155,12 +155,15 @@ async def missing_auth_aliases(
         [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
          for r in resolved])
     if not aliases:
-        return []
+        return [], []
     # §8.3:取用不校验标签 —— 无环境位(旧链曾漏传 env 导致编排预检
     # 恒拒发;链位退役后该缺陷类不复存在)
-    picked = await run_prepare.pick_bindings(
+    # D3 收口(2026-11-22):带回 (missing, ambiguous) 分类,消费方按
+    # 类分道报错(歧义 ≠ 未登记)。missing/ambiguous 恒为请求槽位
+    # 子集,直接回传。
+    _picked, missing, ambiguous = await run_prepare.pick_bindings_full(
         db, owner_id, aliases, cred_project_id=cred_project_id)
-    return sorted(set(aliases) - {r.slot for r in picked})
+    return sorted(missing), sorted(ambiguous)
 
 
 class GraphDispatchError(Exception):

@@ -643,6 +643,75 @@ class TestRunScope:
         assert missing == [{"kind": "alias", "name": "fin-test",
                             "deleted": False}]   # 对象存在 = 未授权
 
+    async def test_scope_auth_deterministic_pick_not_candidate_set(
+            self, client, monkeypatch):
+        """D1 收口(2026-11-22):范围复核对齐执行链确定性选账。同
+        (system, username) 双账户跨 env 并存(唯一约束含 env_id,允许),
+        条目 ref 标签指向范围外账户 B、范围只含同引用的账户 A —— 旧
+        候选集口径因 A 在范围而放行,执行 _pick_one 同标签唯一确定选 B,
+        越权注入范围外凭证。收口后:复核按确定性命中账户对账 → 反例
+        403 未授权 / 正例(范围含 B)201。"""
+        await seed_alias("d1-svc", base_url="https://d1.local")
+        h = await _register_role(client, "rsd1", "admin")
+        uid = await _user_id("rsd1")
+        from app.core.security import fernet_encrypt
+        from app.models import AuthAccount
+        from app.models.environment import Environment
+        async with db_module.SessionLocal() as s:
+            env_x = (await s.execute(sa.text(
+                "SELECT id FROM environments WHERE is_default = TRUE"
+            ))).scalar()
+            env_y = Environment(name="d1-env-y", is_default=False)
+            s.add(env_y)
+            await s.flush()
+            a = AuthAccount(owner_id=uid, system="d1-svc", env_id=env_x,
+                            username="d1-u", is_default=False,
+                            password_enc=fernet_encrypt("p"))
+            b = AuthAccount(owner_id=uid, system="d1-svc", env_id=env_y.id,
+                            username="d1-u", is_default=False,
+                            password_enc=fernet_encrypt("p"))
+            s.add_all([a, b])
+            await s.flush()
+            acc_x, acc_y = a.id, b.id
+            # 条目标签=envY → 地址链也按 envY 解:部署表补 envY 地址
+            from .helpers import seed_deployment
+            await seed_deployment(s, "d1-svc", "https://d1-y.local",
+                                  env_id=env_y.id)
+            # 条目标签改指 env Y(旧 seed_alias 挂默认环境 + default-ref)
+            ident = (await s.execute(sa.select(ServiceIdentity).where(
+                ServiceIdentity.alias_name == "d1-svc"))).scalar_one()
+            ident.env_id = env_y.id
+            ident.ref_mode = "username"
+            ident.ref_username = "d1-u"
+            await s.commit()
+        draft = _draft("sc-rsd1", steps=[dict(GET_STEP, call=dict(
+            GET_STEP["call"], service="d1-svc"))])
+        await client.post("/api/scenarios", headers=h, json=draft)
+        # 反例:范围含标签 X 的 A,不含条目实际命中的 B → 403
+        _, plain = await mk_token(user_id=uid, scope_aliases=["d1-svc"],
+                                  scope_auths=[acc_x])
+        r = await client.post("/api/runs", headers=_gtk(plain), json={
+            "scenarioId": "sc-rsd1"})
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["missing"] == [
+            {"kind": "auth", "name": "d1-svc", "deleted": False}]
+        # 正例:范围含确定性命中的 B → 过闸派发
+        from app.services import run_dispatcher as rd
+        cap: list[int] = []
+
+        async def _fake_fanout(*, db_factory, execution_id, **kw):
+            cap.append(execution_id)
+            await rd.transition_with_retry(
+                db_factory, execution_id, rd.STATUS_DONE)
+
+        monkeypatch.setattr(rd, "_fanout", _fake_fanout)
+        _, plain2 = await mk_token(user_id=uid, scope_aliases=["d1-svc"],
+                                   scope_auths=[acc_y])
+        r2 = await client.post("/api/runs", headers=_gtk(plain2), json={
+            "scenarioId": "sc-rsd1"})
+        assert r2.status_code == 201, r2.text
+        await _wait(lambda: len(cap) == 1)
+
     async def test_scope_deleted_object_classification(self, client):
         await seed_alias("gone-test", base_url="https://gone.local")
         h = await _register_role(client, "rs2", "admin")

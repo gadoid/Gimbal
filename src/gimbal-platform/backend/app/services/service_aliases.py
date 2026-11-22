@@ -670,3 +670,75 @@ async def base_urls_for(
         return {}
     from .env_chain import deployment_urls
     return await deployment_urls(db, raw_names, env.env_id)
+
+
+# ─── 注册化保存/导入闸 判定单源(2026-11-22 收口)──────────────────
+
+from dataclasses import dataclass  # noqa: E402  (闸单源置于模块尾部)
+
+
+@dataclass(frozen=True)
+class RegistryGateOutcome:
+    """身份三态闸 + 服务引用三态闸的判定结果(纯值)。
+
+    enforce/audit 的拒收与告警载体(HTTP 头 / ImportRejected / 响应
+    dict)由消费面映射;本单源只负责三态解析与判定,未知取值一律按
+    off 处理并告警(闸失效最坏退化为现状,不因配置手误把保存面炸死
+    —— 保存闸既有成文拍板)。"""
+
+    identity_mode: str
+    identity_mode_valid: bool
+    unregistered: list[str]
+    base_violations: list[dict]
+    service_mode: str
+    service_mode_valid: bool
+    service_unregistered: list[str]
+    service_authored_urls: list[str]
+
+
+async def registry_gate_outcome(
+    db: AsyncSession, definition: dict, *,
+    extra_known: "set[str] | None" = None,
+    extra_bases: "dict[str, str] | None" = None,
+) -> RegistryGateOutcome:
+    """保存(scenarios)与导入(scenario_import)共用的闸判定单源。
+
+    此前两消费面各自实现判定分支 —— import 侧无未知取值告警(静默
+    按 off)且分支互有漂移;本函数收口后形状不可能再漂移。"""
+    from ..core.config import settings
+
+    idm = settings.REGISTRY_ONLY_IDENTITIES
+    idm_valid = idm in ("off", "audit", "enforce")
+    if not idm_valid:
+        logger.warning(
+            "REGISTRY_ONLY_IDENTITIES 取值 %r 不在 off/audit/enforce,"
+            "按 off 处理", idm)
+        idm = "off"
+    svm = settings.REGISTRY_ONLY_SERVICES
+    svm_valid = svm in ("off", "audit", "enforce")
+    if not svm_valid:
+        logger.warning(
+            "REGISTRY_ONLY_SERVICES 取值 %r 不在 off/audit/enforce,"
+            "按 off 处理", svm)
+        svm = "off"
+
+    unreg: list[str] = []
+    base_v: list[dict] = []
+    svc_unreg: list[str] = []
+    svc_url: list[str] = []
+    if idm in ("audit", "enforce"):
+        unreg = await unregistered_identities(db, definition)
+        if extra_known:
+            # 手配(§3.3 阶段 2)随保存同事务建条目 —— 引用名此刻未
+            # 入库,闸判定时视为「将登记」(时序:闸在 store 落池前)。
+            unreg = [n for n in unreg if n not in extra_known]
+        base_v = await same_base_violations(db, definition,
+                                            extra_bases=extra_bases)
+    if svm in ("audit", "enforce"):
+        svc_unreg, svc_url = await service_reference_audit(db, definition)
+    return RegistryGateOutcome(
+        identity_mode=idm, identity_mode_valid=idm_valid,
+        unregistered=unreg, base_violations=base_v,
+        service_mode=svm, service_mode_valid=svm_valid,
+        service_unregistered=svc_unreg,
+        service_authored_urls=svc_url)

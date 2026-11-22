@@ -849,9 +849,18 @@ async def land(
             "身份条目必须挂环境 —— 平台尚无默认环境,请管理员先在环境"
             "管理建环境并设默认,再导入(或改用「映射到已有服务」)") from e
     except IntegrityError as e:
-        # 预检后到落库前的建名竞态:主键撞车映射 409(前端自愈链自动
-        # 重预检);回滚保证部分写入的别名/carry 不残留
+        # 预检后到落库前的建名竞态:按约束名分派(复核收口 2026-11-22:
+        # 本事务还写 carry 值表 —— blanket 把绑定并发冲突误报成「别名
+        # 被占用」);回滚保证部分写入的别名/carry 不残留
         await db.rollback()
+        _orig = getattr(e, "orig", None)
+        _cname = str(getattr(_orig, "constraint_name", "")
+                     or getattr(getattr(_orig, "diag", None),
+                                "constraint_name", "") or "")
+        if "carry_svc_path" in _cname:
+            raise ImportRejected(
+                "carry_binding_conflict", 409,
+                "carry 值表并发冲突(他人刚写同键),请重试导入") from e
         raise ImportRejected(
             "alias_name_taken", 409,
             f"别名 {eff_key.get(key, '')!r} 已被占用(重预检)") from e
@@ -879,60 +888,57 @@ async def land(
     except ValueError as e:
         code = str(e).split(":", 1)[0]
         raise ImportRejected(code, 422, str(e)) from e
-    _mode = settings.REGISTRY_ONLY_IDENTITIES
-    if _mode in ("audit", "enforce"):
-        unreg = await alias_svc.unregistered_identities(db, defn)
-        if unreg:
-            if _mode == "enforce":
-                raise ImportRejected(
-                    "identity_not_registered", 422,
-                    "引用的身份条目未登记:" + "、".join(unreg)
-                    + " —— 去服务注册页登记,或改绑已有条目")
+    # ── 注册化闸判定单源(2026-11-22 收口):身份三态 + 服务引用三态
+    # 的解析与判定在 service_aliases.registry_gate_outcome(与保存面
+    # _registry_gates 同源;此前本文件重实现判定分支且未知 mode 静默
+    # 放行 —— 无告警)。本面只做 ImportRejected/响应 dict 载体映射。
+    out = await alias_svc.registry_gate_outcome(db, defn)
+    if out.identity_mode == "enforce":
+        if out.unregistered:
+            raise ImportRejected(
+                "identity_not_registered", 422,
+                "引用的身份条目未登记:" + "、".join(out.unregistered)
+                + " —— 去服务注册页登记,或改绑已有条目")
+        if out.base_violations:
+            raise ImportRejected(
+                "identity_base_mismatch", 422,
+                "身份条目与所在步骤服务不同源:" + "、".join(
+                    f"{r['identity']}({r['identityBase']})"
+                    f"@步骤{r['index'] + 1}[{r['service']}/"
+                    f"{r['serviceBase']}]" for r in out.base_violations)
+                + " —— 改绑同源条目,或去服务注册页核对条目归属")
+    else:
+        if out.unregistered:
             logger.warning(
                 "registry gate(audit,import) identity_not_registered: %s",
-                unreg)
-            identity_warnings = unreg
-        bad_base = await alias_svc.same_base_violations(db, defn)
-        if bad_base:
-            if _mode == "enforce":
-                raise ImportRejected(
-                    "identity_base_mismatch", 422,
-                    "身份条目与所在步骤服务不同源:" + "、".join(
-                        f"{r['identity']}({r['identityBase']})"
-                        f"@步骤{r['index'] + 1}[{r['service']}/"
-                        f"{r['serviceBase']}]" for r in bad_base)
-                    + " —— 改绑同源条目,或去服务注册页核对条目归属")
+                out.unregistered)
+            identity_warnings = out.unregistered
+        if out.base_violations:
             logger.warning(
                 "registry gate(audit,import) identity_base_mismatch: %s",
-                bad_base)
-            identity_base_warnings = bad_base
-
-    # ── 服务引用注册化(架构终态,2026-11-21):独立于身份闸的开关
-    # (REGISTRY_ONLY_SERVICES)—— 键注册域 + authored URL ② 层退役;
-    # enforce 422 两码,audit 以 serviceWarnings 键随响应(与路由层
-    # X-Service-Warnings 头同款载体)。
-    _svc_mode = settings.REGISTRY_ONLY_SERVICES
-    if _svc_mode in ("audit", "enforce"):
-        unreg_keys, url_keys = await alias_svc.service_reference_audit(
-            db, defn)
-        if _svc_mode == "enforce" and unreg_keys:
+                out.base_violations)
+            identity_base_warnings = out.base_violations
+    if out.service_mode == "enforce":
+        if out.service_unregistered:
             raise ImportRejected(
                 "service_not_registered", 422,
-                "服务键未注册:" + "、".join(unreg_keys)
+                "服务键未注册:" + "、".join(out.service_unregistered)
                 + " —— 去服务注册页登记(或同步目录到主档)后引用;"
                   "地址由部署表按环境给出")
-        if _svc_mode == "enforce" and url_keys:
+        if out.service_authored_urls:
             raise ImportRejected(
                 "service_url_declared", 422,
-                "导入包携带内嵌服务地址:" + "、".join(url_keys)
+                "导入包携带内嵌服务地址:"
+                + "、".join(out.service_authored_urls)
                 + " —— 场景不持有地址;地址请配置到「服务注册」的"
                   "部署表(按环境)")
-        if unreg_keys or url_keys:
-            logger.warning(
-                "service gate(audit,import) unregistered=%s "
-                "declaredUrls=%s", unreg_keys, url_keys)
-            service_warnings = {"unregistered": unreg_keys,
-                                "declaredUrls": url_keys}
+    elif out.service_unregistered or out.service_authored_urls:
+        logger.warning(
+            "service gate(audit,import) unregistered=%s "
+            "declaredUrls=%s", out.service_unregistered,
+            out.service_authored_urls)
+        service_warnings = {"unregistered": out.service_unregistered,
+                            "declaredUrls": out.service_authored_urls}
 
     draft = ScenarioDraft(definition=defn)
     try:
@@ -941,10 +947,18 @@ async def land(
             owner_id=user.id)
         await db.commit()
     except IntegrityError as e:
+        # 按约束名分派(复核收口 2026-11-22):同事务还可能撞别名表
+        # 唯一(store._integrity_conflict_code 既有分派),blanket 把
+        # 条目竞态误报成「场景 ID 已存在」
         await db.rollback()
+        code = scenario_store._integrity_conflict_code(e)
+        if code == "scenario_id_exists":
+            raise ImportRejected(
+                "scenario_id_exists", 409,
+                f"场景 ID {sid} 已存在") from e
         raise ImportRejected(
-            "scenario_id_exists", 409,
-            f"场景 ID {sid} 已存在") from e
+            code, 409,
+            scenario_store._integrity_message(code, sid)) from e
 
     # ── 事务后:默认方案自愈 + 审计(T2:best-effort,不回滚业务)──
     from . import scheme_store

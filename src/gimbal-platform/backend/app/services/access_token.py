@@ -367,12 +367,16 @@ async def check_scope(
 
     if used.auths:
         # used.auths 存身份条目名;范围存账户 id —— 按属主池把条目解析
-        # 到账户面比对(重构:ref 匹配的保守面 —— 条目在池内可能取用的
-        # 账户,任一在范围内即覆盖;同名不同 id 的重建不继承授权,§4.1)
+        # 到**确定性命中账户**比对(D1 收口 2026-11-22:对齐执行链
+        # run_prepare._pick_account_deterministic 的同标签唯一优先口径
+        # —— 此前按候选集任一命中放行,同引用多候选(唯一约束含 env_id
+        # 允许并存)时执行可确定性选中范围外账户,构成越权窗口;旧注释
+        # 「范围从严覆盖」与实现相反,已废。同名不同 id 的重建不继承
+        # 授权,§4.1。)
         from ..models.auth_account import AuthAccount
         from ..models.service import Service
         from ..models.service_identity import ServiceIdentity
-        from .run_prepare import _pool_clause
+        from .run_prepare import _pick_account_deterministic, _pool_clause
         pool = _pool_clause(
             owner_id, token.project_id if is_project_token(token) else None)
         idents = (await db.execute(
@@ -382,29 +386,32 @@ async def check_scope(
         )).all()
         pool_accounts = (await db.execute(
             select(AuthAccount).where(pool))).scalars().all()
-        by_name: dict[str, set[int]] = {}
+        picked_id: dict[str, int | None] = {}
         for ident, sysname in idents:
-            ids: set[int] = set()
-            # §8.3:引用不校验标签 —— 同 system 候选全部入授权面
-            # (实际取用看解析的同标签优先序;范围从严覆盖)
-            for a in pool_accounts:
-                if a.system != sysname:
-                    continue
-                if ident.ref_mode == "username":
-                    if a.username == ident.ref_username:
-                        ids.add(a.id)
-                elif a.is_default:
-                    ids.add(a.id)
-            by_name.setdefault(ident.alias_name, ids)
+            # 候选收集与执行单源同形(复核收口 2026-11-22):username 支路
+            # 须带 ref_username 非空守卫 —— 空 ref_username 的 username
+            # 条目按 default 口径解析(_resolve_identities 同款),否则该
+            # 形态下候选恒空 → 鉴权比对被跳过,D1 窗口潜伏重开。
+            if ident.ref_mode == "username" and ident.ref_username:
+                cands = [a for a in pool_accounts
+                         if a.system == sysname
+                         and a.username == ident.ref_username]
+            else:
+                cands = [a for a in pool_accounts
+                         if a.system == sysname and a.is_default]
+            acc = _pick_account_deterministic(cands, ident.env_id)
+            picked_id[ident.alias_name] = acc.id if acc is not None else None
         for alias in sorted(set(used.auths)):
-            ids = by_name.get(alias, set())
-            if not ids:
-                # 池内无该条目可取用的账户 —— 授权面无从谈起(范围只
-                # 覆盖存在的账户;缺账户由执行链 S5/集成 missing 报)
+            acc_id = picked_id.get(alias)
+            if acc_id is None:
+                # 池内无该条目的确定性可取用账户(缺账户/多候选歧义)——
+                # 授权面无从谈起(范围只覆盖存在的账户;缺账户由执行链
+                # S5/集成 missing 报,歧义由执行链 409 account_ambiguous
+                # 收口,两处均 fail-closed)
                 continue
-            if ids & scope_auths:
+            if acc_id in scope_auths:
                 continue
-            # 有可取用账户但均不在范围 = 未授权(P1 缺陷修复:原码误引
+            # 确定性命中账户不在范围 = 未授权(P1 缺陷修复:原码误引
             # 未定义名 rid → 复核路径 NameError;auth 支路无「已删除」
             # 分类 —— 账户删除即解析不出,走上句跳过)
             missing.append(ScopeMissing("auth", alias, False))

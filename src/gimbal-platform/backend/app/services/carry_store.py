@@ -174,6 +174,44 @@ async def put_defaults(
         ))
 
 
+async def plate_carry_faces(
+) -> "tuple[dict[str, set[str]], set[str], bool]":
+    """plate 端点目录 → carry face 并集(**单源**,2026-11-22 收口)。
+
+    此前三拷贝(carry_drift / exec_configs 面板 / carry 路由)各自实现
+    「list 端点 → 逐个 /full → carry_face 并集」,且 exec_configs 把
+    整个循环包在一个 try 里 —— plate 抖动一次即误报全量 orphaned。
+    返回 ``(face_by_service, plate_services, reachable)``:
+
+    * reachable=False = 目录拉不到(face 空 —— 调用方须先看信号再
+      渲染,防把不可达误读成漂移);
+    * 单端点 /full 失败 → 该端点面缺席,**逐项隔离**,不阻塞其余。"""
+    from .adaptation_service import _plate_list_endpoints, _plate_full_endpoint
+    from .plate_client import PlateUnavailableError
+
+    face_by_service: dict[str, set[str]] = {}
+    plate_services: set[str] = set()
+    try:
+        items = await _plate_list_endpoints()
+    except PlateUnavailableError:
+        return face_by_service, plate_services, False
+    for item in items:
+        svc = item.get("service")
+        eid = item.get("id")
+        if not svc or not eid:
+            continue
+        plate_services.add(svc)
+        try:
+            full = await _plate_full_endpoint(eid)
+        except PlateUnavailableError:
+            continue      # 逐项隔离:该端点面缺席,不阻塞其余
+        if full is None:
+            continue
+        decls = ((full.get("request") or {}).get("declarations")) or []
+        face_by_service.setdefault(svc, set()).update(carry_face(decls))
+    return face_by_service, plate_services, True
+
+
 async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
     """plate carry 面 vs 绑定表 paths 三类 diff(spec §7;结构 diff,非 semver)。
 
@@ -199,9 +237,7 @@ async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
 
     返回 ``{"services": [...], "plateReachable": bool}``。
     """
-    from .adaptation_service import _plate_list_endpoints, _plate_full_endpoint
     from . import service_names
-    from .plate_client import PlateUnavailableError
 
     stmt = select(CarryServiceBinding)
     if scope is not None:
@@ -219,33 +255,8 @@ async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
             bound_by_service.setdefault(r.config_key, set()).add(r.field_path)
 
     # 面并集(按服务);plate_services = 目录服务全集(键归一的解析域)
-    face_by_service: dict[str, set[str]] = {}
-    plate_services: set[str] = set()
-    reachable = True
-    try:
-        items = await _plate_list_endpoints()
-    except PlateUnavailableError:
-        items = []
-        reachable = False
-    for item in items:
-        svc = item.get("service")
-        eid = item.get("id")
-        if not svc or not eid:
-            continue
-        plate_services.add(svc)
-        try:
-            full = await _plate_full_endpoint(eid)
-        except PlateUnavailableError:
-            continue
-        if full is None:
-            continue
-        # 解析态 == 'carry' 投影(2026-09-05 目录化 §4.1(a)):端点级
-        # entry.state 共识默认 —— 与 carry 路由 service_fields 同口径
-        # (值表是环境级,不 join step 增量);投影走单一实现
-        # field_state_resolution.carry_face(与 carry_injection 同款,
-        # 含祖先吸收:整容器是绑定/注入单元)
-        decls = ((full.get("request") or {}).get("declarations")) or []
-        face_by_service.setdefault(svc, set()).update(carry_face(decls))
+    # —— 聚合单源 plate_carry_faces(2026-11-22 收口,exec_configs 同源)
+    face_by_service, plate_services, reachable = await plate_carry_faces()
 
     out: list[dict] = []
     for svc in sorted(set(bound_by_service) | set(face_by_service)):

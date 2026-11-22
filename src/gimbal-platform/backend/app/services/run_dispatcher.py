@@ -215,8 +215,9 @@ async def execution_rows_page(
     """历史执行行级分页(M6,债 5):DB 行 LIMIT/OFFSET + total。
 
     活跃执行(内存 registry 在场)整段返回后 Python 切片 —— 活跃行的
-    权威在内存,分页只是展示层。M6 之前的存量单 DB 无行 → JSONL 回放
-    (只读归档)兜底。
+    权威在内存,分页只是展示层。M6 前 JSONL 归档回放分支已随存量单
+    清除下线(2026-11-22 复核收口:开发期数据直接改造,不为旧形态
+    保兼容 —— pre-M6 执行已清,全量执行均有 DB 行)。
     """
     live = _row_states.get(execution_id)
     if live is not None:
@@ -233,31 +234,28 @@ async def execution_rows_page(
         sa_select(sa_func.count()).select_from(ExecutionRow)
         .where(ExecutionRow.execution_id == execution_id)
     )).scalar_one()
-    if total:
-        rows = (await db.execute(
-            sa_select(ExecutionRow)
-            .where(ExecutionRow.execution_id == execution_id)
-            .order_by(ExecutionRow.seq)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )).scalars().all()
-        return [
-            {
-                "seq": r.seq, "datasetId": r.dataset_id,
-                "injectionId": r.injection_id, "rowIndex": r.row_index,
-                "rep": r.rep, "status": r.status, "caseDir": r.case_dir or "",
-                "startedAt": _dt_to_iso(r.started_at),
-                "finishedAt": _dt_to_iso(r.finished_at),
-                "serverSlot": r.server_slot,
-                # B4:报告按 unit 归组 graph 链步骤(行 API 响应模型不含此键)
-                "unitId": r.unit_id or "",
-            }
-            for r in rows
-        ], int(total)
-    # 存量单(M6 前无 DB 行):JSONL 只读归档回放,整段回再切片
-    legacy = _replay_rows(execution_id)
-    start = (page - 1) * page_size
-    return legacy[start : start + page_size], len(legacy)
+    if not total:
+        return [], 0
+    rows = (await db.execute(
+        sa_select(ExecutionRow)
+        .where(ExecutionRow.execution_id == execution_id)
+        .order_by(ExecutionRow.seq)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )).scalars().all()
+    return [
+        {
+            "seq": r.seq, "datasetId": r.dataset_id,
+            "injectionId": r.injection_id, "rowIndex": r.row_index,
+            "rep": r.rep, "status": r.status, "caseDir": r.case_dir or "",
+            "startedAt": _dt_to_iso(r.started_at),
+            "finishedAt": _dt_to_iso(r.finished_at),
+            "serverSlot": r.server_slot,
+            # B4:报告按 unit 归组 graph 链步骤(行 API 响应模型不含此键)
+            "unitId": r.unit_id or "",
+        }
+        for r in rows
+    ], int(total)
 
 
 def _iso_to_dt(ts: str | None):
@@ -495,6 +493,39 @@ class _EventIngester:
         await self._flush()
 
 
+_ROW_UPSERT_COLS = ("unit_id", "branch", "attempts", "dataset_id",
+                    "injection_id", "row_index", "rep", "status",
+                    "case_dir", "started_at", "finished_at", "server_slot")
+
+
+async def _upsert_execution_rows(db: Any, rows: list[dict]) -> None:
+    """ExecutionRow 同键 (execution_id, seq) upsert **单源**。
+
+    2026-11-22 收口:此前三处手写 insert→IntegrityError→update 拷贝
+    互有列漂移(恢复分支漏 unit_id/branch/attempts 等、graph 批漏
+    branch/case_dir/started_at —— 撞约束后窄列回填,字段错位残留旧
+    值)。on_conflict 全列覆盖(_ROW_UPSERT_COLS),形状结构上不可能
+    漂移;同批同键去重(PG ON CONFLICT 不允许一语句两次命中同行),
+    语义 = 同键后到覆盖(与 execution_store._upsert_steps 同构)。
+    调用方 row dict 须含 _ROW_UPSERT_COLS 全部键(未知的填 None,
+    不静默沿用库内旧值)。"""
+    from ..models.execution import ExecutionRow
+    from .execution_store import _dialect_insert
+
+    if not rows:
+        return
+    insert_ = _dialect_insert(db)
+    dedup: dict[tuple, dict] = {}
+    for r in rows:
+        dedup[(r["execution_id"], r["seq"])] = r
+    stmt = insert_(ExecutionRow).values(list(dedup.values()))
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["execution_id", "seq"],
+        set_={c: getattr(stmt.excluded, c) for c in _ROW_UPSERT_COLS},
+    )
+    await db.execute(stmt)
+
+
 async def _persist_row_terminal(db_factory: Any, execution_id: int,
                                 state: "RowState") -> None:
     """行终态即落库(M6 转正):崩溃窗口不丢已终态行。
@@ -502,85 +533,27 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
     best-effort —— 失败只记日志:活跃读侧的权威仍在内存 registry,
     DB 是持久层跟进(§2.2);计数器审计面另由 JSONL 生命周期行承担。
     """
-    from sqlalchemy.exc import IntegrityError
-
-    from ..models.execution import ExecutionRow
-
     try:
         async with db_factory() as session:
-            session.add(ExecutionRow(
-                execution_id=execution_id, seq=state.seq,
-                unit_id=state.unit_id, branch=state.branch,
-                attempts=state.attempts,
-                dataset_id=state.dataset_id, injection_id=state.injection_id,
-                row_index=state.row_index, rep=state.rep,
-                status=state.status, case_dir=state.case_dir or "",
-                started_at=_iso_to_dt(state.started_at),
-                finished_at=_iso_to_dt(state.finished_at),
-                server_slot=state.server_slot,
-            ))
-            try:
-                await session.commit()
-            except IntegrityError:
-                # 同 (execution, seq) 已有终态行(P3.5-2:job 重跑时行级
-                # 断点之外的兜底 —— 中断行重跑完成即撞唯一约束)
-                await session.rollback()
-                from sqlalchemy import update
-
-                await session.execute(
-                    update(ExecutionRow)
-                    .where(ExecutionRow.execution_id == execution_id,
-                           ExecutionRow.seq == state.seq)
-                    .values(status=state.status, case_dir=state.case_dir or "",
-                            unit_id=state.unit_id, branch=state.branch,
-                            attempts=state.attempts,
-                            started_at=_iso_to_dt(state.started_at),
-                            finished_at=_iso_to_dt(state.finished_at),
-                            server_slot=state.server_slot)
-                )
-                await session.commit()
+            await _upsert_execution_rows(session, [{
+                "execution_id": execution_id, "seq": state.seq,
+                "unit_id": state.unit_id, "branch": state.branch,
+                "attempts": state.attempts,
+                "dataset_id": state.dataset_id,
+                "injection_id": state.injection_id,
+                "row_index": state.row_index, "rep": state.rep,
+                "status": state.status,
+                "case_dir": state.case_dir or "",
+                "started_at": _iso_to_dt(state.started_at),
+                "finished_at": _iso_to_dt(state.finished_at),
+                "server_slot": state.server_slot,
+            }])
+            await session.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "run_dispatcher: persist row terminal {}/{} failed: {}",
             execution_id, state.seq, e,
         )
-
-
-def _replay_rows(execution_id: int) -> list[dict]:
-    """按天 JSONL 回放:同 (executionId, seq) 后行覆盖前行(final 覆盖 dispatched)。"""
-    rows: dict[int, dict] = {}
-    for path in sorted((settings.DATA_DIR / "runs").glob("*.jsonl")):
-        with path.open(encoding="utf-8") as fh:
-            for line in fh:
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if rec.get("executionId") != execution_id:
-                    continue
-                seq = rec.get("seq")
-                if seq is None:
-                    continue
-                cur = rows.setdefault(seq, {"seq": seq,
-                                            "datasetId": rec.get("datasetId"),
-                                            # 旧 JSONL 无注入族 → 缺键 None,不炸
-                                            "injectionId": rec.get("injectionId"),
-                                            "rowIndex": rec.get("rowIndex", 0),
-                                            "rep": rec.get("rep", 0),
-                                            "status": rec.get("status", ""),
-                                            "caseDir": "",
-                                            "startedAt": None, "finishedAt": None})
-                cur["status"] = rec.get("status", cur["status"])
-                if rec.get("casePath"):
-                    # casePath 指向 case.json 文件;caseDir 取其父目录名
-                    # (= case stem,与 live registry 的 case_dir 同口径)。
-                    cur["caseDir"] = Path(rec["casePath"]).parent.name
-                ts = rec.get("ts")
-                if rec.get("status") in _FINAL_STATUSES:
-                    cur["finishedAt"] = ts
-                else:
-                    cur["startedAt"] = ts or cur["startedAt"]
-    return [rows[k] for k in sorted(rows)]
 
 
 # ─── startup reconcile (P3) ────────────────────────────────────────
@@ -1177,11 +1150,21 @@ async def dispatch_target(
         # 静默漏到引擎层匿名调用 —— 双池统一 fail-fast。
         from . import graph_dispatch as _gd
         try:
-            _g_missing = await _gd.missing_auth_aliases(
+            _g_missing, _g_ambig = await _gd.missing_auth_aliases(
                 db, _graph.model_dump(by_alias=True), user_id,
                 cred_project_id=cred_project_id)
         except _gd.GraphDispatchError as e:
             raise Conflict("graph_invalid", str(e)) from None
+        if _g_ambig:
+            # D3 收口(2026-11-22):歧义独立报(此前误标「未登记」)
+            raise Conflict(
+                "auth_aliases_ambiguous",
+                "以下身份条目命中多个候选账户(同引用多行且无同标签唯一"
+                "命中),请调整条目环境标签或清理同名账户:"
+                + "、".join(_g_ambig),
+                extra={"aliases": _g_ambig,
+                       "credentialSource": ("project" if cred_project_id
+                                            is not None else "personal")})
         if _g_missing:
             if cred_project_id is not None:
                 raise Conflict(
@@ -1738,32 +1721,20 @@ async def _fanout_graph(
             "run_dispatcher: graph execution {} recovered with {} prior "
             "events → failed (at-most-once, no graph replay)",
             execution_id, _prior)
-        from ..models.execution import ExecutionRow
-
         finished_ts = _utcnow().isoformat() + "Z"
         _row_states[execution_id] = []
         try:
-            from sqlalchemy.exc import IntegrityError as _IE
-
             async with db_factory() as session:
-                session.add(ExecutionRow(
-                    execution_id=execution_id, seq=0,
-                    unit_id="graph", branch="graph", attempts=1,
-                    status="failed", case_dir="case-graph",
-                    started_at=None, finished_at=_iso_to_dt(finished_ts)))
-                try:
-                    await session.commit()
-                except _IE:
-                    await session.rollback()
-                    from sqlalchemy import update as _u
-
-                    await session.execute(
-                        _u(ExecutionRow)
-                        .where(ExecutionRow.execution_id == execution_id,
-                               ExecutionRow.seq == 0)
-                        .values(status="failed",
-                                finished_at=_iso_to_dt(finished_ts)))
-                    await session.commit()
+                await _upsert_execution_rows(session, [{
+                    "execution_id": execution_id, "seq": 0,
+                    "unit_id": "graph", "branch": "graph", "attempts": 1,
+                    "dataset_id": None, "injection_id": None,
+                    "row_index": 0, "rep": 0,
+                    "status": "failed", "case_dir": "case-graph",
+                    "started_at": None, "finished_at": _iso_to_dt(finished_ts),
+                    "server_slot": None,
+                }])
+                await session.commit()
         except Exception:  # noqa: BLE001
             pass
         # N2:恢复收口改经唯一终态迁移(原子守卫 + failed 通知 ——
@@ -2028,7 +1999,6 @@ async def _fanout_graph(
     # blocked 记(被 control.only 裁剪 / 未跑)。
     finished_ts = _utcnow().isoformat() + "Z"
     _row_states[execution_id] = []   # 无行级 registry;读侧回落 DB
-    from ..models.execution import ExecutionRow
     ordered_units: list[tuple[str, dict]] = []
     for u in [*graph_spec.get("before", []),
               *graph_spec.get("units", []),
@@ -2046,49 +2016,37 @@ async def _fanout_graph(
     attempts_total = proj["attempts"] or int(
         getattr(result, "attempts", 0) or 0) or 1
     rows_to_write: list[dict] = [
-        {"seq": 0, "unit_id": "graph", "status": status,
-         "attempts": attempts_total}]
+        {"execution_id": execution_id, "seq": 0,
+         "unit_id": "graph", "branch": "graph",
+         "attempts": attempts_total,
+         "dataset_id": None, "injection_id": None,
+         "row_index": 0, "rep": 0,
+         "status": status, "case_dir": "case-graph",
+         "started_at": None, "finished_at": None,
+         "server_slot": None}]
     for idx, (uid, ev) in enumerate(ordered_units, start=1):
         rows_to_write.append({
-            "seq": idx, "unit_id": uid,
+            "execution_id": execution_id, "seq": idx, "unit_id": uid,
+            "branch": "graph", "attempts": 1,
+            "dataset_id": None, "injection_id": None,
+            "row_index": 0, "rep": 0,
             "status": ev.get("status") or "blocked",
-            "attempts": 1,
+            "case_dir": "case-graph",
             "started_at": _iso_to_dt(ev["started_at"])
             if ev.get("started_at") else None,
             "finished_at": _iso_to_dt(ev["finished_at"])
             if ev.get("finished_at") else None,
+            "server_slot": None,
         })
     try:
-        from sqlalchemy.exc import IntegrityError
-
         async with db_factory() as session:
-            for r in rows_to_write:
-                session.add(ExecutionRow(
-                    execution_id=execution_id, seq=r["seq"],
-                    unit_id=r["unit_id"], branch="graph",
-                    attempts=r["attempts"], status=r["status"],
-                    case_dir="case-graph",
-                    started_at=r.get("started_at"),
-                    finished_at=r.get("finished_at")
-                    or _iso_to_dt(finished_ts)))
-            try:
-                await session.commit()
-            except IntegrityError:
-                # P3.5-2:job 重跑 graph 执行 —— 行 upsert(恢复时 graph
-                # 整图重放,事件 seq 已由 ingester 续接)
-                await session.rollback()
-                from sqlalchemy import update as _upd
-
-                for r in rows_to_write:
-                    await session.execute(
-                        _upd(ExecutionRow)
-                        .where(ExecutionRow.execution_id == execution_id,
-                               ExecutionRow.seq == r["seq"])
-                        .values(status=r["status"], unit_id=r["unit_id"],
-                                attempts=r["attempts"],
-                                finished_at=r.get("finished_at")
-                                or _iso_to_dt(finished_ts)))
-                await session.commit()
+            # P3.5-2:job 重跑 graph 执行 —— 行 upsert 单源(恢复时 graph
+            # 整图重放,事件 seq 已由 ingester 续接)
+            await _upsert_execution_rows(session, [
+                {**r, "finished_at": r["finished_at"]
+                 or _iso_to_dt(finished_ts)}
+                for r in rows_to_write])
+            await session.commit()
     except Exception:  # noqa: BLE001
         pass
     # 计数与终态(计数按单元累加;blocked/cancelled 入 skipped)
@@ -2108,12 +2066,8 @@ async def _fanout_graph(
     if cfg_patch:
         try:
             async with db_factory() as session:
-                ex = await session.get(Execution, execution_id)
-                if ex is not None:
-                    cfgj = dict(ex.config_json or {})
-                    cfgj.update(cfg_patch)
-                    ex.config_json = cfgj
-                    await session.commit()
+                await _config_json_merge(session, execution_id, cfg_patch)
+                await session.commit()
         except Exception:  # noqa: BLE001 — 结论留档 best-effort
             pass
     await _finalize_execution(db_factory, execution_id, status=final_status)
@@ -2812,12 +2766,10 @@ async def _fail_whole_execution(
     # 写进 config_json,列表读侧不用扫 JSONL 就能标出"未分发行的单"。
     try:
         async with db_factory() as session:
-            ex = await session.get(Execution, execution_id)
-            if ex is not None:
-                cfg = dict(ex.config_json or {})
-                cfg["authFailFast"] = {"error": str(error)[:512]}
-                ex.config_json = cfg
-                await session.commit()
+            await _config_json_merge(
+                session, execution_id,
+                {"authFailFast": {"error": str(error)[:512]}})
+            await session.commit()
     except Exception as e:  # noqa: BLE001 — 标记失败不影响 fail-fast 收尾
         logger.warning(
             "run_dispatcher: authFailFast marker failed for execution {}: {}",
@@ -2890,17 +2842,29 @@ async def _store_single_case_outputs(
     outputs = scrub_outputs(outputs)
     try:
         async with db_factory() as session:
-            ex = await session.get(Execution, execution_id)
-            if ex is None:
-                return
-            cfg = dict(ex.config_json or {})
-            cfg["outputs"] = outputs
-            ex.config_json = cfg
+            await _config_json_merge(session, execution_id,
+                                     {"outputs": outputs})
             await session.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "run_dispatcher: single-case outputs for {} failed: {}",
             execution_id, e)
+
+
+async def _config_json_merge(
+    session: Any, execution_id: int, patch: dict,
+) -> None:
+    """config_json 顶层键级原子合并(单语句)。
+
+    :436 禁令同源 —— config_json 有多写入者(ingest_stats 快照 /
+    dispatcherError / outputs / authFailFast / counterDrift / 结论
+    留档),ORM 整读整写互相覆盖丢更新;``jsonb ||`` 按顶层键原子
+    合并,不做读改写。行不存在 = 0 行更新,无害。"""
+    await session.execute(sa_text(
+        "UPDATE executions SET config_json = "
+        "COALESCE(config_json, '{}'::jsonb) || CAST(:patch AS jsonb) "
+        "WHERE id = :eid"),
+        {"patch": json.dumps(patch), "eid": execution_id})
 
 
 async def _bump_counters(
@@ -3006,11 +2970,11 @@ async def transition_execution(
                 ex.started_at = backfill_started_at
             if count_fallback and not ex.failed and not ex.passed:
                 ex.failed = max(int(ex.total_runs or 0), 1)
-            cfg = dict(ex.config_json or {})
+            cfg_patch: dict = {}
             if dispatcher_error is not None:
-                cfg["dispatcherError"] = str(dispatcher_error)[:512]
+                cfg_patch["dispatcherError"] = str(dispatcher_error)[:512]
             if reconciled_reason is not None:
-                cfg["reconciled"] = {
+                cfg_patch["reconciled"] = {
                     "at": _utcnow().isoformat() + "Z",
                     "reason": reconciled_reason,
                 }
@@ -3021,8 +2985,11 @@ async def transition_execution(
                     "total={} passed+failed={}",
                     execution_id, ex.total_runs, ex.passed + ex.failed,
                 )
-                cfg["counterDrift"] = True
-            ex.config_json = cfg
+                cfg_patch["counterDrift"] = True
+            # :436 禁令同源 —— config_json 多写入者(stats/ conclusions /
+            # outputs / 本函数),整读整写互相覆盖;键级 || 合并单语句原子。
+            if cfg_patch:
+                await _config_json_merge(session, execution_id, cfg_patch)
             # P2-2(webhook v4 §6):outbox 同事务写行 —— 令牌发起
             # (有 token_id)且令牌配了回调地址时写 execution.finished
             # 投递行;三条 canceled 路径也经本函数真实迁移,满足条件即
@@ -3479,8 +3446,8 @@ def sweep_stale_run_journals() -> int:
     """按日 JSONL 运维索引(``runs/YYYY-MM-DD.jsonl``)的保留期清扫。
 
     按**文件名日期**判龄(不看 mtime:追加写会刷新 mtime)。保留期
-    ``RUNS_JSONL_RETENTION_DAYS``(0 = 禁用)。JSONL 是 M6 前存量单的
-    行级只读归档(``_replay_rows``)与运维索引,M6 起行级已入库,故默认
+    ``RUNS_JSONL_RETENTION_DAYS``(0 = 禁用)。JSONL 是**现役**调度审计
+    索引(执行生命周期逐行追加),M6 起行级台账入库后它保留为运维面,
     保留期长于 case 案卷。
     """
     days = settings.RUNS_JSONL_RETENTION_DAYS

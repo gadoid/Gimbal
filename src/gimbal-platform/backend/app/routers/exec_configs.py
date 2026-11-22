@@ -381,27 +381,12 @@ async def exec_config_drift(
     (配置漂移,应删改);``uncovered`` = 面上有而配置未覆盖(按层序
     合成的部分,提示可覆盖面)。plate 不可达 → ``plateReachable=
     False``,调用方先看信号再渲染(不可达 ≠ 全漂移)。"""
-    from ..services.adaptation_service import (
-        _plate_full_endpoint, _plate_list_endpoints)
-    from ..services.field_state_resolution import carry_face
-    from ..services.plate_client import PlateUnavailableError
-
     row = await _access(db, config_id, user, write=False)
-    face_by_service: dict[str, set[str]] = {}
-    reachable = True
-    try:
-        for item in await _plate_list_endpoints():
-            svc = item.get("service")
-            eid = item.get("id")
-            if not svc or not eid:
-                continue
-            full = await _plate_full_endpoint(eid)
-            if full is None:
-                continue
-            decls = ((full.get("request") or {}).get("declarations")) or []
-            face_by_service.setdefault(svc, set()).update(carry_face(decls))
-    except PlateUnavailableError:
-        reachable = False
+    # 聚合单源(2026-11-22 收口):此前整循环包在一个 try 里 ——
+    # plate 抖动一次即误报全量 orphaned;单源内逐项隔离(/full 失败
+    # = 该端点面缺席,不阻塞其余),与 carry_store.carry_drift 同源。
+    from ..services.carry_store import plate_carry_faces
+    face_by_service, _plate_services, reachable = await plate_carry_faces()
 
     out: list[dict] = []
     systems = (row.payload or {}).get("systems") or []

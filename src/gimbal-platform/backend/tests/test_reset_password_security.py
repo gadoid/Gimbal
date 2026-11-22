@@ -137,3 +137,53 @@ class TestResetPasswordSecurity:
         h_a = await role_headers(client, "rp_n3a", role="user")
         r = await client.post(f"/api/users/{bid}/reset-password", headers=h_a)
         assert r.status_code == 403, r.text
+
+
+class TestResetHistoricalTokens:
+    async def test_reset_does_not_repause_historical_tokens(
+            self, client: AsyncClient, monkeypatch):
+        """复核收口(2026-11-22):失效 UPDATE 加 RETURNING,暂停循环只
+        吃**本次命中**的行 —— 历史 REASON_PASSWORD 令牌(上一轮重置
+        失效、尚未重新生成)不再被重复暂停(:329 同文件 deactivate 路径
+        的既有教训,reset 此前按 invalidated_reason 重取踩同一坑)。"""
+        from datetime import datetime, timedelta, timezone as _tz
+
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.access_token import AccessToken
+        from app.models.user import User
+        from app.services import access_token as at_svc
+
+        await role_headers(client, "rp_hist_admin", role="super_admin")
+        h_victim = await role_headers(client, "rp_hist", role="user")
+        async with db_module.SessionLocal() as s:
+            vid = (await s.execute(sa_select(User.id).where(
+                User.username == "rp_hist"))).scalar_one()
+            exp = datetime.now(_tz.utc) + timedelta(days=30)
+            # 历史 A:上一轮重置失效、未重新生成(仍 REASON_PASSWORD)
+            s.add(AccessToken(
+                user_id=vid, kind=at_svc.PERSONAL_KIND, name="hist",
+                token_hash="a" * 64, token_hint="hist", expires_at=exp,
+                invalidated_at=datetime.now(_tz.utc),
+                invalidated_reason=at_svc.REASON_PASSWORD))
+            # 活跃 B:本轮重置将被失效的唯一目标
+            s.add(AccessToken(
+                user_id=vid, kind=at_svc.PERSONAL_KIND, name="active",
+                token_hash="b" * 64, token_hint="active", expires_at=exp))
+            await s.commit()
+            b_id = (await s.execute(sa_select(AccessToken.id).where(
+                AccessToken.user_id == vid,
+                AccessToken.name == "active"))).scalar_one()
+
+        paused: list[int] = []
+
+        async def _spy_pause(db, tok, reason, message):
+            paused.append(tok.id)
+
+        monkeypatch.setattr(at_svc, "pause_token_instances", _spy_pause)
+        out = await _reset(client, "rp_hist")
+        # 通知计数 = 本次失效数(1,不含历史 A)
+        assert out["user_id"] == vid
+        # 暂停面恰一张:active B;历史 A 不重复进暂停/通知
+        assert paused == [b_id]

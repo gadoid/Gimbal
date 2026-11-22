@@ -838,11 +838,19 @@ async def _run_orchestration(
         cred_project_id = suite.project_id
         from ..services import graph_dispatch as _gd
         try:
-            _missing = await _gd.missing_auth_aliases(
+            _missing, _ambig = await _gd.missing_auth_aliases(
                 db, graph_spec, user.id, cred_project_id=cred_project_id)
         except _gd.GraphDispatchError as e:
             raise HTTPException(status_code=409, detail={
                 "code": "graph_invalid", "message": str(e)}) from None
+        if _ambig:
+            # D3 收口(2026-11-22):歧义独立报(此前误标「未登记」)
+            raise HTTPException(status_code=409, detail={
+                "code": "auth_aliases_ambiguous",
+                "message": ("以下身份条目命中多个候选账户(同引用多行且"
+                            "无同标签唯一命中),请调整条目环境标签或清理"
+                            "同名账户:" + "、".join(_ambig)),
+                "aliases": _ambig, "credentialSource": "project"})
         if _missing:
             raise HTTPException(status_code=409, detail={
                 "code": "auth_aliases_missing",
@@ -1237,6 +1245,17 @@ async def validate_suite(
                                  "Suite 没有成员,无可执行场景")]}
 
     in_flight_batch = await _in_flight_batch(db, user.id, suite_id)
+
+    # C2 收口(2026-11-22):预检对齐运行口径 —— credentialSource=project
+    # 门不过不再静默降级个人池(旧口径:预检绿、发起编排 409 / 聚合
+    # 成员全 skipped,契约失信)。error 级条目压 ok=False,与运行面
+    # credential_source_invalid 同码。
+    if credential_source == "project" and cred_project_id is None:
+        items.append(_vitem(
+            "error", "credential_source_invalid",
+            "项目凭证源不可用(你不是该项目成员或项目为公共项目):"
+            "发起将以 credential_source_invalid 拒绝(编排模式)或"
+            "成员全部 skipped(聚合模式)"))
 
     if mode == "aggregate":
         # ── 聚合:逐成员(只 main)+ 默认方案可运行性与总量 ─────────

@@ -334,6 +334,50 @@ async def test_convert_strips_author_users(plate_mock: PlateMock) -> None:
     assert scen["config"]["users"]["bob"]["password"] == "p"
 
 
+async def test_convert_strips_platform_sidecar_config_keys(
+        plate_mock: PlateMock) -> None:
+    """旁挂剥离(2026-11-22):var_locks / service_scope 是平台旁挂
+    config 键(frontend types/plate.ts ConfigView 契约注释「不进 M2
+    生成物」),plate Config extra="forbid" 不建模 —— convert 入口
+    单点剥除;存储/解析面(run_prepare 服务引用解析读存储侧
+    service_scope)不受影响,调用方 dict 不被原地改。与 TOK-01
+    (作者明文 users)同闸并存。"""
+    from app.services import plate_client
+
+    scope = [{"envId": 1, "service": "fin-service"}]
+    scen = {"meta": {"name": "n"},
+            "config": {"vars": {},
+                       "var_locks": ["bl_no"],
+                       "service_scope": scope,
+                       "users": {"bob": {"username": "u", "password": "p"}}},
+            "steps": []}
+    await plate_client.convert(scen)
+    sent = plate_mock.convert_calls[-1]["scenario"]
+    cfg = sent.get("config") or {}
+    assert "service_scope" not in cfg
+    assert "var_locks" not in cfg
+    assert "users" not in cfg            # TOK-01 同闸并存
+    assert cfg.get("vars") == {}         # M2 已知键不受剥除波及
+    # 调用方传入的 dict 不被原地改(存储侧旁挂数据仍在)。
+    assert scen["config"]["service_scope"] == scope
+    assert scen["config"]["var_locks"] == ["bl_no"]
+    assert scen["config"]["users"]["bob"]["password"] == "p"
+
+
+async def test_convert_keeps_sidecar_free_config_untouched(
+        plate_mock: PlateMock) -> None:
+    """纯 M2 config(无 users/旁挂键)不走深拷贝重组 —— 输入即发送
+    (b3-4「场景原样发 plate」语义对干净定义不回归)。"""
+    from app.services import plate_client
+
+    scen = {"meta": {"name": "n"},
+            "config": {"vars": {"a": 1}, "services": {}},
+            "steps": []}
+    await plate_client.convert(scen)
+    sent = plate_mock.convert_calls[-1]["scenario"]
+    assert sent.get("config") == {"vars": {"a": 1}, "services": {}}
+
+
 async def test_preview_plate_ok(client: AsyncClient, plate_mock: PlateMock) -> None:
     headers = await _register_and_login(client)
     r = await client.post(

@@ -38,6 +38,7 @@ from ..schemas.auth_session import (
     TestResult,
 )
 from ..services import auth_probe, auth_references, query_view_runner
+from ..services.account_integrity import account_integrity_conflict
 from ._password_gate import require_maskable_password
 
 router = APIRouter(prefix="/auths", tags=["auths"])
@@ -279,13 +280,17 @@ async def create_auth(
     session.add(a)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await session.rollback()
+        # 按约束名分派(复核收口 2026-11-22:blanket 把默认位冲突误报
+        # 成撞名)
+        _code, _msg = account_integrity_conflict(e)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"account '{payload.username}' already exists for "
-                   f"system '{payload.system}' in this environment",
-        )
+            detail=_msg or (
+                f"account '{payload.username}' already exists for "
+                f"system '{payload.system}' in this environment"),
+        ) from e
     await session.refresh(a)
     await _revive(user.id)
     return _to_out(a)
@@ -395,12 +400,15 @@ async def patch_auth(
         a.expires_in = payload.expires_in
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await session.rollback()
+        # 按约束名分派(复核收口 2026-11-22:改默认位撞 uq_account_
+        # default 被误报成「同名账户」)
+        _code, _msg = account_integrity_conflict(e)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="更新冲突:同系统同环境已存在同名账户",
-        )
+            detail=_msg or "更新冲突:同系统同环境已存在同名账户",
+        ) from e
     await session.refresh(a)
     _drop_credential_cache(
         user.id, a,

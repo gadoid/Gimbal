@@ -432,8 +432,10 @@ async def reset_password(
         AccessToken.revoked_at.is_(None),
         AccessToken.invalidated_at.is_(None),
     ).values(invalidated_at=datetime.now(_tz.utc),
-             invalidated_reason=at_svc.REASON_PASSWORD))
-    invalidated = int(res.rowcount or 0)
+             invalidated_reason=at_svc.REASON_PASSWORD)
+        .returning(AccessToken.id))
+    hit_ids = list(res.scalars().all())
+    invalidated = len(hit_ids)
     await db.commit()
     from ..services import audit as audit_svc
 
@@ -458,17 +460,16 @@ async def reset_password(
             link="/profile#security")
     except Exception:  # noqa: BLE001 — 通知是增强,不阻断
         pass
-    # 逐令牌暂停注册方实例(与自服务改密同款,§3.4)
-    toks = (await db.execute(select(AccessToken).where(
-        AccessToken.user_id == target.id,
-        AccessToken.kind == at_svc.PERSONAL_KIND,
-        AccessToken.invalidated_reason == at_svc.REASON_PASSWORD,
-        AccessToken.invalidated_at.is_not(None),
-    ))).scalars().all()
-    for tok in toks:
-        await at_svc.pause_token_instances(
-            db, tok, at_svc.PAUSE_TOKEN_INVALIDATED,
-            "令牌因密码重置失效;重新生成后任务自动恢复")
+    # 逐令牌暂停注册方实例(与自服务改密同款,§3.4)—— RETURNING 只
+    # 取本次 UPDATE 命中的行(:329 同文件教训:按 invalidated_reason
+    # 重取会把上一轮重置失效、尚未重新生成的历史令牌再暂停一遍)。
+    if hit_ids:
+        toks = (await db.execute(select(AccessToken).where(
+            AccessToken.id.in_(hit_ids)))).scalars().all()
+        for tok in toks:
+            await at_svc.pause_token_instances(
+                db, tok, at_svc.PAUSE_TOKEN_INVALIDATED,
+                "令牌因密码重置失效;重新生成后任务自动恢复")
     await db.commit()
     return {
         "user_id": target.id,
@@ -773,7 +774,14 @@ async def delete_user(
                         body="任务属主账号已注销,模板随之删除;"
                              "卡片会显示「已移除」,可自行删卡")
                 except Exception:  # noqa: BLE001
-                    await db.rollback()
+                    # 公示是增强,不阻断处置(与 reset_password 通知同
+                    # 语义)。**不得 rollback()**:此处回滚会把此前已
+                    # 完成的处置写入(transfer/删除/更属主)整批吞掉,
+                    # 循环继续 + 末尾照常 commit = 半处置状态落库。
+                    # 通知失败按非 DB 错误吞掉继续;若确为 DB 级错误,
+                    # 事务已中止,后续语句自然失败 → 整端点 500、零提交
+                    # (连贯 fail-closed,无半处置残留)。
+                    pass
             await db.execute(sa_delete(IntegrationTask).where(
                 IntegrationTask.template_id == tpl.id))
             # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会

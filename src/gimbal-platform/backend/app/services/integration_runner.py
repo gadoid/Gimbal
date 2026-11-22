@@ -1370,14 +1370,16 @@ async def _finish(
 
     # Y4/方案 §5:跨次状态回写 —— state_mapping {输出键 → 状态键},
     # 命中的输出复制进 state_vars(下次执行注入为变量,增量游标)。
-    # 仅 run=ok 推进(失败跑的一半数据不前移游标);outputs 已过脱敏
-    # 键表,复制继承;mapping 为空 = 不回写。
+    # 仅 run=ok 推进(失败跑的一半数据不前移游标);复制源 = **已脱敏
+    # 拷贝** new_outputs(复核收口 2026-11-22:原读未脱敏原件,密文经
+    # state_vars 落库;旧注释「已过脱敏」与实现相反);mapping 为空 =
+    # 不回写。
     if (run_status == "ok" and isinstance(tpl.state_mapping, dict)
-            and tpl.state_mapping and outputs):
+            and tpl.state_mapping and new_outputs):
         merged = dict(inst.state_vars or {})
         for src, dst in tpl.state_mapping.items():
-            if isinstance(dst, str) and dst and src in (outputs or {}):
-                merged[dst] = outputs[src]
+            if isinstance(dst, str) and dst and src in new_outputs:
+                merged[dst] = new_outputs[src]
         inst.state_vars = merged
     try:
         inst.next_run_at = next_fire(tpl.trigger_cron, now)

@@ -105,9 +105,10 @@ async def test_immediate_copy_writes_grants(client: AsyncClient):
     assert r.status_code == 201, r.text
     grants = await _grants(pid)
     assert len(grants) == 1
-    # 直通路径「不落申请行」→ 溯源位为空(设计语义:非经申请行的共享
-    # = NULL;经 approve 申请行的共享带 source_promotion_id,见下测)
-    assert grants[0].source_promotion_id is None
+    # C1 收口(2026-11-22):直通 approved 行落库 → 授权带
+    # source_promotion_id 溯源(与 approve 路径同观感;旧「瞬态对象
+    # 溯源 NULL = 与手工授权不可区分」已废)。
+    assert grants[0].source_promotion_id is not None
 
     # 幂等:第二次共享同条目(另一场景)不重复落行
     r = await client.post(f"/api/projects/{pid}/promotions", headers=h_m,

@@ -693,3 +693,78 @@ class TestS13PublishSemantics:
         assert r.status_code in (404, 422), r.text
         if r.status_code == 422:
             assert r.json()["detail"]["code"] == "scenario_not_public"
+
+
+class TestPublicProjectMemberGuard:
+    """B1 收口(2026-11-22):公共项目三成员端点补 public_project_protected
+    守卫 —— can_run_scenario 项目分支纯查成员表,admin 给公共项目落成员
+    行即可执行公共副本,击穿「公共副本对所有人不可执行」不变量。"""
+
+    async def _public_project(self) -> int:
+        """取 0040 迁移种子的公共项目(uq_projects_public_kind:全库至多
+        一个公共项目,测试 schema 由迁移自动种子)。"""
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.project import Project
+
+        async with db_module.SessionLocal() as db:
+            return (await db.execute(sa_select(Project.id).where(
+                Project.kind == "public"))).scalar_one()
+
+    async def test_add_member_public_409(self, client: AsyncClient):
+        h = await role_headers(client, "s11_pubadm", role="admin")
+        pid = await self._public_project()
+        r = await client.post(f"/api/projects/{pid}/members", headers=h,
+                              json={"userId": 999999, "role": "member"})
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == "public_project_protected"
+        # 守卫先行:不存在的用户也到不了 member_invalid 校验
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.project import ProjectMember
+
+        async with db_module.SessionLocal() as db:
+            rows = (await db.execute(sa_select(ProjectMember).where(
+                ProjectMember.project_id == pid))).scalars().all()
+            assert rows == []
+
+    async def test_patch_and_remove_member_public_409(
+            self, client: AsyncClient):
+        h = await role_headers(client, "s11_pubadm2", role="admin")
+        pid = await self._public_project()
+        r = await client.patch(f"/api/projects/{pid}/members/1", headers=h,
+                               json={"role": "member"})
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == "public_project_protected"
+
+
+async def test_remove_member_public_is_remediation_channel(
+        client: AsyncClient):
+    """fresh-eyes 复核收口(2026-11-22):remove_member 对公共项目放行 ——
+    它是 B1 窗口期遗留成员行的唯一 API 补救通道(全闸会把病害锁进库:
+    can_run_scenario 纯查成员表,残留行即活越权面)。add/patch 保持 409;
+    remove 朝不变量收敛(删行即恢复「公共项目无成员行」)。"""
+    from sqlalchemy import select as sa_select
+
+    from app.core import db as db_module
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    h = await role_headers(client, "s11_pubadm3", role="admin")
+    async with db_module.SessionLocal() as db:
+        pid = (await db.execute(sa_select(Project.id).where(
+            Project.kind == "public"))).scalar_one()
+        uid = (await db.execute(sa_select(User.id).where(
+            User.username == "s11_pubadm3"))).scalar_one()
+        # 直插一行 B1 窗口期形态的残留成员行
+        db.add(ProjectMember(project_id=pid, user_id=uid, role="member"))
+        await db.commit()
+    # 删除成功(204)= 补救通道开放
+    r = await client.delete(f"/api/projects/{pid}/members/{uid}", headers=h)
+    assert r.status_code == 204, r.text
+    async with db_module.SessionLocal() as db:
+        rows = (await db.execute(sa_select(ProjectMember).where(
+            ProjectMember.project_id == pid))).scalars().all()
+        assert rows == []   # 不变量收敛:公共项目成员行归零

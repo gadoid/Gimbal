@@ -78,7 +78,18 @@ async def _require_op_access(db, user, op_id: int) -> None:
 
 @router.get("/unindexed-steps", response_model=list[UnindexedStepOut])
 async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedStepOut]:
-    """C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。"""
+    """C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。
+
+    B3 收口(2026-11-22):补 Admin+ 能力门(ops.write,模块 admin-only
+    约定同款,门在取数前)—— 此前 CurrentUser 裸门 + unindexed_steps
+    全表扫无属主过滤,任何登录用户可枚举他人私有场景 id/步骤索引,
+    违反「404 不泄露存在性」教义(模块 docstring 自称 admin-only,
+    端点却无门)。"""
+    from ..core.deps import capability_error
+    from ._ownership import has_capability
+
+    if not has_capability(user, "ops.write"):
+        raise capability_error("ops.write")
     return [
         UnindexedStepOut.model_validate({
             "scenarioId": i["scenario_id"],
@@ -201,8 +212,11 @@ async def apply_op(user: CurrentUser, op_id: int, db: DbSession) -> OpOut:
         actor_name=user.display_name or user.username,
         action="adaptation.op.apply", resource_type="adaptation_op",
         resource_id=str(op_id),
-        resource_name=op.get("scenario_display_name") or None,
-        detail={"status": op.get("status"), "op_type": op.get("op_type")},
+        # 上轮复核收口:apply_op 返回 dict 为 camelCase(_op_out)——
+        # snake_case 键取值恒 None,审计 detail 恒 null。键对齐输出面;
+        # resource_name 弃(服务面不含展示名,以 scenarioId 入 detail)。
+        detail={"status": op.get("status"), "opType": op.get("opType"),
+                "scenarioId": op.get("scenarioId")},
     )
     return OpOut.model_validate(op)
 
@@ -265,7 +279,12 @@ async def rollback_batch(
         actor_name=user.display_name or user.username,
         action="adaptation.batch.rollback", resource_type="adaptation_batch",
         resource_id=batch_id,
-        detail={"skipped": len(getattr(report, "skipped", []) or [])},
+        # 上轮复核收口:report 是 dict(键 batchId/status/restored/
+        # conflicts,无 skipped 字段)—— getattr(report, "skipped", [])
+        # 恒空,审计计数恒 0。记真实键计数(pending ops 置 skipped 的
+        # 数量不经本报告,以 restored/conflicts 为回滚范围口径)。
+        detail={"restored": len(report.get("restored") or []),
+                "conflicts": len(report.get("conflicts") or [])},
     )
     return RollbackReport.model_validate(report)
 
@@ -281,8 +300,19 @@ async def compare_revisions(
 ) -> dict:
     """RS4a 比较（§5.3）:场景起点修订 vs 目标修订的 plate 差异 + 三组影响。
 
-    R22:读面全员(差异本身不涉编辑权)。
+    B4 收口(2026-11-22):场景读闸 —— 旧注释「R22:读面全员」与私有区
+    教义(GET /scenarios/{id} 非可读 404 不泄露存在性)正面冲突,按
+    GET 口径收窄:不可读 → 404 scenario_not_found。submit-suite 的
+    逐成员内部 compare 不经此端点,其编辑权由 submit_adaptation
+    逐成员闸(结果不回吐 compare 面)。
     """
+    from ._ownership import can_read_scenario_row
+    from ..services.scenario_store import get_row as _get_row
+
+    row = await _get_row(db, scenarioId)
+    if row is None or not await can_read_scenario_row(db, user, row):
+        raise HTTPException(
+            404, f"scenario_not_found: {scenarioId}")
     try:
         item = await adaptation_service.compare_scenario(
             db, scenario_id=scenarioId, target_revision=target,
@@ -313,7 +343,15 @@ async def save_check(user: CurrentUser, db: DbSession,
     """RS4a 保存检查:①目标修订试算（阻断）②引用检查 ③保存方式推荐。
 
     R14:review_items 非空时提示确认,未确认提交被拒。
+    B4 收口(2026-11-22):场景读闸同 compare(404 不泄露存在性)。
     """
+    from ._ownership import can_read_scenario_row
+    from ..services.scenario_store import get_row as _get_row
+
+    row = await _get_row(db, body.scenarioId)
+    if row is None or not await can_read_scenario_row(db, user, row):
+        raise HTTPException(
+            404, f"scenario_not_found: {body.scenarioId}")
     try:
         return await adaptation_service.save_check(
             db, scenario_id=body.scenarioId,
@@ -365,12 +403,9 @@ async def submit_adaptation(user: CurrentUser, db: DbSession,
             "multi_system_scenario": 422,
             "no_system_declared": 422,
         }) from e
-    except HTTPException:
-        raise
-    except Exception as e:  # noqa: BLE001 — _ensure_edit_rights 的 403
-        if "not_scenario_owner" in str(e):
-            raise HTTPException(status_code=403, detail=str(e)) from e
-        raise
+    # not_scenario_owner 死分支与 except HTTPException: raise 空转均删
+    # (复核收口 2026-11-22):_ensure_edit_rights 的 403 经 HTTPException
+    # 自然传播,无需捕获形状。
 
 
 @router.get("/stale")
@@ -454,11 +489,32 @@ async def submit_suite(user: CurrentUser, db: DbSession,
     suite = await db.get(Suite, body.suiteId)
     if suite is None:
         raise HTTPException(404, f"suite_not_found: {body.suiteId}")
+    # B2 收口(2026-11-22)读闸:表 B suite.read —— 此前 db.get 裸取,
+    # 任意登录用户可对他人私有 Suite 触发聚合(compare 吐他人场景面)
+    # 或 copy 深拷贝(签名错配恰以 500 挡住,见下);不可读 → 404 不泄露
+    # 存在性(与 suites fork _require_read_async 同源 can())。
+    from ._ownership import can
+
+    if not await can(db, user, "suite", "read", suite):
+        raise HTTPException(404, f"suite_not_found: {body.suiteId}")
     units = (suite.mode_config or {}).get("units") or {}
     scenario_ids = sorted(units.keys()) if isinstance(units, dict) else []
     if not scenario_ids:
         return {"total": 0, "succeeded": 0, "failed": 0, "items": [],
                 "suite_id": body.suiteId}
+
+    # copy 模式 = fork 同语义(内容深拷贝到操作者名下)→ fork 同款
+    # 「公共项目 ∨ 属主」收窄:他人私有 Suite 即便可读(引用面)也不可
+    # 复制,防借复制转内容(suites.py fork 同原则)。direct 模式不改
+    # Suite 本体,成员编辑权由 submit_adaptation 逐成员闸。
+    if body.saveMode == "copy":
+        from ..services.zone import public_project_id
+
+        # 值在前(suites.py fork 同形;grep 守卫冻结 .owner_id 在前的
+        # 等值比较形状)
+        if (suite.project_id != await public_project_id(db)
+                and user.id != suite.owner_id):
+            raise HTTPException(404, f"suite_not_found: {body.suiteId}")
 
     # R25 前置:版本线一致性检查(direct 模式)
     if body.saveMode == "direct":
@@ -478,10 +534,14 @@ async def submit_suite(user: CurrentUser, db: DbSession,
     # copy 模式:先 fork Suite,再逐成员适配到副本
     new_suite_id = None
     if body.saveMode == "copy":
+        # B2 修调用签名:deep_copy_suite(db, suite, target: User,
+        # sharer_disp) → {suiteId, name, count, mode}(fork 同款位置
+        # 传参;旧 owner_id=/owner_name= kwargs 必 TypeError → 500,
+        # 即使侥幸通过,forked.id 对 dict 取 .id 亦 AttributeError)
         forked = await suite_copy.deep_copy_suite(
-            db, suite, owner_id=user.id,
-            owner_name=user.display_name or user.username)
-        new_suite_id = forked.id if forked else None
+            db, suite, user,
+            await suite_copy.suite_owner_display(db, suite))
+        new_suite_id = forked["suiteId"]
         # 适配目标:新 Suite 的成员(副本场景)
         if new_suite_id:
             fork = await db.get(Suite, new_suite_id)

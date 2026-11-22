@@ -128,7 +128,32 @@ def _pool_clause(owner_id: int | None, cred_project_id: int | None):
     否则执行人个人池。两池互斥(CHECK 归属恰一)—— 不混取。"""
     if cred_project_id is not None:
         return DBAuthAccount.project_id == cred_project_id
+    if owner_id is None:
+        # 潜伏 fail-open 守卫(2026-11-22 复核收口):owner_id IS NULL
+        # 会匹配**全部项目池行**(归属恰一 CHECK:owner NULL ⇔ project
+        # 非空)—— 双 None 即「无主读全项目池」。现四调用面均不可达
+        # 双 None,此处显式拒绝而非渲染恒真谓词,防止未来调用点静默
+        # fail-open。
+        raise ValueError(
+            "pool_clause: owner_id 与 cred_project_id 均缺 —— "
+            "拒绝渲染 IS NULL 全项目池谓词")
     return DBAuthAccount.owner_id == owner_id
+
+
+def _pick_account_deterministic(
+        cands: list[DBAuthAccount], tag: int) -> DBAuthAccount | None:
+    """同标签优先 → 唯一命中;多行歧义由调用方归类(§8.3)。
+
+    取用面**唯一实现**(原 ``_resolve_identities`` 内联闭包,2026-11-22
+    提升至模块级):token 范围复核(access_token.check_scope)同走本函数
+    对齐执行口径 —— 候选集任一命中放行的旧口径在同引用多候选时可选
+    中范围外账户(D1 越权窗口),已废。"""
+    same = [a for a in cands if a.env_id == tag]
+    if len(same) == 1:
+        return same[0]
+    if len(cands) == 1:
+        return cands[0]
+    return None   # 0 行(None 外理)或多行歧义
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,15 +238,6 @@ async def _resolve_identities(
             if a.is_default:
                 accs_default.setdefault(a.system, []).append(a)
 
-    def _pick_one(cands: list[DBAuthAccount], tag: int) -> DBAuthAccount | None:
-        """同标签优先 → 唯一命中;多行歧义由调用方归类(§8.3)。"""
-        same = [a for a in cands if a.env_id == tag]
-        if len(same) == 1:
-            return same[0]
-        if len(cands) == 1:
-            return cands[0]
-        return None   # 0 行(None 外理)或多行歧义
-
     picked: dict[str, PickedIdentity] = {}
     for name, i in cand.items():
         sysname = system_of.get(i.base_service)
@@ -232,7 +248,7 @@ async def _resolve_identities(
             cands = accs_by_key.get((sysname, i.ref_username), [])
         else:
             cands = accs_default.get(sysname, [])
-        acc = _pick_one(cands, i.env_id)
+        acc = _pick_account_deterministic(cands, i.env_id)
         if acc is None:
             if cands:
                 ambiguous.add(name)   # 多候选且无同标签唯一命中
@@ -260,6 +276,20 @@ async def pick_bindings(
     picked, _missing, _ambiguous = await _resolve_identities(
         db, owner_id, slots, cred_project_id=cred_project_id)
     return sorted(picked.values(), key=lambda r: r.slot)
+
+
+async def pick_bindings_full(
+    db: Any, owner_id: int | None, slots: list[str],
+    *, cred_project_id: int | None = None,
+) -> "tuple[list[PickedIdentity], list[str], list[str]]":
+    """同 :func:`pick_bindings`,带回 ``(picked, missing, ambiguous)``
+    分类(D3 收口 2026-11-22:fail-fast 差集把歧义条目统一报「未登记」
+    误导排障 —— 消费方按类分道,歧义给 409/独立码)。同一单源
+    ``_resolve_identities``,取用口径与 pick_bindings 结构上一致。"""
+    picked, missing, ambiguous = await _resolve_identities(
+        db, owner_id, slots, cred_project_id=cred_project_id)
+    return (sorted(picked.values(), key=lambda r: r.slot),
+            sorted(missing), sorted(ambiguous))
 
 
 # ── M2b Q3 数据集按账号驱动:行级账号列 ``@slot.<槽名>`` = 绑定名 ─────

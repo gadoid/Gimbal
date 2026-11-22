@@ -114,12 +114,17 @@ class PrecheckResult(BaseModel):
     # 令牌路径自动以当前令牌预检,JWT 可传 tokenId 预检自己可管理的令牌
     scope_missing: list[dict] = Field(default_factory=list, alias="scopeMissing")
     # S8 收口:身份条目在执行人**个人池**未装载(与派发 fail-fast 同源
-    # pick_bindings 取用差集;空 = 全部可取用)
+    # pick_bindings 取用差集;空 = 全部可取用)。歧义单列(复核收口
+    # 2026-11-22:同引用多候选无同标签唯一命中,执行将 409
+    # account_ambiguous —— 混标「缺失」误导排障)
     missing_auths: list[str] = Field(default_factory=list, alias="missingAuths")
+    ambiguous_auths: list[str] = Field(default_factory=list, alias="ambiguousAuths")
     # 项目凭证池的缺槽清单(None = 不适用:场景不属普通项目 / 执行人非
     # 成员;非空时前端提示可切「项目凭证」或去补登记)
     project_missing_auths: "list[str] | None" = Field(
         default=None, alias="projectMissingAuths")
+    project_ambiguous_auths: "list[str] | None" = Field(
+        default=None, alias="projectAmbiguousAuths")
     # §1.4 env 必填收紧 → §8.5 语义改写:执行标签不可解析(条目标签 >
     # 项目默认 > 平台默认 均未命中)且场景用到身份条目 —— 条目无从解析,
     # missingAuths 全数罗列只是表象;单列信号点名根因(派发侧 409)
@@ -338,24 +343,32 @@ async def _precheck_one(
     # 信号(env_unspecified 根因语义,§8.2)—— 全数 missing 是表象;
     # 混拼不连坐(根因已由 envMixed 点名)。
     if _auth_aliases:
-        from ..services.run_prepare import pick_bindings
+        from ..services.run_prepare import pick_bindings_full
         if _env is None or _env.env_id is None:
             result.env_unspecified = not _env_mixed
-        # 取用按换用后条目判(与派发漏斗同折叠;报告键回声明名)
-        _picked = await pick_bindings(db, user_id, _folded)
-        _picked_slots = {r.slot for r in _picked}
+        # 取用按换用后条目判(与派发漏斗同折叠;报告键回声明名)。
+        # 复核收口(2026-11-22):missing/ambiguous 分类 —— 歧义条目
+        # (同引用多候选,执行 409)不再混标「缺失」误导排障;闸面
+        # 行为不变(两者均不可取用)。
+        _picked, _pmiss, _pamb = await pick_bindings_full(
+            db, user_id, _folded)
+        result.ambiguous_auths = sorted(
+            a for a in set(_auth_aliases)
+            if _lookup.get(a, a) in set(_pamb))
         result.missing_auths = sorted(
             a for a in set(_auth_aliases)
-            if _lookup.get(a, a) not in _picked_slots)
+            if _lookup.get(a, a) in set(_pmiss))
         from ..services.zone import can_use_project_credentials
         if user_id is not None and await can_use_project_credentials(
                 db, user_id, scen.project_id):
-            _pp = await pick_bindings(
+            _pp, _ppmiss, _ppamb = await pick_bindings_full(
                 db, None, _folded, cred_project_id=scen.project_id)
-            _pp_slots = {r.slot for r in _pp}
+            result.project_ambiguous_auths = sorted(
+                a for a in set(_auth_aliases)
+                if _lookup.get(a, a) in set(_ppamb))
             result.project_missing_auths = sorted(
                 a for a in set(_auth_aliases)
-                if _lookup.get(a, a) not in _pp_slots)
+                if _lookup.get(a, a) in set(_ppmiss))
 
     # ── §8.5 跨标签凭证提示(不拦截):账户标签 ≠ 执行标签 ──────────
     if _auth_aliases and _env is not None and _env.env_id is not None:
@@ -527,10 +540,17 @@ async def precheck_hard_gate(
     # 判定收窄到登录态面(token 裸引/call.user)—— 静态令牌形态
     # (纯字段面引用,引擎 PreToken)是合法配置,不硬拦。
     from ..services.auth_ref_scan import scan_token_faces
+    from ..services.service_aliases import setup_teardown_nodes
     cls = await _gate_classify_identities(
         db, auth_aliases=auth_aliases, user_id=user_id,
         cred_project_id=cred_project_id, slot_map=slot_map,
-        login_required=scan_token_faces(definition.get("steps") or []))
+        # D2 收口(2026-11-22):setup/teardown 条目并入登录态面扫描 ——
+        # 其 params 可含 ${auth.*} 裸引(经 setup_teardown_nodes 进
+        # auth_aliases,却漏在 steps-only 的 login_required 外),登录口
+        # 缺失预检绿、运行期才暴露(引擎静态令牌降级步骤级 401)。
+        login_required=scan_token_faces(
+            [*(definition.get("steps") or []),
+             *setup_teardown_nodes(definition)]))
     if cls["identity_missing"]:
         raise PrecheckGateError(
             GATE_IDENTITY_MISSING,

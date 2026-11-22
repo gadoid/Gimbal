@@ -901,15 +901,17 @@ async def build_report(session: AsyncSession, ex: Execution) -> dict:
     groups: list[dict] = []
     by_seq: dict[int, dict] = {}
     for r in rows:
+        # 行投影单一形态 = execution_rows_page 的 camelCase 键(复核收口
+        # 2026-11-22:snake_case 双键回落随存量单清除删除)
         g = {
             "key": f"row-{_row_key(r)}", "rowSeq": _row_key(r),
-            "unit": r.get("unitId") or r.get("unit_id") or "",
-            "datasetId": r.get("datasetId") or r.get("dataset_id"),
-            "rowIndex": r.get("rowIndex", r.get("row_index", 0)),
+            "unit": r.get("unitId") or "",
+            "datasetId": r.get("datasetId"),
+            "rowIndex": r.get("rowIndex", 0),
             "rep": r.get("rep", 0),
             "status": r.get("status", ""),
-            "caseDir": r.get("caseDir") or r.get("case_dir") or "",
-            "serverSlot": r.get("serverSlot", r.get("server_slot")),
+            "caseDir": r.get("caseDir") or "",
+            "serverSlot": r.get("serverSlot"),
             "steps": [],
         }
         groups.append(g)

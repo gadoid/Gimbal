@@ -126,6 +126,17 @@ def _now_iso() -> str:
 # b3-4(C12):ext: 前缀锚点剥离器(原 _strip_* 特例)已删 —— 场景原样发
 # plate(存量已迁移;残留 ext: 按未声明系统 422)。
 
+# 平台旁挂 config 键(契约面 = frontend types/plate.ts ConfigView 注释
+# 「var_locks / service_scope 为平台旁挂(不进 M2 生成物)」):平台侧
+# 指针/锁面数据,**落库 definition 允许携带**(存储侧读面 = scenarios.py
+# 解析预览[引用键 = 步骤引用 ∪ scope]与 service_aliases.py 审计;执行链
+# run_prepare 不读 scope —— 服务地址解析走步骤引用),但 plate 的
+# Scenario Config(extra="forbid")不建模 —— 随 convert 输入过界即
+# extra_forbidden → 执行 plate_rejected(首例 2026-11-22「订单创建
+# (call格式)(副本)」,11-21 服务范围重构起旁挂首次落进 config)。
+# TOK-01 同款单点收口:只在 plate 边界剥,存储/解析面不动。
+_PLATFORM_SIDECAR_CONFIG_KEYS = ("var_locks", "service_scope")
+
 async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     """POST /api/scenario/action/convert(consumer 固定 "gimbal")。
 
@@ -152,15 +163,25 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     HTTP 面无鉴权,暴露面 = PLATE_HOST 非回环或本机恶意进程。单点
     收口覆盖全部 8 个调用面(派发/graph/集成/adhoc/保存校验/适配/
     导入 ×2)。深拷贝后剥离,不改动调用方传入的 dict。
+
+    旁挂剥离(2026-11-22,TOK-01 同款单点收口):config 的平台旁挂键
+    (``var_locks`` / ``service_scope``,``_PLATFORM_SIDECAR_CONFIG_KEYS``,
+    契约见 frontend types/plate.ts ConfigView 注释「不进 M2 生成物」)
+    不随 convert 输入过界 —— plate Config ``extra="forbid"``,多一个
+    未知键即 4xx(执行 plate_rejected)。旁挂数据归平台自有(存储侧
+    解析预览/审计照常读,执行链不依赖),只在 plate 边界剥。
     """
     import copy as _copy
 
     if isinstance(scenario_dict, dict):
         cfg = scenario_dict.get("config")
-        if isinstance(cfg, dict) and cfg.get("users"):
+        if isinstance(cfg, dict) and (
+                cfg.get("users")
+                or any(k in cfg for k in _PLATFORM_SIDECAR_CONFIG_KEYS)):
             scenario_dict = _copy.deepcopy(scenario_dict)
             scenario_dict["config"] = {
-                k: v for k, v in cfg.items() if k != "users"}
+                k: v for k, v in cfg.items()
+                if k != "users" and k not in _PLATFORM_SIDECAR_CONFIG_KEYS}
 
     body = {"consumer": "gimbal", "scenario": scenario_dict}
     client = get_client()

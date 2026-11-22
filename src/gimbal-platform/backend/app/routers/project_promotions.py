@@ -125,16 +125,23 @@ async def create_promotion(
             "message": "存在阻断项(成员场景不在本项目且不能随行),先处理再发起",
             "blockers": analysis["blockers"]})
     if not analysis["conflicts"]:
-        # 直通路径:无冲突不落申请行,直接复制(裁决记录 = 立即加入)
+        # 直通路径:无冲突不落**申请**(pending)行,直接复制。C1 收口
+        # (2026-11-22):approved 行本身落库 —— 此前瞬态对象从不入
+        # session,resolution(decidedBy/decidedAt)不持久化、
+        # grants.source_promotion_id=NULL 与手工授权不可区分、
+        # revoke_grants 按 promotion id 回收够不到这批 grant。
         direct = ProjectPromotion(
             project_id=project_id, kind=body.kind, source_id=body.sourceId,
             applicant_id=user.id, status="approved", conflicts=[],
             resolution={"decisions": [], "immediate": True,
                         "decidedBy": user.id,
                         "decidedAt": iso_utc_z(datetime.now(timezone.utc))})
+        db.add(direct)
+        await db.flush()               # promo.id 入库,grant 溯源挂得上
         copy = await execute_promotion_copy(db, direct, [], approver=user)
         await db.commit()
-        return {"status": "copied", "copy": copy}
+        return {"status": "copied", "copy": copy,
+                "promotionId": direct.id}
     promo = ProjectPromotion(
         project_id=project_id, kind=body.kind, source_id=body.sourceId,
         applicant_id=user.id, conflicts=analysis["conflicts"])
@@ -238,7 +245,9 @@ async def approve_promotion(
     promo.resolution = {
         "decisions": [d.model_dump() for d in body.decisions],
         "decidedBy": user.id,
-        "decidedAt": datetime.now(timezone.utc).isoformat(),
+        # 决策时间同直通路径口径(iso_utc_z;裸 isoformat 带本地偏移,
+        # 双口径并存 = 同字段两种格式)
+        "decidedAt": iso_utc_z(datetime.now(timezone.utc)),
     }
     await notify_svc.create_notification(
         db, user_id=promo.applicant_id, type_="project_promotion.approved",
@@ -265,7 +274,7 @@ async def reject_promotion(
     promo.note = body.reason
     promo.resolution = {
         "decisions": [], "decidedBy": user.id,
-        "decidedAt": datetime.now(timezone.utc).isoformat(),
+        "decidedAt": iso_utc_z(datetime.now(timezone.utc)),
         "reason": body.reason}
     await notify_svc.create_notification(
         db, user_id=promo.applicant_id, type_="project_promotion.rejected",

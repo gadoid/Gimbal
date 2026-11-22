@@ -66,6 +66,46 @@ def _strip_user_view_keys(definition: dict) -> dict:
             "config": {**definition["config"], "users": cleaned}}
 
 
+async def gates_for_mutation(
+    definition: dict, *, prev_payload: "dict | None" = None,
+) -> None:
+    """定义写面共用闸单源(2026-11-22 收口):
+
+    * 版本声明闸 ``enforce_meta_plate``(prev = 存量行 plate —— 声明
+      未变跳过引用校验的防抖语义,适配直存此前整体漏);
+    * 明文凭证拒收(§3.5 拍板 2026-11-20:旧行 users 空 + 本次带明文
+      → 422)—— 适配直存此前整体漏(op 改写理论上不产明文,但该闸
+      是写面不变量,不该靠「理论」)。
+
+    消费面 = store.update / 适配直存(adaptation_service.submit)。
+    Raises ValueError(两闸原码)。"""
+    _old_cfg = (((prev_payload or {}).get("definition") or {})
+                .get("config") or {})
+    _new_users = ((definition or {}).get("config") or {}).get("users")
+    _old_users = _old_cfg.get("users")
+    if (not (isinstance(_old_users, dict) and _old_users)
+            and isinstance(_new_users, dict) and _new_users):
+        raise ValueError(
+            "plaintext_users_rejected: 场景不再接受明文凭证快照"
+            "(definition.config.users)——引用请改为身份条目名"
+            "(${auth.*} 模板 / call.user),手配凭证请走认证管理或"
+            "配置页落池后引用")
+    await enforce_meta_plate(
+        definition,
+        prev_meta_plate=(((prev_payload or {}).get("definition") or {})
+                         .get("meta") or {}).get("plate"))
+
+
+async def post_save_chain(db: AsyncSession, row: "ComposerScenario") -> None:
+    """保存后链单源:已验证修订 → 生效修订 best-effort(M1 版本模型
+    4.1;plate 不可达保持原值,绝不阻塞保存主链)。store.update 与
+    适配直存同走 —— 适配直存此前漏,适配保存后 verified 不升 effective。"""
+    try:
+        await _bump_verified_to_effective(db, row)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def enforce_meta_plate(definition: dict,
                              prev_meta_plate: dict | None = None) -> None:
     """版本声明闸(⑥下沉,2026-10-13;create/update/导入/适配提交共用)。
@@ -303,23 +343,10 @@ async def update(
     # F3:旧名快照(提交后判 rename/edit;在 payload 覆盖前取)
     old_name = (((row.payload or {}).get("definition") or {})
                 .get("meta") or {}).get("name")
-    await enforce_meta_plate(
-        draft.definition,
-        prev_meta_plate=(((row.payload or {}).get("definition") or {})
-                         .get("meta") or {}).get("plate"))
-    # 凭证治理 §3.5(拍板 2026-11-20):存量判定点 = 行的既有形态 ——
-    # 旧行 users 非空(遗留明文快照,§7「只对新建生效」不改存量)放行;
-    # 旧行空(新形态场景)而本次提交带明文 → 422(与 create 同码)。
-    _old_users = (((row.payload or {}).get("definition") or {})
-                 .get("config") or {}).get("users")
-    _new_users = (draft.definition.get("config") or {}).get("users")
-    if (not (isinstance(_old_users, dict) and _old_users)
-            and isinstance(_new_users, dict) and _new_users):
-        raise ValueError(
-            "plaintext_users_rejected: 场景不再接受明文凭证快照"
-            "(definition.config.users)——引用请改为身份条目名"
-            "(${auth.*} 模板 / call.user),手配凭证请走认证管理或"
-            "配置页落池后引用")
+    # 写面闸单源(2026-11-22 收口):版本声明(prev 防抖)+ 明文凭证
+    # 拒收 —— 与适配直存(adaptation_service.submit)同走本函数。
+    await gates_for_mutation(
+        draft.definition, prev_payload=row.payload)
     # 调用身份草稿:§3.8 拍板 —— 维护者/admin 改他人场景只能手填名字,
     # 不带草稿(属主单判与 _require_owner 表 B 同源,私有区写权本就归
     # 属主;公共/项目区维护者可写但不代属主登记全局条目)。
@@ -401,12 +428,8 @@ async def update(
         raise ValueError(_integrity_message(
             _integrity_conflict_code(e), scenario_id)) from e
     await db.refresh(row)
-    # 版本模型 4.1(M1):普通保存后,已验证修订 best-effort 升级为
-    # 当时的生效修订 —— plate 不可达时保持原值,绝不阻塞保存主链。
-    try:
-        await _bump_verified_to_effective(db, row)
-    except Exception:  # noqa: BLE001
-        pass
+    # 版本模型 4.1(M1):普通保存后已验证修订 best-effort 升级(后链单源)
+    await post_save_chain(db, row)
     # F3 事件落账(业务提交后):name 变化 → rename,否则 edit;
     # edit 走短窗合并吸收 autosave(2.5s 防抖全量 PUT)。
     if old_name and server_owned.name and old_name != server_owned.name:
@@ -1059,6 +1082,10 @@ async def to_read_shape(
         if user_id is not None
         else False
     )
+    # C3 收口(2026-11-22):visibility 单源 derive_visibility(普通项目
+    # = 'private',与公共页过滤/S1.9 对齐;旧宽口径见 to_list_item_shape)
+    from .zone import derive_visibility
+
     return Scenario(
         meta=meta,
         steps=steps,
@@ -1070,7 +1097,7 @@ async def to_read_shape(
         stepCount=len(steps),
         tags=list(meta.tags or []),
         starred=starred,
-        visibility=("public" if row.project_id is not None else "private"),
+        visibility=await derive_visibility(db, row.project_id),
         projectId=row.project_id,
     )
 
@@ -1081,6 +1108,7 @@ def to_list_item_shape(
     starred_ids: "set[str] | None" = None,
     data_set_count: int = 0,
     scheme_count: int = 0,
+    visibility: str,
 ) -> ScenarioListItem:
     """列表行形态(M1 响应投影):meta + 计数 + starred,**不含**
     steps/config/resource/orchestration — 大 JSON 字段不出列表响应。
@@ -1105,7 +1133,11 @@ def to_list_item_shape(
         varCount=len(vars_) if isinstance(vars_, dict) else 0,
         tags=list(meta.tags or []),
         starred=starred,
-        visibility=("public" if row.project_id is not None else "private"),
+        # C3 收口(2026-11-22)+ 复核收口:visibility 必传(调用方按
+        # derive_visibility 单源计算)—— None 兜底回落旧宽口径
+        # (「project_id 非空 = public」)是 shim perpetuates drift,
+        # 现存两处调用方均已显式传参,兜底删除。
+        visibility=visibility,
         projectId=row.project_id,
     )
 

@@ -60,3 +60,55 @@ async def test_delete_user_cascades_pool_constant_alias(client: AsyncClient):
             ConstantEntry.owner_id == bob_id))).first() is None
         # 用户本体没了
         assert await s.get(User, bob_id) is None
+
+
+async def test_publicize_notification_failure_keeps_disposal(
+        client: AsyncClient, monkeypatch):
+    """复核收口(2026-11-22):publicize 公示通知失败**不得** rollback
+    吞掉此前处置写入 —— 旧码 rollback 后循环继续 + 末尾照常 commit =
+    半处置状态落库。修后:通知失败按增强语义吞掉继续,模板删除照常
+    落库(204);若真为 DB 级错误则事务中止、整端点失败(连贯)。"""
+    from sqlalchemy import select as _sel
+
+    from app.core import db as db_module
+    from app.models.integration_task import IntegrationTask
+    from app.models.user import User
+
+    admin = await register_and_login(client, "pub_admin2", "adminpass123")
+    target = await register_and_login(client, "pub_bob2", "bobpass123")
+    holder = await register_and_login(client, "pub_holder", "holdpass123")
+
+    async with db_module.SessionLocal() as s:
+        tid = (await s.execute(_sel(User.id).where(
+            User.username == "pub_bob2"))).scalar_one()
+        hid = (await s.execute(_sel(User.id).where(
+            User.username == "pub_holder"))).scalar_one()
+        tpl = IntegrationTask(name="pub-tpl-1", owner_id=tid,
+                              card_template="status")
+        s.add(tpl)
+        await s.flush()
+        s.add(IntegrationTask(name="inst-1", owner_id=hid,
+                              template_id=tpl.id, holder_id=hid,
+                              card_template="status"))
+        await s.commit()
+        tpl_id = tpl.id
+
+    async def _boom(*a, **kw):
+        raise RuntimeError("notification backend down")
+
+    monkeypatch.setattr(
+        "app.services.notifications.create_notification", _boom)
+
+    r = await client.request("DELETE", f"/api/users/{tid}", headers=admin,
+                             json={"disposal": "publicize"})
+    assert r.status_code == 204, r.text
+    # 处置照常落库:模板与实例行随 publicize 删除(未被 rollback 吞掉)
+    async with db_module.SessionLocal() as s:
+        left = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.id == tpl_id))).scalar_one_or_none()
+        insts = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tpl_id))).scalars().all()
+        assert left is None and insts == []
+        # 用户行本身已删
+        assert (await s.execute(_sel(User).where(
+            User.id == tid))).scalar_one_or_none() is None
