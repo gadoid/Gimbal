@@ -687,6 +687,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
+import { useAliasCache } from '@/utils/alias-cache'
 import { pickAccountLikeBackend } from '@/utils/identityResolve'
 import {
   listExecConfigs, createExecConfig, updateExecConfig,
@@ -815,12 +816,29 @@ const bypassDegraded = computed(() => {
 })
 
 // ── 写面注册簿数据(懒加载,静默降级;单一数据源 = binds)──────────
+// 复核收口(2026-11-22):懒加载/缓存/错误态单源化到 useAliasCache
+// (与 ServiceAdmin 共享同一镜像);本视图只保留投影。
+const { entries: _aliasEntries, ensure: _ensureAliasBase } = useAliasCache()
 /** 逐服务身份条目表(listAliases base 过滤;与 listAllAliases 同口径) */
-const aliasCache = ref<Record<string, ServiceAliasRow[]>>({})
+const aliasCache = computed<Record<string, ServiceAliasRow[]>>(() => {
+  const out: Record<string, ServiceAliasRow[]> = {}
+  for (const [k, v] of Object.entries(_aliasEntries)) out[k] = v.items
+  return out
+})
 /** 逐服务注册表总条数(截断提示:>200 未全量载入) */
-const aliasTotal = ref<Record<string, number>>({})
+const aliasTotal = computed<Record<string, number>>(() => {
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(_aliasEntries)) out[k] = v.total
+  return out
+})
 /** 逐服务条目加载状态:loading = 占位;done 后看 cache 决定形态 */
-const aliasLoad = ref<Record<string, 'loading' | 'done' | 'error'>>({})
+const aliasLoad = computed<Record<string, 'loading' | 'done' | 'error'>>(() => {
+  const out: Record<string, 'loading' | 'done' | 'error'> = {}
+  for (const [k, v] of Object.entries(_aliasEntries)) {
+    if (v.status !== 'idle') out[k] = v.status
+  }
+  return out
+})
 
 // ── Ping All 状态(地址 ping + 换用账户拨测;结果就地渲染)────────
 const pingAllRunning = ref(false)
@@ -832,19 +850,7 @@ const depPing = ref<Record<string, PingResult>>({})
 const slotProbe = ref<Record<string, TestResult>>({})
 
 async function ensureAliases(service: string): Promise<void> {
-  if (!service || aliasLoad.value[service] === 'loading'
-    || aliasLoad.value[service] === 'done') return
-  aliasLoad.value = { ...aliasLoad.value, [service]: 'loading' }
-  try {
-    const page = await listAliases({ base: service, page_size: 200 })
-    aliasCache.value = { ...aliasCache.value, [service]: page.items }
-    aliasTotal.value = { ...aliasTotal.value, [service]: page.total }
-    aliasLoad.value = { ...aliasLoad.value, [service]: 'done' }
-  } catch {
-    // FE-02:失败≠空表 —— error 态让节点徽章/就绪判定显「读取失败」,
-    // 不再与「未登记条目」混淆;下次 ensure 可重试
-    aliasLoad.value = { ...aliasLoad.value, [service]: 'error' }
-  }
+  await _ensureAliasBase(service)
 }
 
 // 表单里出现过的服务 → 懒加载该服务条目表(fillForm 与手选都走这)

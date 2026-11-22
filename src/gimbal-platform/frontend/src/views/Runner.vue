@@ -134,6 +134,12 @@
                   >凭证条目未装载:{{ item.precheck.missingAuths.join('、') }}<template v-if="item.precheck.projectMissingAuths != null && !item.precheck.projectMissingAuths.length"> — 项目凭证已覆盖,发起前在右侧切「项目凭证」即可</template><template v-if="item.precheck.envUnspecified"> — 若全数未装载,根因多是标签不可解析(见下)</template>;
                   </span>
                   <span
+                    v-if="item.precheck.ambiguousAuths?.length"
+                    class="pc-warn"
+                    data-testid="runner-ambiguous-auths"
+                  >身份条目命中多候选账户(同引用多行且无同标签唯一命中):{{ item.precheck.ambiguousAuths.join('、') }} — 发起会被预检硬门拦截(409);请调整条目环境标签或清理同名账户;
+                  </span>
+                  <span
                     v-if="item.precheck.envMixed"
                     class="pc-warn"
                     data-testid="runner-env-mixed"

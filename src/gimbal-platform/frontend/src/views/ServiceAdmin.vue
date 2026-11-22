@@ -940,6 +940,7 @@ import {
   type AuthSession, type TestResult,
 } from '@/api/auth_sessions'
 import { confirmAction } from '@/utils/confirmAction'
+import { useAliasCache } from '@/utils/alias-cache'
 import { pickAccountLikeBackend } from '@/utils/identityResolve'
 import { toast } from '@/utils/toast'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
@@ -1022,25 +1023,26 @@ async function refreshAll(manual = false): Promise<void> {
 }
 
 // ── 条目缓存(按服务懒加载;卡头计数用它)────────────────────
-const aliasByService = ref<Record<string, ServiceAliasRow[]>>({})
-const aliasLoading = ref<Record<string, boolean>>({})
+// 复核收口(2026-11-22):懒加载/缓存/错误态单源化到 useAliasCache
+// (与 ExecConfigsView 共享同一镜像);本视图只保留投影与语义封装。
+const { entries: aliasEntries, ensure: _ensureAliasBase,
+        invalidate: invalidateAlias } = useAliasCache()
+const aliasByService = computed<Record<string, ServiceAliasRow[]>>(() => {
+  const out: Record<string, ServiceAliasRow[]> = {}
+  for (const [k, v] of Object.entries(aliasEntries)) out[k] = v.items
+  return out
+})
 /** 条目面失败标记(FE-02):失败≠0 条,与空态分列 */
-const aliasError = ref<Record<string, boolean>>({})
+const aliasError = computed<Record<string, boolean>>(() => {
+  const out: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(aliasEntries)) {
+    out[k] = v.status === 'error'
+  }
+  return out
+})
 
 async function ensureAliases(name: string, force = false): Promise<void> {
-  if (!force && aliasByService.value[name] !== undefined) return
-  aliasLoading.value = { ...aliasLoading.value, [name]: true }
-  try {
-    const page = await listAliases({ base: name, page_size: 200 })
-    aliasByService.value = { ...aliasByService.value, [name]: page.items }
-    const { [name]: _drop, ...rest } = aliasError.value
-    aliasError.value = rest
-  } catch {
-    // 不写空数组占位:undefined + aliasError 让卡头/矩阵显「读取失败」而非 0 条
-    aliasError.value = { ...aliasError.value, [name]: true }
-  } finally {
-    aliasLoading.value = { ...aliasLoading.value, [name]: false }
-  }
+  await _ensureAliasBase(name, force)
 }
 
 function aliasFailed(name: string): boolean {
@@ -1392,7 +1394,7 @@ async function removeSvc(svc: ServiceRow): Promise<void> {
   error.value = ''
   try {
     await deleteService(svc.name)
-    delete aliasByService.value[svc.name]
+    invalidateAlias(svc.name)   // 单源缓存行失效(原直删 computed 投影)
     await refreshAll()
   } catch (e) { error.value = msg(e) }
 }

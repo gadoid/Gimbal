@@ -13,6 +13,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ExecConfigsView from '@/views/ExecConfigsView.vue'
+import { _resetAliasCacheForTest } from '@/utils/alias-cache'
 import * as ecApi from '@/api/execConfigs'
 import type { ExecConfigRow } from '@/api/execConfigs'
 import * as envApi from '@/api/environments'
@@ -208,6 +209,7 @@ describe('ExecConfigsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    _resetAliasCacheForTest()   // 条目单源缓存跨用例隔离(alias-cache)
     setup()
   })
 
@@ -1136,6 +1138,8 @@ describe('ExecConfigsView', () => {
 })
 
 describe('FE-02 失败≠空态(旁路/条目面降级)', () => {
+  // 条目单源缓存跨用例隔离(alias-cache;本 describe 不经上方 setup)
+  beforeEach(() => { _resetAliasCacheForTest() })
   it('旁路四面失败 → 降级横幅点名失败面,不静默伪装空数据', async () => {
     vi.mocked(authApi.listAll).mockRejectedValue(new Error('auth down'))
     vi.mocked(svcApi.listServices).mockRejectedValue(new Error('svc down'))

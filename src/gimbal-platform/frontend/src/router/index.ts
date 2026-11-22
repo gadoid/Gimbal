@@ -90,14 +90,6 @@ const routes = [
     meta: { requiresAuth: true, requiresCap: 'users.manage' },
   },
   {
-    // 凭证清账向导(阶段 3;合并路线 §10):盘点/登记/清账指引 +
-    // enforce 就绪面板。写面(登记条目)= ops.write(admin+,同
-    // /service-admin 闸);清快照走属主保存链(W3 admin 无旁路)。
-    path: '/admin/credential-cleanup',
-    component: () => import('@/views/CredentialCleanupWizard.vue'),
-    meta: { requiresAuth: true, requiresCap: 'ops.write' },
-  },
-  {
     // 用户管理 → 用户页(钻取子页,点行进入):概览 + 访问令牌起步,
     // 后续按用户维度的板块在此扩 tab;替代原全局平铺令牌 tab
     path: '/admin/users/:id(\\d+)',

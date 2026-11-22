@@ -14,6 +14,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
 import FieldForm from '@/components/composer/FieldForm.vue'
+import draggable from 'vuedraggable'
 import {
   getFullEndpoint, resolveResponsePaths, validateEndpointFieldStates,
 } from '@/api/scenario-composer'
@@ -3342,6 +3343,68 @@ describe('CaseComposerCanvas — 步骤三态徽标', () => {
     const badges = w.findAll('.ver-badge')
     expect(badges).toHaveLength(1)
     expect(badges[0]!.text()).toBe('钉修订 1.0#2')
+    w.unmount()
+  })
+})
+
+/**
+ * fsMap 位置重映射与外部回流(复核收口 2026-11-22):
+ * 此前 remove/copy/reorder 均不重映射位置键 —— 字段状态串到错位步骤;
+ * fsMap init-only 单向镜像 —— 外部(父级保存水化)变更不回流。
+ */
+describe('CaseComposerCanvas — fsMap 位置重映射与回流(复核收口 2026-11-22)', () => {
+  it('R1 removeStep: 删除位丢弃、后继左移 —— 状态不串到错位步骤', async () => {
+    const { w, fs } = mountCanvas([mkStep(), mkStep(), mkStep()])
+    await flushPromises()
+    // 外部种子(模拟父级水化):1 号步有字段状态增量
+    fs.value = { '1': { '$.orderId': 'carry' } as Record<string, FieldState> }
+    await flushPromises()
+    await w.findAll('.step-row')[0].find('.step-actions .step-del').trigger('click')
+    await flushPromises()
+    // 旧 1 号 → 新 0 号;被删位无状态遗留
+    expect(fs.value).toEqual({ '0': { '$.orderId': 'carry' } })
+    w.unmount()
+  })
+
+  it('R2 copyStep: 副本不继承字段状态、后继右移', async () => {
+    const { w, fs } = mountCanvas([mkStep(), mkStep()])
+    await flushPromises()
+    fs.value = { '1': { '$.orderId': 'carry' } as Record<string, FieldState> }
+    await flushPromises()
+    await w.findAll('.step-row')[0].find('.step-copy').trigger('click')
+    await flushPromises()
+    // 旧 1 号 → 新 2 号;副本位(1)无状态
+    expect(fs.value).toEqual({ '2': { '$.orderId': 'carry' } })
+    w.unmount()
+  })
+
+  it('R3 拖拽重排 0→1: 被移动位与途经位都重映射', async () => {
+    const { w, fs } = mountCanvas([mkStep(), mkStep()])
+    await flushPromises()
+    fs.value = {
+      '0': { '$.a': 'carry' } as Record<string, FieldState>,
+      '1': { '$.b': 'carry' } as Record<string, FieldState>,
+    }
+    await flushPromises()
+    w.findComponent(draggable).vm.$emit('end', { oldIndex: 0, newIndex: 1 })
+    await flushPromises()
+    expect(fs.value).toEqual({
+      '0': { '$.b': 'carry' },
+      '1': { '$.a': 'carry' },
+    } as any)
+    w.unmount()
+  })
+
+  it('R4 外部回流: 父级水化新 fieldStates 灌回本地镜像(fsMap 非 init-only)', async () => {
+    const { w, fs } = mountCanvas([mkStep(), mkStep()])
+    await flushPromises()
+    fs.value = { '0': { '$.orderId': 'carry' } as Record<string, FieldState> }
+    await flushPromises()
+    // 回流路径:watch 灌回 fsMap → _replaceFs → _syncFs 上抛 —— 上抛
+    // payload 即灌回后的镜像内容(等价断言,免穿 script-setup 私有态)
+    const canvas = w.findComponent(CaseComposerCanvas)
+    const last = canvas.emitted('update:fieldStates')!.at(-1)![0] as any
+    expect(last).toEqual({ '0': { '$.orderId': 'carry' } })
     w.unmount()
   })
 })

@@ -11,6 +11,7 @@
  *     前端视图类型 camelCase — 本模块是这层映射的唯一收敛点,
  *     UserAuthView 例外(其自身即 snake_case,与 plate 直通)。
  */
+import http from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import type { ConfigView, MetaView, ResourceView } from '@/types/plate'
 
@@ -47,16 +48,13 @@ export interface PlateLineInfo {
 /**
  * RS3：GET /api/endpoint-catalog/{system}/lines → 版本线列表。
  * 走平台后端代理（不走 /plate 直连——版本线是平台消费面）。
+ * 复核收口(2026-11-22):/api 面改走统一 http 实例(鉴权/错误拦截器
+ * 同源)—— 裸 fetch 只保留给 /plate 直连面(见文件头成文理由)。
  */
 export async function fetchSystemLines(systemId: string): Promise<PlateLineInfo[]> {
-  const token = useAuthStore().accessToken
-  const resp = await fetch(
-    `/api/endpoint-catalog/${encodeURIComponent(systemId)}/lines`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-  )
-  if (!resp.ok) throw new Error(`lines ${systemId} -> HTTP ${resp.status}`)
-  const body = await resp.json() as { items: PlateLineInfo[] }
-  return body.items
+  const resp = await http.get<{ items: PlateLineInfo[] }>(
+    `/endpoint-catalog/${encodeURIComponent(systemId)}/lines`)
+  return resp.data.items
 }
 
 /** plate config 条目(snake_case 原样)。 */

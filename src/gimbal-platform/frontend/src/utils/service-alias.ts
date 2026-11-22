@@ -17,7 +17,12 @@
  */
 
 /** key ∈ 目录集合 → key(目录名直引);否则最后 "-" 切分,base ∈ 集合 → base;
- *  否则 null(裸声明,不猜)。 */
+ *  否则 null(裸声明,不猜)。
+ *
+ * 前后端双头契约(2026-11-22):本函数**逐字镜像**后端单源
+ * ``services/service_names.derive_base``(两侧今日等价;任何一侧改动
+ * 必须同步另一侧 —— 服务键归一是保存闸/导入映射/显示推导共用口径,
+ * 漂移 = 前端预演与后端落库判定分裂)。 */
 export function deriveBase(key: string, catalogNames: ReadonlySet<string>): string | null {
   if (!key) return null
   if (catalogNames.has(key)) return key

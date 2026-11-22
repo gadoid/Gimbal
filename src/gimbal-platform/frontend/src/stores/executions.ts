@@ -28,7 +28,7 @@ const FALLBACK_POLL_MS = 3000
 
 export const useExecutionsStore = defineStore('executions', () => {
   const list = ref<ExecutionListItem[]>([])
-  /** 筛选后的总数(执行记录页筛选行显示;fetchList 不筛时 = list.length 对应总数) */
+  /** 筛选后的总数(执行记录页筛选行显示;视图直载 listExecutions 回填) */
   const total = ref(0)
   const detail = ref<Execution | null>(null)
   const loading = ref(false)
@@ -122,21 +122,10 @@ export const useExecutionsStore = defineStore('executions', () => {
     expandedArtifacts.value = next
   }
 
-  async function fetchList(params?: { tokenId?: number }): Promise<ExecutionListItem[]> {
-    loading.value = true
-    try {
-      const r = await api.listExecutions(params)
-      list.value = r.items
-      total.value = r.total
-      lastError.value = ''
-      return r.items
-    } catch (e) {
-      lastError.value = e instanceof Error ? e.message : 'fetch failed'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
+  // fetchList 已删(2026-11-22 死控制收口):零调用方 —— ExecutionsList
+  // 等视图经 listExecutions 直载并写 store.list/total(分页/筛选参数
+  // 形态各异,store 不做单一 load 门)。新增载入请走视图同款直载。
+
 
   async function fetchDetail(id: number): Promise<Execution> {
     loading.value = true
@@ -384,7 +373,6 @@ export const useExecutionsStore = defineStore('executions', () => {
     artifactText,
     artifactError,
     expandedArtifacts,
-    fetchList,
     fetchDetail,
     remove,
     fetchRows,

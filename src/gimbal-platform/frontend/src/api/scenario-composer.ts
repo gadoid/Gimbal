@@ -645,8 +645,13 @@ export interface PrecheckResult {
   builtinAuthShadowed?: string[]
   /** S8 收口:身份条目在我个人池未装载(派发 fail-fast 同源);空 = 齐备 */
   missingAuths?: string[]
+  /** 复核收口(2026-11-22):歧义单列 —— 同引用多候选无同标签唯一命中
+   *  (执行将 409 account_ambiguous),不再混标「缺失」误导排障 */
+  ambiguousAuths?: string[]
   /** 项目凭证池的缺槽清单(null = 不适用:非普通项目 / 非成员) */
   projectMissingAuths?: string[] | null
+  /** 同上,项目池歧义单列(null = 不适用) */
+  projectAmbiguousAuths?: string[] | null
   /** §8.5 语义改写:执行标签不可解析(条目标签 > 项目默认 > 平台默认
    *  均未命中)且场景用到身份条目 —— missingAuths 全数罗列只是表象;
    *  派发侧 409 env_unspecified。混拼不连坐(见 envMixed) */

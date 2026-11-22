@@ -226,6 +226,7 @@ import type { AuthSession } from '@/api/auth_sessions'
 import { listEnvironments } from '@/api/environments'
 import type { EnvironmentRow } from '@/api/environments'
 import { createAlias, patchAlias } from '@/api/service-aliases'
+import { pickAccountLikeBackend } from '@/utils/identityResolve'
 import type { AuthDraftView } from '@/types/scenario-composer'
 import type { UserAuthView } from '@/types/plate'
 import type {
@@ -455,13 +456,21 @@ function poolForSystem(
 function mappedAccount(
   inst: ScopedServiceInstanceView, id: IdentityRow | null,
 ): AuthSession | null {
+  // A1 收口(2026-11-22):显示口径复用 identityResolve.pickAccountLike
+  // Backend(镜像后端 _pick_account_deterministic),废止本文件手写镜像
+  // 的两处漂移 —— ① username 多候选取 same[0] 假"已映射"(执行将 409
+  // account_ambiguous);② default 在合并双池找默认(执行按单池互斥
+  // 解析,跨池假绑定)。解析按池分道:个人池优先(执行缺省池),
+  // 项目上下文再回落项目池;歧义(同池多候选无同标签唯一)= null。
   if (!id || id.pending || !inst.system) return null
-  const candidates = poolAll.value.filter((a) => a.system === inst.system)
-  if (id.refMode === 'default') {
-    return candidates.find((a) => a.isDefault) ?? null
-  }
-  const same = candidates.filter((a) => a.username === id.refUsername)
-  return same.find((a) => a.envId === id.envId) ?? same[0] ?? null
+  const personal = poolAll.value.filter((a) => a.source !== 'project')
+  const hit = pickAccountLikeBackend(personal, inst.system, id)
+    ?? (props.projectId != null
+      ? pickAccountLikeBackend(
+        poolAll.value.filter((a) => a.source === 'project'),
+        inst.system, id)
+      : undefined)
+  return hit ?? null
 }
 
 function credentialValue(
@@ -497,9 +506,16 @@ function credentialOptions(
         disabled: true,
       })
     } else if (!acc) {
+      // A1:歧义 ≠ 缺账户 —— 多候选无同标签唯一命中时执行将 409,
+      // 文案如误解为「未登记」会把排障指向错误修复面。
+      const ambig = poolAll.value.filter(
+        (a) => a.system === inst.system && a.username === id.refUsername,
+      ).length > 1
       opts.push({
         value: '__missing__',
-        label: `username ${id.refUsername || '?'}(不在我的池)`,
+        label: ambig
+          ? `username ${id.refUsername || '?'}(多候选歧义,执行将 409)`
+          : `username ${id.refUsername || '?'}(不在我的池)`,
         disabled: true,
       })
     }
@@ -528,7 +544,14 @@ function rowHint(
       ? `默认账户:${acc.username}`
       : '默认引用由执行者池解析'
   }
-  if (!acc) return `username ${id.refUsername || '?'} 不在我的池`
+  if (!acc) {
+    const ambig = poolAll.value.filter(
+      (a) => a.system === inst.system && a.username === id.refUsername,
+    ).length > 1
+    return ambig
+      ? `username ${id.refUsername || '?'} 命中多候选账户,执行将 409`
+      : `username ${id.refUsername || '?'} 不在我的池`
+  }
   if (acc.envId !== id.envId) {
     return `凭证环境 ${envName(acc.envId)},执行登录口按账户环境`
   }
@@ -578,7 +601,14 @@ async function bind(
     await patchAlias(id.aliasName, {
       refMode: 'username', refUsername: acc.username,
     })
-    toast.success(`已将 ${id.aliasName} 绑定到 ${acc.username}`)
+    // A2:改绑 = PATCH 全局身份条目(admin 即时生效),toast 需全局
+    // 口径;项目池账户附带池口径提示(单池互斥解析)。
+    toast.success(`已将 ${id.aliasName} 全局绑定到 ${acc.username}`
+      + '(该身份条目为全局注册,所有引用它的场景即时生效)')
+    if (acc.source === 'project') {
+      toast.info('该账户在项目池:username 引用仅在项目凭证源执行时'
+        + '可解析,个人池执行将 account_missing')
+    }
     emit('registry-changed')
   } catch (e) {
     toast.error(errMsg(e))

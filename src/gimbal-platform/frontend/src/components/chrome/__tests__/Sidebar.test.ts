@@ -74,8 +74,8 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     // 说明页,置灰可点(§4.4)。执行配置分层①:+执行配置(全员置顶组)
     // 2026-11-13:服务配置/服务注册(独立页)并为「服务注册」一页,从服务组
     // 挪入「平台」组(服务组回归纯全员使用面)→ 17-1=16;
-    // 阶段 3 增「凭证清账」平台组入口(2026-11-21)→ 16+1=17
-    expect(links.length).toBe(17)
+    // 凭证清账向导退役(2026-11-22 复核:enforce 已闭环,巡检面归 CLI)→ 16
+    expect(links.length).toBe(16)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/notifications', '/exec-configs',
@@ -91,7 +91,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
       // 执行组:执行器/执行记录/数据分析(置灰保留、可点进说明页)
       '/run', '/executions', '/analytics',
       // 平台组(治理面):服务注册(身份面+地址合并页)+ 用户管理
-      '/service-admin', '/admin/credential-cleanup', '/admin/users',
+      '/service-admin', '/admin/users',
     ])
     w.unmount()
   })
@@ -220,9 +220,9 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('aside').classes()).toContain('w-[12.5rem]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
-    // 17+1 可点(含置灰可点的数据分析 + 阶段 3「凭证清账」)+ 1 置灰 span(字段来源分析,§4.4;
-    // 2026-11-13 两治理面合一 18-1)
-    expect(w.findAll('.nav-text').length).toBe(18)
+    // 16 可点(含置灰可点的数据分析)+ 1 置灰 span(字段来源分析,§4.4;
+    // 2026-11-13 两治理面合一 18-1;凭证清账退役 2026-11-22)
+    expect(w.findAll('.nav-text').length).toBe(17)
     w.unmount()
   })
 
@@ -238,7 +238,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(18)   // 17 可点 + 1 置灰 span(两治理面合一 17-1 + 阶段 3 凭证清账)
+    expect(rows.length).toBe(17)   // 16 可点 + 1 置灰 span(两治理面合一;凭证清账退役 2026-11-22)
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -263,7 +263,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(17)  // 两治理面合一(17-1)+ 阶段 3 凭证清账(2026-11-21)
+    expect(links.length).toBe(16)  // 两治理面合一(17-1);凭证清账退役(2026-11-22)
     // 场景集随「我的」组第三位(置顶组 0/1/2 位=工作台/通知/执行配置):
     // suites=5 / auths=6(2026-11-15 迁入)/ 项目=7 / services=8
     expect(links[5].attributes('href')).toBe('/suites')

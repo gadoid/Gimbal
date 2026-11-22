@@ -247,7 +247,6 @@ const groups: SidebarGroup[] = [
     { path: '/service-admin', label: '服务注册', icon: LayersIcon, cap: 'ops.write' },
     // 凭证清账向导(阶段 3):盘点/登记/清账指引 + enforce 就绪;
     // 一次性治理面,enforce 落地后可整页退役。
-    { path: '/admin/credential-cleanup', label: '凭证清账', icon: GearIcon, cap: 'ops.write' },
     { path: '/admin/users', label: '用户管理', icon: GearIcon, cap: 'users.manage' },
   ] },
 ]

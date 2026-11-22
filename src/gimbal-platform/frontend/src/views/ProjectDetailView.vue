@@ -478,15 +478,22 @@ const suiteModeFilters = [
 async function loadSuites(page = suitePage.value): Promise<void> {
   if (!project.value) return
   suitePage.value = page
-  const env = await listSuites({
-    projectId: project.value.id,
-    q: suiteQ.value.trim() || undefined,
-    mode: suiteMode.value || undefined,
-    page, page_size: suitePageSize.value,
-  })
-  suites.value = env.items
-  suiteTotal.value = env.total
-  suiteLoaded.value = true
+  try {
+    const env = await listSuites({
+      projectId: project.value.id,
+      q: suiteQ.value.trim() || undefined,
+      mode: suiteMode.value || undefined,
+      page, page_size: suitePageSize.value,
+    })
+    suites.value = env.items
+    suiteTotal.value = env.total
+    suiteLoaded.value = true
+  } catch (e) {
+    // 复核收口(2026-11-22):防抖 watcher 以 void 调本函数 —— 无 catch
+    // = 未处理 rejection(UI 零提示且 suiteLoaded 不置位)。失败保留
+    // 旧列表(FE-02:失败≠空态),toast 点名。
+    toast.error(`用例集加载失败:${(e as Error).message}`)
+  }
 }
 
 // 搜索防抖 / 模式切换 / 翻页

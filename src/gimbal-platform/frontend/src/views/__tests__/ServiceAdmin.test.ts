@@ -21,6 +21,7 @@ import * as depApi from '@/api/deployments'
 import * as svcApi from '@/api/services'
 import * as aliasApi from '@/api/service-aliases'
 import * as authApi from '@/api/auth_sessions'
+import { _resetAliasCacheForTest } from '@/utils/alias-cache'
 import type { ServiceRow, InstanceRow } from '@/api/services'
 import type { ServiceAliasRow } from '@/api/service-aliases'
 import type { AuthSession, TestResult } from '@/api/auth_sessions'
@@ -119,6 +120,7 @@ function setupBase(overrides: Partial<{
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.restoreAllMocks()
+  _resetAliasCacheForTest()   // 条目单源缓存跨用例隔离(alias-cache)
   document.body.innerHTML = ''
   setupBase()
 })

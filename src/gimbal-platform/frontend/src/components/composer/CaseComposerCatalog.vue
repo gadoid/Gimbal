@@ -497,7 +497,13 @@ async function refetch() {
     const wr = await fetch(workingUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
-    const wd: any = wr.ok ? await wr.json() : { items: [] }
+    if (!wr.ok) {
+      // 复核收口(2026-11-22):working 全量拉取失败曾被 `wr.ok ? json
+      // : {items: []}` 吞成静默空清单 —— 目录面空、零提示,用户无从
+      // 区分「目录真空」与「拉取失败」。显式抛错走外层统一 toast。
+      throw new Error(`接口目录拉取失败(HTTP ${wr.status})`)
+    }
+    const wd: any = await wr.json()
     const workingItems: any[] = wd?.items || []
     // 从 working 结果提取系统清单(不重复)
     const systems = [...new Set(workingItems.map((e: any) => e.system))]

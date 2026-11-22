@@ -8,7 +8,6 @@
  * 颜色语义(批次 4 起统一 Signal token,见 tailwind.config signal.*):
  * queued 灰、running 电光蓝、done Signal 绿、failed Signal 红、
  * canceled 冷灰。
- */
  * 双主题(2026-11-15):颜色走 dual-theme.css 语义令牌 —— 白天值
  * 与原 hex 逐字一致,夜间由 html[data-theme="dark"] 覆盖。
  */

@@ -678,6 +678,32 @@ function _syncFs(): void {
   emit('update:fieldStates', { ...fsMap })
 }
 
+/** fsMap 整表替换 + 上抛(复核收口 2026-11-22:remove/copy/reorder 的
+ *  位置重映射与外部回流共用;reactive 对象不能整体换引用,原地清灌)。 */
+function _replaceFs(next: Record<string, Record<string, FieldState>>): void {
+  for (const k of Object.keys(fsMap)) delete fsMap[k]
+  Object.assign(fsMap, next)
+  _syncFs()
+}
+
+// 外部 fieldStates 回流(fsMap 此前 init-only 单向镜像):父级保存后
+// 水化(同请求顺带 ui.fieldStates)等外部写入灌回本地镜像;回环抑制
+// = 本组件 _syncFs 上抛后父级原样回传(内容相等)不再灌回。deep:
+// 父级若**原地改同一对象**(不换引用)也要触发 —— 浅层 watch 只盯
+// 引用是潜伏漏配。
+watch(() => props.fieldStates, (incoming) => {
+  const inc = (incoming || {}) as Record<string, Record<string, FieldState>>
+  const keys = new Set([...Object.keys(fsMap), ...Object.keys(inc)])
+  let changed = false
+  for (const k of keys) {
+    if (JSON.stringify(fsMap[k] ?? null) !== JSON.stringify(inc[k] ?? null)) {
+      changed = true
+      break
+    }
+  }
+  if (changed) _replaceFs({ ...inc })
+}, { deep: true })
+
 /** W11 三态徽标(与 W5/W7 判定链同口径):
  *  锚定步骤(有 endpoint)→ 系统受管:meta.plate[sys] 有值 = 「钉修订
  *  <ref>」;无/working = 「当前规格」(预览执行,不计入库标准)。
@@ -1329,7 +1355,8 @@ function headerAuthTagOf(step: StepView): string | null {
 /** 查询别名(凭证治理 §3.6 换源,2c):候选 = 步骤服务的注册表条目 ——
  *  步骤服务本身是已登记条目时优先自身(执行视角 = 查询视角,修订 11
  *  延伸),否则同基条目(aliasCandidates 同口径)。「装载」判定 =
- *  pickAccountLikeBackend(镜像后端 run_prepare._pick_one;§8.3 引用
+ *  pickAccountLikeBackend(镜像后端 run_prepare._pick_account_
+ *  deterministic,2026-11-22 单源更名;§8.3 引用
  *  不校验标签)× 本人池 —— 与查询视图 loader「按 alias 从本人池取,
  *  不吃快照」同池同序,选中的候选执行时必查得到。无装载条目 → null
  *  诚实 422(不再回退 authored users 旧值:那是治理要清的陈旧凭证)。
@@ -2256,8 +2283,17 @@ async function onAddEndpoint(ep: any) {
 }
 
 function removeStep(i: number) {
+  // fsMap 位置重映射(复核收口 2026-11-22):删除步后,其后步骤左移
+  // 一格 —— 不重映射会把字段状态串到错位的步骤;被删步的状态丢弃。
+  const moved: Record<string, Record<string, FieldState>> = {}
+  for (const [k, v] of Object.entries(fsMap)) {
+    const o = Number(k)
+    if (o === i) continue
+    moved[String(o < i ? o : o - 1)] = v
+  }
   local.splice(i, 1)
   orch.steps.splice(i, 1)  // 保持与 local 同序同长
+  _replaceFs(moved)
   if (activeStepIdx.value >= local.length) activeStepIdx.value = Math.max(0, local.length - 1)
 }
 
@@ -2267,6 +2303,13 @@ function removeStep(i: number) {
  * WeakMap 侧挂 key 对新对象按需分配,无需处理。
  */
 function copyStep(i: number) {
+  // fsMap 位置重映射(复核收口 2026-11-22):副本插入 i+1,其后步骤
+  // 右移一格;副本 = 全新步骤,**不继承**原步字段状态。
+  const moved: Record<string, Record<string, FieldState>> = {}
+  for (const [k, v] of Object.entries(fsMap)) {
+    const o = Number(k)
+    moved[String(o < i + 1 ? o : o + 1)] = v
+  }
   const clone = JSON.parse(JSON.stringify(local[i])) as StepView
   local.splice(i + 1, 0, clone)
   const name = orch.steps[i]?.name || stepPath(local[i]) || 'step'
@@ -2274,6 +2317,7 @@ function copyStep(i: number) {
     ...(orch.steps[i] ?? { enabled: true, name: '' }),
     name: `${name}(副本)`,
   })
+  _replaceFs(moved)
   activeStepIdx.value = i + 1
   toast.success(`已复制 step ${i + 1}(副本插入其后,可改名单独编排)`)
 }
@@ -2301,9 +2345,21 @@ function stepKey(s: object): number {
 function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   const { oldIndex, newIndex } = evt
   if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+  // fsMap 位置重映射(复核收口 2026-11-22):拖拽重排后,被移动步与其
+  // 途经步骤的位置都变 —— 不重映射同样串数据。
+  const moved: Record<string, Record<string, FieldState>> = {}
+  for (const [k, v] of Object.entries(fsMap)) {
+    const o = Number(k)
+    let nw = o
+    if (o === oldIndex) nw = newIndex
+    else if (oldIndex < newIndex && o > oldIndex && o <= newIndex) nw = o - 1
+    else if (newIndex < oldIndex && o >= newIndex && o < oldIndex) nw = o + 1
+    moved[String(nw)] = v
+  }
   const selected = orch.steps[activeStepIdx.value]
-  const moved = orch.steps.splice(oldIndex, 1)[0]
-  orch.steps.splice(newIndex, 0, moved)
+  const spliced = orch.steps.splice(oldIndex, 1)[0]
+  orch.steps.splice(newIndex, 0, spliced)
+  _replaceFs(moved)
   if (selected) {
     const next = orch.steps.indexOf(selected)
     if (next >= 0) activeStepIdx.value = next
