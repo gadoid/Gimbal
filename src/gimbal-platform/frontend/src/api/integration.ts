@@ -110,6 +110,26 @@ export function runAbnormalOf(runStatus?: string | null): boolean {
   return !!runStatus && runStatus !== 'ok'
 }
 
+/** 暂停原因 → 展示文案(单源,工作台功能卡角标与集成中心状态列共用;
+ *  C1 平台模式退役后 scope_denied 统一「场景非公共」口径)。双上下文
+ *  字段:list = 集成中心「运行状态」列(长口径),badge = 功能卡角标
+ *  (短口径)。fail_streak 由调用方插值次数不入表;查表缺省兜底
+ *  「已暂停」同样留在调用方。 */
+export const PAUSED_REASON_TEXT: Record<string, { list: string; badge: string }> = {
+  auth_failed: { list: '凭证失效', badge: '凭证失效' },
+  missing_credential: { list: '缺凭证', badge: '缺凭证' },
+  template_changed: { list: '内容已变更·待确认', badge: '内容已变更' },
+  made_private: { list: '已转私有·待确认', badge: '已转私有' },
+  token_revoked: { list: '令牌已吊销·待解绑', badge: '令牌已吊销' },
+  token_invalidated: { list: '令牌已失效·待重新生成', badge: '令牌已失效' },
+  token_expired: { list: '令牌已到期·待续期', badge: '令牌已到期' },
+  token_owner_ineligible: { list: '令牌属主角色不足', badge: '令牌属主不足' },
+  resource_not_allowed: { list: '超出令牌范围', badge: '超出令牌范围' },
+  scope_denied: { list: '场景非公共', badge: '场景非公共' },
+  inbound_disabled: { list: '入站已关闭', badge: '入站已关闭' },
+  manual: { list: '已暂停(本人)', badge: '已暂停' },
+}
+
 /** S7.0:?projectId = 项目详情「集成任务」页签(可见性按成员收口)。 */
 export async function listIntegrationTasks(
   projectId?: number,

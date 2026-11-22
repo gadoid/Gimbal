@@ -171,7 +171,7 @@ onUnmounted(() => clearTimeout(pulseTimer))
 }
 .accent-blue { --card-accent: var(--sl-accent); }
 .accent-green { --card-accent: var(--sl-ok); }
-.accent-gold { --card-accent: #eab308; }
+.accent-gold { --card-accent: var(--sl-star); }
 
 .card-slot:hover .slot-frame {
   border-color: var(--sl-accent);
@@ -203,7 +203,7 @@ onUnmounted(() => clearTimeout(pulseTimer))
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #b6c2d4;
+  color: var(--c-text-tertiary);
   cursor: grab;
   border-radius: 0 0.375rem 0.375rem 0;
   opacity: 0;
@@ -255,7 +255,7 @@ onUnmounted(() => clearTimeout(pulseTimer))
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(16, 21, 28, 0.1);
 }
-.ctl-remove:hover { color: var(--sl-bad); border-color: #f6c6c6; background: #fdf5f5; }
+.ctl-remove:hover { color: var(--sl-bad); border-color: color-mix(in srgb, var(--sl-bad) 30%, transparent); background: var(--sl-bad-soft); }
 
 /* ── 状态面(loading / error)────────────────────────────── */
 .card-state {
@@ -267,7 +267,7 @@ onUnmounted(() => clearTimeout(pulseTimer))
   border-radius: 0.5rem;
   text-align: center;
 }
-.card-state.bad { color: var(--sl-bad); border-color: #f6c6c6; background: #fdf5f5; }
+.card-state.bad { color: var(--sl-bad); border-color: color-mix(in srgb, var(--sl-bad) 30%, transparent); background: var(--sl-bad-soft); }
 .retry {
   margin-left: 0.5rem; padding: 0.125rem 0.625rem; font-size: 0.75rem;
   color: var(--sl-accent); background: none;

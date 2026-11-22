@@ -92,7 +92,7 @@ onMounted(async () => {
 /* 形制在基座 scenario-lib.css;本卡只留行列宽与草稿章。 */
 .su-row { grid-template-columns: minmax(0, 1fr) auto auto; }
 .su-draft {
-  font-size: 0.625rem; color: var(--sl-warn); background: #fef3c7;
+  font-size: 0.625rem; color: var(--sl-warn); background: var(--sl-warn-soft);
   border-radius: 0.1875rem; padding: 0 0.25rem; margin-left: 0.25rem;
 }
 </style>

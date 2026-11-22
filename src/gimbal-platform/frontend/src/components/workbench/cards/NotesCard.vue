@@ -55,7 +55,7 @@
           <button
             v-for="f in NOTE_FILTERS" :key="f" type="button"
             class="h-[1.625rem] border-0 px-2.5 text-caption"
-            :class="filter === f ? 'bg-[#E7EFFF] text-[#1F55C4]' : 'bg-signal-card text-signal-ink'"
+            :class="filter === f ? 'bg-signal-soft text-signal' : 'bg-signal-card text-signal-ink'"
             :style="f !== 'all' ? 'border-left: 1px solid var(--color-signal-line)' : ''"
             @click="filter = f"
           >{{ { all: '全部', open: '未完成', done: '已完成' }[f] }}</button>

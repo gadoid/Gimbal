@@ -89,10 +89,10 @@ const allTypes = computed(() =>
 }
 .dot-blue { background: var(--sl-accent); }
 .dot-green { background: var(--sl-ok); }
-.dot-gold { background: #eab308; }
+.dot-gold { background: var(--sl-star); }
 .gal-info { display: flex; flex-direction: column; gap: 0.1875rem; min-width: 0; flex: 1; }
 .gal-title { font-size: 0.8125rem; font-weight: 700; color: var(--sl-ink); }
-.gal-desc { font-size: 0.75rem; color: #5b6472; line-height: 1.45; }
+.gal-desc { font-size: 0.75rem; color: var(--c-text-secondary); line-height: 1.45; }
 .gal-id { font-size: 0.6875rem; color: var(--color-text-tertiary); }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

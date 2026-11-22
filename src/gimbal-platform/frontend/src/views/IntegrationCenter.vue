@@ -216,7 +216,7 @@ import {
   listIntegrationTasks, createIntegrationTask, deleteIntegrationTask,
   runIntegrationTask, integrationErr, fetchScenarioPreview,
   unsubscribeIntegrationTask, pauseMySubscription, resumeMySubscription,
-  RUN_BADGE_TEXT, CHECK_TEXT, runAbnormalOf,
+  RUN_BADGE_TEXT, CHECK_TEXT, runAbnormalOf, PAUSED_REASON_TEXT,
   type IntegrationTaskItem, type ScenarioPreview,
 } from '@/api/integration'
 import SubscriptionDialog from '@/components/integration/SubscriptionDialog.vue'
@@ -276,22 +276,9 @@ function runText(t: IntegrationTaskItem): string {
   if (!i) return '—'
   if (i.state === 'running') return '执行中'
   if (i.state === 'paused') {
-    const reasonText: Record<string, string> = {
-      auth_failed: '凭证失效',
-      missing_credential: '缺凭证',
-      template_changed: '内容已变更·待确认',
-      made_private: '已转私有·待确认',
-      token_revoked: '令牌已吊销·待解绑',
-      token_invalidated: '令牌已失效·待重新生成',
-      token_expired: '令牌已到期·待续期',
-      token_owner_ineligible: '令牌属主角色不足',
-      resource_not_allowed: '超出令牌范围',
-      scope_denied: '场景非公共',
-      manual: '已暂停(本人)',
-    }
     if (i.pausedReason === 'fail_streak')
       return `连续失败暂停(${i.failStreak ?? '多'} 次)`
-    return reasonText[i.pausedReason] || '已暂停'
+    return PAUSED_REASON_TEXT[i.pausedReason || '']?.list || '已暂停'
   }
   if (i.enabled === false) return '已停用'
   if (!i.lastRunAt) return '未执行'
@@ -559,24 +546,24 @@ onMounted(() => {
 }
 .ig-dialog {
   width: min(32.5rem, 100%); background: var(--c-surface); border-radius: 0.625rem; padding: 1.125rem;
-  display: flex; flex-direction: column; gap: 0.625rem; color: #1f2933;
+  display: flex; flex-direction: column; gap: 0.625rem; color: var(--c-text);
   box-shadow: 0 20px 50px rgb(0 0 0 / 15%);
 }
 .ig-dialog h2 { margin: 0; font-size: 1rem; }
-.ig-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78125rem; font-weight: 500; color: rgb(100 116 139); }
+.ig-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78125rem; font-weight: 500; color: var(--c-text-secondary); }
 .ig-field input, .ig-field select {
-  height: 2rem; padding: 0 0.625rem; border: 1px solid var(--color-border-tertiary); border-radius: 0.375rem;
-  font: inherit; font-size: 0.78125rem; color: #1f2933;
+  height: 2rem; padding: 0 0.625rem; border: 1px solid var(--c-field-border); border-radius: 0.375rem;
+  background: var(--c-field-bg); font: inherit; font-size: 0.78125rem; color: var(--c-text);
 }
 .ig-field-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0.625rem; }
 .ig-err { margin: 0; font-size: 0.78125rem; color: var(--sl-bad); }
 .ig-warn { margin: 0; font-size: 0.78125rem; color: var(--sl-warn); }
-.ig-hint { margin: 0; font-size: 0.71875rem; color: rgb(100 116 139); line-height: 1.6; }
-.ig-hint-inline { font-size: 0.71875rem; color: rgb(100 116 139); font-weight: 400; }
+.ig-hint { margin: 0; font-size: 0.71875rem; color: var(--c-text-secondary); line-height: 1.6; }
+.ig-hint-inline { font-size: 0.71875rem; color: var(--c-text-secondary); font-weight: 400; }
 .ig-dialog-acts { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .ig-ghost {
   padding: 0.4375rem 0.875rem; border-radius: 0.375rem; cursor: pointer;
-  border: 1px solid var(--color-border-tertiary); background: var(--c-surface); color: inherit; font: inherit;
+  border: 1px solid var(--c-border); background: var(--c-surface); color: inherit; font: inherit;
 }
 .ig-primary {
   padding: 0.4375rem 1rem; border-radius: 0.375rem; cursor: pointer; font: inherit;

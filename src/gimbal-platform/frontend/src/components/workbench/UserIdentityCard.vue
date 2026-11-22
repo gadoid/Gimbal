@@ -221,8 +221,8 @@ onMounted(async () => {
   @apply flex items-center gap-2 rounded-empty text-caption no-underline;
   padding: 0.5rem 0.75rem;
 }
-.id-alert.error { background: #fee2e2; color: #991b1b; }
-.id-alert.warn { background: #fef3c7; color: #92400e; }
+.id-alert.error { background: var(--sl-bad-soft); color: var(--sl-bad); }
+.id-alert.warn { background: var(--sl-warn-soft); color: var(--sl-warn); }
 .id-alert .action { @apply font-semibold whitespace-nowrap; }
 .more { @apply text-[0.6875rem] text-signal-ink/60 no-underline self-end; }
 

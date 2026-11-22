@@ -146,14 +146,17 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     w.unmount()
   })
 
-  it('复核 §3.1 平台卡 scope_denied 门面:管理者出「启动」;token_revoked 无门面', async () => {
+  it('复核 §3.1 scope_denied 门面(C1 退役后口径:场景非公共):出「启动」;token_revoked 无门面', async () => {
     vi.mocked(api.resumeMySubscription).mockResolvedValue({ } as never)
     const a = mountCard({
       state: 'paused', pausedReason: 'scope_denied', canManage: true,
     }, await mkRouter())
     await flushPromises()
     expect(a.find('[data-testid="fn-card-fn:9-gate"]').text())
-      .toContain('场景已不在平台模式允许范围')
+      .toContain('场景非公共')
+    // 平台模式文案已退役(C1),卡上不得再现
+    expect(a.find('[data-testid="fn-card-fn:9-gate"]').text())
+      .not.toContain('平台模式')
     await a.find('[data-testid="fn-card-fn:9-restart"]').trigger('click')
     await flushPromises()
     expect(api.resumeMySubscription).toHaveBeenCalledWith(9)
@@ -167,8 +170,9 @@ describe('FunctionCard — 个人侧订阅/自管面(W2/W3)', () => {
     await flushPromises()
     expect(g.find('[data-testid="fn-card-fn:9-gate"]').exists()).toBe(false)
     expect(g.find('[data-testid="fn-card-fn:9-restart"]').exists()).toBe(false)
+    // 角标点名具体原因(单源表 PAUSED_REASON_TEXT),不再兜底「已暂停」
     expect(g.find('[data-testid="fn-card-fn:9-badge"]').text())
-      .toContain('已暂停')
+      .toContain('令牌已吊销')
     g.unmount()
   })
 

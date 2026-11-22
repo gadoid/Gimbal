@@ -90,7 +90,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 形制在基座;这里只给行列宽、紫色图标底。 */
+/* 形制在基座(ci-blue 走共享 .ci-* 家族);这里只给行列宽。 */
 .sa-row { grid-template-columns: minmax(0, 1fr) auto auto; }
-.ci-violet { color: #6d28d9; background: #f1ecfd; }
 </style>

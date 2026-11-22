@@ -14,29 +14,37 @@
  * 不用 shadcn 默认 slate 主题。组件用 bg-primary / border-input 等
  * 语义类消费;换肤只动这里。
  * secondary-foreground / accent-foreground 用 #265FD4(暂定 hover 深蓝档)。
+ *
+ * 命名强制 --sd- 前缀(shadcn):这批值是裸 HSL 三元组,只能给
+ * tailwind.config.js 的 hsl(var(--sd-*)) 包装消费;此前直接占用
+ * --accent/--border/--input 等裸名,与 theme.css 的 hex 语义令牌
+ * 同名互覆(main.ts 里本文件最后加载 → :root 三元组赢),所有
+ * 直接 var(--accent) 消费者拿到非法颜色 → 透明塌陷(2da3fc37
+ * hex 收编后集中爆发)。四族令牌(color-*、sl-*、c-*、sd-*)从此
+ * 名字不相交;shadcn 注册表组件经 config 映射层吸收前缀。
  */
 @layer base {
   :root {
-    --background: 216 26% 96%;      /* canvas #F3F5F8 */
-    --foreground: 215 27% 9%;       /* ink var(--sl-ink) */
-    --card: 0 0% 100%;              /* card #FFFFFF */
-    --card-foreground: 215 27% 9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 215 27% 9%;
-    --primary: 220 84% 56%;         /* accent var(--sl-accent) */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 100% 95%;      /* accent-soft var(--soft-accent-bg) */
-    --secondary-foreground: 220 70% 49%;
-    --muted: 216 20% 90%;           /* line var(--sl-line) 兼浅灰底 */
-    --muted-foreground: 220 9% 46%; /* 冷灰中文字 */
-    --accent: 220 100% 95%;         /* accent-soft var(--soft-accent-bg) */
-    --accent-foreground: 220 70% 49%;
-    --destructive: 0 72% 51%;       /* failed var(--sl-bad) */
-    --destructive-foreground: 0 0% 100%;
-    --border: 216 20% 90%;          /* line var(--sl-line) */
-    --input: 216 20% 90%;
-    --ring: 220 84% 56%;            /* accent */
-    --radius: 0.5rem;               /* E-scale:lg=8 空状态,md=6 表单,sm=4 chip */
+    --sd-background: 216 26% 96%;      /* canvas #F3F5F8 */
+    --sd-foreground: 215 27% 9%;       /* ink var(--sl-ink) */
+    --sd-card: 0 0% 100%;              /* card #FFFFFF */
+    --sd-card-foreground: 215 27% 9%;
+    --sd-popover: 0 0% 100%;
+    --sd-popover-foreground: 215 27% 9%;
+    --sd-primary: 220 84% 56%;         /* accent var(--sl-accent) */
+    --sd-primary-foreground: 0 0% 100%;
+    --sd-secondary: 220 100% 95%;      /* accent-soft var(--soft-accent-bg) */
+    --sd-secondary-foreground: 220 70% 49%;
+    --sd-muted: 216 20% 90%;           /* line var(--sl-line) 兼浅灰底 */
+    --sd-muted-foreground: 220 9% 46%; /* 冷灰中文字 */
+    --sd-accent: 220 100% 95%;         /* accent-soft var(--soft-accent-bg) */
+    --sd-accent-foreground: 220 70% 49%;
+    --sd-destructive: 0 72% 51%;       /* failed var(--sl-bad) */
+    --sd-destructive-foreground: 0 0% 100%;
+    --sd-border: 216 20% 90%;          /* line var(--sl-line) */
+    --sd-input: 216 20% 90%;
+    --sd-ring: 220 84% 56%;            /* accent */
+    --sd-radius: 0.5rem;               /* E-scale:lg=8 空状态,md=6 表单,sm=4 chip */
   }
 }
 

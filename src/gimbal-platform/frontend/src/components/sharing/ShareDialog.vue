@@ -135,7 +135,7 @@ async function confirm(): Promise<void> {
   border-radius: 0.375rem; cursor: pointer; border: 1px solid transparent;
 }
 .share-item:hover { background: rgb(0 0 0 / 4%); }
-.share-item.picked { border-color: hsl(var(--primary)); background: hsl(var(--accent)); }
+.share-item.picked { border-color: hsl(var(--sd-primary)); background: hsl(var(--sd-accent)); }
 .share-item .who { display: flex; gap: 0.5rem; align-items: baseline; flex: 1; }
 .share-foot { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
 .muted { color: rgb(100 116 139); }

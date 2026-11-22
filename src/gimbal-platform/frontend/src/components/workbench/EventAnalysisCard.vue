@@ -44,29 +44,24 @@ onMounted(async () => {
 
 <style scoped>
 .ea-card { display: flex; flex-direction: column; gap: 0.375rem; }
-.ea-empty { color: #71717a; font-size: 0.8125rem; padding: 0.5rem 0; }
+.ea-empty { color: var(--c-text-secondary); font-size: 0.8125rem; padding: 0.5rem 0; }
 .ea-row {
   display: flex; align-items: center; gap: 0.5rem;
   font-size: 0.8125rem; text-decoration: none; color: inherit;
   padding: 0.25rem 0.375rem; border-radius: 0.375rem;
 }
-.ea-row:hover { background: #f4f4f5; }
-.st { font-size: 0.6875rem; padding: 0.0625rem 0.375rem; border-radius: 0.25rem; background: #f4f4f5; }
-.st.done { background: #dcfce7; color: #166534; }
-.st.running { background: #dbeafe; color: #1e40af; }
-.st.failed { background: #fee2e2; color: #991b1b; }
+.ea-row:hover { background: var(--sl-row-hover); }
+/* 执行状态 chip:与 status-colors.css(.status-*)同令牌 —— 那里是唯一来源 */
+.st { font-size: 0.6875rem; padding: 0.0625rem 0.375rem; border-radius: 0.25rem; background: var(--soft-neutral-bg); }
+.st.done { background: var(--soft-ok-bg); color: var(--sl-ok); }
+.st.running { background: var(--soft-accent-bg); color: var(--sl-accent); }
+.st.failed { background: var(--soft-bad-bg); color: var(--sl-bad); }
 .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meta { color: #71717a; font-size: 0.75rem; }
+.meta { color: var(--c-text-secondary); font-size: 0.75rem; }
 .mono { font-family: ui-monospace, monospace; }
 </style>
 
-<style scoped>
-.chead { display: flex; align-items: center; gap: 0.5rem; padding: 0.625rem 0.75rem 0.5rem; }
-.chead-icon { display: inline-flex; align-items: center; justify-content: center;
-  width: 1.625rem; height: 1.625rem; border-radius: 0.375rem; }
-.ci-gold { background: #fef3c7; color: var(--sl-warn); }
-.chead-title { font-weight: 600; font-size: 0.8125rem; }
-.chead-count { font-size: 0.75rem; color: #71717a; }
-.chead-spacer { flex: 1; }
-.manage-link { font-size: 0.75rem; color: #2563eb; text-decoration: none; }
-</style>
+<!-- 卡头(.chead/.ci-gold/.manage-link 等)不再本地重复 —— 直接用
+     scenario-lib.css 的共享卡头家族(令牌化 + 双主题 + 分隔线),
+     与其余 19 张工作台卡同款。 -->
+

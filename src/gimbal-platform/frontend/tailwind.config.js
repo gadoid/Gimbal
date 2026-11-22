@@ -68,39 +68,40 @@ export default {
           mall: '#B0568E',
           common: '#6B7280',
         },
-        // ── shadcn-vue 语义层(变量值来自 tailwind.css :root,即 Signal token)──
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
+        // ── shadcn-vue 语义层(变量值来自 tailwind.css :root 的 --sd-*
+        // 三元组;sd- 前缀防与 legacy hex 令牌 --accent 等同名互覆)──
+        border: 'hsl(var(--sd-border))',
+        input: 'hsl(var(--sd-input))',
+        ring: 'hsl(var(--sd-ring))',
+        background: 'hsl(var(--sd-background))',
+        foreground: 'hsl(var(--sd-foreground))',
         primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
+          DEFAULT: 'hsl(var(--sd-primary))',
+          foreground: 'hsl(var(--sd-primary-foreground))',
         },
         secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))',
+          DEFAULT: 'hsl(var(--sd-secondary))',
+          foreground: 'hsl(var(--sd-secondary-foreground))',
         },
         destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
+          DEFAULT: 'hsl(var(--sd-destructive))',
+          foreground: 'hsl(var(--sd-destructive-foreground))',
         },
         muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
+          DEFAULT: 'hsl(var(--sd-muted))',
+          foreground: 'hsl(var(--sd-muted-foreground))',
         },
         accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
+          DEFAULT: 'hsl(var(--sd-accent))',
+          foreground: 'hsl(var(--sd-accent-foreground))',
         },
         popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
+          DEFAULT: 'hsl(var(--sd-popover))',
+          foreground: 'hsl(var(--sd-popover-foreground))',
         },
         card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
+          DEFAULT: 'hsl(var(--sd-card))',
+          foreground: 'hsl(var(--sd-card-foreground))',
         },
       },
       fontFamily: {
@@ -131,10 +132,10 @@ export default {
         empty: '0.5rem',
         card: '0.625rem',
         full: '624.9375rem',
-        // shadcn-vue 组件消费的语义圆角(lg=8/md=6/sm=4,由 --radius 推导)
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 0.125rem)',
-        DEFAULT: 'calc(var(--radius) - 0.125rem)',
+        // shadcn-vue 组件消费的语义圆角(lg=8/md=6/sm=4,由 --sd-radius 推导)
+        lg: 'var(--sd-radius)',
+        md: 'calc(var(--sd-radius) - 0.125rem)',
+        DEFAULT: 'calc(var(--sd-radius) - 0.125rem)',
       },
       // 间距沿用 Tailwind 默认 4px 网格(4/8/12/.../32),与 E-scale 一致,不重录
       boxShadow: {

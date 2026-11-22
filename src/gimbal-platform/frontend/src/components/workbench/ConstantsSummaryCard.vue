@@ -132,7 +132,7 @@ async function copyEntry(e: ConstantEntry): Promise<void> {
 
 /* 键值行:名称 1fr / 类型 chip / 复制 icon */
 .kv-row { grid-template-columns: minmax(0, 1fr) auto auto; font-size: 0.78125rem; }
-.kg-gen { color: #92400e; background: #fef3c7; }
+.kg-gen { color: var(--sl-warn); background: var(--sl-warn-soft); }
 .kg-lit { color: var(--color-text-strong); background: var(--sl-divider); }
 
 /* 行内操作独立:icon-only,默认低透明度,行 hover 才增强 —

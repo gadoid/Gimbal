@@ -48,7 +48,7 @@
                 @click="doResume">启动</button>
       </p>
       <p v-else-if="data?.pausedReason === 'scope_denied'" class="fn-note warn">
-        场景已不在平台模式允许范围,已暂停 — 场景公开后可启动
+        场景非公共,已暂停 — 场景公开后可启动
         <button v-if="canRestart" type="button" class="fn-run"
                 :data-testid="`${t}-restart`"
                 @click="doResume">启动</button>
@@ -166,7 +166,7 @@ import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import {
   fetchFunctionCards, runIntegrationTask, integrationErr,
   runAbnormalOf, RUN_BADGE_TEXT, resumeMySubscription,
-  pauseMySubscription,
+  pauseMySubscription, PAUSED_REASON_TEXT,
   type FunctionCardData,
 } from '@/api/integration'
 import SubscriptionDialog from '@/components/integration/SubscriptionDialog.vue'
@@ -201,7 +201,7 @@ const reconfirmText = computed(() => {
   return ''
 })
 /** W4:暂停门面(本人手动暂停 / 连续失败自动暂停,均可一键恢复);
- * 修复复核 §3.1:scope_denied(平台模式场景出范围)场景修复后也由
+ * 修复复核 §3.1:scope_denied(场景非公共)场景公开后也由
  * 「启动」恢复;inbound_disabled(调用方别名关闭入站,全量评估 #6)
  * 同口径。token_* / resource_not_allowed 类暂停后端 409 拒恢复,不在
  * 此列(先吊销页面/个人设置处置令牌)。 */
@@ -231,15 +231,8 @@ const badge = computed(() => {
   const d = data.value
   if (!d) return ''
   if (d.state === 'paused') {
-    if (d.pausedReason === 'auth_failed') return '凭证失效'
-    if (d.pausedReason === 'missing_credential') return '缺凭证'
-    if (d.pausedReason === 'template_changed') return '内容已变更'
-    if (d.pausedReason === 'made_private') return '已转私有'
-    if (d.pausedReason === 'scope_denied') return '无权用该场景'
-    if (d.pausedReason === 'inbound_disabled') return '入站已关闭'
-    if (d.pausedReason === 'manual') return '已暂停'
     if (d.pausedReason === 'fail_streak') return '连续失败暂停'
-    return '已暂停'
+    return PAUSED_REASON_TEXT[d.pausedReason || '']?.badge || '已暂停'
   }
   if (d.enabled === false) return '已停用'
   return runAbnormal.value ? (RUN_BADGE_TEXT[d.runStatus || ''] || '') : ''
@@ -408,10 +401,10 @@ onUnmounted(() => { if (timer !== null) window.clearInterval(timer) })
 .fn-card { gap: 0.375rem; }
 .fn-s { display: flex; align-items: center; gap: 0.5rem; }
 .fn-dot { width: 0.625rem; height: 0.625rem; border-radius: 62.4375rem; flex: none; }
-.fn-dot.ok { background: var(--green, #22c55e); }
-.fn-dot.bad { background: var(--red, #e24b4a); }
+.fn-dot.ok { background: var(--green); }
+.fn-dot.bad { background: var(--red); }
 .fn-dot.run { background: var(--sl-accent); animation: fn-pulse 1.2s infinite; }
-.fn-dot.muted { background: rgb(100 116 139 / 40%); }
+.fn-dot.muted { background: color-mix(in srgb, var(--c-text-secondary) 40%, transparent); }
 @keyframes fn-pulse { 50% { opacity: .35; } }
 .fn-status { font-size: 0.8125rem; font-weight: 600; }
 .fn-dim { opacity: .55; }
@@ -419,12 +412,13 @@ onUnmounted(() => { if (timer !== null) window.clearInterval(timer) })
 .fn-badge {
   font-size: 0.65625rem; font-weight: 500; flex: none;
   padding: 0.0625rem 0.4375rem; border-radius: 62.4375rem; color: var(--sl-warn);
-  background: rgb(245 158 11 / 12%); border: 1px solid rgb(245 158 11 / 35%);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
   white-space: nowrap;
 }
 .fn-main { display: flex; align-items: center; gap: 0.625rem; }
 .fn-main-text { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; flex: 1; }
-.fn-sub { font-size: 0.71875rem; color: rgb(100 116 139); }
+.fn-sub { font-size: 0.71875rem; color: var(--c-text-secondary); }
 .fn-note { margin: 0; font-size: 0.71875rem; }
 .fn-note.warn { color: var(--sl-warn); }
 .fn-note.err {
@@ -432,23 +426,23 @@ onUnmounted(() => { if (timer !== null) window.clearInterval(timer) })
   white-space: nowrap;
 }
 .fn-l-rows { display: flex; align-items: center; gap: 0.625rem; margin-top: 0.125rem; }
-.fn-kv { font-size: 0.71875rem; color: rgb(100 116 139); flex: 1; }
+.fn-kv { font-size: 0.71875rem; color: var(--c-text-secondary); flex: 1; }
 .fn-run {
   font-size: 0.75rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; cursor: pointer;
-  color: var(--accent); background: var(--accent-soft, #eef2ff);
-  border: 1px solid var(--accent-soft-border, #c7d2fe);
+  color: var(--accent); background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
 }
 .fn-run:disabled { opacity: .5; cursor: not-allowed; }
 /* W4 暂停按钮:与主操作同款但降一档存在感 */
 .fn-run-ghost {
-  color: rgb(100 116 139); background: transparent;
-  border-color: rgb(148 163 184 / 45%);
+  color: var(--c-text-secondary); background: transparent;
+  border-color: color-mix(in srgb, var(--c-text-tertiary) 45%, transparent);
 }
 /* Y4 模板 */
 .fn-kv-list { display: flex; flex-direction: column; gap: 0.25rem; }
 .fn-kv-row { display: flex; justify-content: space-between; gap: 0.5rem;
   font-size: 0.78125rem; }
-.fn-kv-key { color: rgb(100 116 139); }
+.fn-kv-key { color: var(--c-text-secondary); }
 .fn-kv-val { font-weight: 600; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; max-width: 60%; }
 .fn-counter { display: flex; align-items: baseline; gap: 0.625rem; }

@@ -120,27 +120,28 @@ html[data-theme="dark"] {
   --sig-failed: 248 113 113;
   --sig-star: 250 204 21;
 
-  /* ── shadcn 族(tailwind.css 语义类消费;HSL 三元组,无 hsl() 包装)──
-     bg-background/bg-card/bg-accent/border-input 等 tailwind 类的夜面值 */
-  --background: 0 0% 0%;        /* canvas #0f1420 */
-  --foreground: 0 0% 91%;       /* ink #e6eaf2 */
-  --card: 0 0% 9%;             /* surface #1a2130 */
-  --card-foreground: 0 0% 91%;
-  --popover: 0 0% 12%;          /* overlay #202939 */
-  --popover-foreground: 0 0% 91%;
-  --primary: 217 100% 68%;         /* sl-accent #5b9bff */
-  --primary-foreground: 221 39% 9%;
-  --secondary: 0 0% 12%;        /* soft-accent-bg #16243f */
-  --secondary-foreground: 217 100% 80%;
-  --muted: 0 0% 11%;
-  --muted-foreground: 0 0% 61%; /* #9aa5b8 */
-  --accent: 0 0% 12%;
-  --accent-foreground: 217 100% 80%;
-  --destructive: 0 100% 71%;       /* #f87171 */
-  --destructive-foreground: 0 0% 0%;
-  --border: 0 0% 17%;           /* line #2a3345 */
-  --input: 0 0% 17%;
-  --ring: 217 100% 68%;
+  /* ── sd- 族(shadcn 语义,tailwind.css 语义类经 hsl(var(--sd-*))
+     消费;HSL 三元组,无 hsl() 包装;--sd- 前缀防与上面 theme.css
+     族的 hex 令牌同名互覆 —— 夜面 --accent 走 line 50 的 #818cf8)── */
+  --sd-background: 0 0% 0%;        /* canvas #0f1420 */
+  --sd-foreground: 0 0% 91%;       /* ink #e6eaf2 */
+  --sd-card: 0 0% 9%;             /* surface #1a2130 */
+  --sd-card-foreground: 0 0% 91%;
+  --sd-popover: 0 0% 12%;          /* overlay #202939 */
+  --sd-popover-foreground: 0 0% 91%;
+  --sd-primary: 217 100% 68%;         /* sl-accent #5b9bff */
+  --sd-primary-foreground: 221 39% 9%;
+  --sd-secondary: 0 0% 12%;        /* soft-accent-bg #16243f */
+  --sd-secondary-foreground: 217 100% 80%;
+  --sd-muted: 0 0% 11%;
+  --sd-muted-foreground: 0 0% 61%; /* #9aa5b8 */
+  --sd-accent: 0 0% 12%;
+  --sd-accent-foreground: 217 100% 80%;
+  --sd-destructive: 0 100% 71%;       /* #f87171 */
+  --sd-destructive-foreground: 0 0% 0%;
+  --sd-border: 0 0% 17%;           /* line #2a3345 */
+  --sd-input: 0 0% 17%;
+  --sd-ring: 217 100% 68%;
 
   /* ── Element Plus 桥接:组件库变量映射到本方案 ── */  --el-bg-color: #161616;
   --el-bg-color-overlay: #1f1f1f;
