@@ -333,9 +333,8 @@ async def test_row_run_error_engine_failure_e2e(
                 launch_status="ok", exit_code=1, total=1, failed=1,
                 error="assertion failed: status 500 != 200")
         # 派发层异常:plate 不可用路径(runError ← error 键)
-        raise __import__(
-            "app.services.plate_client", fromlist=["PlateUnavailableError"]
-        ).PlateUnavailableError("plate down (e2e)")
+        from app.services.plate_client import PlateUnavailableError
+        raise PlateUnavailableError("plate down (e2e)")
 
     async def _fake_convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}

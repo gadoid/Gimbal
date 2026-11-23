@@ -2141,6 +2141,61 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   与 counterDrift 出排后 **run9/run10 全量连绿**(2175 passed /
   2 skipped);dev 后端已重启(登录口闸 401 路由在位)。
 
+### 待实现批次处理轮(2026-11-23,🟢 三批次落地 + 部署上线)
+
+登记册/设计文档待实现盘点后逐批处理(每批全量绿再进下一批):
+
+- **A 区销项×3(拍板/追认面)**:
+  - A1 圈定白名单:核验已随 identity-registry 阶段 1(2026-11-20 晚)
+    全套落地(409 `identity_not_circled`/rerun 快照 `execCircledAliases`/
+    预检 `notCircled` advisory/前端 payloadOf 自动纳入)—— 上轮盘点被
+    11-19 审计轮「挂起」旧记录误导,实际无需重做;
+  - A2「本人 > 项目」覆盖解析:**用户拍板(2026-11-23)维持互斥现状**
+    (credentialSource 即显式选择、同名冲突检索面已提示、项目统一
+    凭证语义不被本人同名行破坏)—— v2 §9-#7 回写销项,两候选方向
+    均不采纳;
+  - A3=C12 手配自助建条目:追认维持(翻案退路继续在档)。
+- **B3 行级失败原因入库**(登记册 B3 工程项,commit `197938e8`):
+  迁移 **0065**(execution_rows.run_error TEXT NULL,live 库 pg_dump
+  备份后升级 head)+ 写链(RowState.run_error + 终态回写块投影:引擎
+  `runError` 优先、派发层异常 `error` 键次之,`[:2000]` 防超长;
+  `_ROW_UPSERT_COLS`/`_persist_row_terminal`/graph 恢复分支带
+  at-most-once 原因/graph 逐单元行取 `ev.error`)+ 读链(行页
+  `ExecutionRowOut.runError` + 报告 `groups.runError`,graph 兜底分组
+  同形补齐)+ 前端(两类型 + 报告面板行头 `rp-row-error` 呈现,
+  passed 行不出);测试 = roundtrip + e2e 双路(引擎 exit=1 / plate
+  不可用;两行数据集布景 —— P2-05 乘法下沉 nRuns 不展开行)。
+  取消/恢复跳过路径 run_error 恒 None(canceled 无原因、已终态行
+  不重写)。报告端点裸 dict 返回,契约面仅 ExecutionRowOut +11 行。
+- **B4 pydantic 上界**:复核 `8d2a4164`(2026-10-15,登记建次日)已钉
+  `>=2.6,<3` + lock 2.14.1 —— 实质闭合未销条,销条。
+- **B5 契约 codegen 治本切片 1**(commit `7ad3eba5`):
+  `scripts/gen_frontend_contract.py`(契约快照单源 → 前端
+  `api/generated/`:`openapi.ts` 219 schema TS 直译 + `errorCodes.ts`
+  227 码 as const/`ApiErrorCode` union;幂等 + `--check` 守卫)、
+  `contractGuard.ts` **编译期对账**(手写 ⊆ 生成 assignability ——
+  后端 Any 字段致生成宽于手写,守卫方向 = 手写声明的形状必须存在于
+  生成形状;executions 域示范 5 断言当前零漂移)、
+  `ApiError.hasCode(ApiErrorCode)` typed 判等(typo → TS2345 亲验;
+  AdaptationBatchDetail 示范切换)、漂移守卫
+  `test_api_contract.py::test_frontend_contract_no_drift`(人为漂移
+  负例亲验 exit 1)。**切片 2+**(37 api 文件逐域扩断言/字面量判等
+  渐进换 hasCode)留后续批次。
+- **D 部署收尾 + 双主题截图**(commit `33b2235a`):dist 重建部署
+  (`index-iDqmGMdr.js`)+ 后端重启(openapi 含 runError);admin
+  直签令牌 + headless(playwright-core 复用 ms-playwright 缓存)
+  截图 8 张(服务注册/凭证页 × 1280/1920 × 日/夜,`gimbal-tmp/shots/`
+  ignore 留档)全部渲染正常 —— P2-C 第 3 项销项;附带覆盖「登录后
+  页面可用性」(直签令牌走路由/数据/渲染),真实密码登录流仍待凭据。
+- **验证**:后端全量 2185 total(基线 2183 + 新增 2;唯一 failed 为
+  双满载并发 flake,单跑/整文件均绿);前端 vitest 174 文件
+  1536 passed 复跑全绿(B5 后补跑确认)+ vue-tsc 0 + eslint 全量 0
+  (含 generated/)+ 契约 gen+check 双绿。
+- **review 收口轮(同日)**:B5 提交前全量 vitest/eslint 缺口补跑
+  (全绿);两处小瑕疵清理(e2e 测试 `__import__` 丑写法改顶部
+  import、生成器冗余 `sys.path.insert` 删除);语义复核(取消/
+  恢复/upsert 三调用点/报告响应面)全过。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
