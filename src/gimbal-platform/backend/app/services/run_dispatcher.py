@@ -2800,39 +2800,10 @@ async def _fanout(
         for row_idx, row in ds["rows"]
         for inj in injections
     ]
-    # P3.5-2:行级断点 —— 恢复场景(job 租约过期/重启回队重跑)先读已
-    # 终态行,已完成的 seq 不再执行:不重复打被测系统、不重复计数
-    # (行落库先于计数 bump → DB 存在的行必已计数,跳过即无重复)。
-    # DB 只落终态行(_persist_row_terminal),存在即终态;首次运行空集。
-    done_rows: dict[int, str] = {}
-    try:
-        from sqlalchemy import select as _sel_row
-
-        from ..models.execution import ExecutionRow as _ER
-        async with db_factory() as session:
-            _existing = (await session.execute(
-                _sel_row(_ER.seq, _ER.status)
-                .where(_ER.execution_id == execution_id))).all()
-        done_rows = {int(s): st for s, st in _existing
-                     if st in _FINAL_STATUSES}
-    except Exception as e:  # noqa: BLE001 — 查询失败按无断点处理(全量重跑)
-        done_rows = {}
-        logger.warning(
-            "run_dispatcher: 断点恢复查询失败,本单全量重跑"
-            "(execution={}): {}", execution_id, e)
-    # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
-    # _row 内逐行推进,执行终态化时整体 pop → 读侧回落 JSONL 回放)。
-    row_states = _row_states[execution_id] = [
-        RowState(
-            seq=seq,
-            dataset_id=ds["datasetId"] if ds is not None else None,
-            row_index=row_idx,
-            rep=rep,
-            status="queued",
-            injection_id=(inj or {}).get("id"),
-        )
-        for seq, (ds, row_idx, _, inj, rep) in enumerate(entries)
-    ]
+    # P3.5-2 行级断点恢复读(已完成的 seq 不再执行)→ _load_done_rows
+    done_rows = await _load_done_rows(db_factory, execution_id)
+    # spec §9.1:行状态 registry 初始化(全部 queued)→ _init_row_states
+    row_states = _row_states[execution_id] = _init_row_states(entries)
     try:
         try:
             await asyncio.gather(
@@ -3097,6 +3068,47 @@ async def _row_count_and_outputs(db_factory: Any, execution_id: int, *,
             _outputs.update(_d["outputs"])
     if _outputs:
         await _store_single_case_outputs(db_factory, execution_id, _outputs)
+
+
+async def _load_done_rows(db_factory: Any, execution_id: int) -> dict:
+    """P3.5-2 行级断点恢复读:已终态行 seq → status。恢复场景(job 租约
+    过期/重启回队重跑)先读已终态行,已完成的 seq 不再执行:不重复打
+    被测系统、不重复计数(行落库先于计数 bump → DB 存在的行必已计数,
+    跳过即无重复)。DB 只落终态行(_persist_row_terminal),存在即终态;
+    首次运行空集。查询失败按无断点处理(全量重跑)。
+    """
+    try:
+        from sqlalchemy import select as _sel_row
+
+        from ..models.execution import ExecutionRow as _ER
+        async with db_factory() as session:
+            _existing = (await session.execute(
+                _sel_row(_ER.seq, _ER.status)
+                .where(_ER.execution_id == execution_id))).all()
+        return {int(s): st for s, st in _existing
+                if st in _FINAL_STATUSES}
+    except Exception as e:  # noqa: BLE001 — 查询失败按无断点处理(全量重跑)
+        logger.warning(
+            "run_dispatcher: 断点恢复查询失败,本单全量重跑"
+            "(execution={}): {}", execution_id, e)
+        return {}
+
+
+def _init_row_states(entries: list) -> list:
+    """spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
+    行任务内逐行推进,执行终态化时整体 pop → 读侧回落 DB)。
+    """
+    return [
+        RowState(
+            seq=seq,
+            dataset_id=ds["datasetId"] if ds is not None else None,
+            row_index=row_idx,
+            rep=rep,
+            status="queued",
+            injection_id=(inj or {}).get("id"),
+        )
+        for seq, (ds, row_idx, _, inj, rep) in enumerate(entries)
+    ]
 
 
 async def _mark_running(db_factory: Any, execution_id: int) -> None:

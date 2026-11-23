@@ -487,8 +487,10 @@ async def test_run_dispatch_calls_convert_per_row(
     assert r.status_code == 201
     assert "runId" in r.json()
 
-    # Wait for the background fan-out to finish
-    for _ in range(50):
+    # Wait for the background fan-out to finish.
+    # (轮询预算 10s:xdist -n auto 满载时 CPU 争抢会让 3 行 fanout 超过
+    # 旧 2.5s 窗 → 偶发 convert_calls 不足断言失败;轻载/单进程远快于此。)
+    for _ in range(200):
         if len(plate_mock.convert_calls) >= 3:
             break
         await asyncio.sleep(0.05)
