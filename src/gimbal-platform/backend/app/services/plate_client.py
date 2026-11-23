@@ -24,8 +24,8 @@ the platform's preview / run use-case.  This wrapper:
   ───`` 分隔线**之前**,不在文件末尾)。**不是**全仓唯一一条 /full 取数:
   别的 /full 路径不共享这条缓存,边界见 :func:`get_endpoint_full` 的末段。
 
-Run 执行链(V3.2):dispatcher convert 成功后把注入完成的用例落盘,
-交 ``gimbal_launcher.launch`` 子进程(``gimbal run launch``)执行。
+Run 执行链(B6③ 后恒 server):dispatcher convert 成功后把注入完成
+的用例落盘,交执行器 server 实例(``gimbal_server_session``)执行。
 """
 from __future__ import annotations
 

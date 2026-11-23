@@ -130,7 +130,8 @@ def _lift_view_hints(step: dict) -> dict:
 
 
 def launch_ok() -> "Any":
-    """A passing ``gimbal run launch`` result (per-row counters all green)."""
+    """A passing case result (per-row counters all green; LaunchResult
+    形态与 server 链 SSE 归一同源,B6③ 后引擎为执行器 server 实例)。"""
     from app.services.gimbal_launcher import LaunchResult
 
     return LaunchResult(launch_status="ok", exit_code=0, total=1, passed=1)

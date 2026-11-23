@@ -1,7 +1,8 @@
 """Execution model(V3)+ 执行快照/行级明细拆表(M2)。
 
-Execution 是用户触发的场景执行:run_dispatcher 逐行 fan-out 调
-gimbal_launcher 子进程(``gimbal run launch``),只更新本表计数器;
+Execution 是用户触发的场景执行:run_dispatcher 逐行 fan-out 经
+执行器 server 实例(``gimbal_server_session``,POST /runs + SSE;
+B6③ 后恒此链),只更新本表计数器;
 每-run 明细自 M2 起入 ``execution_rows``(吸收 JSONL,M6 转正为读写面)。
 
 M2(PG迁移方案 §2.2):

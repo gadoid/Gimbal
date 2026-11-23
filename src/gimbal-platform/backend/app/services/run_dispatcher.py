@@ -2222,24 +2222,24 @@ async def _fanout(
     # 每个 run 一个 case 目录:case 文件 + 引擎原生报告,并发 fan-out
     # 互不互踩;与 JSONL 同域构成执行审计面(什么数据真的打给了引擎)。
     run_dir = _run_dir(run_id)
-    if server_pool is not None:
-        run_dir.mkdir(parents=True, exist_ok=True)
-        # C12:执行级 server 池槽位 0(reports 落 run_dir,引擎 reporter 相对
-        # server 进程 cwd 写;调试实例在 debug_sessions 注册供代理)。
-        # P3.5-1:槽位 1..N-1 在行执行按需冷启动(锁外并行)
-        try:
-            await server_pool.start(
-                engine_log_path=run_dir / "server-engine.log", cwd=run_dir,
-                on_log=ingester.on_log,   # AD2:stderr 泵 → 本执行 ingester
-                log_counters=ingester.pump_counters)  # S9:泵侧丢弃计数
-        except Exception as e:  # noqa: BLE001
-            await _teardown()
-            # 池启动失败但 ingester 已 start(含启动期可能入缓冲的行):
-            # finalize 收口,否则 ticker 任务泄漏(0.5s 周期冲刷永不停止)。
-            await ingester.finalize()
-            raise
-        if debug is not None:
-            debug_sessions[execution_id] = {"session": server_pool.first}
+    # (B6③ 后池恒建,旧 ``if server_pool is not None`` 死分支已除)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    # C12:执行级 server 池槽位 0(reports 落 run_dir,引擎 reporter 相对
+    # server 进程 cwd 写;调试实例在 debug_sessions 注册供代理)。
+    # P3.5-1:槽位 1..N-1 在行执行按需冷启动(锁外并行)
+    try:
+        await server_pool.start(
+            engine_log_path=run_dir / "server-engine.log", cwd=run_dir,
+            on_log=ingester.on_log,   # AD2:stderr 泵 → 本执行 ingester
+            log_counters=ingester.pump_counters)  # S9:泵侧丢弃计数
+    except Exception as e:  # noqa: BLE001
+        await _teardown()
+        # 池启动失败但 ingester 已 start(含启动期可能入缓冲的行):
+        # finalize 收口,否则 ticker 任务泄漏(0.5s 周期冲刷永不停止)。
+        await ingester.finalize()
+        raise
+    if debug is not None:
+        debug_sessions[execution_id] = {"session": server_pool.first}
 
     # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
