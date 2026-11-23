@@ -2,7 +2,7 @@
  * scenario-lib.css — 全站列表页设计系统基座。
  *
  * 起于场景库三页(我的场景 / 公共场景 / 关注),色板 / 组件规范照
- * docs/superpowers/plans/scenario_refector_design §五「跨页设计系统」。
+ * docs/implemented/plans/scenario_refector_design §五「跨页设计系统」。
  * 服务区域五页(画像 / 信息管理 / 键详情 / 认证管理 / 适配中心)同样
  * 落在本基座上(页壳 .slib、表 .slib-table、卡 .lib-card、chip / 空态),
  * 只在本文件之外补它没有的构件 —— 见 service-area.css。

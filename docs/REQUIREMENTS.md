@@ -336,7 +336,7 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-DOC-05 | 示例索引 + 常见用法 | [docs/examples.md](docs/examples.md) |
 | R-DOC-06 | 插件开发指南（写插件 / 订阅事件） | [docs/plugins/](docs/plugins/) |
 | R-DOC-07 | 设计定稿文档（变更方案 v1/v2/v3） | [change/](change/) |
-| R-DOC-08 | Superpowers 设计与计划文档（scenario-vars-and-generator） | [docs/superpowers/](docs/superpowers/) |
+| R-DOC-08 | Superpowers 设计与计划文档（scenario-vars-and-generator） | [docs/implemented/](docs/implemented/) |
 | R-DOC-09 | Known Issues 登记（含优先级 P0/P1/P2 + 修复记录） | [docs/known-issues/](docs/known-issues/) |
 | R-DOC-10 | Schema 速查表 | [docs/schema.md](docs/schema.md) |
 
