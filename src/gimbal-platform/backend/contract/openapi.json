@@ -3714,6 +3714,17 @@
             "title": "Rowindex",
             "type": "integer"
           },
+          "runError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runerror"
+          },
           "seq": {
             "title": "Seq",
             "type": "integer"

@@ -181,6 +181,8 @@ class ExecutionRowOut(BaseModel):
     # B6(R11 轻量版):server 链槽位号(引擎日志 = server-engine[-N].log);
     # launch 链 / 存量行 None
     server_slot: int | None = Field(default=None, alias="serverSlot")
+    # B3:行级失败原因(引擎结果错误/派发层异常;passed/canceled None)
+    run_error: str | None = Field(default=None, alias="runError")
 
 
 class ExecutionRowsOut(BaseModel):

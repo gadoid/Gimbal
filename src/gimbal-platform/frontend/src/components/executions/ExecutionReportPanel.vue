@@ -80,6 +80,8 @@
           <span v-if="g.serverSlot !== null && g.serverSlot !== undefined" class="rp-dim"
                 :title="`引擎日志在 run 目录的 ${slotLog(g.serverSlot)}`">server 槽位 {{ g.serverSlot }}</span>
         </div>
+        <p v-if="g.runError" class="rp-row-error mono" :data-testid="`report-row-error-${g.key}`"
+           :title="g.runError">{{ g.runError }}</p>
         <p v-if="!g.steps.length" class="rp-dim rp-pad">无步骤结果</p>
         <table v-else class="rp-steps">
           <thead>
@@ -325,6 +327,13 @@ function hasKeys(v: unknown): boolean {
   padding: 0.5rem 0.75rem; background: var(--surface-raised); border-bottom: 0.5px solid var(--color-border-tertiary);
 }
 .rp-group-title { @apply text-label font-semibold; color: var(--color-text-primary); }
+.rp-row-error {
+  margin: 0; padding: 0.375rem 0.75rem; font-size: 0.75rem;
+  color: var(--color-text-danger, #b91c1c);
+  background: var(--surface-raised);
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .rp-row-fail td { background: #fffafa; }
 .rp-call-cell { max-width: 22.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); }
 .rp-detail td { background: #fcfcfd; }

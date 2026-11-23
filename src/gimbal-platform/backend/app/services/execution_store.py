@@ -912,6 +912,7 @@ async def build_report(session: AsyncSession, ex: Execution) -> dict:
             "status": r.get("status", ""),
             "caseDir": r.get("caseDir") or "",
             "serverSlot": r.get("serverSlot"),
+            "runError": r.get("runError"),
             "steps": [],
         }
         groups.append(g)
@@ -931,7 +932,7 @@ async def build_report(session: AsyncSession, ex: Execution) -> dict:
                 g = {"key": f"unit-{s.unit}", "rowSeq": s.row_seq,
                      "unit": s.unit, "datasetId": None, "rowIndex": 0,
                      "rep": 0, "status": "", "caseDir": "",
-                     "serverSlot": None, "steps": []}
+                     "serverSlot": None, "runError": None, "steps": []}
                 groups.append(g)
             by_unit[s.unit] = g
         g["steps"].append(item)

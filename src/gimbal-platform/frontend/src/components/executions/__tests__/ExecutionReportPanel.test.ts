@@ -50,11 +50,11 @@ function report(over: Partial<ExecutionReport> = {}): ExecutionReport {
                assertions: 3, assertionsPassed: 2 },
     groups: [
       { key: 'row-0', rowSeq: 0, unit: 'sc-r', datasetId: null, rowIndex: 0, rep: 0,
-        status: 'passed', caseDir: 'case-000', serverSlot: null,
+        status: 'passed', caseDir: 'case-000', serverSlot: null, runError: null,
         steps: [step({ rowSeq: 0, status: 'passed', error: null, assertionCount: 1,
                        assertionPassed: 1, assertions: [], extracts: [] })] },
       { key: 'row-1', rowSeq: 1, unit: 'sc-r', datasetId: 'ds-a', rowIndex: 3, rep: 0,
-        status: 'failed', caseDir: 'case-001', serverSlot: 2, steps: [failed] },
+        status: 'failed', caseDir: 'case-001', serverSlot: 2, runError: 'assertion failed: status 500 != 200', steps: [failed] },
     ],
     failure: {
       ...failed,
@@ -117,6 +117,10 @@ describe('ExecutionReportPanel', () => {
 
     // 槽位提示随分组头出现
     expect(w.get('[data-testid="report-group-row-1"]').text()).toContain('server 槽位 2')
+    // B3:行级失败原因随行头呈现;passed 行无该元素
+    expect(w.get('[data-testid="report-row-error-row-1"]').text())
+      .toContain('assertion failed: status 500 != 200')
+    expect(w.find('[data-testid="report-row-error-row-0"]').exists()).toBe(false)
   })
 
   it('步骤详情展开:全部断言与提取值', async () => {

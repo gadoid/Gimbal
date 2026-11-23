@@ -183,6 +183,8 @@ export interface ExecutionRow {
   /** B6(R11 轻量版):server 链槽位号 → 引擎日志 server-engine[-N].log;
    *  launch 链 / 存量行为 null(日志在 case 目录自带) */
   serverSlot?: number | null
+  /** B3:行级失败原因(引擎结果错误/派发层异常;passed/canceled null) */
+  runError?: string | null
 }
 
 // ── B4 执行报告(2026-11-06 日志报告整理)────────────────────────
@@ -238,6 +240,7 @@ export interface ReportGroup {
   status: string
   caseDir: string
   serverSlot: number | null
+  runError: string | null
   steps: ReportStep[]
 }
 

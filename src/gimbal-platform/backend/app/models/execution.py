@@ -220,6 +220,11 @@ class ExecutionRow(Base):
     # ——对应 run 目录下 server-engine.log(槽位 0)/ server-engine-N.log。
     # launch 链与旧行为 None(引擎日志在 case 目录自带)。
     server_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # B3(登记册遗留工程项,2026-11-23):行级失败原因入库 —— 此前仅
+    # 存于工件(两击可达),顶层 error 只覆盖 dispatcher 级。两类来源:
+    # 引擎结果错误(runError)与派发层异常(error,plate/熔断/未知)。
+    # passed/canceled 行为 None;TEXT 不截断(写入口统一 [:2000] 防超长)。
+    run_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 事件流折叠的终态键:同 (execution_id, seq) 后行覆盖前行
     __table_args__ = (
         # 事件流折叠的终态键:同 (execution_id, seq) 后行覆盖前行;

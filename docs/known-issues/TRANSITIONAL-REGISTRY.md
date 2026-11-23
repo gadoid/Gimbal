@@ -22,8 +22,8 @@
 |---|---|---|---|---|
 | B1 | gen_m2 compat 守卫无真实基线 | 不兼容 M2 变更不会被拦(main 无 schema,恒跳过) | A1 合入后首个含 m2.schema.json 的 main 即闭合 | 合并后即闭 |
 | B2 | S1.5 质量尾项池 | 快照化/原子重载/ref 多版本/路径可配置等(见 plate-design 修订十) | 合入后按依赖排期 | 后续批次 |
-| B3 | 行级失败原因不入库 | 执行详情顶层 error 仅覆盖 dispatcher 级;行级原因在工件(两击可达) | execution_rows 加 run_error 列(迁移+写入+读侧) | 后续批次 |
-| B4 | pydantic 无上界 | 依赖漂移风险(2.13 曾与旧代码不兼容) | 钉 `<next-major` 或锁定 | 后续批次 |
+| B3 | 行级失败原因不入库 | 执行详情顶层 error 仅覆盖 dispatcher 级;行级原因在工件(两击可达) | execution_rows 加 run_error 列(迁移+写入+读侧) | **✅ 2026-11-23 已落**:迁移 0065(live 已升)+ 模型/RowState/终态投影(引擎 runError 优先、派发层 error 次之,[:2000] 防超长)+ 行页 ExecutionRowOut.runError + 报告 groups.runError(前端行头呈现)+ graph 恢复/逐单元行补键;roundtrip + 引擎失败×派发异常双路 e2e 钉死 |
+| B4 | pydantic 无上界 | 依赖漂移风险(2.13 曾与旧代码不兼容) | 钉 `<next-major` 或锁定 | **✅ 实质已闭合未销条**:`8d2a4164`(2026-10-15,登记次日)已钉 `pydantic>=2.6,<3` + `pydantic-settings>=2.0,<3`,requirements.lock 锁 2.14.1(当前全量绿);2026-11-23 复核销条 |
 | B5 | REST 契约漂移守卫 + 错误码单源化(审计批次⑤治本;**轻量切片 2026-11-20 已落**:`gen_api_contract.py` 快照 openapi.json+error-codes.json(213 码/437 位点/35 动态)双守卫 = plate-ci 步骤 + test_api_contract) | 无意识漂移已被拦;前端 37 api 文件仍手写镜像 ~210 类型、错误码表前端零引用 | 治本全量:codegen 单源化(参照 gen_m2 三侧管线)+ 错误码表前端接入 | 后续批次 |
 | B6 | C3 conftest 钉 legacy vs 生产默认 server(2026-11-20 已做死兜底直读对齐) | 28 个测试文件按 legacy 假引擎编写;出厂默认路径非默认被测路径 | 自举:FakeServerSession 对齐假 launch 覆盖面 → 钉位翻 server → 删 legacy 链 | 自举 |
 | B7 | yz 认证器真实登录协议未实现(2026-11-20 已修 None-token fail-fast + 清硬编码口令) | 现形态 = 预置 token 直通;docstring 所述 POST 表单→PHPSESSID 协议缺外部系统信息 | 取得 21eline 测试环境协议确认后补实现 | 外部信息 |
@@ -43,7 +43,7 @@
 | C9 | 状态迁移写点全量并发审计未做 | 理论竞态面(已知点已 CAS) | 按第 7 类方法扫 | 后续批次 |
 | C10 | account_fields 明文存储(审计 TOK-08b) | 用户存秘密则裸存;F6 拍板:自定义字段明文非密、只经 ${slot.X.field} 消费 | 若收紧:敏感键逐值 fernet(写入加密/消费解密),需先拍板 | 按设计登记 |
 | C11 | md5sign 遗留签名器(审计 TOK-08d) | md5(token+timestamp) 弱签名 | **被测系统协议仿真,不能单方面改**(契约与退役插件逐字节一致,特征化用例钉死);推动场景声明式切 standard.bearer/basic | 随 legacy 链退役 |
-| C12 | 手配自助建条目(凭证治理 §3.3 方案 A,2026-11-20 落) | 普通用户随场景保存可建 username-ref 自用条目 —— 此前条目创建属 alias.write 能力面(W7 导入门同款);范围窄:仅 username-ref 自用形态、base_service 须落主档既有服务(未知系统 422)、目录/部署仍属 admin | 用户未否决视为维持;翻案退路 = 删 `auth_drafts.materialize` 条目创建段(闸与冲突码不动) | 待用户确认 |
+| C12 | 手配自助建条目(凭证治理 §3.3 方案 A,2026-11-20 落) | 普通用户随场景保存可建 username-ref 自用条目 —— 此前条目创建属 alias.write 能力面(W7 导入门同款);范围窄:仅 username-ref 自用形态、base_service 须落主档既有服务(未知系统 422)、目录/部署仍属 admin | 用户未否决视为维持;翻案退路 = 删 `auth_drafts.materialize` 条目创建段(闸与冲突码不动) | **✅ 2026-11-23 追认维持**(待实现批次处理时确认;翻案退路继续在档) |
 
 ## D. UI/UX 登记(一期后第一项:信息架构收敛)
 

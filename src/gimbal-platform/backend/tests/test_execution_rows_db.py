@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from app.core import db as db_module
 from app.models.execution import ExecutionRow
-from tests.helpers import ensure_fk_users, register_and_login
+from tests.helpers import register_and_login
 
 
 async def _seed_exec(owner_id: int) -> int:
@@ -98,3 +98,36 @@ async def test_persist_row_terminal_writes_db(client):
     r = await client.get(f"/api/executions/{eid}/rows", headers=h)
     it = r.json()["items"][0]
     assert it["finishedAt"] == "2026-09-20T12:00:05Z"
+
+
+async def test_row_run_error_roundtrip(client):
+    """B3:行级失败原因入库 —— 直调终态落库 helper,failed 行带原因、
+    passed 行 None;行页响应键 runError。"""
+    from sqlalchemy import select
+
+    from app.services.run_dispatcher import RowState, _persist_row_terminal
+
+    h = await register_and_login(client, "b3rows", "pw123456")
+    eid = await _seed_exec(1)
+    await _persist_row_terminal(db_module.SessionLocal, eid, RowState(
+        seq=0, dataset_id="ds-1", row_index=0, rep=0, status="failed",
+        case_dir="case-000", started_at="2026-09-20T12:00:00Z",
+        finished_at="2026-09-20T12:00:05Z", injection_id=None,
+        run_error="exit=1: assertion failed on step 2",
+    ))
+    await _persist_row_terminal(db_module.SessionLocal, eid, RowState(
+        seq=1, dataset_id="ds-1", row_index=1, rep=0, status="passed",
+        case_dir="case-001", started_at="2026-09-20T12:00:06Z",
+        finished_at="2026-09-20T12:00:09Z", injection_id=None,
+    ))
+    async with db_module.SessionLocal() as s:
+        rows = (await s.execute(
+            select(ExecutionRow).where(ExecutionRow.execution_id == eid)
+            .order_by(ExecutionRow.seq))).scalars().all()
+    assert rows[0].run_error == "exit=1: assertion failed on step 2"
+    assert rows[1].run_error is None
+
+    r = await client.get(f"/api/executions/{eid}/rows", headers=h)
+    items = r.json()["items"]
+    assert items[0]["runError"] == "exit=1: assertion failed on step 2"
+    assert items[1]["runError"] is None

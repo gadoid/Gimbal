@@ -184,6 +184,9 @@ class RowState:
     attempts: int = 1
     # B6(R11 轻量版):server 链执行本行的槽位号;launch 链 None
     server_slot: int | None = None
+    # B3:行级失败原因(引擎 runError 或派发层异常 error;终态回写块
+    # 投影,随 _persist_row_terminal 落库;passed/canceled 为 None)
+    run_error: str | None = None
 
 
 # 行终态集合:JSONL 里 per-row 最后一行 status 的取值("dispatched" 为
@@ -251,6 +254,8 @@ async def execution_rows_page(
             "startedAt": _dt_to_iso(r.started_at),
             "finishedAt": _dt_to_iso(r.finished_at),
             "serverSlot": r.server_slot,
+            # B3:行级失败原因(响应模型键 runError;报告同键消费)
+            "runError": r.run_error,
             # B4:报告按 unit 归组 graph 链步骤(行 API 响应模型不含此键)
             "unitId": r.unit_id or "",
         }
@@ -495,7 +500,8 @@ class _EventIngester:
 
 _ROW_UPSERT_COLS = ("unit_id", "branch", "attempts", "dataset_id",
                     "injection_id", "row_index", "rep", "status",
-                    "case_dir", "started_at", "finished_at", "server_slot")
+                    "case_dir", "started_at", "finished_at", "server_slot",
+                    "run_error")
 
 
 async def _upsert_execution_rows(db: Any, rows: list[dict]) -> None:
@@ -547,6 +553,7 @@ async def _persist_row_terminal(db_factory: Any, execution_id: int,
                 "started_at": _iso_to_dt(state.started_at),
                 "finished_at": _iso_to_dt(state.finished_at),
                 "server_slot": state.server_slot,
+                "run_error": state.run_error,
             }])
             await session.commit()
     except Exception as e:  # noqa: BLE001
@@ -1733,6 +1740,9 @@ async def _fanout_graph(
                     "status": "failed", "case_dir": "case-graph",
                     "started_at": None, "finished_at": _iso_to_dt(finished_ts),
                     "server_slot": None,
+                    "run_error": (
+                        "recovered with prior events "
+                        "(at-most-once, no graph replay)"),
                 }])
                 await session.commit()
         except Exception:  # noqa: BLE001
@@ -2023,7 +2033,7 @@ async def _fanout_graph(
          "row_index": 0, "rep": 0,
          "status": status, "case_dir": "case-graph",
          "started_at": None, "finished_at": None,
-         "server_slot": None}]
+         "server_slot": None, "run_error": None}]
     for idx, (uid, ev) in enumerate(ordered_units, start=1):
         rows_to_write.append({
             "execution_id": execution_id, "seq": idx, "unit_id": uid,
@@ -2037,6 +2047,8 @@ async def _fanout_graph(
             "finished_at": _iso_to_dt(ev["finished_at"])
             if ev.get("finished_at") else None,
             "server_slot": None,
+            "run_error": str(ev["error"])[:2000]
+            if ev.get("error") else None,
         })
     try:
         async with db_factory() as session:
@@ -2572,6 +2584,13 @@ async def _fanout(
             state.status = log_line["status"]
             state.finished_at = finished_ts
             state.case_dir = case_dir.name
+            # B3:行级失败原因入库 —— 引擎结果错误优先,派发层异常次之
+            # (plate/熔断/未知异常分支写 "error" 键);passed/canceled 恒
+            # 无键 → None。[:2000] 防超长(引擎 error 形态不可控)。
+            state.run_error = (
+                log_line.get("runError") or log_line.get("error")) or None
+            if state.run_error is not None:
+                state.run_error = str(state.run_error)[:2000]
             # P2-04/P2-05:单元列投影(unit 取事件标签;attempts 取
             # run.finished 单列,缺省回退 launch 解析值,再缺省 1)
             state.unit_id = proj["unit"] or "u"

@@ -294,3 +294,91 @@ async def test_stale_env_key_silently_ignored(client, monkeypatch):
     # config_json 不再留痕 envId
     exec_row = (await client.get("/api/executions", headers=headers)).json()
     assert all("envId" not in (e.get("config") or {}) for e in exec_row.get("items", []))
+
+
+async def test_row_run_error_engine_failure_e2e(
+    client: AsyncClient, monkeypatch
+) -> None:
+    """B3:行级失败原因入库 e2e —— 引擎失败(exit=1)与派发层异常
+    (plate 不可用)两路,终态行的 runError 均落库并经行页回读。"""
+    headers = await register_and_login(client)
+    draft = make_draft("sc-b3", steps=STEPS)
+    draft["definition"]["config"] = {
+        "timePolicy": {"kind": "record"},
+        "vars": {"customer_id": "262"},
+    }
+    await client.post("/api/scenarios", headers=headers, json=draft)
+    # 两行数据集 × nRuns=1(P2-05 乘法下沉:nRuns 不展开行,行数来自数据集)
+    r0 = await client.post(
+        "/api/scenarios/sc-b3/data-sets",
+        headers=headers,
+        json={"name": "ds-b3", "rows": [
+            {"customer_id": "1"}, {"customer_id": "2"}]},
+    )
+    assert r0.status_code == 201, r0.text
+    dataset_id = r0.json()["datasetId"]
+
+    from app.services.gimbal_launcher import LaunchResult
+
+    calls = {"n": 0}
+
+    async def _fail(case_path, *, step_to=None, report_dir=None,
+                    cwd=None, timeout=None, engine_log_path=None,
+                    on_event=None, on_log=None, log_counters=None,
+                    n_runs=1, retry=0):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # 引擎结果错误:exit=1 = 测试失败,runError = result.error
+            return LaunchResult(
+                launch_status="ok", exit_code=1, total=1, failed=1,
+                error="assertion failed: status 500 != 200")
+        # 派发层异常:plate 不可用路径(runError ← error 键)
+        raise __import__(
+            "app.services.plate_client", fromlist=["PlateUnavailableError"]
+        ).PlateUnavailableError("plate down (e2e)")
+
+    async def _fake_convert(scenario):
+        return {"consumer": "platform", "converted": dict(scenario)}
+
+    from app.services import gimbal_launcher as gl, plate_client as pc
+    monkeypatch.setattr(gl, "launch", _fail)
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+
+    r = await client.post("/api/runs", headers=headers, json={
+        "scenarioId": "sc-b3", "dataSetIds": [dataset_id],
+    })
+    assert r.status_code == 201, r.text
+
+    import sqlalchemy as sa
+
+    from app.core import db as db_module
+    from app.models.execution import Execution, ExecutionRow
+
+    ex = None
+    for _ in range(200):
+        async with db_module.SessionLocal() as s:
+            ex = (await s.execute(
+                sa.select(Execution).order_by(Execution.id.desc()).limit(1)
+            )).scalar_one_or_none()
+        if ex is not None and ex.status in ("done", "failed"):
+            break
+        await asyncio.sleep(0.05)
+    # fan-out 不因单行崩溃:整单收敛到终态即可(两行全败 → failed)
+    assert ex is not None and ex.status in ("done", "failed")
+
+    async with db_module.SessionLocal() as s:
+        rows = (await s.execute(
+            sa.select(ExecutionRow).where(ExecutionRow.execution_id == ex.id)
+            .order_by(ExecutionRow.seq))).scalars().all()
+    assert len(rows) == 2
+    assert rows[0].status == "failed"
+    assert rows[0].run_error == "assertion failed: status 500 != 200"
+    assert rows[1].status == "plate_unavailable"
+    assert rows[1].run_error == "plate down (e2e)"
+
+    # 行页回读键
+    page = await client.get(
+        f"/api/executions/{ex.id}/rows", headers=headers)
+    items = page.json()["items"]
+    assert items[0]["runError"] == "assertion failed: status 500 != 200"
+    assert items[1]["runError"] == "plate down (e2e)"
