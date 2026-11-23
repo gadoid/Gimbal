@@ -280,8 +280,9 @@
   --c-divider: #f1f5f9;
   --c-bg-secondary: #f8fafc;
   --c-text: #1f2933;
-  --c-text-secondary: #64748b;
-  --c-text-tertiary: #94a3b8;
+  /* 与 theme.css 日面阶梯同步(2026-11-23 对比度修复,实证见彼处注) */
+  --c-text-secondary: #526276;
+  --c-text-tertiary: #607086;
   --c-field-bg: #f8fafc;
   --c-field-border: #e2e8f0;
   --c-accent: #4338ca;

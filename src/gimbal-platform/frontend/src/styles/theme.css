@@ -11,10 +11,17 @@
   --color-bg-primary: #ffffff;
   --color-bg-secondary: #f5f3ee;
 
-  /* text */
+  /* text —— 日面阶梯整体下移一档(2026-11-23 对比度实证修复):原
+   * tertiary #94a3b8 在白底仅 2.56:1、暖次底 #f5f3ee 仅 2.31:1,连
+   * large-text 的 3:1 都不达;而原 secondary #64748b 在暖次底也只有
+   * 4.29:1 —— 三级色要达 AA 就不可能比次级色浅,单改三级会把层级
+   * 压平,故两级同移。新值在三个日面(白 / #f8fafc / #f5f3ee)全部
+   * AA:secondary 6.24 / 5.96 / 5.62,tertiary 5.05 / 4.83 / 4.55;
+   * 一级之差的层级与夜间阶梯(#9b9b9b / #909090,见 dual-theme.css)
+   * 同构。 */
   --color-text-primary: #1f2933;
-  --color-text-secondary: #64748b;
-  --color-text-tertiary: #94a3b8;
+  --color-text-secondary: #526276;
+  --color-text-tertiary: #607086;
 
   /* borders */
   --color-border-tertiary: #e2e8f0;

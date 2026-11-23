@@ -44,7 +44,7 @@
 | C8 | 静态约束入口校验全量清单未建 | 晚失败(登记类) | 按第 5 类方法列清单核 | **✅ 2026-11-23 已扫**(docs/static-constraint-audit-20261123.md,新口径:信任边界×静态约束×四档判定,三面全量清单化):边界即校验为主旋律,晚失败面高度集中且多为文档化架构决策(plate/执行器为结构权威);**真缺口 4 处本批修复** —— runs/preview serviceBindings 形态 500→422、ck_scope_exactly_one 模型/迁移漂移对齐、REGISTRY_ONLY_* 拼错静默按 off→Literal 启动拒(高危)、死键×4 删除(plugins 三键 + B6③ 遗留 CANCEL_GRACE);挂账 J 区三项(convert 信封/队列配方版本化/share_refs 无模型) |
 | C9 | 状态迁移写点全量并发审计未做 | 理论竞态面(已知点已 CAS) | 按第 7 类方法扫 | **✅ 2026-11-23 已扫**(docs/concurrency-write-audit-20261123.md,12 写点清单化):唯一真竞态 promotions 裁决 TOCTOU 本批修复(行锁串行化,grants 双写面收口);revoke_grants 粒度维持 E 区挂账 |
 | C10 | account_fields 明文存储(审计 TOK-08b) | 用户存秘密则裸存;F6 拍板:自定义字段明文非密、只经 ${slot.X.field} 消费 | ~~若收紧:敏感键逐值 fernet(写入加密/消费解密),需先拍板~~ **✅ 2026-11-23 销问:维持明文非密,收紧不立项**(重开条件 = 出现实际敏感键使用证据;收尾排布批次 0-4) | 按设计登记(已销问) |
-| C11 | md5sign 遗留签名器(审计 TOK-08d) | md5(token+timestamp) 弱签名 | **被测系统协议仿真,不能单方面改**(契约与退役插件逐字节一致,特征化用例钉死);推动场景声明式切 standard.bearer/basic | **勘误(2026-11-23,B6③ 落地时核实)**:md5sign 是 plate 方言 token_type 契约项(_m2/dialect/selfdescribe/m2.schema.json/compiler 校验/签名分派),与平台执行链**零耦合**——平台 legacy 链删除不影响其可达性;真退役 = 方言破坏性变更,m2.schema 契约面再生成依赖 A1 合并后的 main 基线(B1),另批立项(随 D10 真引擎 suite e2e 一并) |
+| C11 | md5sign 遗留签名器(审计 TOK-08d) | md5(token+timestamp) 弱签名 | **被测系统协议仿真,不能单方面改**(契约与退役插件逐字节一致,特征化用例钉死);推动场景声明式切 standard.bearer/basic | **勘误(2026-11-23,B6③ 落地时核实)**:md5sign 是 plate 方言 token_type 契约项(_m2/dialect/selfdescribe/m2.schema.json/compiler 校验/签名分派),与平台执行链**零耦合**——平台 legacy 链删除不影响其可达性;真退役 = 方言破坏性变更,m2.schema 契约面再生成依赖 A1 合并后的 main 基线(B1),另批立项(随 D10 真引擎 suite e2e 一并)。**进度(2026-11-23)**:D10 真引擎 suite e2e 已落(见 D10);md5sign 退役本身仍受 A1 前置约束 —— 按用户拍板的顺序(另批池 → 合主干),它落在合并窗口之后 |
 | C12 | 手配自助建条目(凭证治理 §3.3 方案 A,2026-11-20 落) | 普通用户随场景保存可建 username-ref 自用条目 —— 此前条目创建属 alias.write 能力面(W7 导入门同款);范围窄:仅 username-ref 自用形态、base_service 须落主档既有服务(未知系统 422)、目录/部署仍属 admin | 用户未否决视为维持;翻案退路 = 删 `auth_drafts.materialize` 条目创建段(闸与冲突码不动) | **✅ 2026-11-23 追认维持**(待实现批次处理时确认;翻案退路继续在档) |
 
 ## D. UI/UX 登记(一期后第一项:信息架构收敛)
@@ -60,7 +60,8 @@
 | D7 | 未用系统适配页 250 条漂移 6000px | 页面不可用 | 空场景系统折叠 | 后续批次 |
 | D8 | 常量池版式居中窄版与其他页不一致 | 视觉不齐 | IA 批顺带 | 一期后 |
 | D9 | GET 步骤「query 参数」标签在契约未加载时回落 body 字样 | 瞬时误导(契约加载后正确) | stepMethod 响应式化 | 后续批次 |
-| D10 | 自举必须覆盖的路径登记 | 测试≠生产路径 | server 链/空库启动/CLI 退出码/suite 执行(前三已各有测试,补 suite 端到端) | 自举 |
+| D10 | 自举必须覆盖的路径登记 | 测试≠生产路径 | server 链/空库启动/CLI 退出码/suite 执行(前三已各有测试,补 suite 端到端) | **✅ 2026-11-23 已销**:最后一项补齐 —— `tests/test_suite_real_engine_e2e.py`:编排模式(chain,两单元)经**真 gimbal 引擎**完整执行(composition 落库 → suite_graph 入队 → _fanout_graph → 逐单元 convert → 执行器 server 会话 spawn + SSE),断言 done / kind=suite_graph / 两单元 passed / 桩被测系统各命中一次 / 行台账(图行 + ref 标签单元行)/ 事件(run.finished×1 + scenario.end×2)/ 台账 chain=server。此前编排链只有假引擎覆盖,图物化产物与真执行器方言是否咬合无证据 —— 首跑即过(4/4 稳定,xdist 满载亦绿)。四路径自此全部有真形态测试 |
+| D11 | 日面灰字对比度(批次 4 夜间修复时的新观察) | tertiary `#94a3b8` 白底 2.56:1、暖次底 2.31:1(连 large-text 3:1 都不达) | 日面阶梯整体下移一档 | **✅ 2026-11-23 已修**:单改三级不可行 —— 次级 `#64748b` 自己在暖次底 #f5f3ee 也仅 4.29:1,三级达 AA 就不可能比次级浅,单改会把层级压平;故两级同移:secondary → `#526276`(白/米白/暖次底 6.24/5.96/5.62),tertiary → `#607086`(5.05/4.83/4.55,三面全 AA),与夜间阶梯(#9b9b9b/#909090)同构。theme.css + composer.css 两套令牌同改(118 + 164 处使用面);NotificationBell 相对时间直写 `text-slate-400` → `slate-500`(浅底面板内唯一漏网)。另 4 处 `text-slate-400` 在深色外壳图标上(≈7:1),非问题面 |
 
 ## E. 挂账观察(无行动项)
 

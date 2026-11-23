@@ -2400,7 +2400,38 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   路径基建)。维持口径(status 值域应用层常量单源/SSE 防御兜底/
   token 范围收紧复核窗口/m2 门放行档等)逐项在档。
   验证:新增测试 3 文件位(preview 形状/Scope IntegrityError/
-  Settings Literal)+ 受影响域 60 绿;全量与契约见批尾。
+  Settings Literal)+ 受影响域 60 绿;全量 **2165+2**(xdist 134s)。
+- **另批池(2026-11-23,🟢 两项落地,一项受合并前置)**
+  - **D10 真引擎 suite e2e(D10 销问)**:自举四路径(server 链/空库
+    启动/CLI 退出码/suite 执行)的最后一项补齐 ——
+    `tests/test_suite_real_engine_e2e.py`:编排模式(chain,两单元)经
+    **真 gimbal 引擎**完整执行:composition 落库 → kind=suite_graph
+    入队 → _fanout_graph → 逐单元 convert → 执行器 server 会话 spawn
+    + SSE。断言:done / kind=suite_graph / passed=2 / 桩被测系统各
+    命中一次 / 行台账(seq=0 图行 + ref 标签 ua/ub 单元行全 passed)/
+    事件(run.finished×1 + scenario.end×2)/ 台账 chain=server、
+    mode=chain。基建沿用 p35(直通 convert 替身 —— 真引擎兼容平台
+    方言且回包无 m2 自然略过代际门;GIMBAL_BIN="" 钉当前解释器;
+    real_engine_session 还原真会话类)。**首跑即过**,串行 4/4、xdist
+    满载全量亦绿。意义:此前编排链只有假引擎覆盖(mock launch 流式
+    事件),图物化产物与真执行器方言是否咬合无测试证据 —— 这正是
+    D10「测试≠生产路径」登记的缺口。
+  - **日面灰字对比度(登记册补 D11,已修)**:批次 4 夜间修复时的新
+    观察项。实测原 tertiary `#94a3b8` 白底 2.56:1、暖次底 #f5f3ee
+    2.31:1;且**原 secondary `#64748b` 在暖次底也只有 4.29:1** ——
+    三级色要达 AA 就不可能比次级色浅,单改三级会把层级压平,故两级
+    同移一档:secondary → `#526276`(白/米白/暖次底 6.24/5.96/5.62),
+    tertiary → `#607086`(5.05/4.83/4.55,三面全 AA),与夜间阶梯
+    (#9b9b9b/#909090)同构。theme.css + composer.css 两套令牌同改
+    (118 + 164 处使用面);NotificationBell 相对时间直写
+    `text-slate-400` → `slate-500`(浅底面板内唯一漏网);另 4 处
+    `text-slate-400` 在深色外壳图标上(≈7:1),非问题面。比值全部
+    脚本精算(WCAG 相对亮度),不靠目测。
+  - **md5sign 方言退役(C11)**:受 A1 前置约束(m2.schema 再生成
+    依赖合并后的 main 基线)—— 按拍板顺序(另批池 → 合主干)落在
+    合并窗口**之后**,不在本批强推。
+  验证:后端全量 **2166+2**(xdist 119s);前端 **1538+1**、
+  vue-tsc 0、eslint 0 错。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本

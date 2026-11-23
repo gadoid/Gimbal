@@ -56,7 +56,7 @@
             <span class="truncate text-body font-medium">{{ n.title }}</span>
           </div>
           <div class="mt-0.5 line-clamp-2 text-caption text-slate-500">{{ n.body }}</div>
-          <div class="mt-0.5 text-[0.625rem] text-slate-400">{{ relTime(n.createdAt) }}</div>
+          <div class="mt-0.5 text-[0.625rem] text-slate-500">{{ relTime(n.createdAt) }}</div>
         </button>
       </div>
 

@@ -83,7 +83,9 @@ C6 dispatcher 域切片      ─→ C1(先辨清哪些 except 是承重的)
 > 删除(六处 + gimbal_launcher 剥壳 + 假引擎缝迁 `tests/_fake_engine`
 > ×23 文件 + 真引擎 e2e 转真会话,M2 代际门坑发现并修)。
 > **C3 销条**。md5sign 勘误另批(方言契约项,非平台链耦合;m2.schema
-> 再生成依赖 A1 基线)——与 D10 真引擎 suite e2e 一并立项。
+> 再生成依赖 A1 基线)。**另批池进度(2026-11-23)**:D10 真引擎 suite
+> e2e 已落(test_suite_real_engine_e2e,编排链首跑即过);md5sign 退役
+> 仍受 A1 前置约束,落在合并窗口之后。
 > 记录见 progress 收尾排布轮 / 登记册 B6/C3/C11 行。
 
 - 三步:① FakeServerSession 对齐假 launch 覆盖面(现仅 graph 域,
@@ -129,7 +131,9 @@ C6 dispatcher 域切片      ─→ C1(先辨清哪些 except 是承重的)
 | C8 静态约束清单 | **✅ 已落(2026-11-23)**:新口径三面全量清单化(审计档在 docs/static-constraint-audit-20261123.md),4 窄面修复(preview 422/CHECK 对齐/REGISTRY_ONLY Literal/死键×4),J 区挂账 3 项 | 0.5-1 天 |
 | C9 并发写点审计 | ✅ 已落(2026-11-23,docs/concurrency-write-audit-20261123.md):12 写点清单化;promotions 裁决 TOCTOU 修复(行锁串行化) | 0.5-1 天 |
 | C6 其余域宽捕获 | dispatcher 域随批次 3;余域按「降级必须可见」不变式渐进清扫 | 渐进 |
-| D 区快赢:D6/D7/D9 + 夜间灰字对比度 | ✅ 已落(2026-11-23):D6 预填豁免 / D7 无漂移折叠 / D9 projMethod 响应化 / 夜 ink-3 #6f6f6f→#909090(黑底 4.18→6.58:1 全 AA);新观察:日面 tertiary 2.56:1 挂账 | 1 天内 |
+| D 区快赢:D6/D7/D9 + 夜间灰字对比度 | ✅ 已落(2026-11-23):D6 预填豁免 / D7 无漂移折叠 / D9 projMethod 响应化 / 夜 ink-3 #6f6f6f→#909090(黑底 4.18→6.58:1 全 AA);日面观察项 **✅ 已修(2026-11-23,D11)**:阶梯两级同移(secondary #526276 / tertiary #607086,三个日面全 AA;单改三级会压平层级) | 1 天内 |
+| D10 真引擎 suite e2e | **✅ 已落(2026-11-23)**:编排模式经真 gimbal 引擎完整执行(chain 两单元;行台账/事件/桩命中/台账 chain 全断言),自举四路径全部有真形态测试 | 0.5 天 |
+| md5sign 方言退役(C11) | ⏸ 受 A1 前置约束(m2.schema 再生成依赖合并后 main 基线)—— 按拍板顺序落在合并窗口之后 | 另批 |
 
 ## 6. 批次 5:合并窗口项(0-5 拍板后低峰)
 
