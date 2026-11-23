@@ -9,8 +9,10 @@
 > 权限管理、CodingAgent Goals、外部集成架构评审)。
 > 被取代件 asset-domain-change-adaptation-storage → 根 design/archive/。
 >
-> **留守 superpowers/plans**(待实现/活):suite-refactor-design(现行
+> > **留守 superpowers/plans**(待实现/活):suite-refactor-design(现行
 > 唯一蓝图)、GIMBAL-外部系统集成架构设计(决策表引用源)、路线图
 > 2026-09-28、执行能力功能点与归属(架构类比参考)、execution-design
-> (活,W6 勘误)、companion-refactor-plan(未实现)、injection-provenance
-> -manifest-design(specs,待评审未实施)。
+> (活,W6 勘误);specs 留 injection-provenance-manifest-design(待评审
+> 未实施)。
+> **勘误(同日)**:companion-refactor-plan 初判误留 —— 其主体已交付
+> (C1/C2/C3 全落地,仅 carry_profile_ref 列已废止),已改迁本目录。
