@@ -677,12 +677,13 @@ class TestDispatchSplitEquivalence:
             # 架构终态(2026-11-21):默认环境落地后标签链可解析 →
             # 环境快照键随解析出现(两条派发路径同有,c1==c2 已对拍)
             "environmentId", "environmentSource"}
-        assert c1["scenarioId"] == "sc-eq" and c1["chain"] == "legacy"
+        # B6 批次②(2026-11-23):conftest 钉位翻 server,链记录随默认口径
+        assert c1["scenarioId"] == "sc-eq" and c1["chain"] == "server"
         assert c1["dataSetIds"] == [] and c1["serviceBindings"] == {}
         ds = cap[0]["datasets"]
         assert len(ds) == 1 and ds[0]["datasetId"] is None
         assert len(ds[0]["rows"]) == 1
-        assert cap[0]["owner_id"] == uid and cap[0]["chain"] == "legacy"
+        assert cap[0]["owner_id"] == uid and cap[0]["chain"] == "server"
         assert (await _wait_terminal(ex1)).status == STATUS_DONE
         assert (await _wait_terminal(ex2)).status == STATUS_DONE
 

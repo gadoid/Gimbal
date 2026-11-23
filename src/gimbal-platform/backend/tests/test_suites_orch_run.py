@@ -115,8 +115,10 @@ def _patch_pipeline(monkeypatch, events: list[dict]) -> list[dict]:
     async def _fake_convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    from app.services import graph_dispatch as gd, plate_client as pc
+    from app.services import (gimbal_launcher as gl, graph_dispatch as gd,
+                              plate_client as pc)
     monkeypatch.setattr(gd, "launch", _launch)
+    monkeypatch.setattr(gl, "launch", _launch)   # B6②:server 垫片委托缝
     monkeypatch.setattr(pc, "convert", _fake_convert)
     return launched
 

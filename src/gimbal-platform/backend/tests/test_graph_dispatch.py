@@ -102,8 +102,10 @@ class TestGraphRunEndToEnd:
 
         # patch 打在调用方模块(execute_graph 用 from-import 绑定,
         # 只 patch gimbal_launcher.launch 顺序敏感、时灵时不灵)
-        from app.services import graph_dispatch as gd, plate_client as pc
+        from app.services import (gimbal_launcher as gl, graph_dispatch as gd,
+                                  plate_client as pc)
         monkeypatch.setattr(gd, "launch", _launch)
+        monkeypatch.setattr(gl, "launch", _launch)   # B6②:server 垫片委托缝
         monkeypatch.setattr(pc, "convert", _fake_convert)
 
         r = await client.post("/api/runs", headers=headers, json={
@@ -176,8 +178,9 @@ class TestGraphRunEndToEnd:
             return LaunchResult(launch_status="ok", exit_code=1,
                                 total=2, passed=1, failed=1)
 
-        from app.services import graph_dispatch as gd
+        from app.services import gimbal_launcher as gl, graph_dispatch as gd
         monkeypatch.setattr(gd, "launch", _launch)
+        monkeypatch.setattr(gl, "launch", _launch)   # B6②:server 垫片委托缝
 
         async def _fake_convert(scenario):
             return {"consumer": "platform", "converted": dict(scenario)}
@@ -452,8 +455,9 @@ class TestGraphCompositionInline:
 
         # 打在调用方模块上(execute_graph 用的是 from-import 绑定,
         # 只 patch gimbal_launcher.launch 在部分顺序下不生效)
-        from app.services import graph_dispatch as gd
+        from app.services import gimbal_launcher as gl, graph_dispatch as gd
         monkeypatch.setattr(gd, "launch", _launch)
+        monkeypatch.setattr(gl, "launch", _launch)   # B6②:server 垫片委托缝
         await self._fake_convert_patch(monkeypatch)
 
         await register_and_login(client, "ga_boot", "ga_bootpass123")

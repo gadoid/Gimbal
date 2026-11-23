@@ -281,6 +281,70 @@ async def _ensure_pool_schema() -> None:
     _pool_built = True
 
 
+class ShimServerSession:
+    """B6 批次②(2026-11-23):server 链测试垫片 —— 默认被测路径对齐
+    生产默认(``EXEC_CHAIN=server``),引擎行为仍走既有 fake 缝。
+
+    ``run_case`` 委托 ``gimbal_launcher.launch``(用 legacy 分支同款
+    kwargs —— 各用例 monkeypatch 的 fake 引擎零改动可续用);
+    ``start`` 捕获池侧透传的 ``on_log/log_counters``(AD2)原样转发,
+    日志事件路径保持。``slot`` 读写均吞(池 _spawn 会盖章,垫片不具
+    备 per-slot 引擎日志,维持 legacy 同形的 ``server_slot=None`` 工件
+    路由)。需要真 server 会话语义(取消握手/能力位/SSE)的专项用例
+    自行 monkeypatch ``gimbal_server_session.ServerSession`` 覆盖本垫片
+    (先例 test_graph_cancel_unit);需要 legacy 链本身的用例显式把
+    ``EXEC_CHAIN`` 钉回 legacy。
+    """
+
+    server_version = "shim-legacy-launch"
+    cancel_scopes = ("step", "unit")
+
+    def __init__(self) -> None:
+        self._on_log = None
+        self._log_counters = None
+
+    # 池 _spawn 无条件 s.slot = slot;垫片不具备槽位语义(读恒 None,
+    # 写吞掉)—— server_slot 不盖章,case 工件路由与 legacy 期一致。
+    @property
+    def slot(self):  # noqa: ANN201 — 测试垫片,类型从简
+        return None
+
+    @slot.setter
+    def slot(self, _v) -> None:
+        return None
+
+    async def start(self, *, engine_log_path=None, cwd=None,
+                    on_log=None, log_counters=None, **_kw) -> None:
+        self._on_log = on_log
+        self._log_counters = log_counters
+
+    async def close(self) -> None:
+        return None
+
+    async def cancel(self, *, scope: str = "step") -> bool:
+        return False   # 垫片不模拟取消握手;取消语义用例自带 FakeServerSession
+
+    async def run_case(self, case_path, *, halt_at=None, n_runs: int = 1,
+                       parallel: int = 1, debug=None, m2_info=None,
+                       timeout=None, on_event=None):
+        from pathlib import Path
+
+        from app.services import gimbal_launcher
+
+        case_dir = Path(case_path).parent
+        return await gimbal_launcher.launch(
+            case_path,
+            step_to=halt_at,
+            report_dir=case_dir / "reports",
+            cwd=case_dir,
+            engine_log_path=case_dir / "engine.log",
+            on_event=on_event,
+            on_log=self._on_log,
+            log_counters=self._log_counters,
+            n_runs=n_runs,
+        )
+
+
 @pytest.fixture
 async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
     """Swap the global DB engine onto the process's pooled schema(每测行级白纸).
@@ -288,13 +352,18 @@ async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
     PG-only(SQLite 已退役):连进来的会话 search_path 钉在池 schema
     上;TEST_DATABASE_URL 缺失在 conftest 导入期即中止会话。
     """
-    # P3.6:默认链已切 server(生产),测试钉回 legacy —— 大量用例按
-    # legacy 假引擎(monkeypatch gimbal_launcher.launch)编写,默认拉真
-    # server 实例会拖爆套件且伪 convert 场景被引擎拒绝。server 链由
-    # 显式 chain_override/debug 的专项用例覆盖,不受此钉影响。
+    # B6 批次②(2026-11-23):钉位翻 server —— 出厂默认路径(生产
+    # EXEC_CHAIN=server)从「非默认被测路径」转为默认被测路径,消除
+    # C3 登记的「shipped 默认 ≠ 被测默认」分裂。既有按 legacy 假引擎
+    # (monkeypatch gimbal_launcher.launch)编写的用例经 ShimServerSession
+    # 垫片继续有效(run_case 委托同一 fake 缝);server 会话真语义
+    # (SSE/取消握手/能力位)仍由专项用例自带 FakeServerSession 覆盖,
+    # legacy 链本体由 test_gimbal_launcher/test_launcher_streaming* 直测。
     from app.core.config import settings as _settings
+    from app.services import gimbal_server_session as _gss
 
-    monkeypatch.setattr(_settings, "EXEC_CHAIN", "legacy", raising=True)
+    monkeypatch.setattr(_settings, "EXEC_CHAIN", "server", raising=True)
+    monkeypatch.setattr(_gss, "ServerSession", ShimServerSession, raising=True)
 
     # 阶段 3(2026-11-21):生产 .env 已切 enforce —— 套件与 .env 取值
     # 解耦(同 EXEC_CHAIN 先例):缺省钉回 off,登记/同 base 闸行为由
