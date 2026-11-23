@@ -664,7 +664,7 @@ class TestFinalProductsNoAuthorCredentials:
         import asyncio
         from pathlib import Path
 
-        from app.services import gimbal_launcher as gl
+        from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
         from tests.helpers import launch_ok
 
         _echo_convert(monkeypatch)
@@ -673,7 +673,7 @@ class TestFinalProductsNoAuthorCredentials:
         async def _fake_launch(case_path, **kw):
             cases.append(Path(case_path).read_text(encoding="utf-8"))
             return launch_ok()
-        monkeypatch.setattr(gl, "launch", _fake_launch)
+        monkeypatch.setattr(fe, "launch", _fake_launch)
 
         from .helpers import seed_service_runtime
         await seed_service_runtime("svc")   # M3 §8.5:派发硬门地址落点

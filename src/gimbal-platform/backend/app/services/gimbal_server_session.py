@@ -17,8 +17,10 @@ docstring），本模块不再单靠协作式回收：
     协作取消，本链两信号等价）。助手实现在 ``gimbal_launcher.
     _arm_pdeathsig``（launch 链共用）。
 
-与 ``gimbal_launcher.launch()``（run launch 子进程 stdout jsonl）双链并存
-（C13 灰度：``settings.EXEC_CHAIN`` / 执行配方 ``chain`` 键切换）。
+B6③(2026-11-23)后为**唯一执行链**:legacy ``gimbal_launcher.launch()``
+(run launch 子进程 stdout jsonl)已退役,``settings.EXEC_CHAIN`` 键与
+执行配方 ``chain`` 选择随之删除(台账 ``chain`` 键存量 legacy 值仅历史
+可读)。
 """
 from __future__ import annotations
 
@@ -37,8 +39,8 @@ import httpx
 from loguru import logger
 
 from ..core.config import settings
-# PDEATHSIG 助手实现在 gimbal_launcher(launch 链同款共用,方向:本模块
-# 已依赖 launcher,反向放这里会循环导入)
+# PDEATHSIG 助手实现在 gimbal_launcher(进程原语+LaunchResult 共用件;
+# 方向:本模块已依赖 launcher,反向放这里会循环导入)
 from .gimbal_launcher import LaunchResult, _arm_pdeathsig, _base_argv
 
 # 入库级别序(与 execution_store.query_events 的 level_min 同一序;泵处
@@ -287,7 +289,6 @@ class ServerSession:
         to = timeout if timeout is not None else settings.GIMBAL_TIMEOUT_SEC
         counts: "dict[str, Any] | None" = None
         error_text = ""
-        argv_note = [f"server:{self._port}", "POST", "/runs"]
         try:
             async with httpx.AsyncClient(
                 base_url=self._base,
@@ -298,7 +299,7 @@ class ServerSession:
                 if r.status_code != 200:
                     return LaunchResult(
                         launch_status="ok", exit_code=2,
-                        error=r.text[:400], argv=argv_note)
+                        error=r.text[:400])
                 self._run_id = r.json().get("runId")
                 counts = await self._consume_events(
                     c, self._run_id, on_event=on_event, timeout=to)
@@ -311,8 +312,7 @@ class ServerSession:
             except Exception:  # noqa: BLE001
                 pass
             return LaunchResult(launch_status="timeout", exit_code=None,
-                                error=error_text or "no run.finished",
-                                argv=argv_note)
+                                error=error_text or "no run.finished")
         return LaunchResult(
             launch_status="ok",
             exit_code=int(counts.get("exit_code") or 0),
@@ -322,8 +322,6 @@ class ServerSession:
             skipped=int(counts.get("skipped") or 0),
             attempts=int(counts.get("attempts") or 0),
             details=counts.get("details") or [],
-            stdout="",
-            argv=argv_note,
         )
 
     async def _consume_events(self, client: httpx.AsyncClient, run_id: str, *,

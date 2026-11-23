@@ -31,7 +31,6 @@ from . import plate_client, run_prepare, scenario_store
 from .run_injection import compose_injection_scenario
 from . import service_aliases
 from . import carry_store
-from .gimbal_launcher import launch
 from .run_materialize import materialize_run_copy, referenced_services
 
 
@@ -446,58 +445,42 @@ def _all_referenced_services(resolved: list[dict]) -> list[str]:
 async def execute_graph(
     db_factory, execution_id: int, run_dir: Path, graph: dict,
     *, on_event=None, on_log=None, log_counters: dict | None = None,
-    chain: str = "legacy",
     m2_info: dict | None = None,
     on_session=None,
-    cancel_file: Path | None = None,
 ) -> dict:
-    """物化好的 SuiteGraph → 落盘 case.json → 单 spawn 执行;返回
-    LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。
+    """物化好的 SuiteGraph → 落盘 case.json → 执行器 server 实例单跑;
+    返回 LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。
 
-    C12/C13：``chain="server"`` 走执行器 server 实例（POST /runs +
-    SSE 消费）；legacy 走 run launch 子进程（stdout jsonl）。
-    ``on_session``（graph 单元级取消 P2）：server 链启动后把 ServerSession
-    交给调用方,供其在取消位置位时下发 ``cancel(scope="unit")``。
-    ``cancel_file``（legacy 链单元级取消）：信号文件路径,透传
-    ``gimbal run launch --cancel-file`` —— 调用方在取消位置位时创建该
-    文件,执行器 drain(在飞单元跑完、未启动主体记 cancelled、after 必达)。
+    C12/C13:执行器 server 实例(POST /runs + SSE 消费);legacy run
+    launch 子进程链已随 B6③ 退役(2026-11-23,--cancel-file 信号文件
+    通道同退)。``on_session``(graph 单元级取消 P2):启动后把
+    ServerSession 交给调用方,供其在取消位置位时下发
+    ``cancel(scope="unit")``。
     """
     case_dir = run_dir / "case-graph"
     case_dir.mkdir(parents=True, exist_ok=True)
     case_path = case_dir / "case.json"
     case_path.write_text(_json_dumps(graph), encoding="utf-8")
     n_runs = 1    # graph 内单元已带 policy_kwargs;spawn 级乘法不叠
-    if chain == "server":
-        from .gimbal_server_session import ServerSession
-        ss = ServerSession()
-        # 日志入库接线(与 cases 链同面):server 分支此前漏传 on_log/
-        # log_counters,graph 执行的引擎日志只落 engine.log 文件、不入
-        # execution_events。顺序安全:ss.close() 在本函数 finally 收口
-        # (泵排空后才返回),调用方 _fanout_graph 随后 finalize。
-        await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir,
-                       on_log=on_log, log_counters=log_counters)
-        if on_session is not None:
-            try:
-                on_session(ss)
-            except Exception:  # noqa: BLE001
-                pass
+    from .gimbal_server_session import ServerSession
+    ss = ServerSession()
+    # 日志入库接线(与 cases 链同面):server 分支此前漏传 on_log/
+    # log_counters,graph 执行的引擎日志只落 engine.log 文件、不入
+    # execution_events。顺序安全:ss.close() 在本函数 finally 收口
+    # (泵排空后才返回),调用方 _fanout_graph 随后 finalize。
+    await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir,
+                   on_log=on_log, log_counters=log_counters)
+    if on_session is not None:
         try:
-            return await ss.run_case(
-                case_path, n_runs=n_runs, on_event=on_event,
-                m2_info=m2_info)
-        finally:
-            await ss.close()
-    return await launch(
-        case_path,
-        report_dir=case_dir / "reports",
-        cwd=case_dir,
-        engine_log_path=case_dir / "engine.log",
-        on_event=on_event,
-        on_log=on_log,
-        log_counters=log_counters,
-        n_runs=n_runs,
-        cancel_file=cancel_file,
-    )
+            on_session(ss)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        return await ss.run_case(
+            case_path, n_runs=n_runs, on_event=on_event,
+            m2_info=m2_info)
+    finally:
+        await ss.close()
 
 
 def _json_dumps(obj) -> str:

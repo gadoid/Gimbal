@@ -46,6 +46,11 @@ class PlateMock:
         # 既有等价测试行为不变(兼容关键),carry 用例自行注入服务。
         self.fulls: dict[str, dict] = {}   # endpoint_id → full spec(carry 面)
         self.services: list[dict] = []
+        # convert 回包附带的 m2 构建身份(台账 m2_hash 回填用)。真引擎
+        # server 会话走 M2 §5.1 代际门 —— mock 哈希恒与真实构建失配,
+        # 真引擎 e2e 置 None 略过代际门(r6 掩码用例,2026-11-23)。
+        self.m2: dict | None = {"hash": "mock-m2-hash-0001",
+                                "generation": 1}
         # A-3/W7:修订 manifest.objects 评审面({系统: {对象id: review}});
         # 未注入 = 空目录(所有对象按未评审计)。
         self.revision_reviews: dict[str, dict[str, str]] = {}
@@ -92,9 +97,10 @@ class PlateMock:
                                 "consumer": "platform",
                                 "converted": {"kind": "platform_scenario"},
                                 # M2 §5.1:真实 plate 的 convert 恒附构建身份
-                                # (W21:派发链据此回填 executions.m2_hash)
-                                "m2": {"hash": "mock-m2-hash-0001",
-                                       "generation": 1},
+                                # (W21:派发链据此回填 executions.m2_hash;
+                                # 真引擎 e2e 置 None 略过代际门,见 __init__)
+                                **({"m2": self.m2}
+                                   if self.m2 is not None else {}),
                             },
                         },
                     )
@@ -123,11 +129,11 @@ class PlateMock:
                                if k not in proj}
                         st["call"] = {"kind": st["call"].get("kind", "call"),
                                       **proj, **own}
+                    data = {"consumer": "gimbal", "converted": converted}
+                    if self.m2 is not None:
+                        data["m2"] = self.m2
                     return httpx.Response(200, json={
-                        "ok": True, "dim": "scenario",
-                        "data": {"consumer": "gimbal", "converted": converted,
-                                 "m2": {"hash": "mock-m2-hash-0001",
-                                        "generation": 1}},
+                        "ok": True, "dim": "scenario", "data": data,
                     })
                 if self.behaviour == "4xx":
                     return httpx.Response(
@@ -280,7 +286,7 @@ def plate_mock():
 # ── Gimbal launcher mock(V3.2 run 链路)─────────────────────────────
 @pytest.fixture
 def gimbal_mock(monkeypatch: pytest.MonkeyPatch) -> dict:
-    """把 ``gimbal_launcher.launch`` 换成读 case.json 的假实现。
+    """把 ``_fake_engine.launch`` 换成读 case.json 的假实现。
 
     * ``state["calls"]``  — 每次 launch 的 case.json 内容(dict,
       即引擎子进程的真实输入快照);
@@ -310,9 +316,9 @@ def gimbal_mock(monkeypatch: pytest.MonkeyPatch) -> dict:
             failed=0 if code == 0 else 1,
         )
 
-    from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
-    monkeypatch.setattr(gl, "launch", _fake_launch)
+    monkeypatch.setattr(fe, "launch", _fake_launch)
     return state
 
 
@@ -657,6 +663,7 @@ async def test_run_partial_failure_marks_execution_failed(
     与 V1 在同一张 /executions 表里显示矛盾状态。
     """
     from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe
 
     calls = {"n": 0}
 
@@ -669,7 +676,7 @@ async def test_run_partial_failure_marks_execution_failed(
             passed=1 if ok else 0, failed=0 if ok else 1,
         )
 
-    monkeypatch.setattr(gl, "launch", _run)
+    monkeypatch.setattr(fe, "launch", _run)
 
     headers = await _register_and_login(client)
     await _seed_scenario_case_and_dataset(
@@ -726,11 +733,12 @@ async def test_run_auth_decrypt_failure_fails_execution(
         await s.commit()
 
     from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe
 
     async def _must_not_run(*_a: object, **_k: object):
         raise AssertionError("解密失败后不得分发执行")
 
-    monkeypatch.setattr(gl, "launch", _must_not_run)
+    monkeypatch.setattr(fe, "launch", _must_not_run)
 
     r = await client.post(
         "/api/runs",
@@ -867,6 +875,7 @@ async def test_run_injects_exec_auths_into_run_copy_only(
     from pathlib import Path
 
     from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe
 
     run_payloads: list[dict] = []
 
@@ -877,7 +886,7 @@ async def test_run_injects_exec_auths_into_run_copy_only(
         return gl.LaunchResult(launch_status="ok", exit_code=0,
                                total=1, passed=1)
 
-    monkeypatch.setattr(gl, "launch", _capture_run)
+    monkeypatch.setattr(fe, "launch", _capture_run)
 
     r = await client.post(
         "/api/runs",
@@ -959,6 +968,7 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     from pathlib import Path
 
     from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe
 
     run_payloads: list[dict] = []
 
@@ -969,7 +979,7 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
         return gl.LaunchResult(launch_status="ok", exit_code=0,
                                total=1, passed=1)
 
-    monkeypatch.setattr(gl, "launch", _capture_run)
+    monkeypatch.setattr(fe, "launch", _capture_run)
 
     # alice 发起运行,绑定选共享条目(取用须只吃 alice 池)
     r = await client.post(

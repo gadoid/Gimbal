@@ -170,7 +170,7 @@ def _plate_ready(plate_mock: PlateMock) -> None:
 
 def _patch_launch(monkeypatch, sink: list[dict],
                   outputs: dict | None = None) -> None:
-    """gimbal_launcher.launch 打桩:捕获 case.json,回 passed(可带 extract 产物)。"""
+    """假引擎(_fake_engine.launch)打桩:捕获 case.json,回 passed(可带 extract 产物)。"""
     async def _capture(case_path, *, step_to=None, report_dir=None, cwd=None,
                        timeout=None, engine_log_path=None, on_event=None,
                        on_log=None, log_counters=None, n_runs=1, retry=0):
@@ -181,8 +181,8 @@ def _patch_launch(monkeypatch, sink: list[dict],
         return LaunchResult(launch_status="ok", exit_code=0, total=1, passed=1,
                             details=details)
 
-    from app.services import gimbal_launcher as gl
-    monkeypatch.setattr(gl, "launch", _capture)
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _capture)
 
 
 async def _executions() -> list[Execution]:
@@ -559,8 +559,8 @@ class TestExecution:
                 details=[{"outputs": {"status": "INIT", "amount": 1}},
                          {"outputs": {"status": "SETTLED"}}])
 
-        from app.services import gimbal_launcher as gl
-        monkeypatch.setattr(gl, "launch", _capture)
+        from tests import _fake_engine as fe
+        monkeypatch.setattr(fe, "launch", _capture)
         second = _step(body={"orderNo": "${status}"}, strategy=[
             {"kind": "extract", "expression": "$.data.status",
              "target": "status", "scope": "scenario"}])
@@ -683,7 +683,7 @@ class TestDispatchSplitEquivalence:
         ds = cap[0]["datasets"]
         assert len(ds) == 1 and ds[0]["datasetId"] is None
         assert len(ds[0]["rows"]) == 1
-        assert cap[0]["owner_id"] == uid and cap[0]["chain"] == "server"
+        assert cap[0]["owner_id"] == uid   # chain 键随 B6③ 从 _fanout 实参退役
         assert (await _wait_terminal(ex1)).status == STATUS_DONE
         assert (await _wait_terminal(ex2)).status == STATUS_DONE
 

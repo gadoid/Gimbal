@@ -2257,6 +2257,34 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   链分支/graph_dispatch legacy 分支/suites.py:876/executions.py:821
   读侧/config.py:120/EXEC_CHAIN 键)+ gimbal_launcher 退役(牵
   ~30 测试文件 fake 缝迁移)+ md5sign 随退 + D10 suite 端到端补测。
+- **批次 2③ 平台侧删链(2026-11-23,🟢)**:legacy 生产链整体退役。
+  - 生产面六处:run_dispatcher(链解析恒 server/删 launch 调用分支与
+    `_legacy_unit_cancel_capable`/取消文件通道/`chain_override` 参/
+    LaunchResult stdout 兜底)/graph_dispatch(legacy 分支与 launch
+    导入)/suites.py 链取值/executions.py 读侧口径(docstring 存在性
+    回溯)/config.py EXEC_CHAIN 键删(.env 残键 extra=ignore)/
+    run_job_from_payload 存量配方一律按 server 消费。
+  - gimbal_launcher 剥壳:`launch()/build_argv()/parse_run_result()`
+    删除;保留 `LaunchResult/_base_argv/_arm_pdeathsig`(server 会话
+    spawn 与垫片共用;stdout/argv 字段随消费面清零一并退役)。
+  - 测试面:假引擎缝统一迁 `tests/_fake_engine.launch`(裸调显式报错;
+    23 文件机械迁移)/launcher 专属测试三文件随 launch() 删除
+    (test_gimbal_launcher/test_launcher_streaming×2)/p35 双链等价
+    五形态裁单臂+双链等价用例删/adhoc 等价性 chain 断言随口径/
+    旧 legacy 信号文件取消用例删。
+  - **真引擎 e2e 转真会话**:conftest 模块级捕获真 ServerSession +
+    `real_engine_session` fixture —— r6 按值掩码、p35 对账五形态、
+    plate↔gimbal 契约、debug console server e2e 统一走真引擎 server
+    形态;**发现并修 M2 代际门坑**:PlateMock echo 的 mock m2 与真实
+    构建恒失配(409 M2_GENERATION_MISMATCH)→ PlateMock.m2 可配
+    (默认不变),真引擎用例置 None 略过代际门(legacy 链不带 m2,
+    此坑为 server 链转正后首现)。
+  - md5sign **不随本批**(登记册 C11 勘误):方言 token_type 契约项,
+    与平台链零耦合;退役 = 方言破坏性变更,m2.schema 再生成依赖 A1
+    合并后的 main 基线,另批立项(与 D10 真引擎 suite e2e 一并)。
+  - 验证:后端全量 **2161 passed + 2 skipped**(0 failed;较 2188 净
+    减 27 = launcher 专属测试三文件 + 双链等价臂);契约快照重生
+    (openapi noop、error-codes 行号位移)。
 
 ## 5. 已知风险与待决
 

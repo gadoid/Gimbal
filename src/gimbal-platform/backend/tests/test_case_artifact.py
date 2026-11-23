@@ -34,7 +34,7 @@ async def finished_run(client, plate_mock: PlateMock, monkeypatch):
     测试断言以它为准。等 rows 的 caseDir 就绪(live registry 行尾置
     stem;过早读会撞上 ``_append_log`` 的 to_thread 窗口拿到空 stem)。
     """
-    from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
@@ -44,7 +44,7 @@ async def finished_run(client, plate_mock: PlateMock, monkeypatch):
         (case_dir / "engine.log").write_text("engine says hi\n", encoding="utf-8")
         return _ok()
 
-    monkeypatch.setattr(gl, "launch", _capture)
+    monkeypatch.setattr(fe, "launch", _capture)
 
     bob = await _member(client, "bob")
     r = await client.post("/api/scenarios", headers=bob,

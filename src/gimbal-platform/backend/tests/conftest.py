@@ -57,6 +57,11 @@ from app.models import AuthAccount, ServiceIdentity  # noqa: E402,F401  explicit
 from app.core import db as db_module  # noqa: E402
 from app.core.db import Base  # noqa: E402
 from app.main import create_app  # noqa: E402
+# B6③:真 ServerSession 类在此捕获(fresh_db 垫片安装前)——
+# 真实引擎 e2e 用 real_engine_session fixture 还原垫片。
+from app.services.gimbal_server_session import (  # noqa: E402
+    ServerSession as _REAL_SESSION_CLS,
+)
 
 # ── 套件提速(2026-11-21):bcrypt 轮数钉 4 ─────────────────────────
 # 缺省 12 轮 ≈ 哈希/校验各 ~170ms;大量用例每测注册+登录(哈希 1 次 +
@@ -282,18 +287,18 @@ async def _ensure_pool_schema() -> None:
 
 
 class ShimServerSession:
-    """B6 批次②(2026-11-23):server 链测试垫片 —— 默认被测路径对齐
-    生产默认(``EXEC_CHAIN=server``),引擎行为仍走既有 fake 缝。
+    """B6③(2026-11-23):server 链测试垫片 —— 生产恒 server 链后,
+    引擎行为统一走 ``tests/_fake_engine.launch`` 缝。
 
-    ``run_case`` 委托 ``gimbal_launcher.launch``(用 legacy 分支同款
-    kwargs —— 各用例 monkeypatch 的 fake 引擎零改动可续用);
-    ``start`` 捕获池侧透传的 ``on_log/log_counters``(AD2)原样转发,
-    日志事件路径保持。``slot`` 读写均吞(池 _spawn 会盖章,垫片不具
-    备 per-slot 引擎日志,维持 legacy 同形的 ``server_slot=None`` 工件
-    路由)。需要真 server 会话语义(取消握手/能力位/SSE)的专项用例
+    ``run_case`` 以 legacy 期同款 kwargs(step_to/report_dir/cwd/
+    engine_log_path/on_event/on_log/log_counters/n_runs)委托假引擎,
+    各用例 monkeypatch 的 fake(写工件/发事件/返回 LaunchResult)
+    形状不变;``start`` 捕获池侧透传的 ``on_log/log_counters``(AD2)
+    原样转发,日志事件路径保持。``slot`` 读写均吞(池 _spawn 会盖章,
+    垫片不具备 per-slot 引擎日志,维持 ``server_slot=None`` 工件路由)。
+    需要真 server 会话语义(取消握手/能力位/SSE/真引擎)的专项用例
     自行 monkeypatch ``gimbal_server_session.ServerSession`` 覆盖本垫片
-    (先例 test_graph_cancel_unit);需要 legacy 链本身的用例显式把
-    ``EXEC_CHAIN`` 钉回 legacy。
+    (先例 test_graph_cancel_unit / test_plate_gimbal_contract)。
     """
 
     server_version = "shim-legacy-launch"
@@ -329,10 +334,10 @@ class ShimServerSession:
                        timeout=None, on_event=None):
         from pathlib import Path
 
-        from app.services import gimbal_launcher
+        from tests import _fake_engine
 
         case_dir = Path(case_path).parent
-        return await gimbal_launcher.launch(
+        return await _fake_engine.launch(
             case_path,
             step_to=halt_at,
             report_dir=case_dir / "reports",
@@ -346,23 +351,34 @@ class ShimServerSession:
 
 
 @pytest.fixture
+def real_engine_session(monkeypatch):
+    """还原 conftest 垫片 → 真 ServerSession(真引擎 server 形态)。
+
+    供真实引擎 e2e 用(r6 按值掩码 / p35 对账五形态 / plate↔gimbal
+    契约):dispatch 经真会话 spawn ``gimbal run server`` 并以
+    POST /runs + SSE 驱动 —— B6③ 前这些用例走 legacy 真子进程,
+    现统一切 server 形态。"""
+    from app.services import gimbal_server_session as gss
+
+    monkeypatch.setattr(gss, "ServerSession", _REAL_SESSION_CLS,
+                        raising=True)
+
+
+@pytest.fixture
 async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
     """Swap the global DB engine onto the process's pooled schema(每测行级白纸).
 
     PG-only(SQLite 已退役):连进来的会话 search_path 钉在池 schema
     上;TEST_DATABASE_URL 缺失在 conftest 导入期即中止会话。
     """
-    # B6 批次②(2026-11-23):钉位翻 server —— 出厂默认路径(生产
-    # EXEC_CHAIN=server)从「非默认被测路径」转为默认被测路径,消除
-    # C3 登记的「shipped 默认 ≠ 被测默认」分裂。既有按 legacy 假引擎
-    # (monkeypatch gimbal_launcher.launch)编写的用例经 ShimServerSession
-    # 垫片继续有效(run_case 委托同一 fake 缝);server 会话真语义
-    # (SSE/取消握手/能力位)仍由专项用例自带 FakeServerSession 覆盖,
-    # legacy 链本体由 test_gimbal_launcher/test_launcher_streaming* 直测。
+    # B6③(2026-11-23):legacy 链退役,EXEC_CHAIN 键已删 —— 生产恒
+    # server 链。server 会话以 ShimServerSession 垫片替换(引擎行为走
+    # tests/_fake_engine.launch 缝);真会话语义(SSE/取消握手/能力位)
+    # 由专项用例自带 FakeServerSession 或还原真 ServerSession 覆盖
+    # (先例 test_graph_cancel_unit / test_plate_gimbal_contract)。
     from app.core.config import settings as _settings
     from app.services import gimbal_server_session as _gss
 
-    monkeypatch.setattr(_settings, "EXEC_CHAIN", "server", raising=True)
     monkeypatch.setattr(_gss, "ServerSession", ShimServerSession, raising=True)
 
     # 阶段 3(2026-11-21):生产 .env 已切 enforce —— 套件与 .env 取值

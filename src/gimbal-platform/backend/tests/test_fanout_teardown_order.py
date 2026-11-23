@@ -70,8 +70,7 @@ class _TrailingLogPool:
         from app.services.gimbal_launcher import LaunchResult
         self._emit("mid-run-line")
         return LaunchResult(launch_status="ok", exit_code=0, total=1,
-                            passed=1, failed=0, skipped=0, attempts=1,
-                            argv=["fake-server"])
+                            passed=1, failed=0, skipped=0, attempts=1)
 
     async def close(self) -> None:
         self._emit("trailing-after-run")
@@ -130,7 +129,7 @@ async def test_server_chain_trailing_logs_flushed_before_terminal(
         user = (await db.execute(
             sa.select(User).where(User.username == "trail1"))).scalar_one()
         resp = await run_dispatcher.dispatch_run(
-            db, user.id, req, chain_override="server")
+            db, user.id, req, )
         await db.commit()
 
     ex = await _wait_final(resp.execution_id)
@@ -198,8 +197,7 @@ async def test_gather_exception_still_closes_pump_and_finalizes(
             run_id="run-trail2",
             scenario_payload={"scenarioId": "sc-trail2", "definition": {}},
             datasets=[{"datasetId": None, "rows": [(0, {})]}],
-            injections=[None], owner_id=user.id, auth_aliases=[],
-            chain="server")
+            injections=[None], owner_id=user.id, auth_aliases=[])
 
     # 异常路径的 close(吐尾行+EOF)→ finalize 冲刷:紧随异常查库,
     # 行已在、对账一致(ticker 0.5s 首拍前,修复前此处必为空)

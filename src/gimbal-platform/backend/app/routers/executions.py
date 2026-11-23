@@ -2,7 +2,7 @@
 
 V1 子进程创建链路(POST /executions 与 rerun,经 executor.py 的
 gimbal CLI 子进程)已退役;V3 场景执行的创建入口是 ``POST /api/runs``
-(run_dispatcher → gimbal_launcher 子进程(``gimbal run launch``))。
+(run_dispatcher → gimbal_server_session 执行器 server 实例)。
 
 exec_runs 表(V1 每-run 明细/报告/日志/SSE)已随存量数据清理一并
 退役:V3 运行的可观测面是 Execution 计数器 + ``data/runs/*.jsonl``
@@ -818,10 +818,10 @@ async def get_case_artifact(
     """白名单工件:engine.log(引擎日志)/ result.json(步骤级明细)。
     case.json 刻意不暴露 — 含明文凭证,无前端消费场景。Task 13 前端消费。
 
-    engine.log 按 EXEC_CHAIN 分派:launch 链写在 case 目录;server 链
-    写 run 级 server-engine.log(每执行一份,非 per-case)——case 目录
-    缺 engine.log 时回退 run 级,不 404(否则新执行也被前端判为「已过期
-    清扫」,误导)。"""
+    engine.log 按存在性回溯:先 case 目录(legacy 期执行写在 case 目录),
+    缺失则回退 run 级 server-engine.log(server 链每执行一份,非
+    per-case;B6③ 后新执行恒此形态),不 404(否则新执行也被前端判为
+    「已过期清扫」,误导)。"""
     name = _ARTIFACTS.get(file)
     if name is None or case in {".", ".."} or not _CASE_STEM_RE.fullmatch(case):
         raise HTTPException(

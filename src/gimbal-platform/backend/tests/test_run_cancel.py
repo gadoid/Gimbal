@@ -83,7 +83,8 @@ def _jsonl_records(run_dispatcher) -> list:
 
 
 async def test_cancel_skips_remaining_rows(client, monkeypatch):
-    from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
+    from app.services import plate_client as pc, run_dispatcher
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     run_dispatcher.reset_cancel_state()
     headers = await register_and_login(client)
@@ -101,7 +102,7 @@ async def test_cancel_skips_remaining_rows(client, monkeypatch):
         done["n"] += 1
         return _ok()
 
-    monkeypatch.setattr(gl, "launch", _slow_launch)
+    monkeypatch.setattr(fe, "launch", _slow_launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
@@ -123,12 +124,13 @@ async def test_cancel_skips_remaining_rows(client, monkeypatch):
 
 
 async def test_cancel_terminal_conflicts(client, monkeypatch):
-    from app.services import gimbal_launcher as gl, plate_client as pc
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     headers = await register_and_login(client)
     await client.post("/api/scenarios", headers=headers,
                       json=make_draft("sc-cancel-done"))
-    monkeypatch.setattr(gl, "launch", _fake_launch)
+    monkeypatch.setattr(fe, "launch", _fake_launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-cancel-done", "dataSetIds": [],
@@ -364,7 +366,8 @@ async def test_fanout_marks_running(client, monkeypatch):
     终态(done)覆盖 running。"""
     import asyncio
 
-    from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
+    from app.services import plate_client as pc, run_dispatcher
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     run_dispatcher.reset_cancel_state()
     headers = await register_and_login(client)
@@ -379,7 +382,7 @@ async def test_fanout_marks_running(client, monkeypatch):
         await gate.wait()          # 卡住首行,让 running 窗口可观测
         return _ok()
 
-    monkeypatch.setattr(gl, "launch", _gated_launch)
+    monkeypatch.setattr(fe, "launch", _gated_launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={

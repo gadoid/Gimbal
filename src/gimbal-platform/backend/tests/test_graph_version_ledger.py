@@ -3,7 +3,7 @@
 覆盖三面:
 * 台账三件套随 graph 派发落库(plate_pins/baseline_*/m2_hash)——与
   单场景 dispatcher 同口径(此前 graph 分支完全不记);
-* m2_info 透传执行器(server 链 run_case 收到;legacy 链无 m2 面,
+* m2_info 透传执行器(server 链 run_case 收到;
   同单场景限制);
 * check_and_resolve_suite_versions 不再静默剔除 resolve 失败的成员
   (声明不存在的修订 → SUITE_REVISION_RESOLVE_FAILED,而非约束凭空
@@ -19,17 +19,20 @@ from tests.test_scenario_composer_plate_integration import PlateMock, plate_mock
 
 
 def _capture_graph_launch(monkeypatch, sink: list[dict]) -> None:
-    """patch graph_dispatch.launch(模块顶 from-import 绑定;patch
-    gimbal_launcher.launch 对它无效,会留真实子进程悬挂)。"""
+    """假引擎缝捕获 graph case.json(B6③:graph 恒 server 链,经
+    conftest 垫片委托 tests/_fake_engine.launch)。"""
+    import json
     import pathlib
+
+    from tests import _fake_engine as fe
     from tests.helpers import launch_ok
-    from app.services import graph_dispatch as gd
 
     async def _cap(case_path, **_kw):
-        sink.append(__import__("json").loads(
+        sink.append(json.loads(
             pathlib.Path(case_path).read_text(encoding="utf-8")))
         return launch_ok()
-    monkeypatch.setattr(gd, "launch", _cap)
+
+    monkeypatch.setattr(fe, "launch", _cap)
 
 
 def _pinned_steps():
@@ -147,9 +150,7 @@ async def test_graph_m2_info_passed_to_server_chain(
     r = await client.post("/api/scenarios", headers=h, json=draft)
     assert r.status_code in (200, 201), r.text
 
-    # conftest 把 EXEC_CHAIN 钉回 legacy;本用例覆写为 server(C12 链)
     from app.core.config import settings as _settings
-    monkeypatch.setattr(_settings, "EXEC_CHAIN", "server", raising=True)
     r = await client.post("/api/runs", headers=h, json={
         "scenarioId": "sc-gvm-a",
         "graph": {"mode": "chain",

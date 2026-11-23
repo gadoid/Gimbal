@@ -53,14 +53,12 @@ def _graph_launch_capture(monkeypatch, sink: list[dict]):
         from tests.helpers import launch_ok
         return launch_ok()
 
-    from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
     from app.services import graph_dispatch as gd, plate_client as pc
 
     async def _convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}
-
-    monkeypatch.setattr(gd, "launch", _launch)
-    monkeypatch.setattr(gl, "launch", _launch)   # B6②:server 垫片委托缝
+    monkeypatch.setattr(fe, "launch", _launch)   # B6②:server 垫片委托缝
     monkeypatch.setattr(pc, "convert", _convert)
 
 

@@ -231,7 +231,7 @@ async def test_run_step_to_passes_halt_at(
     )
     await _seed_ds(client, bob)
 
-    from app.services import gimbal_launcher as gl
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     calls: list[dict] = []
 
@@ -240,7 +240,7 @@ async def test_run_step_to_passes_halt_at(
         return gl.LaunchResult(launch_status="ok", exit_code=0,
                                total=1, passed=1)
 
-    monkeypatch.setattr(gl, "launch", _capture)
+    monkeypatch.setattr(fe, "launch", _capture)
 
     r = await client.post(
         "/api/runs",

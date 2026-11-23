@@ -10,7 +10,7 @@
 * ``POST /run/precheck`` — 「用例 × 方案」失效判定的服务端唯一实现:
   数据集已删 / 注入条目悬空 / 未落点服务引用 / 场景不可读不泄露存在性
 
-执行 mock 同 M1 测试:gimbal_launcher.launch 捕获式假实现,plate 走
+执行 mock 同 M1 测试:_fake_engine.launch 捕获式假实现,plate 走
 PlateMock(behaviour ok)。
 """
 
@@ -40,7 +40,7 @@ from .test_scenario_visibility_and_copy import _member, _seed_ds
 def _patch_launch_capture(
     monkeypatch: pytest.MonkeyPatch, sink: list[dict]
 ) -> None:
-    """把 ``gimbal_launcher.launch`` 换成读 case.json 并捕获的假实现。"""
+    """把 ``_fake_engine.launch`` 换成读 case.json 并捕获的假实现。"""
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
                        cwd=None, timeout=None, engine_log_path=None,
@@ -49,8 +49,8 @@ def _patch_launch_capture(
         sink.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
 
-    from app.services import gimbal_launcher as gl
-    monkeypatch.setattr(gl, "launch", _capture)
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _capture)
 
 
 async def _insert_execution(

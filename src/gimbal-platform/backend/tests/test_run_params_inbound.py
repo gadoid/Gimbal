@@ -460,8 +460,8 @@ class TestRawAndMixed:
             return LaunchResult(launch_status="ok", exit_code=0,
                                 total=1, passed=1)
 
-        from app.services import gimbal_launcher as gl
-        monkeypatch.setattr(gl, "launch", _capture_case)
+        from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+        monkeypatch.setattr(fe, "launch", _capture_case)
         r = await client.post("/api/runs", headers=ready, json={
             "scenarioId": SID, "schemeId": "raw", "params": GOOD_PARAMS})
         assert r.status_code == 201, r.text

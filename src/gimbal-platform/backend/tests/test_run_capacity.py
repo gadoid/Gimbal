@@ -58,7 +58,8 @@ async def test_worker_serializes_executions_across_queue(client, monkeypatch):
     """C11(P3-01):全局 launch 信号量已退役——跨 execution 并发上限改由
     队列 worker 数界定(EXEC_WORKERS=1 → 串行:两 execution 的 launch
     时间线互不重叠;行级 parallel 仍由行 sem 承担)。"""
-    from app.services import gimbal_launcher as gl, plate_client as pc,         execution_queue as eq
+    from app.services import plate_client as pc, execution_queue as eq
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     eq.reset_worker_state()
 
@@ -77,7 +78,7 @@ async def test_worker_serializes_executions_across_queue(client, monkeypatch):
         state["live"] -= 1
         return gl.LaunchResult(launch_status="ok", exit_code=0, total=1, passed=1)
 
-    monkeypatch.setattr(gl, "launch", launch)
+    monkeypatch.setattr(fe, "launch", launch)
 
     eids = []
     for _ in range(2):                   # 两个 execution,各 1 行 × nRuns=4

@@ -1,52 +1,41 @@
-"""Subprocess launcher for ``gimbal run launch {case-path}`` (V3.2 执行链).
+"""引擎子进程原语 + LaunchResult(server 链共用件)。
 
-执行调用的唯一形态是 CLI 子进程(设计见
-docs/implemented/specs/2026-08-24-run-launch-subprocess-design.md):
-平台把逐行合成的数据驱动用例落盘为 scenario.json,交给
-``gimbal run launch <case> -o json`` 执行,同步收 JSON RunResult。
+legacy ``run launch`` 逐 case 子进程链已随 B6③ 退役(2026-11-23,
+登记册 B6/C3):平台执行恒走 server 链(gimbal_server_session,
+``gimbal run server`` + HTTP/SSE)。本模块只保留 server 会话与测试
+垫片仍消费的两件:
 
-与被退役的 gimbal_client(HTTP POST /run)的关键差异:子进程不会
-"不可达"——spawn 失败 / 超时 / 引擎崩溃都归一为 LaunchResult 上的
-``launch_status`` 字段,由调用方(run_dispatcher)映射为行级状态,
-不再需要 typed errors。
+* ``LaunchResult`` —— 执行结果值对象(server 链 SSE ``run.finished``
+  的归一形态;行级判定在 run_dispatcher);
+* ``_base_argv`` / ``_arm_pdeathsig`` —— 引擎可执行前缀解析与
+  PDEATHSIG 泄漏防线(server 链 spawn 与 legacy 链同款,共用至今)。
 
-可执行文件:``settings.GIMBAL_BIN``(如 .env 的
-``D:\\Gimbal\\Scripts\\gimbal.exe``);空值回退
-``[sys.executable, "-m", "gimbal"]`` —— 同 venv 部署时最稳,不依赖
-PATH 激活状态。
-
-测试缝:``_base_argv()`` 可 monkeypatch 成假命令
-(``[sys.executable, "-c", "..."]``),``launch()`` 整体可被
-dispatcher 级测试替换(继承原 ``gimbal_client.run`` 的 mock 模式)。
+历史:执行调用曾是 CLI 子进程 ``gimbal run launch <case> -o json``
+(设计 docs/implemented/specs/2026-08-24-run-launch-subprocess-design.md),
+launch()/build_argv()/parse_run_result() 随双链退役删除,git 历史可溯。
 """
 from __future__ import annotations
 
-import asyncio
 import ctypes
-import json
-import os
 import signal
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Callable, Any
-
-from loguru import logger
+from typing import Any
 
 from ..core.config import settings
 
 
-# ─── 子进程泄漏防线(2026-11-03 复盘,launch 链) ────────────────────
+# ─── 子进程泄漏防线(2026-11-03 复盘;launch 链事故实证,server 链同款)──
 # 事故形态(实证):平台父进程被硬杀(SIGKILL/Bash 超时/带会话退出)后,
-# launch 子进程不会死 —— stdout 写断管道的 BrokenPipeError 被引擎事件
+# 子进程不会死 —— stdout 写断管道的 BrokenPipeError 被引擎事件
 # 总线 _safe_call 吞掉(只往同样已断的 stderr 记日志,loguru 再吞一层),
 # Python 默认 SIGPIPE=SIG_IGN 也不杀进程 —— 它把用例剩余工作量全部跑完
 # 才退(继续对被测系统发真实请求、写报告),且 GIMBAL_TIMEOUT_SEC 超时
-# 上限随父进程失效。本链与 server 链(见 gimbal_server_session)同款双守卫:
+# 上限随父进程失效。双守卫:
 #   - stdin=PIPE:父死→内核关写端→引擎 stdin EOF 守卫置协作取消,
 #     步骤边界收口后正常退出(引擎侧 core/proc_guard,Windows 唯一守卫);
 #   - PR_SET_PDEATHSIG=SIGINT(评审 3.1,2026-11-04):父死→内核递 SIGINT→
-#     引擎 CLI 的 SIGINT handler 置协作取消旗标(与手动 Ctrl-C 同一条路)
+#     引擎的 SIGINT handler 置协作取消旗标(与手动 Ctrl-C 同一条路)
 #     ——在飞请求跑完、步骤边界停、teardown/after 括号必达、报告照写。
 #     不能用 SIGTERM:Python 默认处置=立即终止,等于内核级硬杀,清理括号
 #     全丢(被测系统留脏数据);SIGINT 对不装 handler 的旧引擎同样致死
@@ -67,7 +56,7 @@ def _arm_pdeathsig() -> None:
     """preexec_fn：子进程 exec 前置 ``PR_SET_PDEATHSIG=SIGINT``。
 
     内核保证「父进程死亡 → 向本进程递送 SIGINT」，父进程怎么死都成立
-    （含 SIGKILL）。递 SIGINT 而非 SIGTERM（评审 3.1）：引擎 CLI 装有
+    （含 SIGKILL）。递 SIGINT 而非 SIGTERM（评审 3.1）：引擎装有
     SIGINT handler —— 置协作取消旗标，在飞请求跑完、步骤边界停、
     teardown/after 括号必达；SIGTERM 的默认处置是立即终止，父死=硬杀，
     清理括号全丢。注意其触发条件是**发起 fork 的线程**退出：本服务
@@ -83,14 +72,14 @@ def _arm_pdeathsig() -> None:
 # ─── result value object ──────────────────────────────────────────
 @dataclass(frozen=True, slots=True)
 class LaunchResult:
-    """一次 ``gimbal run launch`` 子进程的结果。
+    """一次 case 执行的结果(server 链 = SSE ``run.finished`` 归一;
+    历史 launch 链 = 子进程 stdout JSON,已退役)。
 
     ``launch_status``:
 
-    * ``ok``      — 进程正常退出(退出码含义见引擎 exit_codes.py:
-      0=passed / 1=测试失败 / 2=校验拒绝 / 3-5=引擎侧错误;计数来自
-      ``-o json`` 的 stdout,解析失败退化为仅退出码)。
-    * ``timeout`` — 超时被 kill(``GIMBAL_TIMEOUT_SEC``)。
+    * ``ok``      — 执行器正常答复(退出码含义见引擎 exit_codes.py:
+      0=passed / 1=测试失败 / 2=校验拒绝 / 3-5=引擎侧错误)。
+    * ``timeout`` — 超时被取消收口。
     * ``error``   — spawn 失败(OSError)等未得到引擎答复的故障。
 
     行级 passed/failed 判定由 run_dispatcher 按 launch_status +
@@ -105,14 +94,10 @@ class LaunchResult:
     skipped: int = 0
     # P2-05:n_runs/retry 展开的总执行次数(run.finished attempts 单列)。
     attempts: int = 0
-    # 步骤级明细(-o json stdout 里的 details[];解析失败/兜底路径为 [])。
+    # 步骤级明细(server 链 details[];兜底路径为 [])。
     details: list[dict[str, Any]] = field(default_factory=list)
     error: str = ""
-    # stdout 原文(诊断用;引擎日志走 stderr,stdout 只有 JSON 报告,
-    # 但防御性保留原文以防未来混入噪声)。
-    stdout: str = ""
-    argv: list[str] = field(default_factory=list)
-    # B6(R11 轻量版):server 链借出的槽位号(launch 链恒 None)
+    # B6(R11 轻量版):server 链借出的槽位号。
     server_slot: int | None = None
 
     @property
@@ -134,337 +119,3 @@ def _base_argv() -> list[str]:
     if settings.GIMBAL_BIN:
         return [settings.GIMBAL_BIN]
     return [sys.executable, "-m", "gimbal"]
-
-
-def build_argv(
-    case_path: Path | str,
-    *,
-    step_to: int | None = None,
-    report_dir: Path | str | None = None,
-    n_runs: int = 1,
-    retry: int = 0,
-    cancel_file: Path | str | None = None,
-) -> list[str]:
-    """组装 ``gimbal run launch`` 命令行。
-
-    * ``-o jsonl`` — stdout 逐行事件流,末行 run.finished 携带判定
-      (v2.1 F-2c 迁移切换;parse_run_result 双读,旧 `-o json` 输出仍兼容)。
-    * ``--step-to`` — 0-based 含端点,与平台 RunRequest.stepTo 同语义,
-      直接透传引擎 RuntimeControl.halt_at。
-    * ``--report-dir`` — 引擎原生报告目录(逐 case 隔离,防并发互踩)。
-    * ``--n-runs/--retry`` — P2-05 乘法下沉:平台不再循环 nRuns,
-      乘法由执行器单元策略执行(N4 CLI 入口)。
-    * ``--cancel-file`` — 跨进程单元级取消信号(legacy 链 graph):文件
-      出现 = 执行器 drain(在飞单元跑完、未启动主体记 cancelled、after
-      必达);要求执行器声明 cancel-file 能力(gimbal.version.FEATURES),
-      旧引擎不认该参数会启动失败 —— 调用方须先探测能力再传。
-    """
-    argv = [*_base_argv(), "run", "launch", str(case_path), "-o", "jsonl"]
-    if step_to is not None:
-        argv += ["--step-to", str(step_to)]
-    if report_dir is not None:
-        argv += ["--report-dir", str(report_dir)]
-    if n_runs and n_runs > 1:
-        argv += ["--n-runs", str(n_runs)]
-    if retry and retry > 0:
-        argv += ["--retry", str(retry)]
-    if cancel_file is not None:
-        argv += ["--cancel-file", str(cancel_file)]
-    return argv
-
-
-# ─── stdout parsing ───────────────────────────────────────────────
-def _parse_run_finished_line(lines: list[str]) -> dict[str, Any] | None:
-    """v2.1 批次 F-2c 双读①:jsonl 流末行 run.finished(v2 E2 契约)。
-
-    从 stdout 尾部向上找第一条含 ``"event_type": "run.finished"`` 的
-    JSON 行。找到则提取与旧终态 JSON 同键的计数 dict(平台零改动消费)。
-    """
-    for line in reversed(lines[-10:]):   # 只看末尾 10 行,避免整流扫描
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            data = json.loads(line)
-        except (json.JSONDecodeError, ValueError):
-            continue
-        if isinstance(data, dict) and data.get("event_type") == "run.finished":
-            return {
-                "exit_code": int(data.get("exit_code") or 0),
-                "total": int(data.get("total") or 0),
-                "passed": int(data.get("passed") or 0),
-                "failed": int(data.get("failed") or 0),
-                "skipped": int(data.get("skipped") or 0),
-                "details": [d for d in (data.get("details") or []) if isinstance(d, dict)],
-            }
-    return None
-
-
-def parse_run_result(stdout: str) -> dict[str, Any] | None:
-    """解析 gimbal stdout 为计数 dict;失败返回 None。双读(v2.1 §4.1):
-
-    ① **jsonl 事件流末行 run.finished**(``-o jsonl``,v2 E2 契约)——
-       平台批次 6 切换的目标形态,优先识别;
-    ② **旧终态 JSON**(``-o json``,现状)——整段或后缀解析,取最后一个
-       含 ``exit_code`` 键的对象(兼容 stdout 前部混入噪声行)。
-    """
-    text = stdout.strip()
-    if not text:
-        return None
-    lines = text.splitlines()
-
-    # ① jsonl 末行 run.finished
-    finished = _parse_run_finished_line(lines)
-    if finished is not None:
-        return finished
-
-    # ② 旧终态 JSON 后缀解析
-    candidates: list[str] = [text]
-    for i, line in enumerate(lines):
-        if line.strip() == "{":
-            candidates.append("\n".join(lines[i:]))
-    for cand in reversed(candidates):
-        try:
-            data = json.loads(cand)
-        except (json.JSONDecodeError, ValueError):
-            continue
-        if isinstance(data, dict) and "exit_code" in data:
-            return {
-                "exit_code": int(data.get("exit_code") or 0),
-                "total": int(data.get("total") or 0),
-                "passed": int(data.get("passed") or 0),
-                "failed": int(data.get("failed") or 0),
-                "skipped": int(data.get("skipped") or 0),
-                "details": [d for d in (data.get("details") or []) if isinstance(d, dict)],
-            }
-    return None
-
-
-# ─── subprocess execution ─────────────────────────────────────────
-async def launch(
-    case_path: Path | str,
-    *,
-    step_to: int | None = None,
-    report_dir: Path | str | None = None,
-    cwd: Path | None = None,
-    timeout: float | None = None,
-    engine_log_path: Path | None = None,
-    on_event: "Callable[[dict], None] | None" = None,
-    on_log: "Callable[[dict], None] | None" = None,
-    log_counters: "dict | None" = None,
-    n_runs: int = 1,
-    retry: int = 0,
-    cancel_file: Path | str | None = None,
-) -> LaunchResult:
-    """执行 ``gimbal run launch <case_path>``,同步返回 LaunchResult。
-
-    ``timeout`` 缺省取 ``settings.GIMBAL_TIMEOUT_SEC``;到点 kill 进程,
-    返回 ``launch_status="timeout"``(进程残留不可能——kill 后仍 await)。
-
-    ``engine_log_path``:stderr 逐行流式落盘(边读边写,spec §9.2);
-    超时 kill 保留已读部分,spawn 失败不产生该文件。stdout JSON
-    解析语义不受影响(stderr 仍会在内存留一份供退化分支取尾行)。
-
-    P2-03(C1)流式读取:``on_event`` 在 stdout 每读出一行合法 jsonl 事件
-    时即时回调(边运行边消费);``on_log`` 对 stderr 每行合法 JSON 日志
-    回调(执行器管道下默认 JSON 日志模式,行含 category 与执行上下文
-    标签,P1-03)。终态判定仍取 run.finished;子进程异常退出/超时时
-    已回调的内容由调用方保留(回调先于退出发生)。回调异常只告警不阻断。
-    """
-    from collections.abc import Callable  # noqa: F401  # 注解运行时求值用
-    argv = build_argv(case_path, step_to=step_to, report_dir=report_dir,
-                      n_runs=n_runs, retry=retry, cancel_file=cancel_file)
-    timeout = settings.GIMBAL_TIMEOUT_SEC if timeout is None else timeout
-
-    # Windows: 不弹控制台窗;其他平台无该 flag。
-    creationflags = 0
-    if sys.platform == "win32":  # pragma: no cover - platform-specific
-        creationflags = 0x08000000  # CREATE_NO_WINDOW
-
-    # 子进程 stdio 强制 UTF-8:引擎 JSON 报告 ensure_ascii=False、错误信息
-    # 含中文,Windows 管道缺省走 locale 码页(GBK),不强制则会乱码。
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-    # 注:GIMBAL_BIN 未配置时回退 ``python -m gimbal``,要求当前解释器可导入
-    # gimbal(pip install -e src/gimbal 或显式设 GIMBAL_BIN)。不把 src/gimbal
-    # 注入 PYTHONPATH —— 其顶层 logging.py 会遮蔽标准库,破坏子进程 site
-    # 初始化(用户级 .pth 可编辑安装导入即炸)。
-    # 插件注入(平台 Settings → 引擎 ConfigLoader 的 GIMBAL_* 环境变量):
-    # 空值不设置 → 引擎走默认(base_dir/plugins、全启用、default_config),
-    # 与未加此机制前的行为完全一致。
-    if settings.GIMBAL_PLUGINS_DIR:
-        env["GIMBAL_PLUGINS_DIR"] = settings.GIMBAL_PLUGINS_DIR
-    if settings.GIMBAL_PLUGINS:
-        env["GIMBAL_PLUGINS"] = settings.GIMBAL_PLUGINS
-    if settings.GIMBAL_PLUGIN_CONFIGS:
-        env["GIMBAL_PLUGIN_CONFIGS"] = settings.GIMBAL_PLUGIN_CONFIGS
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            # 泄漏防线(模块头 docstring):stdin 管道=父死子亡的跨平台通道,
-            # 引擎 stdin EOF 守卫据此置协作取消;PDEATHSIG=SIGINT 为内核
-            # 级兜底(非 Windows,父死即递协作取消信号)。
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            creationflags=creationflags,
-            preexec_fn=_arm_pdeathsig if sys.platform != "win32" else None,
-        )
-    except OSError as e:
-        logger.error(
-            "gimbal_launcher: spawn failed for {}: {}", argv[:1], e
-        )
-        return LaunchResult(
-            launch_status="error",
-            error=f"spawn failed: {type(e).__name__}: {e}",
-            argv=argv,
-        )
-
-    # stderr 流式落盘(spec §9.2):逐行边读边写,超时 kill 保留已读
-    # 部分;内存同步留一份(stderr_parts)供退化分支取错误尾行 —
-    # 与旧 communicate() 的 stderr 语义保持一致。newline="" 保字节
-    # 忠实:Windows 子进程 stderr 行尾是 \r\n,禁用二次转换。
-    log_fh = (
-        engine_log_path.open("w", encoding="utf-8", newline="")
-        if engine_log_path else None
-    )
-    stderr_parts: list[str] = []
-
-    async def _drain_stderr() -> None:
-        assert proc.stderr is not None
-        while True:
-            raw = await proc.stderr.readline()
-            if not raw:
-                break
-            text = raw.decode("utf-8", errors="replace")
-            stderr_parts.append(text)
-            if log_fh:
-                log_fh.write(text)
-            # P2-03:stderr JSON 日志行即时回调(执行上下文标签/category 已在)
-            if on_log is not None:
-                line = text.strip()
-                d = None
-                if line.startswith("{"):
-                    try:
-                        d = json.loads(line)
-                    except (json.JSONDecodeError, ValueError):
-                        d = None
-                if isinstance(d, dict) and d.get("message") is not None:
-                    try:
-                        on_log(d)
-                    except Exception:  # noqa: BLE001
-                        logger.warning("gimbal_launcher: on_log 回调异常(已忽略)")
-                elif log_counters is not None:
-                    # S9 泵侧丢弃计数(legacy 链无级别门槛,仅非 JSON/畸形行)
-                    log_counters["logs_dropped_unparsable"] += 1
-
-    # P2-03:stdout 逐行流式读取(on_event 边运行边回调;整流仍在内存,
-    # 供 run.finished 双读与退化分支)。行级解析失败不阻断读取。
-    stdout_parts: list[str] = []
-
-    async def _drain_stdout() -> None:
-        assert proc.stdout is not None
-        while True:
-            raw = await proc.stdout.readline()
-            if not raw:
-                break
-            text = raw.decode("utf-8", errors="replace")
-            stdout_parts.append(text)
-            if on_event is not None:
-                line = text.strip()
-                if line.startswith("{"):
-                    try:
-                        d = json.loads(line)
-                    except (json.JSONDecodeError, ValueError):
-                        d = None
-                    if isinstance(d, dict) and d.get("event_type"):
-                        try:
-                            on_event(d)
-                        except Exception:  # noqa: BLE001
-                            logger.warning("gimbal_launcher: on_event 回调异常(已忽略)")
-
-    stdout_task = asyncio.create_task(_drain_stdout())
-    stderr_task = asyncio.create_task(_drain_stderr())
-    # shield:超时不取消泵/等待 —— 取消宽限分支要二次等待;kill 分支收尸
-    # 后管道 EOF,泵自然收尾(此前 wait_for 直接取消 gather 的行为只被
-    # finally 的兜底取消依赖,语义不变)。
-    work = asyncio.shield(asyncio.gather(stdout_task, stderr_task, proc.wait()))
-    timed_out = False
-    try:
-        try:
-            await asyncio.wait_for(work, timeout=timeout)
-        except asyncio.TimeoutError:
-            # 单元级取消宽限:--cancel-file 已出现说明执行器正在取消收尾
-            # (在飞单元跑完 + after 括号必达),一次性加时,避免正常收口被
-            # 误判 launch_timeout —— kill 会把「跑完当前单元」变成硬中断。
-            grace = (settings.GIMBAL_CANCEL_GRACE_SEC
-                     if cancel_file is not None else 0.0)
-            if grace > 0 and Path(cancel_file).exists():   # type: ignore[arg-type]
-                logger.info(
-                    "gimbal_launcher: unit cancel in flight, granting {}s grace "
-                    "over {}s timeout: {}", grace, timeout, case_path)
-                try:
-                    await asyncio.wait_for(work, timeout=grace)
-                except asyncio.TimeoutError:
-                    timed_out = True
-            else:
-                timed_out = True
-        if timed_out:
-            # kill 后 wait() 收尸,避免进程残留;管道随进程关闭,泵读 EOF
-            # 自然收尾,finally 落盘已读部分。
-            try:
-                proc.kill()
-            except ProcessLookupError:  # pragma: no cover - race with exit
-                pass
-            try:
-                await proc.wait()
-            except Exception:  # noqa: BLE001 - best-effort reaping
-                pass
-            logger.warning(
-                "gimbal_launcher: launch timed out after {}s: {}", timeout, case_path
-            )
-            return LaunchResult(
-                launch_status="timeout",
-                error=f"launch timeout after {timeout}s",
-                argv=argv,
-            )
-    finally:
-        if log_fh:
-            log_fh.flush()
-            log_fh.close()
-        for t in (stdout_task, stderr_task):
-            if not t.done():
-                t.cancel()
-
-    stdout = "".join(stdout_parts)
-    stderr = "".join(stderr_parts)
-    exit_code = proc.returncode
-
-    counts = parse_run_result(stdout)
-    if counts is None:
-        # 引擎没有给出可解析的 JSON 报告:退化为仅退出码。
-        # 常见原因:exit 2(校验拒绝走 typer.secho err)或引擎崩溃。
-        detail = stderr.strip().splitlines()
-        err_tail = detail[-1] if detail else ""
-        return LaunchResult(
-            launch_status="ok",
-            exit_code=exit_code,
-            error=err_tail[:500],
-            stdout=stdout,
-            argv=argv,
-        )
-
-    return LaunchResult(
-        launch_status="ok",
-        exit_code=counts["exit_code"],
-        total=counts["total"],
-        passed=counts["passed"],
-        failed=counts["failed"],
-        skipped=counts["skipped"],
-        attempts=counts.get("attempts", 0),
-        details=counts["details"],
-        stdout=stdout,
-        argv=argv,
-    )

@@ -9,8 +9,8 @@ Per-row fan-out of a Scenario's selected DataSets:
    ``materialize_run_copy`` 纯函数接管(services/users 物化,注入清单 =
    模板扫描 ∪ serviceBindings 绑定)。
 4. 落盘 case 文件(``DATA_DIR/runs/cases/<runId>/``)。
-5. ``gimbal_launcher.launch`` 子进程执行 ``gimbal run launch <case>``,
-   stdout JSON RunResult 驱动行级计数。
+5. 执行器 server 实例执行(``gimbal_server_session``:POST /runs + SSE;
+   legacy ``run launch`` 子进程链已随 B6③ 退役,2026-11-23)。
 
 Mirrors the in-flight task pattern in ``app/routers/executions.py``
 (tracked ``set[asyncio.Task]`` + ``_shutting_down`` flag + ``drain_*``
@@ -832,7 +832,6 @@ async def dispatch_run(
     req: RunRequest,
     *,
     preloaded_scenario: ComposerScenario | None = None,
-    chain_override: str | None = None,
     token: "object | None" = None,
     trace: "dict | None" = None,
     exec_replay: dict | None = None,
@@ -875,7 +874,7 @@ async def dispatch_run(
         db, user_id, req,
         RunTarget(scenario_id=scen.scenario_id,
                   payload=scen.payload or {}, kind="scenario"),
-        chain_override=chain_override, token=token, trace=trace,
+        token=token, trace=trace,
         exec_replay=exec_replay, env_replay=env_replay)
 
 
@@ -886,7 +885,6 @@ async def dispatch_target(
     target: RunTarget,
     *,
     run_id: str | None = None,
-    chain_override: str | None = None,
     token: "object | None" = None,
     trace: "dict | None" = None,
     exec_replay: dict | None = None,
@@ -905,9 +903,8 @@ async def dispatch_target(
     and returns the runId so the user can still see the run in
     ``/executions`` (per the agreed run-failure semantics).
 
-    ``chain_override``（C13 对账用，非公开 API 面）：强制本次执行的链
-    （legacy|server），覆盖 settings.EXEC_CHAIN；随配方与 config_json
-    落档，回滚 = 开关关闭即回旧链。
+    执行链恒 server(B6③ 退役 legacy 链后,2026-11-23);C13 台账
+    ``chain`` 键照记 ``"server"``,存量行的 ``legacy`` 值仅历史可读。
 
     令牌调用面(webhook v4 §3.1):``token`` 来自 ``principal_or_user``
     分流(JWT 调用恒 None → 不写投递行、不回调);``client_ref``/
@@ -1290,10 +1287,8 @@ async def dispatch_target(
             row_bindings_cfg.setdefault(f"{d}:{i}", {})[s] =                 _hit[(s, a)].account_id
 
     from . import execution_queue as _eq
-    # C3(2026-11-20 审计)最小对齐:settings 是 pydantic Settings,属性
-    # 恒存在,getattr 死兜底与 config 默认(server)矛盾 —— 直读;空串
-    # 防御回落到与 config.py 同值的 "server"。
-    chain = chain_override or (str(settings.EXEC_CHAIN) or "server")
+    # B6③(2026-11-23):legacy 链退役,执行链恒 server(EXEC_CHAIN 键已删)。
+    chain = "server"
     debug_spec = getattr(req, "debug", None)
     if debug_spec is not None:
         # 调试前置（引擎既有约束的收口）：单 case 且无乘法、非 graph
@@ -1305,7 +1300,6 @@ async def dispatch_target(
                 "调试执行仅支持单 case（数据集行 × 注入族须为 1）")
         if int(req.n_runs or 1) != 1:
             raise Conflict("debug_single_run", "调试执行要求 nRuns=1")
-        chain = "server"
 
     # clientRef 幂等预查(设计 2026-11-13 决策 8):外部投递天然
     # at-least-once,重复 clientRef = 重复业务订单 → 409 回显原
@@ -1466,8 +1460,8 @@ async def dispatch_target(
 
     # C11（P3-01）：不再 spawn 进程内 fanout —— 执行配方入队，worker 认领驱动。
     # 配方是 dispatch 校验后的完整快照（worker 不回查请求上下文）；
-    # chain（C13）记录执行链：settings.EXEC_CHAIN（legacy|server）或
-    # dispatch 的 chain_override（对账脚本用）；debug（C6）强制 server 链。
+    # chain（C13 台账）恒记 "server"（B6③ 后单链;键保留 = 存量行
+    # legacy 值与新行同形可读,worker 不再消费该键）。
     from . import execution_queue as _eq
     if getattr(req, "graph", None) is not None:
         payload = {
@@ -1546,11 +1540,9 @@ async def run_job_from_payload(job: dict) -> None:
     p = job["payload"]
     args = dict(p["args"])
     if p["kind"] == "graph":
-        # B-1(2026-10-13):graph 分支此前丢掉 chain 选择 —— cases 分支
-        # 透传 p["chain"] 而 graph 恒走缺省 legacy,EXEC_CHAIN=server /
-        # chain_override 对 suite 执行完全不生效。
-        await _fanout_graph(db_factory=_session_factory,
-                            chain=p.get("chain") or "legacy", **args)
+        # B6③:单链后配方不再携带链选择;升级前入队的存量配方(chain=legacy)
+        # 由 worker 消费时一律按 server 链执行(键忽略,仅台账可读)。
+        await _fanout_graph(db_factory=_session_factory, **args)
         return
     # S6:升级前入队的配方可能带 url/authAlias —— 剥离退役字段再重建
     args["service_bindings"] = {
@@ -1559,7 +1551,6 @@ async def run_job_from_payload(job: dict) -> None:
     }
     await _fanout(
         db_factory=_session_factory,
-        chain=p.get("chain") or "legacy",
         debug=p.get("debug"),
         **args,
     )
@@ -1623,23 +1614,6 @@ def _start_cancel_poller(db_factory: Any, execution_id: int, *,
     return cancel_local, asyncio.create_task(_poll_cancel())
 
 
-def _legacy_unit_cancel_capable() -> bool:
-    """legacy 链(单子进程)是否具备单元级取消(--cancel-file 通道)。
-
-    legacy 链没有 HTTP 面,无法运行期探测:GIMBAL_BIN 未设置(默认同解释器
-    ``-m gimbal``,引擎与本进程同安装)时读本地 gimbal 包的 FEATURES 声明;
-    GIMBAL_BIN 指向外部安装 → 无法探测,保守 False(旧引擎不认 --cancel-file
-    参数会启动失败,宁可 409 也不下发)。
-    """
-    if settings.GIMBAL_BIN:
-        return False
-    try:
-        from gimbal.version import FEATURES
-    except Exception:  # noqa: BLE001 — 本地无 gimbal 包(异常部署)按无能力
-        return False
-    return "cancel-file" in FEATURES
-
-
 async def _record_unit_cancel(db_factory: Any, execution_id: int,
                               capable: bool) -> None:
     """把「本执行是否具备单元级取消」写进 job payload(台账性质,写失败
@@ -1675,7 +1649,6 @@ async def _fanout_graph(
     n_runs: int = 1,
     halt_at: int | None = None,
     scenario_payload: dict | None = None,
-    chain: str = "legacy",
     env_snapshot: dict | None = None,
     cred_project_id: int | None = None,
 ) -> None:
@@ -1762,14 +1735,10 @@ async def _fanout_graph(
     # 进程退出(恢复后执行已 failed,取消位永远不会置上)。
     session_holder: dict = {}
     deliver: dict = {"task": None, "accepted": False}
-    # 单元级取消能力:server 链 session 就绪时按 healthz 能力位填 ok 并落
-    # job payload(旧执行器 False → 不下发,读侧按能力位 409);legacy 链
-    # spawn 前按本地 FEATURES 判定,ok 时才有信号文件可写。
-    unit_cancel: dict = {"ok": chain != "server" and _legacy_unit_cancel_capable(),
-                         "recorded": chain != "server"}
-    cancel_file: "Path | None" = (
-        run_dir / "case-graph" / "cancel-unit"
-        if chain != "server" and unit_cancel["ok"] else None)
+    # 单元级取消能力:session 就绪时按 healthz 能力位填 ok 并落 job
+    # payload(旧执行器 False → 不下发,读侧按能力位 409)。B6③ 后单链,
+    # legacy --cancel-file 信号文件通道已随链退役。
+    unit_cancel: dict = {"ok": False, "recorded": False}
 
     async def _deliver_unit_cancel() -> None:
         # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
@@ -1797,25 +1766,13 @@ async def _fanout_graph(
             await asyncio.sleep(0.5)
 
     def _on_cancel_set() -> None:
-        if chain == "server":
-            # 总是创建下发任务(评审 2026-11-03 §3.1):取消可能落在执行器
-            # 启动窗口(ss.start 轮询 healthz 期间,on_session 未回调、能力位
-            # 未落定),此时若按能力位拦截,轮询器命中一次即 return,能力位
-            # 后来转 True 也无人再触发下发 —— 取消被接受却静默跑完。
-            # 旧执行器的拦截挪进 _deliver_unit_cancel(session 就绪后判)。
-            if deliver["task"] is None:
-                deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
-        elif cancel_file is not None:
-            try:
-                cancel_file.parent.mkdir(parents=True, exist_ok=True)
-                cancel_file.write_text("", encoding="utf-8")
-                logger.info(
-                    "run_dispatcher: graph execution {} unit-level cancel "
-                    "signal file written ({})", execution_id, cancel_file)
-            except OSError:
-                logger.warning(
-                    "run_dispatcher: write cancel file failed for {} ({})",
-                    execution_id, cancel_file)
+        # 总是创建下发任务(评审 2026-11-03 §3.1):取消可能落在执行器
+        # 启动窗口(ss.start 轮询 healthz 期间,on_session 未回调、能力位
+        # 未落定),此时若按能力位拦截,轮询器命中一次即 return,能力位
+        # 后来转 True 也无人再触发下发 —— 取消被接受却静默跑完。
+        # 旧执行器的拦截挪进 _deliver_unit_cancel(session 就绪后判)。
+        if deliver["task"] is None:
+            deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
 
     def _on_session(ss: Any) -> None:
         session_holder["ss"] = ss
@@ -1949,16 +1906,12 @@ async def _fanout_graph(
                             unit_events[uid] = {"status": st}
             ingester.on_event(d)
 
-        if chain != "server":
-            # legacy 链能力位在 spawn 前落库(server 链在 on_session):
-            # cancel 端点读 job payload 判定,晚于首次取消会白拒一次。
-            await _record_unit_cancel(db_factory, execution_id, unit_cancel["ok"])
         result = await graph_dispatch.execute_graph(
             db_factory, execution_id, run_dir, graph,
             on_event=_on_event, on_log=ingester.on_log,
-            log_counters=ingester.pump_counters, chain=chain,
+            log_counters=ingester.pump_counters,
             m2_info=graph_sem.get("m2_info"),
-            on_session=_on_session, cancel_file=cancel_file)
+            on_session=_on_session)
         if result.launch_status == "ok":
             # 总状态由 run.finished 的 exit_code 推导(重构方案第 3 处):
             # 判定门不通过只改退出码,按 scenario.end 取总状态会吞掉
@@ -1995,7 +1948,7 @@ async def _fanout_graph(
         if main_cancelled:
             status = "canceled"
             final_status = STATUS_CANCELED
-        elif chain == "server" and not unit_cancel["ok"]:
+        elif not unit_cancel["ok"]:
             # 旧执行器(cancel_scopes 无 unit):取消被读侧接受(启动窗口
             # 能力位未落定)但未下发 —— 与「所有单元已启动」区分留痕,
             # 读侧 cancel_note 给对应解释。
@@ -2099,7 +2052,6 @@ async def _fanout(
     n_runs: int = 1,
     parallel: int = 1,
     service_bindings: dict[str, ServiceBinding] | None = None,
-    chain: str = "legacy",
     debug: "dict | None" = None,
     scenario_owner_id: int | None = None,
     env_snapshot: dict | None = None,
@@ -2151,20 +2103,18 @@ async def _fanout(
         _eq._cancel_hint.discard(execution_id)
         _row_states.pop(execution_id, None)
 
-    # C12/P3.5-1:server 链/调试 —— 并发槽位实例池(引擎 /runs 单 run
-    # 设计,并发第二个 POST 直接 409;多行 × parallel>1 须每槽位一实例。
-    # 单行/调试退化为单实例语义)
-    server_pool = None
-    if chain == "server" or debug is not None:
-        from .gimbal_server_session import ServerSessionPool
-        _total_rows = (sum(len(ds["rows"]) for ds in datasets)
-                       * len(list(injections) or [None]))
-        # P3 收尾:全局上限钳制 —— parallel 可到 MAX_RUNS_PER_EXECUTION,
-        # 不钳制会一次冷启动上百个引擎进程(行排队等空闲槽位)
-        _slots = (1 if debug is not None
-                  else max(1, min(int(parallel or 1), _total_rows or 1,
-                                  settings.EXEC_MAX_SERVER_INSTANCES)))
-        server_pool = ServerSessionPool(size=_slots)
+    # C12/P3.5-1:并发槽位实例池(引擎 /runs 单 run 设计,并发第二个
+    # POST 直接 409;多行 × parallel>1 须每槽位一实例。单行/调试退化
+    # 为单实例语义)。B6③ 后单链恒建(legacy 分支已删)。
+    from .gimbal_server_session import ServerSessionPool
+    _total_rows = (sum(len(ds["rows"]) for ds in datasets)
+                   * len(list(injections) or [None]))
+    # P3 收尾:全局上限钳制 —— parallel 可到 MAX_RUNS_PER_EXECUTION,
+    # 不钳制会一次冷启动上百个引擎进程(行排队等空闲槽位)
+    _slots = (1 if debug is not None
+              else max(1, min(int(parallel or 1), _total_rows or 1,
+                              settings.EXEC_MAX_SERVER_INSTANCES)))
+    server_pool = ServerSessionPool(size=_slots)
     # P2-02/C2:执行器事件/日志流式入库(launcher on_event/on_log →
     # 缓冲 → 批量 execution_events;读侧 SSE/日志分析页共用)
     ingester = _EventIngester(db_factory, execution_id)
@@ -2478,30 +2428,17 @@ async def _fanout(
                                 _p["unit"] = d.get("unit") or _p["unit"]
                             ingester.on_event(d)
 
-                        if server_pool is not None:
-                            # C12:server 链(调试恒走此链) —— SSE 事件同
-                            # 一回调面;超时由 run_case 内部 cancel 收口。
-                            # P3.5-1:实例经槽位池借还,parallel>1 的多行
-                            # 各占一个实例,不再撞引擎单 run 409
-                            result = await server_pool.run_case(
-                                case_path, halt_at=halt_at, n_runs=n_runs,
-                                debug=debug, on_event=_row_on_event,
-                                m2_info=m2_info)
-                            # B6:记下 server 槽号——case-artifact 的引擎日志按它路由到
-                            # server-engine[-N].log(多 worker 时不再 404)
-                            state.server_slot = getattr(result, "server_slot", None)
-                        else:
-                            result = await gimbal_launcher.launch(
-                                case_path,
-                                step_to=halt_at,
-                                report_dir=case_dir / "reports",
-                                cwd=case_dir,
-                                engine_log_path=case_dir / "engine.log",
-                                on_event=_row_on_event,
-                                on_log=ingester.on_log,
-                                log_counters=ingester.pump_counters,
-                                n_runs=n_runs,
-                            )
+                        # C12:server 链(B6③ 后单链;调试同路) —— SSE
+                        # 事件同一回调面;超时由 run_case 内部 cancel 收口。
+                        # P3.5-1:实例经槽位池借还,parallel>1 的多行
+                        # 各占一个实例,不再撞引擎单 run 409
+                        result = await server_pool.run_case(
+                            case_path, halt_at=halt_at, n_runs=n_runs,
+                            debug=debug, on_event=_row_on_event,
+                            m2_info=m2_info)
+                        # B6:记下 server 槽号——case-artifact 的引擎日志按它路由到
+                        # server-engine[-N].log(多 worker 时不再 404)
+                        state.server_slot = getattr(result, "server_slot", None)
                     log_line["runResult"] = result.run_result
                     if result.launch_status != "ok":
                         # 子进程层故障(超时 kill / spawn 失败):记失败但
@@ -2818,8 +2755,9 @@ def _write_result_evidence(
 ) -> None:
     """P1 证据落盘:per-case result.json(步骤级 details 完整保留)。
 
-    JSONL 保持 counts-only(运维索引);完整证据(含 details[] / 兜底
-    stdout 原文)落在本文件,与 case.json 同目录构成审计面。
+    JSONL 保持 counts-only(运维索引);完整证据(含 details[])落在
+    本文件,与 case.json 同目录构成审计面。legacy 期的「stdout 原文
+    兜底」随 B6③ 退役(server 链无 stdout 面,降级态由 error 字段承载)。
     Best-effort:写失败只告警,绝不打断行执行。
     """
     payload: dict[str, Any] = {
@@ -2833,9 +2771,6 @@ def _write_result_evidence(
         "details": result.details,
         "error": result.error,
     }
-    if not result.details and result.stdout:
-        # 引擎未给出可解析 JSON 报告(如 exit 2 走 typer err)时保留原文。
-        payload["stdout"] = result.stdout
     try:
         (case_dir / "result.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"

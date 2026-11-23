@@ -5,7 +5,7 @@
   场景内置 users 保留);prefix/mergePolicy 已随 RunRequest 收敛退役;
   env.baseUrl 补缺层已随执行环境退役(D2)
 
-V3.2:执行 mock 从 gimbal HTTP /run 改为 ``gimbal_launcher.launch`` —
+V3.2→B6③:执行 mock 落位 ``tests/_fake_engine.launch`` —
 capture 读落盘的 case.json(引擎子进程的真实输入)。
 """
 from __future__ import annotations
@@ -58,8 +58,8 @@ def _patch_launch_capture(
         sink.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
 
-    from app.services import gimbal_launcher as gl
-    monkeypatch.setattr(gl, "launch", _capture)
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _capture)
 
 
 # ── nRuns / parallel fan-out ──────────────────────────────────────
@@ -95,8 +95,8 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
         kw.append({"n_runs": n_runs, "retry": retry})
         return _ok()
 
-    from app.services import gimbal_launcher as gl
-    monkeypatch.setattr(gl, "launch", _capture_nruns)
+    from tests import _fake_engine as fe
+    monkeypatch.setattr(fe, "launch", _capture_nruns)
 
     r = await client.post(
         "/api/runs", headers=bob, json=_run_payload(nRuns=3, parallel=2)
@@ -159,8 +159,8 @@ async def test_parallel_limits_concurrency(
         done += 1
         return _ok()
 
-    from app.services import gimbal_launcher as gl
-    monkeypatch.setattr(gl, "launch", _capture)
+    from tests import _fake_engine as fe
+    monkeypatch.setattr(fe, "launch", _capture)
 
     r = await client.post(
         "/api/runs", headers=bob, json=_run_payload(nRuns=2, parallel=2)

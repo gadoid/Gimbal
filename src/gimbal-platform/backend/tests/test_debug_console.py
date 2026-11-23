@@ -197,8 +197,10 @@ def stub_sut():
 
 @pytest.mark.skipif(not _engine_available(),
                     reason="真 gimbal 引擎不可用(GIMBAL_BIN / importable gimbal)")
-async def test_server_chain_end_to_end(client, monkeypatch, stub_sut):
-    """C12:chain_override=server → 执行器 server 实例真实跑通一个 case。
+async def test_server_chain_end_to_end(client, monkeypatch, stub_sut,
+                                        real_engine_session):
+    """C12:执行器 server 实例真实跑通一个 case(B6③ 后恒 server 链;
+    真会话经 real_engine_session 还原垫片)。
 
     事件经 SSE 入库(execution_events 有行);结束无残留(会话已关闭)。
     """
@@ -244,7 +246,7 @@ async def test_server_chain_end_to_end(client, monkeypatch, stub_sut):
                 __import__("app.models.user", fromlist=["User"]).User)
         )).scalars().first()
         resp = await run_dispatcher.dispatch_run(
-            db, user_row.id, req, chain_override="server")
+            db, user_row.id, req, )
         await db.commit()
     eid = resp.execution_id
 

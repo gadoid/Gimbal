@@ -112,12 +112,11 @@ class Settings(BaseSettings):
     # 超窗再发起属可接受降级(旧批仍在跑、新批排队,不损正确性)。
     SUITE_RUN_STALE_HOURS: int = 24
     # ── C12/C13(P3-02/03)执行链 ─────────────────────────────
-    # server = 每执行一组 gimbal run server 实例(POST /runs + SSE;槽位池
-    #   见 EXEC_MAX_SERVER_INSTANCES)—— 2026-09-29 起为默认(P3 收尾:
-    #   P3.5 三缺陷修复 + 五形态对账 match 后放量);
-    # legacy = run launch 子进程(stdout jsonl)——回滚路径,稳定一段
-    #   时间后删除(不留兼容层)。
-    EXEC_CHAIN: str = "server"
+    # B6③(2026-11-23):EXEC_CHAIN 键删除 —— 平台执行恒 server 链
+    # (gimbal run server + POST /runs + SSE;槽位池见
+    # EXEC_MAX_SERVER_INSTANCES)。legacy ``run launch`` 子进程回滚链
+    # 已服役期满删除(登记册 B6/C3;台账 chain 键存量 legacy 值仅历史
+    # 可读,.env 残键由 extra=ignore 静默忽略)。
     # ── 决策 1「引用即登记」保存/导入闸(identity-registry §2)─────
     # 场景保存/更新/导入的身份引用存在性闸三态:
     #   off     = 现状,不校验(阶段 0 落地时的缺省);

@@ -50,8 +50,9 @@ async def test_baseline_run_without_datasets(
     async def _fake_convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    from app.services import gimbal_launcher as gl, plate_client as pc
-    monkeypatch.setattr(gl, "launch", _capture)
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _capture)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
@@ -127,8 +128,9 @@ async def test_selected_dataset_with_zero_rows_runs_baseline_once(
     async def _fake_convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    from app.services import gimbal_launcher as gl, plate_client as pc
-    monkeypatch.setattr(gl, "launch", _capture)
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _capture)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
@@ -197,8 +199,9 @@ async def test_dataset_row_string_values_coerced_to_baseline_types(
     async def _fake_convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    from app.services import gimbal_launcher as gl, plate_client as pc
-    monkeypatch.setattr(gl, "launch", _capture)
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _capture)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
@@ -243,8 +246,9 @@ async def test_run_fills_plate_required_meta_defaults(
         sent.append(scenario)
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    from app.services import gimbal_launcher as gl, plate_client as pc
-    monkeypatch.setattr(gl, "launch", _capture)
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _capture)
     monkeypatch.setattr(pc, "convert", _record_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
@@ -265,7 +269,8 @@ async def test_run_fills_plate_required_meta_defaults(
 async def test_stale_env_key_silently_ignored(client, monkeypatch):
     """D2:RunRequest 删 env 后,旧客户端仍发 env 键 → 静默忽略不 422,
     config_json 不再留痕 envId。"""
-    from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
+    from app.services import plate_client as pc, run_dispatcher
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                            cwd=None, timeout=None, engine_log_path=None,
@@ -280,7 +285,7 @@ async def test_stale_env_key_silently_ignored(client, monkeypatch):
     await client.post(
         "/api/scenarios", headers=headers, json=make_draft("sc-stale-env")
     )
-    monkeypatch.setattr(gl, "launch", _fake_launch)
+    monkeypatch.setattr(fe, "launch", _fake_launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-stale-env", "dataSetIds": [],
@@ -339,8 +344,9 @@ async def test_row_run_error_engine_failure_e2e(
     async def _fake_convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    from app.services import gimbal_launcher as gl, plate_client as pc
-    monkeypatch.setattr(gl, "launch", _fail)
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _fail)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={

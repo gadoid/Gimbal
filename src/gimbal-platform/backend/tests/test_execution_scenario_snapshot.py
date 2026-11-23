@@ -23,7 +23,8 @@ STEPS = [{
 
 def _launch_and_convert_mocks(monkeypatch, sent_convert: list | None = None):
     """launch 恒成功 + plate convert 原样回显(基线执行最小依赖)。"""
-    from app.services import gimbal_launcher as gl, plate_client as pc
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     async def _fake_launch(case_path, *, step_to=None, report_dir=None,
                            cwd=None, timeout=None, engine_log_path=None,
@@ -36,7 +37,7 @@ def _launch_and_convert_mocks(monkeypatch, sent_convert: list | None = None):
             sent_convert.append(scenario)
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    monkeypatch.setattr(gl, "launch", _fake_launch)
+    monkeypatch.setattr(fe, "launch", _fake_launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
 

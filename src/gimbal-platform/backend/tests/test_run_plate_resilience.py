@@ -55,12 +55,13 @@ def _jsonl_records(run_dispatcher) -> list:
 
 
 async def _run_with_convert(client, monkeypatch, convert, *, body_over=None):
-    from app.services import gimbal_launcher as gl, plate_client as pc
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     headers = await register_and_login(client)
     await client.post("/api/scenarios", headers=headers,
                       json=make_draft("sc-plate", vars_map={"customer_id": "1"}))
-    monkeypatch.setattr(gl, "launch", _fake_launch)
+    monkeypatch.setattr(fe, "launch", _fake_launch)
     monkeypatch.setattr(pc, "convert", convert)
     body = {"scenarioId": "sc-plate", "dataSetIds": []}
     body.update(body_over or {})
@@ -129,7 +130,8 @@ async def test_memo_hit_injection_view_not_polluted(client, monkeypatch):
 async def test_breaker_opens_after_consecutive_unavailable(
     client, monkeypatch
 ):
-    from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
+    from app.services import plate_client as pc, run_dispatcher
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
     from tests.helpers import register_and_login  # noqa: F401
 
     headers = await register_and_login(client)  # noqa: F841 — 复用登录态
@@ -152,7 +154,7 @@ async def test_breaker_opens_after_consecutive_unavailable(
         from tests.helpers import launch_ok
         return launch_ok()
 
-    monkeypatch.setattr(gl, "launch", noop_launch)
+    monkeypatch.setattr(fe, "launch", noop_launch)
     monkeypatch.setattr(pc, "convert", down_convert)
 
     r = await client.post("/api/runs", headers=headers, json={

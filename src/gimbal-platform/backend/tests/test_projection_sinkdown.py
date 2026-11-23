@@ -69,8 +69,9 @@ async def _dispatch_and_project(client, monkeypatch, *, n_runs=3,
     async def _fake_convert(scenario):
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    from app.services import gimbal_launcher as gl, plate_client as pc
-    monkeypatch.setattr(gl, "launch", _launch)
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+    monkeypatch.setattr(fe, "launch", _launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={

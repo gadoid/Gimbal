@@ -27,7 +27,7 @@
 | B3 | 行级失败原因不入库 | 执行详情顶层 error 仅覆盖 dispatcher 级;行级原因在工件(两击可达) | execution_rows 加 run_error 列(迁移+写入+读侧) | **✅ 2026-11-23 已落**:迁移 0065(live 已升)+ 模型/RowState/终态投影(引擎 runError 优先、派发层 error 次之,[:2000] 防超长)+ 行页 ExecutionRowOut.runError + 报告 groups.runError(前端行头呈现)+ graph 恢复/逐单元行补键;roundtrip + 引擎失败×派发异常双路 e2e 钉死 |
 | B4 | pydantic 无上界 | 依赖漂移风险(2.13 曾与旧代码不兼容) | 钉 `<next-major` 或锁定 | **✅ 实质已闭合未销条**:`8d2a4164`(2026-10-15,登记次日)已钉 `pydantic>=2.6,<3` + `pydantic-settings>=2.0,<3`,requirements.lock 锁 2.14.1(当前全量绿);2026-11-23 复核销条 |
 | B5 | REST 契约漂移守卫 + 错误码单源化(审计批次⑤治本;**轻量切片 2026-11-20 已落**:`gen_api_contract.py` 快照 openapi.json+error-codes.json(213 码/437 位点/35 动态)双守卫 = plate-ci 步骤 + test_api_contract;**治本切片 1 2026-11-23 已落**:`gen_frontend_contract.py` 生成前端 `api/generated/openapi.ts`(219 schema 直译,Any→unknown)+ `errorCodes.ts`(227 码 as const + `ApiErrorCode` union);`contractGuard.ts` 编译期对账(手写⊆生成 assignability,executions 域示范 5 断言;后端 Any 字段致生成宽于手写,故守卫取方向「手写声明的形状必须存在于生成形状」);`ApiError.hasCode(ApiErrorCode)` typed 判等(AdaptationBatchDetail 示范,typo 编译期红已亲验);漂移守卫 = `test_api_contract.py::test_frontend_contract_no_drift` + 负例亲验) | 无意识漂移已被拦;错误码前端接入面 = 渐进(hasCode 可用,字面量判等未全量替换);**37 api 文件手写类型迁移未动**(方向:facade re-export 生成类型/或守卫逐域扩断言) | 切片 2+:逐域扩 contractGuard 断言(每批全量绿推进);组件字面量判等渐进换 hasCode | 后续批次 |
-| B6 | C3 conftest 钉 legacy vs 生产默认 server(2026-11-20 已做死兜底直读对齐) | 28 个测试文件按 legacy 假引擎编写;出厂默认路径非默认被测路径 | 自举:FakeServerSession 对齐假 launch 覆盖面 → 钉位翻 server → 删 legacy 链 | **② 已落(2026-11-23)**:conftest 钉位翻 server + `ShimServerSession` 垫片(run_case 以 legacy 同款 kwargs 委托 `gimbal_launcher.launch` —— 既有 fake 引擎缝零改动续用,实际迁移仅 5 处 graph/suite fake 双绑 `gd.launch`+`gl.launch`;垫片 slot 读写吞掉保持 server_slot=None 工件路由同形);全量 2188+2 绿。余 ③:删 legacy 链(dispatcher/graph/suites/executions 读侧/config 六处 + gimbal_launcher 退役与 ~30 文件 fake 缝迁移 + md5sign 随退) |
+| B6 | C3 conftest 钉 legacy vs 生产默认 server(2026-11-20 已做死兜底直读对齐) | 28 个测试文件按 legacy 假引擎编写;出厂默认路径非默认被测路径 | 自举:FakeServerSession 对齐假 launch 覆盖面 → 钉位翻 server → 删 legacy 链 | **② 已落(2026-11-23)**:conftest 钉位翻 server + `ShimServerSession` 垫片(run_case 以 legacy 同款 kwargs 委托 `gimbal_launcher.launch` —— 既有 fake 引擎缝零改动续用,实际迁移仅 5 处 graph/suite fake 双绑 `gd.launch`+`gl.launch`;垫片 slot 读写吞掉保持 server_slot=None 工件路由同形);全量 2188+2 绿。**③ 平台侧已落(2026-11-23)**:生产面六处清链(dispatcher 链分支与取消文件通道/graph_dispatch legacy 分支/suites 链取值/executions 读侧口径/config 键)+ gimbal_launcher 剥壳(launch/build_argv/parse_run_result 删,保留 LaunchResult+spawn 原语供 server 会话)+ 测试假引擎缝统一迁 tests/_fake_engine.launch(23 文件)+ 双链等价用例裁单臂 + 真引擎 e2e(r6/对账五形态/契约/debug)转真 ServerSession(conftest real_engine_session)+ PlateMock.m2 可配(真引擎代际门略过);launcher 专属测试三文件随 launch() 删除。全量 2161+2 绿。**md5sign 不随本批**(见 C11 勘误) |
 | B7 | yz 认证器真实登录协议未实现(2026-11-20 已修 None-token fail-fast + 清硬编码口令) | 现形态 = 预置 token 直通;docstring 所述 POST 表单→PHPSESSID 协议缺外部系统信息 | 取得 21eline 测试环境协议确认后补实现 | 外部信息 |
 
 ## C. 结构性登记(不修,按设计)
@@ -36,7 +36,7 @@
 |---|---|---|---|---|
 | C1 | run_dispatcher ~2600 行 / 25 个百行函数 | 新功能易只接一条路径(第 3 类根源) | 重构批次(先抽「执行前置」共用段) | 后续重构 |
 | C2 | jsonpath 三份实现 | 语义漂移风险 | gimbal-core 拆分 | gimbal-core |
-| C3 | legacy 执行链(EXEC_CHAIN) | 测试钉 legacy,server 链覆盖在专项用例 | 自举覆盖 server 链后退役 | **默认被测已翻 server(2026-11-23,B6②)**:出厂默认 == 默认被测;legacy 分支现仅显式钉位用例与 launcher 直测覆盖,待 ③ 删除 |
+| C3 | legacy 执行链(EXEC_CHAIN) | 测试钉 legacy,server 链覆盖在专项用例 | 自举覆盖 server 链后退役 | **✅ 2026-11-23 已销(B6③)**:legacy 生产链整体删除(dispatcher/graph/suites/EXEC_CHAIN 键/取消文件通道/CLI 逐 case 调用),server 为唯一链且默认被测;台账 chain 键存量 legacy 值仅历史可读 |
 | C4 | 未声明修订场景用存储 binding(过渡形态) | C-2 闸后新增即拒;存量已 rs3 回填 | 存量清零后删过渡分支 | 已基本闭合,观察 |
 | C5 | CRLF/LF 混存 | diff 噪音 | .gitattributes 统一(一次性大 diff,低峰做) | 后续批次 |
 | C6 | 宽捕获 ~240 处未逐个审计 | 旁路降级无日志的漏网 | 按第 4 类排查方法扫(主链路已清) | 后续批次 |
@@ -44,7 +44,7 @@
 | C8 | 静态约束入口校验全量清单未建 | 晚失败(登记类) | 按第 5 类方法列清单核 | 后续批次 |
 | C9 | 状态迁移写点全量并发审计未做 | 理论竞态面(已知点已 CAS) | 按第 7 类方法扫 | 后续批次 |
 | C10 | account_fields 明文存储(审计 TOK-08b) | 用户存秘密则裸存;F6 拍板:自定义字段明文非密、只经 ${slot.X.field} 消费 | ~~若收紧:敏感键逐值 fernet(写入加密/消费解密),需先拍板~~ **✅ 2026-11-23 销问:维持明文非密,收紧不立项**(重开条件 = 出现实际敏感键使用证据;收尾排布批次 0-4) | 按设计登记(已销问) |
-| C11 | md5sign 遗留签名器(审计 TOK-08d) | md5(token+timestamp) 弱签名 | **被测系统协议仿真,不能单方面改**(契约与退役插件逐字节一致,特征化用例钉死);推动场景声明式切 standard.bearer/basic | 随 legacy 链退役 |
+| C11 | md5sign 遗留签名器(审计 TOK-08d) | md5(token+timestamp) 弱签名 | **被测系统协议仿真,不能单方面改**(契约与退役插件逐字节一致,特征化用例钉死);推动场景声明式切 standard.bearer/basic | **勘误(2026-11-23,B6③ 落地时核实)**:md5sign 是 plate 方言 token_type 契约项(_m2/dialect/selfdescribe/m2.schema.json/compiler 校验/签名分派),与平台执行链**零耦合**——平台 legacy 链删除不影响其可达性;真退役 = 方言破坏性变更,m2.schema 契约面再生成依赖 A1 合并后的 main 基线(B1),另批立项(随 D10 真引擎 suite e2e 一并) |
 | C12 | 手配自助建条目(凭证治理 §3.3 方案 A,2026-11-20 落) | 普通用户随场景保存可建 username-ref 自用条目 —— 此前条目创建属 alias.write 能力面(W7 导入门同款);范围窄:仅 username-ref 自用形态、base_service 须落主档既有服务(未知系统 422)、目录/部署仍属 admin | 用户未否决视为维持;翻案退路 = 删 `auth_drafts.materialize` 条目创建段(闸与冲突码不动) | **✅ 2026-11-23 追认维持**(待实现批次处理时确认;翻案退路继续在档) |
 
 ## D. UI/UX 登记(一期后第一项:信息架构收敛)

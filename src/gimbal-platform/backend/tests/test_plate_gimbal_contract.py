@@ -125,7 +125,11 @@ async def real_plate():
 
 
 @pytest.fixture
-def real_engine(monkeypatch):
+def real_engine(monkeypatch, real_engine_session):
+    """B6③(2026-11-23):真 plate /convert → 真引擎 server 会话
+    (POST /runs + SSE,经 conftest real_engine_session 还原垫片)。
+    契约面不变(call 形态/断言/计数),执行形态从 legacy CLI stdout
+    切到 server SSE。"""
     from app.services import gimbal_launcher as gl
     prefix = _engine_prefix()
     assert prefix is not None

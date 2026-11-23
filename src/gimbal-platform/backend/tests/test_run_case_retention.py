@@ -50,7 +50,8 @@ def _make_case_dir(run_dispatcher, run_id: str, age_days: float = 0):
 
 async def test_delete_execution_purges_case_dir(client, monkeypatch, tmp_path):
     from app.core.config import settings
-    from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
+    from app.services import plate_client as pc, run_dispatcher
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
     from tests.helpers import make_draft, register_and_login
 
     # DATA_DIR 指到 tmp:case 目录/JSONL 全落在临时域,不污染真实 data/。
@@ -59,7 +60,7 @@ async def test_delete_execution_purges_case_dir(client, monkeypatch, tmp_path):
     headers = await register_and_login(client)
     await client.post("/api/scenarios", headers=headers,
                       json=make_draft("sc-purge"))
-    monkeypatch.setattr(gl, "launch", _fake_launch)
+    monkeypatch.setattr(fe, "launch", _fake_launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={

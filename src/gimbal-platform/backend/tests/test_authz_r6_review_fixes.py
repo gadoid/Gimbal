@@ -62,9 +62,12 @@ class TestProjectCredentialPasswordFloor:
 class TestValueMaskingEndToEnd:
     """真实引擎执行 → 平台三张落库面(事件/步骤/日志)搜不到明文。"""
 
-    async def test_events_steps_logs_have_no_plaintext(self, client,
-                                                       plate_mock):
+    async def test_events_steps_logs_have_no_plaintext(
+            self, client, plate_mock, real_engine_session):
         plate_mock.behaviour = "echo"
+        # B6③ 真引擎 server 会话走 M2 §5.1 代际门:mock m2 恒与真实构建
+        # 失配(409 M2_GENERATION_MISMATCH)—— 掩码 e2e 不测代际,置 None。
+        plate_mock.m2 = None
         secret = "ProjPw-Zx81Qv77"
         h = await register_and_login(client, "r6_mk", "pw123456")
         uid = await _uid("r6_mk")

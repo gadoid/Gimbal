@@ -78,12 +78,13 @@ C6 dispatcher 域切片      ─→ C1(先辨清哪些 except 是承重的)
 
 ## 3. 批次 2:B6/C3/C11 自举链(消双链)
 
-> **进度(2026-11-23)**:①+② 已落并全量绿 —— conftest 钉位翻 server +
-> ShimServerSession 垫片(委托 `gimbal_launcher.launch` 同缝,既有 fake
-> 引擎零改动;实际迁移仅 5 处 graph/suite fake 双绑),「28 文件翻链」
-> 风险点被垫片设计消解。③(删 legacy 链生产面六处 + gimbal_launcher
-> 退役 + ~30 文件 fake 缝迁移 + md5sign 随退 + D10 补测)为独立批次,
-> 记录见 progress 收尾排布轮 / 登记册 B6 行。
+> **进度(2026-11-23)**:①+②+③(平台侧)全部落地并全量绿 ——
+> conftest 钉位翻 server + ShimServerSession 垫片;legacy 生产链整体
+> 删除(六处 + gimbal_launcher 剥壳 + 假引擎缝迁 `tests/_fake_engine`
+> ×23 文件 + 真引擎 e2e 转真会话,M2 代际门坑发现并修)。
+> **C3 销条**。md5sign 勘误另批(方言契约项,非平台链耦合;m2.schema
+> 再生成依赖 A1 基线)——与 D10 真引擎 suite e2e 一并立项。
+> 记录见 progress 收尾排布轮 / 登记册 B6/C3/C11 行。
 
 - 三步:① FakeServerSession 对齐假 launch 覆盖面(现仅 graph 域,
   `test_graph_cancel_unit.py:32`)→ ② conftest EXEC_CHAIN 钉位翻 server,
