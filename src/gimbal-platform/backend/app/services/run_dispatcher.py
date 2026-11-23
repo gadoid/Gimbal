@@ -451,6 +451,10 @@ class _EventIngester:
                     self._stats_written = snap
             except BaseException as e:  # noqa: BLE001
                 # 失败/取消都要回填缓冲(下次冲刷重试),不丢这批事件/日志。
+                if not isinstance(e, asyncio.CancelledError):
+                    logger.warning(
+                        "run_dispatcher: 事件批冲刷失败已回填待重试"
+                        "(execution={}): {}", self._execution_id, e)
                 # P3.5-3 对账实测:finalize 取消 ticker 时批次可能正在 DB
                 # 往返中,CancelledError 不是 Exception 子类,旧 except
                 # Exception 会放行 → 整批静默丢失(批已换出,final flush
@@ -1039,8 +1043,11 @@ async def dispatch_target(
     try:
         env_warnings = await _check_env_consistency(
             db, scenario_payload, env_choice.env_id)
-    except Exception:  # noqa: BLE001 — 告警失败不阻塞执行
+    except Exception as e:  # noqa: BLE001 — 告警失败不阻塞执行,但降级可见
         env_warnings = []
+        logger.warning(
+            "run_dispatcher: env consistency 告警生成失败(告警面置空): {}",
+            e)
 
     # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     # 预检与本处共用同一份实现,算法不得漂移)。
@@ -1718,8 +1725,10 @@ async def _fanout_graph(
                         "(at-most-once, no graph replay)"),
                 }])
                 await session.commit()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "run_dispatcher: 恢复路径 graph 行留档失败(行台账缺失,"
+                "终态不受影响): {}", e)
         # N2:恢复收口改经唯一终态迁移(原子守卫 + failed 通知 ——
         # 此前静默,N2-2 拍板补发);P0-3.2:改带重试版
         await transition_with_retry(
@@ -2012,8 +2021,10 @@ async def _fanout_graph(
                  or _iso_to_dt(finished_ts)}
                 for r in rows_to_write])
             await session.commit()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: graph 行留档失败(行台账缺失,计数照常): {}",
+            e)
     # 计数与终态(计数按单元累加;blocked/cancelled 入 skipped)
     n_pass = sum(1 for _, ev in ordered_units if ev.get("status") == "passed")
     n_fail = sum(1 for _, ev in ordered_units
@@ -2033,9 +2044,101 @@ async def _fanout_graph(
             async with db_factory() as session:
                 await _config_json_merge(session, execution_id, cfg_patch)
                 await session.commit()
-        except Exception:  # noqa: BLE001 — 结论留档 best-effort
-            pass
+        except Exception as e:  # noqa: BLE001 — 结论留档 best-effort,降级可见
+            logger.warning(
+                "run_dispatcher: cancel 结论留档失败(config_json 未含"
+                " cancelIgnored): {}", e)
     await _finalize_execution(db_factory, execution_id, status=final_status)
+
+
+# ── 执行前置共用段(C1 切片 1,2026-11-23)────────────────────────
+# _fanout 前置的命名缝:鉴权预检 / 台账写 / 会话池脚手架 / §7 收口序。
+# 新执行面特性只接这些缝,不再平铺进 _fanout 主体。
+
+
+async def _fanout_auth_preflight(
+    db_factory, owner_id: int, auth_aliases: list[str], datasets,
+    *, cred_project_id: "int | None", slot_map: "dict | None",
+) -> tuple:
+    """鉴权预检:owner 级解密一次 + 行账号列覆盖绑定(每 (槽, 绑定名)
+    只解密一次)。解密失败 = AuthResolveError fail-fast(V1 严格语义,
+    调用方整单收口);注入清单为空直接跳过解析。"""
+    exec_auths = (
+        await resolve_exec_auths(
+            db_factory, owner_id, auth_aliases,
+            cred_project_id=cred_project_id, slot_map=slot_map)
+        if auth_aliases else [])
+    row_auths_map = await run_prepare.resolve_row_bindings(
+        db_factory, owner_id,
+        {(s, a) for ds in datasets for _i, r in ds["rows"]
+         for s, a in run_prepare.row_binding_refs(r).items()},
+        cred_project_id=cred_project_id)
+    return exec_auths, row_auths_map
+
+
+async def _persist_run_telemetry(db_factory, execution_id: int, prep) -> None:
+    """台账写:入库标准判定(A-3/W7)与 RS3 生效修订表 —— 与 pins 同点
+    写,判定/写库失败均不阻断执行(台账性质;留默认值 = 未判定)。"""
+    from . import run_semantics
+    baseline: "tuple[bool, str | None, dict] | None" = None
+    try:
+        async with db_factory() as _sem_s:
+            baseline = await run_semantics.assess_baseline(
+                _sem_s, meta_plate=prep.meta_plate,
+                endpoints_used=prep.endpoints_used,
+                unanchored_services=prep.unanchored_services)
+    except Exception:  # noqa: BLE001
+        logger.opt(exception=True).warning(
+            'run_dispatcher: 入库标准判定失败 (execution={})', execution_id)
+        baseline = None
+    if prep.plate_pins or baseline is not None:
+        try:
+            from sqlalchemy import update as sa_update
+            async with db_factory() as _pin_sess:
+                _values: dict = {}
+                if prep.plate_pins:
+                    _values['plate_pins'] = prep.plate_pins
+                if baseline is not None:
+                    _values['baseline_eligible'] = baseline[0]
+                    _values['baseline_block'] = baseline[1]
+                    _values['baseline_evidence'] = baseline[2] or None
+                await _pin_sess.execute(
+                    sa_update(Execution)
+                    .where(Execution.id == execution_id)
+                    .values(**_values))
+                await _pin_sess.commit()
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                'plate_pins 回填失败 (execution={})', execution_id)
+
+
+def _fanout_pool_scaffold(datasets, injections, *, parallel: int,
+                          debug: "dict | None") -> "ServerSessionPool":
+    """会话池脚手架:槽位上限钳制(P3 收尾 —— parallel 可到
+    MAX_RUNS_PER_EXECUTION,不钳制会一次冷启动上百个引擎进程,行排队
+    等空闲槽位)+ 池构建。启动(start)由调用方绑定本执行 ingester。"""
+    from .gimbal_server_session import ServerSessionPool
+    _total_rows = (sum(len(ds["rows"]) for ds in datasets)
+                   * len(list(injections) or [None]))
+    _slots = (1 if debug is not None
+              else max(1, min(int(parallel or 1), _total_rows or 1,
+                              settings.EXEC_MAX_SERVER_INSTANCES)))
+    return ServerSessionPool(size=_slots)
+
+
+async def _drain_and_finalize(server_pool, ingester,
+                              execution_id: int) -> None:
+    """§7 顺序不变量单点实现:先关池(terminate 进程树、stderr 泵排空到
+    EOF),再 finalize 冲刷已入缓冲的事件/日志 —— server 启动期已入缓冲
+    的行不丢、ticker 不泄漏。收口失败可见但不阻断调用方。"""
+    if server_pool is not None:
+        try:
+            await server_pool.close()
+        except Exception as e:  # noqa: BLE001 — 收口失败可见(可能留引擎进程)
+            logger.warning(
+                "run_dispatcher: server pool close 失败(可能留引擎进程,"
+                "execution={}): {}", execution_id, e)
+    await ingester.finalize()
 
 
 async def _fanout(
@@ -2061,19 +2164,19 @@ async def _fanout(
     exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
     skip_carry: bool = False,
 ) -> None:
-    """Per-row × per-repeat compose + convert + 执行器调用（双链）。
+    """Per-row × per-repeat compose + convert + 执行器调用(恒 server 链)。
 
     ``env_snapshot``(S2.1):dispatch 落档的环境选择(与 config_json 同
     一份快照;旧配方缺键 = 无环境 = 旧 ③ 行为)。
 
-    ``halt_at``(V1 step_to 移植):0-based 含端点,透传 CLI
-    ``--step-to`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
+    ``halt_at``(V1 step_to 移植):0-based 含端点,透传执行器
+    ``options.step_to`` —— RuntimeControl 在该步后停(剩余步显示
+    skipped)。
 
-    C12/C13 双链:``chain``（legacy|server）——legacy 落盘 case 后
-    ``gimbal run launch`` 子进程（stdout jsonl）；server 为本次执行
-    持有一个执行器 server 实例（POST /runs + SSE 消费），取消走
-    cancel 端点，结束 terminate 进程树。``debug``（C6）强制 server 链
-    且单 case；会话注册进 ``debug_sessions`` 供平台调试台代理。
+    C12:执行器 server 实例池(POST /runs + SSE 消费;单 run 设计,
+    多行 × parallel>1 每槽位一实例),取消走 cancel 端点,结束
+    terminate 进程树。``debug`` 单 case,会话注册进 ``debug_sessions``
+    供平台调试台代理。B6③:legacy 子进程链已退役(2026-11-23)。
 
     C11 取消：DB 位（execution_jobs.cancel_requested）→ 本函数的取消
     轮询器写入局部标志 → 行边界消费（未跑行记 canceled 不进计数器）。
@@ -2097,24 +2200,18 @@ async def _fanout(
         if server_pool is not None:
             try:
                 await server_pool.close()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001 — 收口失败可见(可能留引擎进程)
+                logger.warning(
+                    "run_dispatcher: teardown server pool close 失败"
+                    "(execution={}): {}", execution_id, e)
         debug_sessions.pop(execution_id, None)
         _eq._cancel_hint.discard(execution_id)
         _row_states.pop(execution_id, None)
 
-    # C12/P3.5-1:并发槽位实例池(引擎 /runs 单 run 设计,并发第二个
-    # POST 直接 409;多行 × parallel>1 须每槽位一实例。单行/调试退化
-    # 为单实例语义)。B6③ 后单链恒建(legacy 分支已删)。
-    from .gimbal_server_session import ServerSessionPool
-    _total_rows = (sum(len(ds["rows"]) for ds in datasets)
-                   * len(list(injections) or [None]))
-    # P3 收尾:全局上限钳制 —— parallel 可到 MAX_RUNS_PER_EXECUTION,
-    # 不钳制会一次冷启动上百个引擎进程(行排队等空闲槽位)
-    _slots = (1 if debug is not None
-              else max(1, min(int(parallel or 1), _total_rows or 1,
-                              settings.EXEC_MAX_SERVER_INSTANCES)))
-    server_pool = ServerSessionPool(size=_slots)
+    # C12/P3.5-1:并发槽位实例池(C1 切片 1 起经 _fanout_pool_scaffold
+    # 构建;单行/调试退化为单实例语义)。
+    server_pool = _fanout_pool_scaffold(
+        datasets, injections, parallel=parallel, debug=debug)
     # P2-02/C2:执行器事件/日志流式入库(launcher on_event/on_log →
     # 缓冲 → 批量 execution_events;读侧 SSE/日志分析页共用)
     ingester = _EventIngester(db_factory, execution_id)
@@ -2148,21 +2245,12 @@ async def _fanout(
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
     # failed,所有行计入 failed 计数,不带着空/坏凭证打环境。
     try:
-        # 注入清单为空(无 ${auth.*} 扫描引用、无步骤服务条目)时
-        # 直接跳过解析。
-        exec_auths = (
-            await resolve_exec_auths(
-                db_factory, owner_id, auth_aliases,
-                cred_project_id=cred_project_id, slot_map=slot_map)
-            if auth_aliases
-            else []
-        )
-        # M2b Q3:行账号列覆盖绑定(每个 (槽, 绑定名) 只解密一次)
-        row_auths_map = await run_prepare.resolve_row_bindings(
-            db_factory, owner_id,
-            {(s, a) for ds in datasets for _i, r in ds["rows"]
-             for s, a in run_prepare.row_binding_refs(r).items()},
-            cred_project_id=cred_project_id)
+        # C1 切片 1:鉴权预检抽至 _fanout_auth_preflight(注入清单为空
+        # 直接跳过解析;M2b Q3 行账号列覆盖绑定每个 (槽, 绑定名) 只解
+        # 密一次)。
+        exec_auths, row_auths_map = await _fanout_auth_preflight(
+            db_factory, owner_id, auth_aliases, datasets,
+            cred_project_id=cred_project_id, slot_map=slot_map)
     except AuthResolveError as e:
         logger.error(
             "run_dispatcher: auth resolve failed for execution {}: {}",
@@ -2170,14 +2258,9 @@ async def _fanout(
         )
         total_rows = (sum(len(ds["rows"]) for ds in datasets)
                       * len(injections or [None]))
-        # §7 顺序不变量在异常路径同样成立:先排空泵(关池)再冲刷 ingester,
-        # 最后才写终态 —— server 启动期已入缓冲的日志行不丢、ticker 不泄漏。
-        if server_pool is not None:
-            try:
-                await server_pool.close()
-            except Exception:  # noqa: BLE001
-                pass
-        await ingester.finalize()
+        # §7 顺序不变量在异常路径同样成立(C1 切片 1 起单点实现于
+        # _drain_and_finalize):排空泵 → 冲刷 → 终态,不丢不漏。
+        await _drain_and_finalize(server_pool, ingester, execution_id)
         await _fail_whole_execution(
             db_factory, log_path, execution_id=execution_id, run_id=run_id,
             total_rows=total_rows, error=str(e),
@@ -2217,41 +2300,9 @@ async def _fanout(
         # 入站参数(设计 2026-11-13 决策 3):raw 保留字 → 跳过 carry
         skip_carry=skip_carry)
 
-    # A-3/W7(版本模型 4.3):入库标准台账 —— 与 pins 同点写,判定/写库
-    # 失败均不阻断执行(台账性质;留默认值 = 未判定)。
-    baseline: tuple[bool, str | None, dict] | None = None
-    try:
-        from . import run_semantics
-        async with db_factory() as _sem_s:
-            baseline = await run_semantics.assess_baseline(
-                _sem_s, meta_plate=prep.meta_plate,
-                endpoints_used=prep.endpoints_used,
-                unanchored_services=prep.unanchored_services)
-    except Exception:  # noqa: BLE001
-        logger.opt(exception=True).warning(
-            'run_dispatcher: 入库标准判定失败 (execution={})', execution_id)
-        baseline = None
-    # RS3：生效修订表落库（dispatch 侧无引用可回填 —— job 经 DB
-    # 队列异步驱动，在解析处就地写入；台账性质，失败不阻断执行）。
-    if prep.plate_pins or baseline is not None:
-        try:
-            from sqlalchemy import update as sa_update
-            async with db_factory() as _pin_sess:
-                _values: dict = {}
-                if prep.plate_pins:
-                    _values['plate_pins'] = prep.plate_pins
-                if baseline is not None:
-                    _values['baseline_eligible'] = baseline[0]
-                    _values['baseline_block'] = baseline[1]
-                    _values['baseline_evidence'] = baseline[2] or None
-                await _pin_sess.execute(
-                    sa_update(Execution)
-                    .where(Execution.id == execution_id)
-                    .values(**_values))
-                await _pin_sess.commit()
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                'plate_pins 回填失败 (execution={})', execution_id)
+    # A-3/W7 + RS3 台账写(C1 切片 1 起抽至 _persist_run_telemetry):
+    # 入库标准判定与生效修订表,同点写、失败不阻断(台账性质)。
+    await _persist_run_telemetry(db_factory, execution_id, prep)
 
     # P6:fan-out 级 convert memo + plate 连续不可用熔断计数。
     convert_cache: dict[str, dict] = {}
@@ -2598,8 +2649,11 @@ async def _fanout(
                 .where(_ER.execution_id == execution_id))).all()
         done_rows = {int(s): st for s, st in _existing
                      if st in _FINAL_STATUSES}
-    except Exception:  # noqa: BLE001 — 查询失败按无断点处理(全量重跑)
+    except Exception as e:  # noqa: BLE001 — 查询失败按无断点处理(全量重跑)
         done_rows = {}
+        logger.warning(
+            "run_dispatcher: 断点恢复查询失败,本单全量重跑"
+            "(execution={}): {}", execution_id, e)
     # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
     # _row 内逐行推进,执行终态化时整体 pop → 读侧回落 JSONL 回放)。
     row_states = _row_states[execution_id] = [
@@ -2644,14 +2698,9 @@ async def _fanout(
         # ingester 的缓冲,永远不落库,却已计入 logs_ingested —— S9 对账
         # 失真、S6 摘要漏最尾证据。先关池(close = terminate 进程树并等
         # 泵读到 EOF,幂等 —— _teardown 再关无害),泵排空后再 finalize。
-        # launch 链无此问题:进程退出即管道 EOF,泵在 launch 返回前读完。
-        if server_pool is not None:
-            try:
-                await server_pool.close()
-            except Exception:  # noqa: BLE001
-                pass
+        # (C1 切片 1 起经 _drain_and_finalize 单点实现。)
+        await _drain_and_finalize(server_pool, ingester, execution_id)
         # P2-02:冲刷事件/日志余量(先于终态落库 —— SSE/日志页在 done 后仍可读全量)
-        await ingester.finalize()
 
         # Terminal status + timestamps only (counters already maintained
         # incrementally above).

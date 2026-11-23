@@ -34,12 +34,12 @@
 
 | # | 条目 | 影响 | 退出条件 | 归属 |
 |---|---|---|---|---|
-| C1 | run_dispatcher ~2600 行 / 25 个百行函数 | 新功能易只接一条路径(第 3 类根源) | 重构批次(先抽「执行前置」共用段) | 后续重构 |
+| C1 | run_dispatcher ~2600 行 / 25 个百行函数 | 新功能易只接一条路径(第 3 类根源) | 重构批次(先抽「执行前置」共用段) | **切片 1 已落(2026-11-23)**:执行前置四缝抽离(`_fanout_auth_preflight` 鉴权预检/`_persist_run_telemetry` 台账写/`_fanout_pool_scaffold` 池脚手架/`_drain_and_finalize` §7 收口序单点)+ `_fanout` 过时双链 docstring 清账;**百行函数 25→5**(dispatch_target 652/_fanout 573/_fanout_graph 403/_row 293/compute_run_fanout 107,余量后续切片分批) |
 | C2 | jsonpath 三份实现 | 语义漂移风险 | gimbal-core 拆分 | gimbal-core |
 | C3 | legacy 执行链(EXEC_CHAIN) | 测试钉 legacy,server 链覆盖在专项用例 | 自举覆盖 server 链后退役 | **✅ 2026-11-23 已销(B6③)**:legacy 生产链整体删除(dispatcher/graph/suites/EXEC_CHAIN 键/取消文件通道/CLI 逐 case 调用),server 为唯一链且默认被测;台账 chain 键存量 legacy 值仅历史可读 |
 | C4 | 未声明修订场景用存储 binding(过渡形态) | C-2 闸后新增即拒;存量已 rs3 回填 | 存量清零后删过渡分支 | 已基本闭合,观察 |
 | C5 | CRLF/LF 混存 | diff 噪音 | .gitattributes 统一(一次性大 diff,低峰做) | 后续批次 |
-| C6 | 宽捕获 ~240 处未逐个审计 | 旁路降级无日志的漏网 | 按第 4 类排查方法扫(主链路已清) | 后续批次 |
+| C6 | 宽捕获 ~240 处未逐个审计 | 旁路降级无日志的漏网 | 按第 4 类排查方法扫(主链路已清) | **dispatcher 域已扫(2026-11-23,58 处分类)**:真静默降级 8 处补 warning(env 告警/恢复行留档×2/cancel 结论留档/断点查询/关池×3/事件批冲刷回填);刻意静默 9 处保留(自带注释:取消轮询瞬态/无循环兜底/CancelledError 回填/清理扫描跳过)。余域渐进 |
 | C7 | 主链路注释含历史叙述 | 可读性 | 注释清理批(移提交记录) | 后续批次 |
 | C8 | 静态约束入口校验全量清单未建 | 晚失败(登记类) | 按第 5 类方法列清单核 | 后续批次 |
 | C9 | 状态迁移写点全量并发审计未做 | 理论竞态面(已知点已 CAS) | 按第 7 类方法扫 | 后续批次 |

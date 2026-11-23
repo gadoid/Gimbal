@@ -2282,7 +2282,18 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   - md5sign **不随本批**(登记册 C11 勘误):方言 token_type 契约项,
     与平台链零耦合;退役 = 方言破坏性变更,m2.schema 再生成依赖 A1
     合并后的 main 基线,另批立项(与 D10 真引擎 suite e2e 一并)。
-  - 验证:后端全量 **2161 passed + 2 skipped**(0 failed;较 2188 净
+- **批次 3 切片 1(2026-11-23,🟢)**:C6 dispatcher 域清扫 + C1
+  执行前置抽缝。C6:run_dispatcher 58 处 except 逐个分类 —— 真静默
+  降级 8 处补 warning(env 一致性告警/graph 恢复行留档/graph 行
+  upsert/cancel 结论留档/断点恢复查询/关池×3/事件批冲刷回填),刻意
+  静默 9 处保留(自带注释:轮询瞬态重试/CancelledError 回填自愈/
+  无运行循环兜底/清理扫描跳过);graph_dispatch 5 处早已达标
+  (CFG-03 审计轮)。C1:执行前置四缝抽离
+  (`_fanout_auth_preflight`/`_persist_run_telemetry`/
+  `_fanout_pool_scaffold`/`_drain_and_finalize` §7 顺序不变量单点)
+  + `_fanout` 双链 docstring 清账;**百行函数 25→5**(dispatch_target
+  652/_fanout 573/_fanout_graph 403/_row 293 留后续切片)。
+  验证:后端全量 **2161 passed + 2 skipped**(0 failed;较 2188 净
     减 27 = launcher 专属测试三文件 + 双链等价臂);契约快照重生
     (openapi noop、error-codes 行号位移)。
 
