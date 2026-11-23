@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 const dataSetsFallback = (to: { params: Record<string, string | string[]> }) =>
   `/scenarios/${encodeURIComponent(String(to.params.scenarioId))}/schemes`
 
-const routes = [
+export const routes = [
   // F-sitemap v2:登录后默认落地 = 用户工作台 /home(原为 /scenarios)
   { path: '/', redirect: '/home' },
   { path: '/home', component: () => import('@/views/WorkbenchView.vue'), meta: { requiresAuth: true } },
@@ -258,11 +258,14 @@ const routes = [
   {
     // 画布(重构方案 10–13):新建(/suites/new,不落库,首次拖入建草稿)
     // 与改结构(/suites/:id/compose)同一路由记录 —— alias 导航时组件
-    // 实例复用,首次拖入建草稿换 URL 不丢画布状态(vue-router 对静态
-    // 别名缺参的 warn 不影响匹配,已由 SuiteCompose.test 钉住);非属主
-    // 在页面内重定向到 20 只读态。
+    // 实例复用,首次拖入建草稿换 URL 不丢画布状态(SuiteCompose.test
+    // 钉住);非属主在页面内重定向到 20 只读态。别名须带与原路由同名
+    // 同必填的参数(vue-router checkSameParams:静态别名 /suites/new
+    // 缺 :id 即 dev 建表 warn)—— :id(new) 只吃字面量 new,该态
+    // params.id 恒为 'new',由 SuiteCompose.routeSuiteId() 归一为
+    // 「无库内 id」(router.match.test 钉住建表零告警)。
     path: '/suites/:id(\\d+)/compose',
-    alias: '/suites/new',
+    alias: '/suites/:id(new)',
     component: () => import('@/views/SuiteCompose.vue'),
     meta: { requiresAuth: true },
   },

@@ -271,10 +271,17 @@ const AUTOSAVE_MS = 800
 const route = useRoute()
 const router = useRouter()
 
+/** 新建画布深链 /suites/new 经路由别名 :id(new) 进来 —— 该态 params.id
+ *  是字面量 'new' 而非库内 id;归一为 null = 未落库(别名须声明与
+ *  /suites/:id/compose 同名的必填参数,见 router/index.ts)。 */
+function routeSuiteId(): number | null {
+  const raw = route.params.id
+  return raw === undefined || raw === 'new' ? null : Number(raw)
+}
+
 // ── 状态 ────────────────────────────────────────────────────────
 const loaded = ref(false)
-const suiteId = ref<number | null>(
-  route.params.id ? Number(route.params.id) : null)
+const suiteId = ref<number | null>(routeSuiteId())
 const rev = ref(0)
 const isDraft = ref(true)
 const name = ref('未命名 Suite')
@@ -423,14 +430,15 @@ function nodeIdExists(id: string): boolean {
 
 // ── 加载(/suites/:id/compose;非 canEdit 重定向管理页只读态)─────
 onMounted(async () => {
-  if (!route.params.id) {
+  const routeId = routeSuiteId()
+  if (routeId === null) {
     loaded.value = true
     // 隐私模式/禁用存储下 getItem 会抛 — 引导弹层只是增强,不让页面挂掉
     try { if (!localStorage.getItem(GUIDE_OFF_KEY)) guideOpen.value = true } catch { /* 存储不可达 → 不弹引导 */ }
     return
   }
   try {
-    const d = await getSuite(Number(route.params.id))
+    const d = await getSuite(routeId)
     if (!d.canEdit) {
       void router.replace(`/suites/${d.suiteId}`)
       return

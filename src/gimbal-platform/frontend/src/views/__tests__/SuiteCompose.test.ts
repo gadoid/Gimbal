@@ -61,7 +61,7 @@ function routerAt(path: string) {
       { path: '/suites', component: { template: '<div/>' } },
       {
         path: '/suites/:id(\\d+)/compose',
-        alias: '/suites/new',
+        alias: '/suites/:id(new)',
         component: SuiteCompose,
       },
       { path: '/suites/:id(\\d+)', component: { template: '<div/>' } },
