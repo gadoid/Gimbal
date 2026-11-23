@@ -43,7 +43,8 @@ html[data-theme="dark"] {
   --color-bg-secondary: #121212;
   --color-text-primary: #e8e8e8;
   --color-text-secondary: #9b9b9b;
-  --color-text-tertiary: #6f6f6f;
+  --color-text-tertiary: #909090;  /* AA 修复:6f6f6f 在纯黑仅 4.18:1,
+                                    909090 → 黑底 6.58/121212 5.87 */
   --color-text-strong: #8a8a8a;
   --color-border-tertiary: #2b2b2b;
   --color-border-secondary: #3b3b3b;
@@ -66,7 +67,7 @@ html[data-theme="dark"] {
   --sl-warn-soft: #2d2210;
   --sl-ink: #e8e8e8;
   --sl-ink-2: #9b9b9b;
-  --sl-ink-3: #6f6f6f;
+  --sl-ink-3: #909090;  /* AA 修复(同上);表头底 1a1a1a 5.45 */
   --sl-line: #2b2b2b;
   --sl-divider: #202020;
   --sl-canvas: #000000;
@@ -83,7 +84,7 @@ html[data-theme="dark"] {
   --c-divider: #202020;
   --c-text: #e8e8e8;
   --c-text-secondary: #9b9b9b;
-  --c-text-tertiary: #6f6f6f;
+  --c-text-tertiary: #909090;  /* AA 修复(同上);面板底 161616 5.67 */
   --c-accent: #818cf8;
   --c-accent-soft: #232329;
   --c-accent-soft-border: #3a3a4a;

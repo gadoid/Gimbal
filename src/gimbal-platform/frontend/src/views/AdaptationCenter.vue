@@ -105,16 +105,33 @@
           {{ carryLoadFailed ? '加载失败,请刷新' : '暂无 carry 数据' }}
         </div>
         <div v-else class="ac-drift-list">
-          <div v-for="s in carryDrift" :key="s.service" class="ac-drift-svc" data-testid="drift-svc">
+          <!-- D7(登记册,2026-11-23):250 系统目录全量渲染致页面 6000px
+               不可用 —— 漂移者全展;「✓ 无漂移」(本就无勾选项)折叠为
+               单行可展开组,不丢任何功能面。 -->
+          <div v-for="s in driftedServices" :key="s.service" class="ac-drift-svc"
+               data-testid="drift-svc">
             <div class="ac-drift-name mono">{{ s.service }}</div>
-            <p v-if="!hasCarryDrift(s)" class="ac-drift-ok">✓ 无漂移</p>
-            <div v-else class="ac-drift-checks">
+            <div class="ac-drift-checks">
               <label v-for="opt in driftCheckOptions(s)" :key="opt.key" class="ac-drift-check">
                 <input v-model="carryChecked" type="checkbox" :value="opt.key" />
                 {{ opt.text }}
               </label>
             </div>
           </div>
+          <button v-if="cleanServices.length" type="button" class="ac-drift-fold"
+                  data-testid="drift-fold"
+                  @click="showCleanServices = !showCleanServices">
+            {{ showCleanServices
+               ? '▾ 收起无漂移系统'
+               : `▸ ${cleanServices.length} 个系统无漂移(展开查看)` }}
+          </button>
+          <template v-if="showCleanServices">
+            <div v-for="s in cleanServices" :key="s.service" class="ac-drift-svc"
+                 data-testid="drift-svc-clean">
+              <div class="ac-drift-name mono">{{ s.service }}</div>
+              <p class="ac-drift-ok">✓ 无漂移</p>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -218,6 +235,11 @@ function ownsScopedBatch(b: BatchOut): boolean {
 
 // ── carry 漂移面板 ──────────────────────────────────────────────
 const carryDrift = ref<ServiceDrift[]>([])
+// D7:漂移者/无漂移者分组(无漂移折叠;切刷新收起)
+const driftedServices = computed(() => carryDrift.value.filter(hasCarryDrift))
+const cleanServices = computed(() =>
+  carryDrift.value.filter((s) => !hasCarryDrift(s)))
+const showCleanServices = ref(false)
 const carryPlateReachable = ref(true)
 const carryDriftLoading = ref(false)
 const carryGenerating = ref(false)
@@ -238,6 +260,7 @@ async function loadCarryDrift(): Promise<void> {
     carryPlateReachable.value = report.plateReachable
     carryDrift.value = report.services
     carryChecked.value = []
+    showCleanServices.value = false   // D7:刷新后无漂移组回折叠态
   } catch (e) {
     carryLoadFailed.value = true
     toast.error(api.errMsg(e, 'carry 漂移拉取失败'))

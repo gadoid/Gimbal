@@ -479,7 +479,8 @@ let registryHydrated = true
 // services/users/vars 合并;resource 取各系统并集。仅首次、且
 // config/resource 未被编辑过时生效 — 详见 useSystemPrefill 契约。
 const isNewScenario = computed(() => !scenarioId.value || scenarioId.value === 'new')
-useSystemPrefill(definition, isNewScenario)
+// D6:预填种下的变量名传给 lintDraft 豁免(未接线素材 ≠ 用户手写死数据)
+const { prefilledVars } = useSystemPrefill(definition, isNewScenario)
 
 // S7.1 在项目内新建:?projectId= 深链(项目详情「场景」页签发起),
 // 首次保存时透传给 POST /scenarios —— 门 = 项目成员,公共项目 422。
@@ -1060,7 +1061,9 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
     return false
   }
   // 保存前 lint(C10/§4.3):不拦截保存,只提醒;自动保存(步进)不弹 toast
-  const lintWarns = lintDraft(definition.value as Parameters<typeof lintDraft>[0])
+  const lintWarns = lintDraft(
+    definition.value as Parameters<typeof lintDraft>[0],
+    { exemptVars: [...prefilledVars.value] })
   // W11:未接入服务告警(unknown = 别名表未登记;执行按外部处理、不计
   // 入库标准 —— 与保存告警同款非阻断口径,去服务注册登记或接入 plate)。
   const unknownSvcs = unanchoredServices.value.filter(

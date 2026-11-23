@@ -52,13 +52,16 @@ class TestApplyServicesCallForm:
     ② authored 声明 > ③ 部署地址 > ④ 缺口留给引擎(① 绑定 url 随
     authz M2a S6 退役)。"""
 
-    def test_call_form_declared_url_wins(self):
+    def test_call_form_alias_overwrites_declared(self):
+        """架构终态(2026-11-21)对齐:② authored 层退役 —— 物化副本的
+        services 以别名/部署地址为唯一权威,存量声明值被覆盖(旧口径
+        「authored 声明获胜」随层退役,断言随终态更新)。"""
         from app.services.run_materialize import _apply_services
         cfg = {"services": {"fin": "https://declared"}}
         steps = [_call_step("fin")]
         _apply_services(cfg, steps=steps,
                         alias_base_urls={"fin": "https://alias"})
-        assert cfg["services"]["fin"] == "https://declared"
+        assert cfg["services"]["fin"] == "https://alias"
 
     def test_call_form_alias_fallback(self):
         from app.services.run_materialize import _apply_services

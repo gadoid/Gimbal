@@ -668,7 +668,7 @@
         ]
       ],
       "sites": [
-        "app/routers/project_promotions.py:237"
+        "app/routers/project_promotions.py:242"
       ],
       "statuses": [
         422
@@ -1381,7 +1381,7 @@
         "app/routers/project_credentials.py:110",
         "app/routers/project_promotions.py:95",
         "app/routers/project_promotions.py:211",
-        "app/routers/project_promotions.py:322",
+        "app/routers/project_promotions.py:329",
         "app/routers/project_tokens.py:62",
         "app/routers/project_tokens.py:79",
         "app/routers/projects.py:99",
@@ -1471,9 +1471,9 @@
         ]
       ],
       "sites": [
-        "app/routers/project_promotions.py:228",
-        "app/routers/project_promotions.py:282",
-        "app/routers/project_promotions.py:325"
+        "app/routers/project_promotions.py:233",
+        "app/routers/project_promotions.py:289",
+        "app/routers/project_promotions.py:334"
       ],
       "statuses": [
         409

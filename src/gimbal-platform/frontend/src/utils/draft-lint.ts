@@ -9,11 +9,18 @@
 import { assignVarRefs, deriveVarRegistry, varUsages } from './var-registry'
 import { stepEndpointId } from '@/types/plate'
 
-export function lintDraft(definition: {
-  steps?: any[]
-  config?: { vars?: Record<string, unknown> }
-}): string[] {
+export function lintDraft(
+  definition: {
+    steps?: any[]
+    config?: { vars?: Record<string, unknown> }
+  },
+  opts: { exemptVars?: ReadonlySet<string> | readonly string[] } = {},
+): string[] {
   const warns: string[] = []
+  // D6(登记册,2026-11-23 收口):选系统预填(useSystemPrefill)种下的
+  // 变量是「待接线素材」而非用户手写死数据 —— 未引用告警对它们纯属
+  // 自造噪音;调用方传入豁免集,接线(或删除)前的保存不再逐个提醒。
+  const exempt = new Set(opts.exemptVars ?? [])
   const steps = (definition.steps ?? []).map((s: any) => s ?? {})
 
   steps.forEach((s: any, i: number) => {
@@ -29,7 +36,7 @@ export function lintDraft(definition: {
     ...assignVarRefs(steps).map((r) => r.name),
   ])
   for (const e of registry.entries) {
-    if (e.origin === 'config' && !used.has(e.name)) {
+    if (e.origin === 'config' && !used.has(e.name) && !exempt.has(e.name)) {
       warns.push(`共享变量 ${e.name} 声明了但未被引用(死数据)`)
     }
   }

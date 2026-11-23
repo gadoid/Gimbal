@@ -23,3 +23,19 @@ it('干净草稿零告警', () => {
     steps: [{ endpoint: 'x', call: { headers: { a: '${var.amount}' } } }],
   })).toEqual([])
 })
+
+it('D6 豁免:预填种下的变量不报死数据;未豁免照报', () => {
+  const warns = lintDraft(
+    { config: { vars: { pre_a: 1, pre_b: 2, mine: 3 } },
+      steps: [{ endpoint: 'x', call: {} }] },
+    { exemptVars: ['pre_a', 'pre_b'] })
+  expect(warns).toEqual(['共享变量 mine 声明了但未被引用(死数据)'])
+})
+
+it('D6 豁免不吞 endpoint 告警;已接线变量本就无死数据', () => {
+  const warns = lintDraft(
+    { config: { vars: { pre_a: 1 } },
+      steps: [{ call: {}, request: { body: { k: '${var.pre_a}' } } }] },
+    { exemptVars: ['pre_a'] })
+  expect(warns).toEqual(['步骤 1 未绑定接口目录(endpoint_id 缺失,不进反向索引)'])
+})

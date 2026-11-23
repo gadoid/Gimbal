@@ -109,9 +109,10 @@ def _detect_format(
             return InputFormat.yaml
         if source_hint == ".json":
             return InputFormat.json
-        if source_hint in (".txt", ".text"):
-            return InputFormat.auto
-        # 其他扩展名走内容嗅探
+        # .txt/.text 与未知扩展名同样走内容嗅探(txt 里装 json/yaml 是
+        # 常见形态;真文本会在双解析失败处得到明确 InputError —— 2026-11-23
+        # 收口,此前 auto 残值落入 _parse_text 占位,静默产出无人消费的
+        # __raw_text__ 标记 dict,fail-silent)。
 
     # stdin / inline / 未知扩展名：内容嗅探
     stripped = raw.lstrip()
@@ -154,9 +155,13 @@ def _parse_yaml(raw: str) -> dict:
 
 
 def _parse_text(raw: str) -> dict:
-    """text 格式占位实现：原样把 raw 包装为带 __raw_text__/__pending_parse__ 标记的 dict，等待后续解析器接入。"""
-    # TODO: 接入文本检查/解析方法，例如 text_parser.parse(raw) -> dict
-    return {"__raw_text__": raw, "__pending_parse__": True}
+    """防御性收口(2026-11-23,原 TODO 占位退役):auto 经内容嗅探后
+    不应残留到本函数 —— .txt/.text 已改走嗅探。真被调到即上游契约
+    破裂,显式报错而非静默产出无人消费的 __raw_text__ 标记 dict;
+    真文本解析器待真实诉求另立(text 每行一值的形态尚无消费面)。"""
+    raise InputError(
+        "输入既不是可解析的 JSON 也不是 YAML。如为自由文本格式,"
+        "请改用 json/yaml 提供结构化用例(自由文本解析器尚未提供)。")
 
 
 def normalize_input(

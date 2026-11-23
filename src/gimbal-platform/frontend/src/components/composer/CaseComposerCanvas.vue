@@ -306,7 +306,10 @@
             <div v-else-if="activeIoTab === 'request'" class="cf-item">
               <!-- C 组(2026-10-14):GET/HEAD 的 body 引擎按 query 参数发,
                    标签随方法切换,不再让用户以为在写请求体 -->
-              <span class="cf-label">{{ ['GET', 'HEAD'].includes(stepMethod(currentStep) || '') ? 'query 参数 (JSON)' : 'body (JSON)' }}</span>
+              <!-- D9(登记册,2026-11-23):标签随 projMethod(契约投影优先,
+                   步骤自带 method 兜底)响应 —— 契约加载后 GET 标签不再
+                   瞬时回落 body 字样误导 -->
+              <span class="cf-label">{{ ['GET', 'HEAD'].includes(projMethod || '') ? 'query 参数 (JSON)' : 'body (JSON)' }}</span>
               <textarea
                 :value="JSON.stringify(currentStep.request?.body || {}, null, 2)"
                 rows="5"

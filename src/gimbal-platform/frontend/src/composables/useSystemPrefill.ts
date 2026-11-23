@@ -63,9 +63,15 @@ function mergeConfig(base: ConfigView | null, parts: ConfigView[]): ConfigView {
   }
 }
 
-export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boolean>): void {
+export function useSystemPrefill(
+  definition: Ref<ScenarioView>, isNew: Ref<boolean>,
+): { prefilledVars: Ref<ReadonlySet<string>> } {
   /** 首次预填是否已成功(成功后切换系统不重载)。 */
   const prefilled = ref(false)
+  /** 本轮预填种入 config.vars 的变量名(D6:lintDraft 豁免集 —— 预填
+   * 素材未接线前的保存不再报「死数据」自造噪音;接线或删除后豁免
+   * 自然失效)。 */
+  const prefilledVars = ref<ReadonlySet<string>>(new Set())
 
   /** 守卫:仅「新建 + 未预填过 + config/resource 还是原始默认」时放行。 */
   function shouldPrefill(): boolean {
@@ -93,10 +99,12 @@ export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boole
               [ConfigView | null, Record<string, ResourceView>]
             >),
         ])
-        definition.value.config = mergeConfig(
+        const mergedConfig = mergeConfig(
           commonConfig,
           systemParts.map(([cfg]) => cfg).filter((cfg): cfg is ConfigView => !!cfg),
         )
+        definition.value.config = mergedConfig
+        prefilledVars.value = new Set(Object.keys(mergedConfig.vars ?? {}))
         const resources = Object.assign(
           {}, ...systemParts.map(([, res]) => res),
         )
@@ -120,4 +128,5 @@ export function useSystemPrefill(definition: Ref<ScenarioView>, isNew: Ref<boole
     // immediate:新建场景默认 system:['fin'] 视为已选,进页即预填
     { immediate: true, deep: true },
   )
+  return { prefilledVars }
 }

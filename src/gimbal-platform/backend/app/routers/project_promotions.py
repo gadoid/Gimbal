@@ -224,6 +224,11 @@ async def approve_promotion(
     项目层(合并写)。decisions 须覆盖全部冲突路径。"""
     promo = await _load_promo(db, promo_id)
     await require_project_admin(db, promo.project_id, user)
+    # C9(2026-11-23 审计):行锁串行化裁决 —— 读-判-写在无锁下存在
+    # TOCTOU(并发双批 → execute_promotion_copy 双份副本 + 双份 grants);
+    # 同事务持锁至 commit,状态判定与复制原子化(先例 integration_runner
+    # 实例行 with_for_update)。
+    await db.refresh(promo, with_for_update=True)
     if promo.status != "pending":
         raise HTTPException(409, detail={
             "code": "not_pending",
@@ -278,6 +283,8 @@ async def reject_promotion(
 ) -> dict:
     promo = await _load_promo(db, promo_id)
     await require_project_admin(db, promo.project_id, user)
+    # C9:行锁串行化裁决(同 approve 口径)
+    await db.refresh(promo, with_for_update=True)
     if promo.status != "pending":
         raise HTTPException(409, detail={
             "code": "not_pending",
@@ -321,6 +328,8 @@ async def withdraw_promotion(
     if promo.applicant_id != user.id:
         raise HTTPException(404, detail={
             "code": "not_found", "message": f"promotion not found: {promo_id}"})
+    # C9:行锁串行化撤回(同 approve/reject 口径)
+    await db.refresh(promo, with_for_update=True)
     if promo.status != "pending":
         raise HTTPException(409, detail={
             "code": "not_pending",

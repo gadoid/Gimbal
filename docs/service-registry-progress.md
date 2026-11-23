@@ -2293,6 +2293,36 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   `_fanout_pool_scaffold`/`_drain_and_finalize` §7 顺序不变量单点)
   + `_fanout` 双链 docstring 清账;**百行函数 25→5**(dispatch_target
   652/_fanout 573/_fanout_graph 403/_row 293 留后续切片)。
+- **批次 4 快赢池(2026-11-23,🟢)**:
+  - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
+    json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本
+    在双解析失败处得到明确 InputError,不再静默产出无人消费的
+    __raw_text__ dict);+8 测试(此前该面零覆盖)。
+  - **D 区快赢 ×3 + 对比度**:D9 请求标签随 projMethod 响应化(契约
+    加载后 GET 不再瞬时回落 body 字样);D6 预填变量 lint 豁免
+    (useSystemPrefill 种子集 → lintDraft exemptVars,未接线素材
+    不再报死数据噪音);D7 carry 漂移面板无漂移系统折叠(250 系统
+    6000px 不可用 → 漂移者全展 + 无漂移单行可展开组);**夜间灰字
+    对比度实证修复**:ink-3/tertiary 三族 #6f6f6f 在纯黑仅 4.18:1
+    (表头底 3.46:1,截图轮观察项证实)→ #909090(黑底 6.58:1 全
+    AA);**新发现挂账**:日面 tertiary #94a3b8 仅 2.56:1(连
+    large-text 都不达),登记册 D 区观察。
+  - **引擎树 review 修复(B6③ 验证面补漏)**:引擎测试树
+    (tests/unit+integration,CI 范围)首次纳入收尾验证 —— B6③ 漏跑
+    该树致三处死/旧测试:platform_compat/test_launcher_dual_read
+    (测已删 parse_run_result)删;characterization/test_migration_script
+    (测 11-22 已退役脚本)删;integration/test_launch_leak_guard
+    (launch 形态泄漏守卫,server 同性质已被 test_server_selfexit 三测
+    完整覆盖)删;run_materialize 过期断言(11-21 authored 层退役漏改)
+    随终态口径更新。引擎树 **745 passed**。
+  - **C9 并发写点审计落地**(docs/concurrency-write-audit-20261123.md,
+    12 写点清单化):唯一真竞态 promotions 裁决 TOCTOU(读-判-写无锁
+    → 并发双批双份 grants/副本)**本批修复**(三端点行锁串行化,
+    先例 integration_runner);revoke_grants 粒度维持 E 区挂账。
+  - **C8 顺延**:「第 5 类」方法论源(一期 14 类问题清单)未存档,
+    需以新口径重定义约束面后独立一批。
+  - 验证:平台后端 2161+2、前端 **1538+1**(基线+2)、引擎 **745**、
+    契约双守卫绿。
   验证:后端全量 **2161 passed + 2 skipped**(0 failed;较 2188 净
     减 27 = launcher 专属测试三文件 + 双链等价臂);契约快照重生
     (openapi noop、error-codes 行号位移)。
