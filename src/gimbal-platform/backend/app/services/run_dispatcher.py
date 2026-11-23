@@ -2682,40 +2682,17 @@ async def _fanout(
                 return
             # 交叉组合序(spec v3 §3):行值合入(vars)→ 条目 Assign 直补
             # + asserts patch — 偏离最后生效。基线/无行维度 = 空行字典。
-            row_dict = run_prepare.strip_row_binding_columns(row)
             # M2b Q3:本行凭证组(账号列覆盖执行级取用)
             row_exec_auths = run_prepare.apply_row_bindings(
                 exec_auths, row, row_auths_map)
-            composed = compose_scenario(scenario_payload, row_dict)
-            if injection is not None:
-                composed = compose_injection_scenario(composed, injection)
-            # 每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
-            # 原生报告目录;stem 带 dataset/row/rep 定位,便于事后审计。
-            # stem 三定位(spec v3 §4 审计):数据集(或 baseline)+ 行号
-            # + 条目 id(无注入省略)+ rep,如 case-003-ds-x-r1-inj-inj-2-n0。
-            stem = (
-                f"case-{seq:03d}-{ds['datasetId'] or 'baseline'}-r{row_idx}"
-                + (f"-inj-{injection_id}" if injection_id else "")
-                + f"-n{rep}"
-            )
-            case_dir = run_dir / stem
-            ts = _utcnow().isoformat() + "Z"
-            log_line = {
-                "ts": ts,
-                "runId": run_id,
-                "executionId": execution_id,
-                "seq": seq,
-                "scenarioId": composed.get("scenarioId"),
-                "datasetId": ds_id,
-                "injectionId": injection_id,
-                "rowIndex": row_idx,
-                "rep": rep,
-                "status": "dispatched",
-                "casePath": str((case_dir / "case.json")),
-                "reportDir": str((case_dir / "reports")),
-            }
-            state.status = "dispatched"
-            state.started_at = ts
+            # 派发头(组合 + case 目录 + 日志行 + state 置 dispatched)→
+            # _row_dispatch_head
+            composed, case_dir, log_line = _row_dispatch_head(
+                scenario_payload=scenario_payload, run_dir=run_dir,
+                run_id=run_id, execution_id=execution_id, seq=seq,
+                ds=ds, row_idx=row_idx, row=row, rep=rep,
+                injection=injection, ds_id=ds_id, injection_id=injection_id,
+                state=state)
 
             try:
                 if _breaker_open():
@@ -2728,15 +2705,9 @@ async def _fanout(
                         "consecutive unavailable"
                     )
                 else:
-                    cache_key = _convert_cache_key(composed)
-                    if cache_key in convert_cache:
-                        # 防御性深拷贝:materialize_run_copy 虽是纯函数,
-                        # 任何未来的原地注入仍不得污染缓存共享引用。
-                        convert_data = copy.deepcopy(convert_cache[cache_key])
-                    else:
-                        convert_data = await plate_client.convert(composed)
-                        # 入缓存的是物化前原始快照(注入只进 run 副本)。
-                        convert_cache[cache_key] = copy.deepcopy(convert_data)
+                    # convert memo(P6,fan-out 级)→ _row_convert_cached
+                    convert_data = await _row_convert_cached(
+                        composed, convert_cache)
                     plate_state["consecutive_unavailable"] = 0
                     # Convert succeeded — hand the gimbal-shaped product to the
                     # engine. 明文 users 不流经 plate(池凭证经 materialize
@@ -2748,23 +2719,10 @@ async def _fanout(
                     converted = convert_data.get("converted") or {}
                     # M2 §5.1:/convert 响应附带的构建身份 → 转交执行器（代际门）
                     m2_info = convert_data.get("m2") or None
-                    # W21/挂账二.1:M2 构建身份派发回填 —— 身份落
-                    # executions.m2_hash(整执行同源,首行一次;台账性质,
-                    # 失败不阻断执行)。
-                    if (m2_info and m2_info.get("hash")
-                            and not plate_state.get("m2_hash_written")):
-                        plate_state["m2_hash_written"] = True
-                        try:
-                            from sqlalchemy import update as sa_update
-                            async with db_factory() as _m2_sess:
-                                await _m2_sess.execute(
-                                    sa_update(Execution)
-                                    .where(Execution.id == execution_id)
-                                    .values(m2_hash=str(m2_info["hash"])))
-                                await _m2_sess.commit()
-                        except Exception:  # noqa: BLE001
-                            logger.warning(
-                                "m2_hash 回填失败 (execution={})", execution_id)
+                    # W21/挂账二.1:m2_hash 派发回填(首行一次)→
+                    # _record_m2_hash_once
+                    await _record_m2_hash_once(
+                        db_factory, execution_id, m2_info, plate_state)
                     # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
                     # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
                     # services 物化(authored > ③ 环境部署地址)。
@@ -2774,94 +2732,29 @@ async def _fanout(
                         built_in_users=built_in_users,
                         carry_context=carry_ctx,
                         alias_base_urls=prep.alias_base_urls,
-
                     )
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)
-                    # P7 全局并发闸:进程级 launch 在飞上限(跨 execution
-                    # 合并生效;行级 sem 只管单 execution 的 parallel)。
-                    if True:
-                        # (C11:P7 全局 launch 闸退役——并发由 worker 数与
-                        # 行级 sem 界定)P2-04 事件投影:本行的 scenario.end/run.finished
-                        # 单独摘出(状态/attempts/unit 由此投影;无事件路径
-                        # —— PlateMock/旧引擎 —— 回退 launch 结果推导)。
-                        def _row_on_event(d: dict, _p=proj, _seq=seq) -> None:
-                            et = d.get("event_type")
-                            # B3:步骤结果按行归属(同场景多行的 unit 标签相同,
-                            # 只能靠行号区分);insert_events 取走、不进 payload
-                            if et == "step.end":
-                                d = {**d, "row_seq": _seq}
-                            if et == "scenario.end":
-                                _p["status"] = d.get("status")
-                                _p["unit"] = d.get("unit") or _p["unit"]
-                            elif et == "run.finished":
-                                # attempts 缺省(旧引擎)=0 → 行级回退 1
-                                _p["attempts"] = int(d.get("attempts") or 0)
-                                _p["unit"] = d.get("unit") or _p["unit"]
-                            ingester.on_event(d)
-
-                        # C12:server 链(B6③ 后单链;调试同路) —— SSE
-                        # 事件同一回调面;超时由 run_case 内部 cancel 收口。
-                        # P3.5-1:实例经槽位池借还,parallel>1 的多行
-                        # 各占一个实例,不再撞引擎单 run 409
-                        result = await server_pool.run_case(
-                            case_path, halt_at=halt_at, n_runs=n_runs,
-                            debug=debug, on_event=_row_on_event,
-                            m2_info=m2_info)
-                        # B6:记下 server 槽号——case-artifact 的引擎日志按它路由到
-                        # server-engine[-N].log(多 worker 时不再 404)
-                        state.server_slot = getattr(result, "server_slot", None)
-                    log_line["runResult"] = result.run_result
-                    if result.launch_status != "ok":
-                        # 子进程层故障(超时 kill / spawn 失败):记失败但
-                        # 不中断后续行(fan-out 永不因单行崩溃)。
-                        log_line["status"] = (
-                            "launch_timeout"
-                            if result.launch_status == "timeout"
-                            else "launch_error"
-                        )
-                        log_line["runError"] = result.error
-                        logger.warning(
-                            "run_dispatcher: launch {} for row {}/{}#{}: {}",
-                            result.launch_status, row_src, row_idx, rep,
-                            result.error,
-                        )
-                    elif proj["status"] is not None:
-                        # P2-04:scenario.end 事件投影(执行器权威);
-                        # passed 之外一律 failed(与 exit 判定同口径)
-                        log_line["status"] = (
-                            "passed" if proj["status"] == "passed" else "failed"
-                        )
-                        logger.info(
-                            "run_dispatcher: row {}/{} projected by events: "
-                            "unit={} status={} attempts={}",
-                            row_src, row_idx, proj["unit"], proj["status"],
-                            proj["attempts"],
-                        )
-                    elif result.exit_code == 0:
-                        log_line["status"] = "passed"
-                        logger.info(
-                            "run_dispatcher: row {}/{}#{} executed: exit=0 passed={} failed={}",
-                            row_src, row_idx, rep,
-                            result.passed, result.failed,
-                        )
-                    elif result.exit_code == 2:
-                        # 引擎 Scenario 校验拒绝(与 HTTP 422 同源)。
-                        log_line["status"] = "gimbal_rejected"
-                        log_line["runError"] = result.error
-                        logger.warning(
-                            "run_dispatcher: gimbal rejected row {}/{}#{}: {}",
-                            row_src, row_idx, rep, result.error,
-                        )
-                    else:
-                        # exit 1 = 测试失败(正常业务结果);>=3 = 引擎侧错误。
-                        log_line["status"] = "failed"
-                        log_line["runError"] = result.error
-                        logger.info(
-                            "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
-                            row_src, row_idx, rep, result.exit_code,
-                            result.passed, result.failed,
-                        )
+                    # P2-04 行事件投影器 → _row_event_projection。
+                    # (C11:P7 全局 launch 闸退役 —— 并发由 worker 数与
+                    # 行级 sem 界定)
+                    on_event = _row_event_projection(proj, seq, ingester)
+                    # C12:server 链(B6③ 后单链;调试同路) —— SSE
+                    # 事件同一回调面;超时由 run_case 内部 cancel 收口。
+                    # P3.5-1:实例经槽位池借还,parallel>1 的多行
+                    # 各占一个实例,不再撞引擎单 run 409
+                    result = await server_pool.run_case(
+                        case_path, halt_at=halt_at, n_runs=n_runs,
+                        debug=debug, on_event=on_event,
+                        m2_info=m2_info)
+                    # B6:记下 server 槽号——case-artifact 的引擎日志按它路由到
+                    # server-engine[-N].log(多 worker 时不再 404)
+                    state.server_slot = getattr(result, "server_slot", None)
+                    # 行终态推导(runResult 落档 + 事件投影 > exit 判定)→
+                    # _row_status_from_result
+                    _row_status_from_result(
+                        result, proj, log_line,
+                        row_src=row_src, row_idx=row_idx, rep=rep)
             except plate_client.PlateUnavailableError as e:
                 plate_state["consecutive_unavailable"] += 1
                 log_line["status"] = "plate_unavailable"
@@ -2882,64 +2775,16 @@ async def _fanout(
             if "runResult" in log_line:
                 _write_result_evidence(case_dir, result, log_line["status"])
 
-            # T7-Q1:final 行 ts 刷新为完成时刻 — log_line 的 ts 构造于
-            # 派发时刻,沿用会让 JSONL 回放的 finishedAt == startedAt
-            # (行时长恒为 0)。同一时刻写 registry,两读路口径一致。
-            finished_ts = _utcnow().isoformat() + "Z"
-            log_line["ts"] = finished_ts
-
-            # 行终态落 registry(spec §9.1):完成时刻 + case stem(供
-            # 工件端点)。M6:终态即落 DB(崩溃窗口不丢),行级 JSONL 停写。
-            state.status = log_line["status"]
-            state.finished_at = finished_ts
-            state.case_dir = case_dir.name
-            # B3:行级失败原因入库 —— 引擎结果错误优先,派发层异常次之
-            # (plate/熔断/未知异常分支写 "error" 键);passed/canceled 恒
-            # 无键 → None。[:2000] 防超长(引擎 error 形态不可控)。
-            state.run_error = (
-                log_line.get("runError") or log_line.get("error")) or None
-            if state.run_error is not None:
-                state.run_error = str(state.run_error)[:2000]
-            # P2-04/P2-05:单元列投影(unit 取事件标签;attempts 取
-            # run.finished 单列,缺省回退 launch 解析值,再缺省 1)
-            state.unit_id = proj["unit"] or "u"
-            state.attempts = (
-                proj["attempts"]
-                or int(getattr(result, "attempts", 0) or 0)
-                or 1
-            )
-            await _persist_row_terminal(db_factory, execution_id, state)
-
-            # Atomic per-row counter bump.  Deltas (not absolute
-            # write-backs) so concurrent rows and concurrent UI
-            # deletions (MAX(0, col-1) SQL) compose correctly.
-            passed = 1 if log_line["status"] == "passed" else 0
-            # S5:引擎 run.finished 的 skipped 计数随行累加(plate 异常/
-            # 校验拒绝分支无引擎结果,恒 0)
-            row_skipped = (
-                int(getattr(result, "skipped", 0) or 0)
-                if "runResult" in log_line else 0
-            )
-            await _bump_counters(
-                db_factory, execution_id, passed=passed, failed=1 - passed,
-                skipped=row_skipped,
-            )
-
-            # P2-4(webhook 设计 v3 §5.5/D10):单 case 执行(行数为 1)
-            # 在行完成处把提取产物脱敏后写进 ``config_json.outputs``
-            # (唯一例外键,见 models.execution 注释)—— 终态迁移组装
-            # 回调 payload 时读取;发生在 finalize/终态之前,顺序保证
-            # 回调拿得到。多行执行不写、回调 outputs=null。best-effort:
-            # 写失败只丢回调里的 outputs,不影响行/终态。
-            if len(entries) == 1 and "runResult" in log_line:
-                _outputs: dict = {}
-                for _d in (getattr(result, "details", None) or []):
-                    if (isinstance(_d, dict)
-                            and isinstance(_d.get("outputs"), dict)):
-                        _outputs.update(_d["outputs"])
-                if _outputs:
-                    await _store_single_case_outputs(
-                        db_factory, execution_id, _outputs)
+            # 行终态落 registry + DB(spec §9.1)→ _row_settle_terminal
+            await _row_settle_terminal(
+                db_factory, execution_id, state, log_line, case_dir,
+                proj, result)
+            # 行级计数 + 单 case outputs(webhook v3 §5.5/D10)→
+            # _row_count_and_outputs
+            await _row_count_and_outputs(
+                db_factory, execution_id,
+                log_line=log_line, result=result,
+                single_case=(len(entries) == 1))
 
     # (dataset row × injection entry × repeat) 交叉笛卡尔积(spec v3 §4):
     # injections 已含 None 占位(未选条目时 = [None],恰一次无注入组合)。
@@ -3035,6 +2880,223 @@ async def _fanout(
             await _finalize_execution(db_factory, execution_id)
     finally:
         await _teardown()
+
+
+# ── 行执行体辅助(C1 切片 4,2026-11-23)────────────────────────────
+# _fanout._row 闭包的具名缝:派发头 / convert memo / m2 回填 / 事件投影
+# / 终态推导 / registry 收口 / 计数+outputs。行任务体只保留编排序。
+
+def _row_dispatch_head(*, scenario_payload: dict, run_dir: Path,
+                       run_id: str, execution_id: int, seq: int,
+                       ds: dict | None, row_idx: int, row: dict | None,
+                       rep: int, injection: dict | None, ds_id, injection_id,
+                       state: RowState) -> tuple:
+    """行派发头(交叉组合序,spec v3 §3):行值合入(vars)→ 条目
+    Assign 直补 + asserts patch — 偏离最后生效。基线/无行维度 = 空行
+    字典。每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
+    原生报告目录;stem 带 dataset/row/rep 定位,便于事后审计。stem
+    三定位(spec v3 §4 审计):数据集(或 baseline)+ 行号 + 条目 id
+    (无注入省略)+ rep,如 case-003-ds-x-r1-inj-inj-2-n0。
+    返回 (composed, case_dir, log_line);state 记 dispatched/started_at。
+    """
+    row_dict = run_prepare.strip_row_binding_columns(row)
+    composed = compose_scenario(scenario_payload, row_dict)
+    if injection is not None:
+        composed = compose_injection_scenario(composed, injection)
+    stem = (
+        f"case-{seq:03d}-{ds['datasetId'] or 'baseline'}-r{row_idx}"
+        + (f"-inj-{injection_id}" if injection_id else "")
+        + f"-n{rep}"
+    )
+    case_dir = run_dir / stem
+    ts = _utcnow().isoformat() + "Z"
+    log_line = {
+        "ts": ts,
+        "runId": run_id,
+        "executionId": execution_id,
+        "seq": seq,
+        "scenarioId": composed.get("scenarioId"),
+        "datasetId": ds_id,
+        "injectionId": injection_id,
+        "rowIndex": row_idx,
+        "rep": rep,
+        "status": "dispatched",
+        "casePath": str((case_dir / "case.json")),
+        "reportDir": str((case_dir / "reports")),
+    }
+    state.status = "dispatched"
+    state.started_at = ts
+    return composed, case_dir, log_line
+
+
+async def _row_convert_cached(composed: dict,
+                              convert_cache: dict) -> dict:
+    """fan-out 级 convert memo(P6,整单一次 compose 时间戳 → 同行
+    n_runs 次重复的 convert 输入完全一致,memo 键才能命中):命中取
+    防御性深拷贝(materialize_run_copy 虽是纯函数,任何未来的原地注入
+    仍不得污染缓存共享引用);未命中调 plate,入缓存的是物化前原始快照
+    (注入只进 run 副本)。
+    """
+    cache_key = _convert_cache_key(composed)
+    if cache_key in convert_cache:
+        return copy.deepcopy(convert_cache[cache_key])
+    convert_data = await plate_client.convert(composed)
+    convert_cache[cache_key] = copy.deepcopy(convert_data)
+    return convert_data
+
+
+async def _record_m2_hash_once(db_factory: Any, execution_id: int,
+                               m2_info: dict | None,
+                               plate_state: dict) -> None:
+    """W21/挂账二.1:M2 构建身份派发回填 —— 身份落 executions.m2_hash
+    (整执行同源,首行一次;台账性质,失败不阻断执行)。
+    """
+    if not (m2_info and m2_info.get("hash")
+            and not plate_state.get("m2_hash_written")):
+        return
+    plate_state["m2_hash_written"] = True
+    try:
+        from sqlalchemy import update as sa_update
+        async with db_factory() as _m2_sess:
+            await _m2_sess.execute(
+                sa_update(Execution)
+                .where(Execution.id == execution_id)
+                .values(m2_hash=str(m2_info["hash"])))
+            await _m2_sess.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("m2_hash 回填失败 (execution={})", execution_id)
+
+
+def _row_event_projection(proj: dict, seq: int,
+                          ingester: _EventIngester) -> Callable[[dict], None]:
+    """P2-04 行事件投影器:本行的 scenario.end/run.finished 单独摘出
+    (状态/attempts/unit 由此投影;无事件路径 —— PlateMock/旧引擎 ——
+    回退 launch 结果推导)。B3:步骤结果按行归属(同场景多行的 unit
+    标签相同,只能靠行号区分);insert_events 取走、不进 payload。
+    """
+
+    def _row_on_event(d: dict) -> None:
+        et = d.get("event_type")
+        if et == "step.end":
+            d = {**d, "row_seq": seq}
+        if et == "scenario.end":
+            proj["status"] = d.get("status")
+            proj["unit"] = d.get("unit") or proj["unit"]
+        elif et == "run.finished":
+            # attempts 缺省(旧引擎)=0 → 行级回退 1
+            proj["attempts"] = int(d.get("attempts") or 0)
+            proj["unit"] = d.get("unit") or proj["unit"]
+        ingester.on_event(d)
+
+    return _row_on_event
+
+
+def _row_status_from_result(result: Any, proj: dict, log_line: dict, *,
+                            row_src: str, row_idx: int, rep: int) -> None:
+    """launch 成功路径的行终态推导(直接写 log_line 的 status/runError
+    并落对应日志行):事件投影(scenario.end,执行器权威;passed 之外
+    一律 failed,与 exit 判定同口径)> exit 0 / 2(gimbal 校验拒绝,
+    与 HTTP 422 同源)/ exit 1 = 测试失败(正常业务结果)、>=3 引擎侧
+    错误。launch 非 ok(超时 kill / spawn 失败):记失败但不中断后续行
+    (fan-out 永不因单行崩溃)。
+    """
+    log_line["runResult"] = result.run_result
+    if result.launch_status != "ok":
+        log_line["status"] = (
+            "launch_timeout" if result.launch_status == "timeout"
+            else "launch_error")
+        log_line["runError"] = result.error
+        logger.warning(
+            "run_dispatcher: launch {} for row {}/{}#{}: {}",
+            result.launch_status, row_src, row_idx, rep, result.error)
+        return
+    if proj["status"] is not None:
+        log_line["status"] = (
+            "passed" if proj["status"] == "passed" else "failed")
+        logger.info(
+            "run_dispatcher: row {}/{} projected by events: "
+            "unit={} status={} attempts={}",
+            row_src, row_idx, proj["unit"], proj["status"], proj["attempts"])
+        return
+    if result.exit_code == 0:
+        log_line["status"] = "passed"
+        logger.info(
+            "run_dispatcher: row {}/{}#{} executed: exit=0 passed={} failed={}",
+            row_src, row_idx, rep, result.passed, result.failed)
+        return
+    if result.exit_code == 2:
+        log_line["status"] = "gimbal_rejected"
+        log_line["runError"] = result.error
+        logger.warning(
+            "run_dispatcher: gimbal rejected row {}/{}#{}: {}",
+            row_src, row_idx, rep, result.error)
+        return
+    log_line["status"] = "failed"
+    log_line["runError"] = result.error
+    logger.info(
+        "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
+        row_src, row_idx, rep, result.exit_code, result.passed, result.failed)
+
+
+async def _row_settle_terminal(db_factory: Any, execution_id: int,
+                               state: RowState, log_line: dict,
+                               case_dir: Path, proj: dict,
+                               result: Any) -> None:
+    """行终态落 registry + DB(spec §9.1):T7-Q1 final 行 ts 刷新为
+    完成时刻 — log_line 的 ts 构造于派发时刻,沿用会让 JSONL 回放的
+    finishedAt == startedAt(行时长恒为 0);同一时刻写 registry,两读路
+    口径一致。M6:终态即落 DB(崩溃窗口不丢),行级 JSONL 停写。
+    B3:行级失败原因入库 —— 引擎结果错误优先,派发层异常次之
+    (plate/熔断/未知异常分支写 "error" 键);passed/canceled 恒无键 →
+    None,[:2000] 防超长(引擎 error 形态不可控)。
+    P2-04/P2-05:单元列投影(unit 取事件标签;attempts 取 run.finished
+    单列,缺省回退 launch 解析值,再缺省 1)。
+    """
+    finished_ts = _utcnow().isoformat() + "Z"
+    log_line["ts"] = finished_ts
+    state.status = log_line["status"]
+    state.finished_at = finished_ts
+    state.case_dir = case_dir.name
+    state.run_error = (
+        log_line.get("runError") or log_line.get("error")) or None
+    if state.run_error is not None:
+        state.run_error = str(state.run_error)[:2000]
+    state.unit_id = proj["unit"] or "u"
+    state.attempts = (
+        proj["attempts"] or int(getattr(result, "attempts", 0) or 0) or 1)
+    await _persist_row_terminal(db_factory, execution_id, state)
+
+
+async def _row_count_and_outputs(db_factory: Any, execution_id: int, *,
+                                 log_line: dict, result: Any,
+                                 single_case: bool) -> None:
+    """行级计数 + 单 case outputs:
+    计数原子增量(Deltas 而非绝对回写)—— 并发行与并发 UI 删除
+    (MAX(0, col-1) SQL)可组合。S5:引擎 run.finished 的 skipped 计数
+    随行累加(plate 异常/校验拒绝分支无引擎结果,恒 0)。
+    P2-4(webhook 设计 v3 §5.5/D10):单 case 执行(行数为 1)在行完成
+    处把提取产物脱敏后写进 ``config_json.outputs``(唯一例外键,见
+    models.execution 注释)—— 终态迁移组装回调 payload 时读取;发生在
+    finalize/终态之前,顺序保证回调拿得到。多行执行不写、回调
+    outputs=null。best-effort:写失败只丢回调里的 outputs,不影响行/终态。
+    """
+    passed = 1 if log_line["status"] == "passed" else 0
+    row_skipped = (
+        int(getattr(result, "skipped", 0) or 0)
+        if "runResult" in log_line else 0
+    )
+    await _bump_counters(
+        db_factory, execution_id, passed=passed, failed=1 - passed,
+        skipped=row_skipped)
+    if not (single_case and "runResult" in log_line):
+        return
+    _outputs: dict = {}
+    for _d in (getattr(result, "details", None) or []):
+        if (isinstance(_d, dict)
+                and isinstance(_d.get("outputs"), dict)):
+            _outputs.update(_d["outputs"])
+    if _outputs:
+        await _store_single_case_outputs(db_factory, execution_id, _outputs)
 
 
 async def _mark_running(db_factory: Any, execution_id: int) -> None:

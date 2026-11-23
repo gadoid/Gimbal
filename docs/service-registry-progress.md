@@ -2335,6 +2335,27 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   验证:全量 **2160+2** + 契约行号位移重生(2 行)后守卫绿;
   取消/恢复域 51 对拍绿。余量:_fanout 573(C1 切片 1 已抽执行前置
   四缝)/_row 293 留切片 4。
+- **批次 3 切片 4(2026-11-23,🟢)**:_fanout._row 嵌套闭包 293→138
+  (_fanout 本体 573→418),七缝抽离(抽缝不改语义,cases 域对拍
+  91+67 全绿):
+  `_row_dispatch_head`(交叉组合序 + case 目录 stem 三定位 + 派发
+  日志行 + state 置 dispatched)/`_row_convert_cached`(P6 fan-out 级
+  convert memo,命中防御性深拷贝)/`_record_m2_hash_once`(W21 首行
+  一次回填,失败不阻断)/`_row_event_projection`(P2-04 行投影器,
+  B3 步骤结果按行归属)/`_row_status_from_result`(runResult 落档 +
+  事件投影 > exit 0/2/1 判定序)/`_row_settle_terminal`(T7-Q1 final
+  ts 刷新 + registry + M6 终态即落 DB + B3 失败原因入库 + 单元列投影)/
+  `_row_count_and_outputs`(原子计数增量 + 单 case outputs 落
+  config_json)。行任务体只保留编排序(信号量准入/取消门/熔断/异常
+  捕获面)。ruff 画像与基线一致(零新增)。
+  **勘误(套件提速误关)**:本轮全量验证沿用了早前排查期的
+  `-o addopts=""`,把 pyproject 缺省的 xdist `-n auto`(2026-11-21
+  提速项,每进程 pid 命名 schema 池)关成了单进程 —— 单进程
+  18min40s vs 缺省并行 **141.8s(16 核,7.7×)**,结果完全一致
+  (2160+2)。后续全量一律走缺省参数;切片 2/3 的全量耗时同因,
+  结论不受影响(只是慢,不是错)。验证:全量 **2160+2**(xdist
+  缺省)+ 契约行号位移重生(2 行)后守卫绿。余量:_fanout 尾部
+  编排队 418(切片 1 已抽执行前置四缝)。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本
