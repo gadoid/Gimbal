@@ -256,7 +256,7 @@ class TestApprovalFlow:
 
         from app.core import db as db_module
         from app.models.composer_scenario import ComposerScenario
-        from app.models.permission import Notification
+        from app.models.permission import AuditLog, Notification
 
         async with db_module.SessionLocal() as db:
             row = (await db.execute(sa_select(ComposerScenario).where(
@@ -266,6 +266,17 @@ class TestApprovalFlow:
                 Notification.type == "project_promotion.approved"
             ))).scalars().all()
             assert len(notes) == 1
+            # 审批裁决入审计(0-2 批次 2026-11-23):动作/资源/detail 坐标
+            audits = (await db.execute(sa_select(AuditLog).where(
+                AuditLog.action == "promotion.approve"))).scalars().all()
+            assert len(audits) == 1
+            a = audits[0]
+            assert a.resource_type == "project_promotion"
+            assert a.resource_id == str(promo_id)
+            assert a.detail["project_id"] == pid
+            assert a.detail["kind"] == "scenario"
+            assert a.detail["source_id"] == "sc-s72-f"
+            assert a.detail["conflicts"] == 2
         # 已批准再批 → 409
         r = await client.post(
             f"/api/project-promotions/{promo_id}/approve", headers=h_adm,
@@ -296,6 +307,18 @@ class TestApprovalFlow:
             json={"reason": "项目层用新网关,不采纳旧值"})
         assert r.status_code == 200
         assert r.json()["status"] == "rejected"
+        # 驳回入审计(reason 随行;0-2 批次 2026-11-23)
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.permission import AuditLog
+
+        async with db_module.SessionLocal() as db:
+            audits = (await db.execute(sa_select(AuditLog).where(
+                AuditLog.action == "promotion.reject"))).scalars().all()
+            assert len(audits) == 1
+            assert audits[0].resource_id == str(promo_id)
+            assert audits[0].detail["reason"] == "项目层用新网关,不采纳旧值"
         # 已驳回不能撤回(非 pending)
         r = await client.post(
             f"/api/project-promotions/{promo_id}/withdraw", headers=h_m)
@@ -312,6 +335,16 @@ class TestApprovalFlow:
         r = await client.post(
             f"/api/project-promotions/{promo_id}/withdraw", headers=h_m)
         assert r.status_code == 200 and r.json()["status"] == "withdrawn"
+        # withdraw 是申请人自操作,非特权写 —— 不入审计(0-2 批次口径)
+        from sqlalchemy import select as sa_select
+
+        from app.core import db as db_module
+        from app.models.permission import AuditLog
+
+        async with db_module.SessionLocal() as db:
+            rows = (await db.execute(sa_select(AuditLog).where(
+                AuditLog.action.like("promotion.%")))).scalars().all()
+            assert rows == []
 
 
 class TestSuitePromotion:

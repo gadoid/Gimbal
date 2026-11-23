@@ -148,6 +148,18 @@ async def executions_summary(
             )
         )
     ).scalar_one()
+    # 今日执行次数(stitch 0-2 批次 2026-11-23):活动量口径 —— 自然日
+    # 锚 created_at,服务器时区零点起算(astimezone 把 naive 本地时刻
+    # 携带上时区,与 timestamptz 列可比较),含进行中单,不受窗约束。
+    today_start = datetime.now().astimezone().replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    today_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(Execution)
+            .where(scope, Execution.created_at >= today_start)
+        )
+    ).scalar_one()
 
     total_runs = passed = failed = 0
     durations: list[float] = []
@@ -183,6 +195,7 @@ async def executions_summary(
         avg_duration_sec=(sum(durations) / len(durations)) if durations else None,
         repeat_failure_scenarios=len(repeat_scenarios),
         active_executions=int(active),
+        today_executions=int(today_count),
     )
 
 

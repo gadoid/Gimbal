@@ -45,7 +45,7 @@
 | 能力 | 缺口 | 级 | 前端落点 |
 |---|---|---|---|
 | ✅ 运行成功率（98.6%） | ~~无项目维度执行聚合端点~~ 已接回：`/executions/summary?projectId=`（2026-11-18） | A | 头卡 `.prj-stats` 第 4 格 `prj-stat-passrate` |
-| 今日执行次数 / 自动化覆盖率 | 无来源 | B | 同上（_2 指标卡） |
+| ✅ 今日执行次数 | 已接回:`/executions/summary` 增 `todayExecutions`(自然日锚 created_at,服务器时区零点,含进行中单,与 windowDays 统计窗独立;2026-11-23) | B | 头卡 `.prj-stats` `prj-stat-today`(自动化覆盖率仍无来源,留池) |
 | ✅ 执行历史/监控指标带项目过滤 | 已接回：executions 列表 `?projectId=` + `ExecutionsList` 深链 chip（2026-11-18；Analytics 延后页仅透传） | A | 头卡按钮跳转带 `query.projectId` |
 
 ### 场景页签（_2）
@@ -55,7 +55,7 @@
 | 被复制次数列 | 无字段（仅 forked_from_id 血缘）；公共页同口径留 `—` | B | 表格加一列（两处：普通/公共桶） |
 | Draft 副本徽章 | 场景无 draft 概念（仅 suite 有 isDraft） | C | 名称旁 chip |
 | ✅ facets 高级筛选（FilterPopover） | 已接回：`/scenarios/facets?projectId=`（读门同项目详情；2026-11-18） | A | 场景页签改共享骨架，FilterPopover 已上 |
-| 按所属 Suite 筛选 | 无反查列表参数（仅 `/scenarios/{id}/suites` 单查） | B | 工具条下拉 |
+| ✅ 按所属 Suite 筛选 | 已接回:场景列表 `?suiteId=`(suite_members 反查下推;空集/不存在 id 恒假不 404;2026-11-23) | B | 工具条下拉 `prj-scen-suite`(project 桶专属,下拉源 = 本项目用例集;读失败不渲染) |
 | 批量导入/导出、批量执行 | 导入仅单 bundle JSON 预检；导出仅单场景；无批量执行端点 | B | 工具条按钮 + 选中态列 |
 | ✅ 快速视图分组（存为分组） | 已接回：filter-groups `project` 桶（按项目 id 隔离，pref key `…project.<id>`；2026-11-18） | A | `useScenarioListView('project')` + `FilterGroups` 已上 |
 
@@ -83,7 +83,7 @@
 |---|---|---|---|
 | 人员加入项目申请（工号/部门/申请角色/理由/SLA/开发者配额） | 现有 `ProjectPromotion` 是**内容**（场景/用例集）进项目的审批，非人员申请；模型无工号/部门/申请角色 | **C（先决策）** | 若立项需新模型 + User 表 department/employee_id 列 |
 | 批量通过 / 批量驳回 / 转派 | 仅逐条端点 | B | 卡片多选 + 批量条 |
-| 审批流/权限变更审计（「完整审计流 128 条」） | promotions 审批动作未入 audit log；`/admin/audit-logs` 仅平台 Admin 且无项目过滤 | B | 面板入口按钮 |
+| ◐ 审批流/权限变更审计（「完整审计流 128 条」） | **审批动作已入 audit log(2026-11-23)**:approve/reject 落 `promotion.approve`/`promotion.reject`(detail 带项目/kind/source/冲突数/reason;withdraw 申请人自操作不记,直通路径溯源走 promotion 行自身);admin 审计页动作表自动可见。**仍缺**:审计页无项目过滤、promotions 面板无入口按钮 | B | 面板入口按钮(后续) |
 | 权限矩阵规则页 | 完全缺失 | C | 「查看完整权限矩阵」入口 |
 
 ### 成员列表页签（_5）

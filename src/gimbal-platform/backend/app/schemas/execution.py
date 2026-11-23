@@ -157,6 +157,10 @@ class ExecutionSummaryOut(BaseModel):
     repeat_failure_scenarios: int = Field(default=0, alias="repeatFailureScenarios")
     # 进行中(queued/running)— 不受窗约束,发起中的单必须可见
     active_executions: int = Field(default=0, alias="activeExecutions")
+    # 今日执行次数(stitch 0-2 批次 2026-11-23):活动量口径 —— 自然日
+    # 锚 created_at(服务器时区零点),含进行中单,与 windowDays 的
+    # 「已完成统计窗」相互独立。
+    today_executions: int = Field(default=0, alias="todayExecutions")
 
 
 class ExecutionRowOut(BaseModel):

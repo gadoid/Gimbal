@@ -360,6 +360,9 @@ export interface ExecutionsSummary {
   avgDurationSec: number | null
   repeatFailureScenarios: number
   activeExecutions: number
+  /** 今日执行次数(stitch 0-2 批次 2026-11-23):自然日锚 created_at
+   *  (服务器时区零点),含进行中单,与 windowDays 统计窗相互独立。 */
+  todayExecutions: number
 }
 
 export function getExecutionsSummary(

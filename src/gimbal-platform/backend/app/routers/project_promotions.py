@@ -23,6 +23,7 @@ from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..core.timeutil import iso_utc_z
 from ..models.project_promotion import ProjectPromotion
+from ..services import audit as audit_svc
 from ..services import notifications as notify_svc
 from ..services.project_promotion import (
     PromotionError,
@@ -257,6 +258,17 @@ async def approve_promotion(
         link=f"/projects/{promo.project_id}",
         payload={"promotionId": promo.id}, commit=False)
     await db.commit()
+    # 审批裁决入审计(0-2 批次 2026-11-23):best-effort,业务已提交;
+    # 裁决明细在 promotion.resolution,审计只记动作与对象坐标。
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="promotion.approve",
+        resource_type="project_promotion", resource_id=str(promo.id),
+        detail={"project_id": promo.project_id, "kind": promo.kind,
+                "source_id": promo.source_id,
+                "conflicts": len(conflicts)},
+    )
     return _promo_out(promo, copy=copy)
 
 
@@ -287,6 +299,17 @@ async def reject_promotion(
     from ..services.project_promotion import revoke_grants
     await revoke_grants(db, promo.id)
     await db.commit()
+    # 驳回入审计(0-2 批次 2026-11-23;同 approve 口径)
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="promotion.reject",
+        resource_type="project_promotion", resource_id=str(promo.id),
+        detail={"project_id": promo.project_id, "kind": promo.kind,
+                "source_id": promo.source_id,
+                "conflicts": len(promo.conflicts or []),
+                "reason": body.reason},
+    )
     return _promo_out(promo)
 
 

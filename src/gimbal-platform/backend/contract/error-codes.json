@@ -296,8 +296,8 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:823",
-        "app/routers/executions.py:852"
+        "app/routers/executions.py:836",
+        "app/routers/executions.py:865"
       ],
       "statuses": [
         404
@@ -360,7 +360,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:814"
+        "app/routers/executions.py:827"
       ],
       "statuses": [
         400
@@ -432,7 +432,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:312"
+        "app/routers/executions.py:325"
       ],
       "statuses": [
         422
@@ -446,7 +446,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:205"
+        "app/routers/executions.py:218"
       ],
       "statuses": [
         404
@@ -668,7 +668,7 @@
         ]
       ],
       "sites": [
-        "app/routers/project_promotions.py:236"
+        "app/routers/project_promotions.py:237"
       ],
       "statuses": [
         422
@@ -1219,7 +1219,7 @@
         ]
       ],
       "sites": [
-        "app/routers/project_promotions.py:123",
+        "app/routers/project_promotions.py:124",
         "app/services/project_promotion.py:474"
       ],
       "statuses": [
@@ -1249,7 +1249,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1091"
+        "app/routers/scenarios.py:1108"
       ],
       "statuses": [
         409
@@ -1305,7 +1305,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:1115"
+        "app/routers/executions.py:1128"
       ],
       "statuses": [
         409
@@ -1339,8 +1339,8 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:1051",
-        "app/routers/executions.py:1068"
+        "app/routers/executions.py:1064",
+        "app/routers/executions.py:1081"
       ],
       "statuses": [
         409
@@ -1360,7 +1360,7 @@
         "app/routers/carry.py:143",
         "app/routers/carry.py:151",
         "app/routers/executions.py:112",
-        "app/routers/executions.py:261",
+        "app/routers/executions.py:274",
         "app/routers/integration.py:478",
         "app/routers/integration.py:495",
         "app/routers/integration.py:500",
@@ -1379,9 +1379,9 @@
         "app/routers/integration.py:1096",
         "app/routers/project_credentials.py:70",
         "app/routers/project_credentials.py:110",
-        "app/routers/project_promotions.py:94",
-        "app/routers/project_promotions.py:210",
-        "app/routers/project_promotions.py:299",
+        "app/routers/project_promotions.py:95",
+        "app/routers/project_promotions.py:211",
+        "app/routers/project_promotions.py:322",
         "app/routers/project_tokens.py:62",
         "app/routers/project_tokens.py:79",
         "app/routers/projects.py:99",
@@ -1433,7 +1433,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1340",
+        "app/routers/scenarios.py:1357",
         "app/routers/suites.py:1863"
       ],
       "statuses": [
@@ -1448,7 +1448,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:977",
+        "app/routers/executions.py:990",
         "app/routers/runs.py:574",
         "app/routers/runs.py:604",
         "app/routers/suites.py:91",
@@ -1471,9 +1471,9 @@
         ]
       ],
       "sites": [
-        "app/routers/project_promotions.py:227",
-        "app/routers/project_promotions.py:270",
-        "app/routers/project_promotions.py:302"
+        "app/routers/project_promotions.py:228",
+        "app/routers/project_promotions.py:282",
+        "app/routers/project_promotions.py:325"
       ],
       "statuses": [
         409
@@ -1635,7 +1635,7 @@
         "app/routers/endpoint_catalog.py:154",
         "app/routers/endpoint_catalog.py:311",
         "app/routers/scenarios.py:286",
-        "app/routers/scenarios.py:1421"
+        "app/routers/scenarios.py:1438"
       ],
       "statuses": [
         422,
@@ -1659,7 +1659,7 @@
         "app/routers/integration.py:872",
         "app/routers/runs.py:265",
         "app/routers/scenarios.py:278",
-        "app/routers/scenarios.py:1414",
+        "app/routers/scenarios.py:1431",
         "app/routers/strategy_catalog.py:58"
       ],
       "statuses": [
@@ -1797,7 +1797,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1026",
+        "app/routers/scenarios.py:1043",
         "app/routers/suites.py:1782"
       ],
       "statuses": [
@@ -1918,7 +1918,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:922"
+        "app/routers/executions.py:935"
       ],
       "statuses": [
         409
@@ -2089,7 +2089,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:964",
+        "app/routers/executions.py:977",
         "app/routers/integration.py:331",
         "app/routers/integration.py:342",
         "app/routers/integration.py:827",
@@ -2144,7 +2144,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:871"
+        "app/routers/executions.py:884"
       ],
       "statuses": [
         404
@@ -2323,7 +2323,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:842"
+        "app/routers/scenarios.py:859"
       ],
       "statuses": [
         409
@@ -2407,7 +2407,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:915"
+        "app/routers/executions.py:928"
       ],
       "statuses": [
         409
@@ -2697,7 +2697,7 @@
       "sites": [
         "app/routers/integration.py:728",
         "app/routers/report_definitions.py:230",
-        "app/routers/scenarios.py:1346",
+        "app/routers/scenarios.py:1363",
         "app/routers/suites.py:1869"
       ],
       "statuses": [
@@ -2793,10 +2793,10 @@
     "app/routers/auth_sessions.py:410": "_msg or '更新冲突:同系统同环境已存在同名账户'",
     "app/routers/exec_configs.py:242": "e.code",
     "app/routers/exec_configs.py:291": "e.code",
-    "app/routers/executions.py:1011": "e.code",
-    "app/routers/executions.py:1016": "e.code",
-    "app/routers/executions.py:752": "f'bad_{prefix}_pair'",
-    "app/routers/executions.py:760": "f'bad_{prefix}_ts'",
+    "app/routers/executions.py:1024": "e.code",
+    "app/routers/executions.py:1029": "e.code",
+    "app/routers/executions.py:765": "f'bad_{prefix}_pair'",
+    "app/routers/executions.py:773": "f'bad_{prefix}_ts'",
     "app/routers/integration.py:350": "e.code",
     "app/routers/integration.py:870": "e.code",
     "app/routers/project_credentials.py:198": "_code",

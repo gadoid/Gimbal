@@ -107,6 +107,7 @@ def _filter_clauses(
     authors: list[str],
     cutoff: datetime | None,
     starred_ids: list[str] | None,
+    suite_member_ids: list[str] | None = None,
 ) -> list:
     clauses = []
     qc = _q_clause(q)
@@ -142,6 +143,13 @@ def _filter_clauses(
             ComposerScenario.scenario_id.in_(starred_ids) if starred_ids
             else sa_text("1 = 0")
         )
+    if suite_member_ids is not None:
+        # 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):成员集下推 IN;
+        # 空 suite/无成员 = 恒假(筛选语义,不 404 —— 不泄露存在性)
+        clauses.append(
+            ComposerScenario.scenario_id.in_(suite_member_ids)
+            if suite_member_ids else sa_text("1 = 0")
+        )
     return clauses
 
 
@@ -164,6 +172,7 @@ async def list_page(
     scope: str = "all",
     project_id: int | None = None,
     starred_ids: list[str] | None = None,
+    suite_member_ids: list[str] | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[ComposerScenario], int]:
@@ -177,6 +186,7 @@ async def list_page(
         q=q, systems=systems or [], modules=modules or [],
         priorities=priorities or [], tags=tags or [], authors=authors or [],
         cutoff=cutoff, starred_ids=starred_ids,
+        suite_member_ids=suite_member_ids,
     )
     if visibility == "public":
         from .zone import public_project_id as _ppid

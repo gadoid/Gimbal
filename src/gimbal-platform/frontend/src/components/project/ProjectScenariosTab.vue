@@ -23,6 +23,19 @@
         data-testid="prj-scen-starred" title="仅看已关注(★)"
         @click="starred = !starred"
       >★ 仅看关注</button>
+      <!-- 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):下拉源 =
+           本项目用例集列表;读失败不渲染(FE-02 纪律:失败≠空集)。 -->
+      <select
+        v-if="suites.length" class="seg-btn suite-select"
+        data-testid="prj-scen-suite"
+        :value="suiteId ?? 0"
+        @change="onSuiteChange(Number(($event.target as HTMLSelectElement).value))"
+      >
+        <option :value="0">全部用例集</option>
+        <option v-for="s in suites" :key="s.suiteId" :value="s.suiteId">
+          用例集：{{ s.name }}
+        </option>
+      </select>
       <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
       <span class="flex-1" />
       <button v-if="canWrite" type="button" class="slib-create" data-testid="prj-scen-new"
@@ -122,10 +135,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useScenarioListView } from '@/composables/useScenarioListView'
 import { listDataSets, runScenario } from '@/api/scenario-composer'
+import { listSuites, type SuiteSummary } from '@/api/suites'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { scenarioDetailUrl } from '@/utils/links'
 import { FollowCapError } from '@/composables/useFollowLayout'
@@ -155,14 +169,28 @@ const formatTime = shortDateTime
 
 // project 桶:检索/筛选/分页/分组全在共享骨架(与场景库两页同心智模型)
 const {
-  filters, starred, page, paged, total, loading, filtering,
+  filters, starred, suiteId, page, paged, total, loading, filtering,
   filterableRows, facets, load, pageSize,
   searchBox, writeSearch,
   groups, groupsState, savingGroup, activeGroupId, canSaveGroup,
   loadGroups, applyGroup, saveGroup, removeGroup,
 } = useScenarioListView('project', { projectId: props.projectId })
 
-onMounted(load)
+// 按所属 Suite 筛选的下拉源:本项目用例集(空项目/读失败都不渲染下拉)
+const suites = ref<SuiteSummary[]>([])
+onMounted(async () => {
+  await load()
+  try {
+    const page0 = await listSuites({ projectId: props.projectId, page_size: 100 })
+    suites.value = page0.items
+  } catch {
+    suites.value = []   // 读失败 ≠ 无用例集:不渲染下拉,不给假口径
+  }
+})
+
+function onSuiteChange(v: number): void {
+  suiteId.value = v > 0 ? v : undefined
+}
 
 function newScenarioInProject(): void {
   void router.push({ path: '/composer/new', query: { projectId: String(props.projectId) } })
@@ -223,6 +251,8 @@ async function toggleStar(row: ScenarioListItem): Promise<void> {
 }
 .seg-btn:hover { color: var(--sl-ink); }
 .seg-btn.on { background: var(--sl-accent-soft); color: var(--sl-accent); font-weight: 600; }
+/* Suite 筛选下拉复用 seg-btn 边框基座(select 自带箭头即可) */
+.suite-select { color: var(--sl-ink-2); max-width: 12rem; }
 
 .sys-cell { display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
 .empty { color: var(--sl-ink-3); margin: 0; }

@@ -74,6 +74,9 @@ export function useScenarioListView(
         : { projectId: opts.projectId }),
     // 「★ 仅看关注」只挂在 project 桶(场景库两页无此面)
     ...(bucket === 'project' && starred.value ? { starred: true } : {}),
+    // 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):同样 project 桶
+    // 专属 —— 后端 suite_members 反查下推(空集恒假)。
+    ...(bucket === 'project' && suiteId.value ? { suiteId: suiteId.value } : {}),
     system: filters.value.systems.join(',') || undefined,
     module: filters.value.modules.join(',') || undefined,
     tag: filters.value.tags.join(',') || undefined,
@@ -85,6 +88,10 @@ export function useScenarioListView(
 
   /** project 桶专属:仅看关注(后端 ?starred=true 服务端过滤)。 */
   const starred = ref(false)
+
+  /** project 桶专属:按所属 Suite 筛选(后端 ?suiteId= 反查;
+   *  undefined = 全部)。变化经 useServerList 的 params watch 自动回页 1。 */
+  const suiteId = ref<number | undefined>(undefined)
 
   const initialPage = (() => {
     const p = Number.parseInt(String(route.query.page ?? '1'), 10)
@@ -253,7 +260,7 @@ export function useScenarioListView(
 
   return {
     store,
-    q, filters, starred,
+    q, filters, starred, suiteId,
     page: list.page,
     items: list.items,
     /** 兼容旧消费面:rows/paged 均为当前页(服务端已分页)。 */

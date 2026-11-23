@@ -59,6 +59,12 @@ AUDIT_ACTIONS = (
     # ── TOK-05 护栏(2026-11-20 审计):明文回显是拍板保留的内网测试
     # 策略,但每次明文读取必须留痕(读类先例 external_endpoint.query_safe)
     "auth.secret.read",           # GET /auths/{id}?include_secrets=true
+    # ── 项目加入审批(stitch 0-2 批次 2026-11-23):管理员裁决留痕;
+    # 资源 = project_promotion / 申请 id。withdraw 是申请人自操作
+    # (非特权写,不记);无冲突直通路径不记 —— C1 收口后溯源走
+    # promotion 行自身(resolution.immediate + decidedBy)。
+    "promotion.approve",
+    "promotion.reject",
 )
 
 

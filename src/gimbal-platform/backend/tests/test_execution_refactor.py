@@ -135,6 +135,34 @@ async def test_summary_route_order_and_kpi(client: AsyncClient) -> None:
     assert abs(body["passRate"] - 0.5) < 1e-6
     assert body["activeExecutions"] == 1      # running 不受窗约束
     assert body["repeatFailureScenarios"] == 0
+    assert body["todayExecutions"] == 0       # 三单均非今日(昨日/10 天/30 天前)
+
+
+async def test_summary_today_executions(client: AsyncClient) -> None:
+    """今日执行次数(stitch 0-2 批次 2026-11-23):自然日锚 created_at
+    (服务器时区零点),含进行中单,与 windowDays 统计窗相互独立。"""
+    auth = await _register_and_login(client, "today_u", "todaypass123")
+    from sqlalchemy import select as sa_select
+
+    from app.core.db import SessionLocal
+    from app.models.user import User
+
+    async with SessionLocal() as db:
+        uid = (await db.execute(sa_select(User.id).where(
+            User.username == "today_u"))).scalar_one()
+    now = datetime.utcnow()
+    # 今日两单(终态 + 进行中)+ 昨日一单
+    await _insert_execution(owner_id=uid, status="done", total_runs=1, passed=1,
+                            created_at=now)
+    await _insert_execution(owner_id=uid, status="running", created_at=now)
+    await _insert_execution(owner_id=uid, status="done", total_runs=1, passed=1,
+                            created_at=now - timedelta(days=1))
+    r = await client.get("/api/executions/summary", headers=auth)
+    body = r.json()
+    assert body["todayExecutions"] == 2
+    # 窗口 1 天(滚动 24h)会把昨日边界单也计入 —— 证明两口径独立
+    r = await client.get("/api/executions/summary?window_days=1", headers=auth)
+    assert r.json()["todayExecutions"] == 2
 
 
 async def test_summary_owner_isolation(client: AsyncClient) -> None:

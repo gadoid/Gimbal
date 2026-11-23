@@ -724,6 +724,7 @@ export interface ExecutionSummaryOut {
   passRate?: number | null
   passedRuns?: number
   repeatFailureScenarios?: number
+  todayExecutions?: number
   totalExecutions?: number
   totalRuns?: number
   windowDays?: number

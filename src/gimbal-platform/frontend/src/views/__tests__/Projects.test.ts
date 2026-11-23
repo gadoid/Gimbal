@@ -46,7 +46,7 @@ vi.mock('@/api/executions', () => ({
   getExecutionsSummary: vi.fn().mockResolvedValue({
     windowDays: 7, totalExecutions: 4, totalRuns: 10, passedRuns: 9,
     failedRuns: 1, passRate: 0.9, avgDurationSec: 2, repeatFailureScenarios: 0,
-    activeExecutions: 0,
+    activeExecutions: 0, todayExecutions: 0,
   }),
   listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, failedTotal: 0 }),
 }))

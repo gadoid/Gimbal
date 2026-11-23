@@ -3840,6 +3840,11 @@
             "title": "Repeatfailurescenarios",
             "type": "integer"
           },
+          "todayExecutions": {
+            "default": 0,
+            "title": "Todayexecutions",
+            "type": "integer"
+          },
           "totalExecutions": {
             "default": 0,
             "title": "Totalexecutions",
@@ -20498,6 +20503,23 @@
                 }
               ],
               "title": "Projectid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "suiteId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Suiteid"
             }
           },
           {

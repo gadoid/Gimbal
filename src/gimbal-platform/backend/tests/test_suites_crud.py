@@ -299,3 +299,37 @@ async def test_scenario_lookup_suites(client: AsyncClient) -> None:
                              headers=carol)).status_code == 404
     assert (await client.get("/api/scenarios/sc-lk-ghost/suites",
                              headers=bob)).status_code == 404
+
+
+async def test_scenarios_list_filter_by_suite(client: AsyncClient) -> None:
+    """按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):场景列表
+    ``?suiteId=`` = suite_members 反查下推;空 suite / 不存在 id 均
+    恒假返回空,不 404(筛选语义,不泄露存在性)。"""
+    bob = await register_and_login(client, "fi_bob", "fi_bob_pass123")
+    for sid in ("sc-fi-a", "sc-fi-b", "sc-fi-c"):
+        await _mk_scenario(client, bob, sid)
+    s1 = await _mk_suite(client, bob, "筛选集一")
+    s2 = await _mk_suite(client, bob, "空集")   # 建后不加成员
+    r = await client.post(f"/api/suites/{s1}/members", headers=bob,
+                          json={"scenarioIds": ["sc-fi-a", "sc-fi-b"]})
+    assert r.status_code == 200, r.text
+
+    # 命中:仅成员两单(排序 updated_at DESC,同秒创建顺序不保证 → 集合比)
+    r = await client.get("/api/scenarios", headers=bob,
+                         params={"suiteId": s1})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 2
+    assert {i["meta"]["scenarioId"] for i in body["items"]} == \
+        {"sc-fi-a", "sc-fi-b"}
+    # 空 suite 恒假
+    assert (await client.get("/api/scenarios", headers=bob,
+                             params={"suiteId": s2})).json()["total"] == 0
+    # 不存在 id 同为空(不 404)
+    r = await client.get("/api/scenarios", headers=bob,
+                         params={"suiteId": 99999999})
+    assert r.status_code == 200 and r.json()["total"] == 0
+    # 与 q 复合过滤
+    r = await client.get("/api/scenarios", headers=bob,
+                         params={"suiteId": s1, "q": "sc-fi-a"})
+    assert r.json()["total"] == 1

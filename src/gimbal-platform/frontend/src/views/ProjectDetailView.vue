@@ -71,6 +71,12 @@
               <span class="k">运行成功率(7天)</span>
               <span class="v">{{ passRateText }}</span>
             </div>
+            <!-- 今日执行次数(stitch 0-2 批次 2026-11-23):同端点顺风车;
+                 软失败显 —(与成功率同口径)。 -->
+            <div class="stat" data-testid="prj-stat-today">
+              <span class="k">今日执行</span>
+              <span class="v">{{ todayText }}</span>
+            </div>
           </div>
           <p v-if="project.description" class="prj-desc">{{ project.description }}</p>
           <p v-if="metaText" class="prj-meta" data-testid="prj-meta">{{ metaText }}</p>
@@ -438,14 +444,20 @@ async function removeProject(): Promise<void> {
 const passRate = ref<number | null>(null)
 const passRateText = computed(() =>
   passRate.value == null ? '—' : `${(passRate.value * 100).toFixed(1)}%`)
+// 今日执行次数(stitch 0-2 批次 2026-11-23):同一 summary 响应顺风车
+const todayCount = ref<number | null>(null)
+const todayText = computed(() =>
+  todayCount.value == null ? '—' : String(todayCount.value))
 
 async function loadPassRate(): Promise<void> {
   if (!project.value) return
   try {
     const s = await getExecutionsSummary(7, project.value.id)
     passRate.value = s.passRate
+    todayCount.value = s.todayExecutions
   } catch {
     passRate.value = null
+    todayCount.value = null
   }
 }
 

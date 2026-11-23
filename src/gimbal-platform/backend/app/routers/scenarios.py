@@ -664,6 +664,9 @@ async def list_scenarios(
     # S7.0 修正:补 alias —— 前端/项目页签发的是 projectId,缺 alias
     # 时该过滤被静默忽略(S1.8 区切换器起就漏了)
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
+    # 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):suite_members
+    # 反查成员 scenario_id 集下推;空集恒假(筛选语义,不 404)
+    suite_id: Annotated[int | None, Query(alias="suiteId", ge=1)] = None,
     updated_within: Literal["24h", "7d", "30d"] | None = None,
     starred: bool | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -709,6 +712,15 @@ async def list_scenarios(
 
     user_star_ids = await user_stars_svc.star_ids(db, user.id)
     starred_ids = sorted(user_star_ids) if starred is True else None
+    suite_member_ids: list[str] | None = None
+    if suite_id is not None:
+        from sqlalchemy import select as _sa_select
+
+        from ..models.suite import SuiteMember as _SuiteMember
+
+        suite_member_ids = sorted(
+            (await db.execute(_sa_select(_SuiteMember.scenario_id).where(
+                _SuiteMember.suite_id == suite_id))).scalars().all())
     is_pg = db.bind.dialect.name == "postgresql"
     if is_pg and starred is not False:
         from ..services import scenario_query
@@ -722,6 +734,7 @@ async def list_scenarios(
             cutoff=scenario_query.updated_cutoff(updated_within),
             visibility=visibility, scope=scope,
             project_id=project_id, starred_ids=starred_ids,
+            suite_member_ids=suite_member_ids,
             page=page, page_size=page_size,
         )
         if fields == "options":
@@ -785,6 +798,10 @@ async def list_scenarios(
             r for r in readable
             if (r.scenario_id in user_star_ids) == starred
         ]
+    # 按所属 Suite 筛选(Python 兜底分支;PG 分支已下推 IN)
+    if suite_member_ids is not None:
+        readable = [r for r in readable
+                    if r.scenario_id in suite_member_ids]
 
     total = len(readable)
     start = (page - 1) * page_size

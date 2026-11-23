@@ -39,7 +39,7 @@ vi.mock('@/api/executions', async (importOriginal) => {
     getExecutionsSummary: vi.fn().mockResolvedValue({
       windowDays: 7, totalExecutions: 0, totalRuns: 0, passedRuns: 0,
       failedRuns: 0, passRate: null, avgDurationSec: null,
-      repeatFailureScenarios: 0, activeExecutions: 0,
+      repeatFailureScenarios: 0, activeExecutions: 0, todayExecutions: 0,
     }),
     // 行级明细已退役(2026-11-12):rows/artifact/events 消费面移至
     // 报告面板与日志分析页,本文件不再 mock。
@@ -907,7 +907,7 @@ describe('ExecutionsList — ?projectId= 项目过滤(A 级批次 2026-11-18)', 
     vi.mocked(getExecutionsSummary).mockResolvedValue({
       windowDays: 7, totalExecutions: 2, totalRuns: 6, passedRuns: 5,
       failedRuns: 1, passRate: 5 / 6, avgDurationSec: 1,
-      repeatFailureScenarios: 0, activeExecutions: 0,
+      repeatFailureScenarios: 0, activeExecutions: 0, todayExecutions: 0,
     })
     const router = makeRouter()
     router.push('/executions?projectId=7')
