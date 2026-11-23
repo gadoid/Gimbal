@@ -1096,3 +1096,21 @@ class TestRegisterScopeGate:
                                headers=_gtk(plain),
                                json={"schemeId": scheme_ok})
         assert r.status_code == 200, r.text
+
+
+async def test_scope_row_exactly_one_enforced_in_model(client):
+    """C8(2026-11-23):ck_scope_exactly_one 对齐进模型(fresh 库按模型
+    建表,此前只在迁移 0033)—— 双空范围行 INSERT 即 IntegrityError。"""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models.access_token import AccessTokenScope
+    await _register(client, "s50scope")
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(sa.text(
+            "SELECT id FROM users WHERE username = 's50scope'"))).scalar()
+    tok_id, _ = await mk_token(user_id=uid, name="shape")
+    async with db_module.SessionLocal() as s:
+        s.add(AccessTokenScope(token_id=tok_id))
+        with pytest.raises(IntegrityError):
+            await s.flush()
+        await s.rollback()

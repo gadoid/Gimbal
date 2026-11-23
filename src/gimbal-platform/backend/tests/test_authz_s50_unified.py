@@ -125,6 +125,21 @@ async def test_preview_shape_and_equality_with_dispatch(
     assert r.status_code == 200, r.text
 
 
+async def test_preview_bindings_non_dict_shape_422(client, plate_mock):
+    """C8(2026-11-23):手写 dict 入口的形状门 —— serviceBindings 为
+    list/标量等非 dict 形态 → 422,不再 .items() AttributeError → 500。"""
+    plate_mock.behaviour = "echo"
+    h = await register_and_login(client, "s50shape", "pw123456")
+    r = await client.post("/api/scenarios", headers=h, json=_draft(
+        "sc-s50shape", steps=[dict(_STEP)]))
+    assert r.status_code in (200, 201), r.text
+    for bad in (["fin-alias"], "fin-alias", 3):
+        r = await client.post("/api/runs/preview", headers=h, json={
+            "scenarioId": "sc-s50shape", "serviceBindings": bad})
+        assert r.status_code == 422, (bad, r.text)
+        assert r.json()["detail"]["code"] == "binding_invalid"
+
+
 async def test_dispatch_missing_slot_refused_and_preview_reports(
         client, plate_mock: PlateMock):
     """缺槽:预览 missingAuths 如实报;dispatch 整单拒发(失败即中止)。

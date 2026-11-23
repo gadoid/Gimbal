@@ -41,7 +41,7 @@
 | C5 | CRLF/LF 混存 | diff 噪音 | .gitattributes 统一(一次性大 diff,低峰做) | 后续批次 |
 | C6 | 宽捕获 ~240 处未逐个审计 | 旁路降级无日志的漏网 | 按第 4 类排查方法扫(主链路已清) | **dispatcher 域已扫(2026-11-23,58 处分类)**:真静默降级 8 处补 warning(env 告警/恢复行留档×2/cancel 结论留档/断点查询/关池×3/事件批冲刷回填);刻意静默 9 处保留(自带注释:取消轮询瞬态/无循环兜底/CancelledError 回填/清理扫描跳过)。余域渐进 |
 | C7 | 主链路注释含历史叙述 | 可读性 | 注释清理批(移提交记录) | 后续批次 |
-| C8 | 静态约束入口校验全量清单未建 | 晚失败(登记类) | 按第 5 类方法列清单核 | 后续批次 |
+| C8 | 静态约束入口校验全量清单未建 | 晚失败(登记类) | 按第 5 类方法列清单核 | **✅ 2026-11-23 已扫**(docs/static-constraint-audit-20261123.md,新口径:信任边界×静态约束×四档判定,三面全量清单化):边界即校验为主旋律,晚失败面高度集中且多为文档化架构决策(plate/执行器为结构权威);**真缺口 4 处本批修复** —— runs/preview serviceBindings 形态 500→422、ck_scope_exactly_one 模型/迁移漂移对齐、REGISTRY_ONLY_* 拼错静默按 off→Literal 启动拒(高危)、死键×4 删除(plugins 三键 + B6③ 遗留 CANCEL_GRACE);挂账 J 区三项(convert 信封/队列配方版本化/share_refs 无模型) |
 | C9 | 状态迁移写点全量并发审计未做 | 理论竞态面(已知点已 CAS) | 按第 7 类方法扫 | **✅ 2026-11-23 已扫**(docs/concurrency-write-audit-20261123.md,12 写点清单化):唯一真竞态 promotions 裁决 TOCTOU 本批修复(行锁串行化,grants 双写面收口);revoke_grants 粒度维持 E 区挂账 |
 | C10 | account_fields 明文存储(审计 TOK-08b) | 用户存秘密则裸存;F6 拍板:自定义字段明文非密、只经 ${slot.X.field} 消费 | ~~若收紧:敏感键逐值 fernet(写入加密/消费解密),需先拍板~~ **✅ 2026-11-23 销问:维持明文非密,收紧不立项**(重开条件 = 出现实际敏感键使用证据;收尾排布批次 0-4) | 按设计登记(已销问) |
 | C11 | md5sign 遗留签名器(审计 TOK-08d) | md5(token+timestamp) 弱签名 | **被测系统协议仿真,不能单方面改**(契约与退役插件逐字节一致,特征化用例钉死);推动场景声明式切 standard.bearer/basic | **勘误(2026-11-23,B6③ 落地时核实)**:md5sign 是 plate 方言 token_type 契约项(_m2/dialect/selfdescribe/m2.schema.json/compiler 校验/签名分派),与平台执行链**零耦合**——平台 legacy 链删除不影响其可达性;真退役 = 方言破坏性变更,m2.schema 契约面再生成依赖 A1 合并后的 main 基线(B1),另批立项(随 D10 真引擎 suite e2e 一并) |

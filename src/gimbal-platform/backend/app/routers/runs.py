@@ -368,10 +368,18 @@ async def preview_effective_config(
             or not await can_read_scenario_row(db, user, scen):
         raise HTTPException(404, detail={"code": "scenario_not_found",
                                          "message": f"scenario not found: {sid}"})
+    # C8 审计(2026-11-23):手写 dict 入口的形状门 —— serviceBindings
+    # 非 dict 形态(如 list)此前 .items() 直接 AttributeError → 500,
+    # 应 422(fail-fast 不晚崩)。
+    _raw_bindings = body.get("serviceBindings")
+    if _raw_bindings is not None and not isinstance(_raw_bindings, dict):
+        raise HTTPException(422, detail={
+            "code": "binding_invalid",
+            "message": "serviceBindings 必须是对象(服务键 → 绑定)"})
     try:
         bindings_raw = {
             str(k): ServiceBinding.model_validate(v).model_dump()
-            for k, v in (body.get("serviceBindings") or {}).items()}
+            for k, v in (_raw_bindings or {}).items()}
     except ValidationError as e:
         raise HTTPException(422, detail={
             "code": "binding_invalid",

@@ -123,6 +123,11 @@ class AccessTokenScope(Base):
 
     __tablename__ = "access_token_scopes"
     __table_args__ = (
+        # C8 审计(2026-11-23):此前 ck_scope_exactly_one 只活在迁移
+        # 0033,模型侧零表达 —— fresh 库按模型建表(测试)与迁移库
+        # 约束漂移。对齐进模型,模型/迁移从此同形。
+        CheckConstraint("(alias_name IS NULL) <> (auth_id IS NULL)",
+                        name="ck_scope_exactly_one"),
         Index("uq_token_scope_alias", "token_id", "alias_name", unique=True),
         Index("uq_token_scope_auth", "token_id", "auth_id", unique=True),
     )

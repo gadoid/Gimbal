@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import secrets
 from pathlib import Path
+from typing import Literal
 
 from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -75,11 +76,9 @@ class Settings(BaseSettings):
     GIMBAL_BIN: str = ""
     # 单次 launch 子进程超时(秒)。
     GIMBAL_TIMEOUT_SEC: float = 300.0
-    # 单元级取消(--cancel-file)下发后的一次性超时宽限(秒):取消在收尾时
-    # 在飞单元要跑完、after 括号必达,墙钟可能顶到 GIMBAL_TIMEOUT_SEC ——
-    # 文件已出现即视为「正在取消收尾」,加时一段避免被误判 launch_timeout
-    # (kill 会把「跑完当前单元」变成硬中断,丢 after 语义)。0 = 不宽限。
-    GIMBAL_CANCEL_GRACE_SEC: float = 120.0
+    # (B6③ 清尾/C8 2026-11-23)GIMBAL_CANCEL_GRACE_SEC 已删 —— legacy
+    # --cancel-file 取消通道随 B6③ 退役后全仓零消费;server 链取消走
+    # cancel 端点 + run_case 内部收口。
     # P7 资源闸:单次执行总行数上限(行数 × nRuns,409 拒单)与
     # 进程内 launch 子进程同时在飞上限(跨 execution 合并生效)。
     MAX_RUNS_PER_EXECUTION: int = 200
@@ -127,7 +126,11 @@ class Settings(BaseSettings):
     #              完成(合并路线阶段 3;时点由阶段 0 审计数字定)。
     # 运行方案保存的登记闸 = validate_binding_aliases 既有覆盖(绑定值
     # 存在 + 同基础服务),无定义侧引用面,不重复挂。
-    REGISTRY_ONLY_IDENTITIES: str = "off"
+    # C8 审计(2026-11-23):Literal 化 —— 拼错取值直接启动期 ValidationError
+    # 拒绝(此前消费侧仅 warning 后按 off,生产以为开了 enforce 实则全放行)。
+    # 消费面(service_aliases._registry_flags)的未知取值告警分支自此为
+    # 不可达防御,保留自证。
+    REGISTRY_ONLY_IDENTITIES: Literal["off", "audit", "enforce"] = "off"
     # ── 服务引用注册化(架构终态;2026-11-21)─────────────────────
     # 场景 = 纯引用容器:步骤服务键须落注册域(主档 services ∪ 身份
     # 条目表),authored URL(config.services 第 ② 层)整体退役 ——
@@ -138,7 +141,7 @@ class Settings(BaseSettings):
     #   enforce= 422 service_not_registered / service_url_declared
     #            硬拦。切换前置 = 存量清账完成
     #            (scripts/cleanup_authored_services.py)。
-    REGISTRY_ONLY_SERVICES: str = "off"
+    REGISTRY_ONLY_SERVICES: Literal["off", "audit", "enforce"] = "off"
     # ── 周期对账(P0-3.2,webhook 设计 v3)───────────────────────
     # 僵尸执行(job 已终态/不存在而执行仍 queued/running)的周期收口:
     # 间隔 5 分钟一拍;宽限 10 分钟内的单不动(可能与正在收尾的执行抢
@@ -171,13 +174,10 @@ class Settings(BaseSettings):
     # (server-engine.log 文件不受影响,全量保留);DEBUG 排障走文件。
     # 级别序:TRACE<DEBUG<INFO<SUCCESS<WARNING<ERROR<CRITICAL。
     EXEC_INGEST_LOG_LEVEL: str = "INFO"
-    # ── Gimbal 插件注入(透传给执行子进程;空值 = 现状零变化) ──
-    # GIMBAL_PLUGINS_DIR:文件系统插件目录(绝对路径;空 = 引擎默认 base_dir/plugins)
-    GIMBAL_PLUGINS_DIR: str = ""
-    # GIMBAL_PLUGINS:插件白名单,逗号分隔(空 = 引擎侧全部启用)
-    GIMBAL_PLUGINS: str = ""
-    # GIMBAL_PLUGIN_CONFIGS:按插件名配置,JSON 串(空 = 全走插件 default_config)
-    GIMBAL_PLUGIN_CONFIGS: str = ""
+    # (C8 审计 2026-11-23)GIMBAL_PLUGINS_DIR / GIMBAL_PLUGINS /
+    # GIMBAL_PLUGIN_CONFIGS 平台侧 Settings 字段已删 —— 全仓零消费
+    # (引擎侧同名 env 是引擎自己的进程环境契约,由部署层直传,
+    # 见 src/gimbal/config/loader.py,不经平台 Settings)。
 
     # ── CORS ──────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

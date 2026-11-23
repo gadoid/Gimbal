@@ -2373,6 +2373,34 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   新执行面特性接 **28 个具名缝**不再平铺主体。验证:全量
   **2161+2**(xdist 缺省 145s,复跑绿)+ 契约行号位移重生后守卫绿;
   ruff 画像与基线一致全程零新增(切片 2 净 -1)。
+- **C8 静态约束入口校验审计(2026-11-23,🟢 销问)**
+  (docs/static-constraint-audit-20261123.md):「第 5 类」方法论源
+  未存档,以**新口径**重定义 —— 信任边界(REST/webhook/令牌/队列
+  配方回放/plate+引擎响应/导入/CLI/server/env/DB 列)× 静态约束 ×
+  四档判定(边界即校验/晚校验/防御兜底/无校验),三路并行扫全仓。
+  **总判**:边界即校验为主旋律;晚失败面高度集中在「plate/执行器
+  为结构权威」的自由 dict(definition/modeConfig 变量级/graph 语义)
+  —— 文档化架构决策,登记维持。
+  **真缺口 4 处本批修复**(窄面,均带测试):
+  ① `/runs/preview` serviceBindings 非 dict 形态 → .items()
+  AttributeError 500 → 形状门 422(C8-1);
+  ② ck_scope_exactly_one 只活在迁移 0033、模型零表达(fresh 库按模型
+  建表与迁移库约束漂移)→ CheckConstraint 对齐进模型(C8-2);
+  ③ **REGISTRY_ONLY_* 拼错仅告警后按 off 处理**(生产以为开了
+  enforce 实则全放行,静默失效高危)→ Literal 化启动期 ValidationError
+  即拒;开发 .env 实值 enforce 合法(C8-3);
+  ④ 死键×4 删:GIMBAL_PLUGINS_DIR/PLUGINS/PLUGIN_CONFIGS(平台
+  Settings 零消费;引擎侧同名 env 是引擎自己的进程环境契约,部署层
+  直传不经平台 Settings)+ GIMBAL_CANCEL_GRACE_SEC(B6③ 清尾,
+  零消费;env 残留 extra=ignore 消化,同 EXEC_CHAIN 先例)(C8-4)。
+  **J 区挂账 3 项**:plate convert 回包缺 converted 全链静默空
+  (PlateMock 恒回灌有效形状=测试盲区;修复涉及异常分类学,另批);
+  队列旧配方缺键语义缺省(skip_carry=False = 升级瞬态多做 carry
+  注入;配方版本化若立则随);share_refs 无 ORM 模型裸 SQL(退役
+  路径基建)。维持口径(status 值域应用层常量单源/SSE 防御兜底/
+  token 范围收紧复核窗口/m2 门放行档等)逐项在档。
+  验证:新增测试 3 文件位(preview 形状/Scope IntegrityError/
+  Settings Literal)+ 受影响域 60 绿;全量与契约见批尾。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本
