@@ -2196,6 +2196,68 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   import、生成器冗余 `sys.path.insert` 删除);语义复核(取消/
   恢复/upsert 三调用点/报告响应面)全过。
 
+### 收尾排布轮(2026-11-23,🟢 批次 0 拍板 + 0-2 三项交付)
+
+收尾排布文档入档 `docs/wrapup-plan-20261123.md`(批次 0-5 + B5 常轨 +
+暂缓清单;分级口径:关键路径全部模块级/结构件级动作,架构级候选
+——C2 gimbal-core 拆分、D1/D2 IA、stitch C 级产品立项、§9-2 ——
+全部拦在收尾外)。
+
+- **批次 0 拍板**:0-2 = 进三项小批;0-3/0-4 = 双双维持销问
+  (identity-registry §9-2 行 + 登记册 C10 行已落档);0-5 = 批间低峰
+  再合;0-1 = 注入溯源**核实确未实现**(全仓无 collector/落盘/端点/
+  前端区块;与「注入清单=auth 别名清单」「config_json 快照=最终态」
+  两名撞名邻居区分)。**后续拍板(同日):0-1 挂起 —— 注入溯源
+  manifest 与其同族「字段来源分析」另一半 E2a 预测模式(execution-design
+  §2,侧边栏/执行行两个置灰入口在等)后续再实现,spec 维持待评审在档;
+  关键路径改走批次 2(自举链消双链)。**
+- **0-2 交付 ×3**:
+  - **审批入 audit log**:approve/reject 落 `promotion.approve` /
+    `promotion.reject`(AUDIT_ACTIONS 登记 → admin 审计页动作表
+    自动可见;detail = project_id/kind/source_id/冲突数(+reject
+    reason));withdraw 申请人自操作不记(特权写口径)、无冲突直通
+    不记(溯源走 promotion 行自身,C1 收口后已完备)。测试:approve
+    detail 六断言 + reject reason 随行 + withdraw 零行。
+  - **今日执行次数**:`/executions/summary` 增 `todayExecutions`
+    (自然日锚 created_at、服务器时区零点 `astimezone()`、含进行中单、
+    与 windowDays「已完成统计窗」相互独立);项目头卡 `prj-stat-today`
+    同端点顺风车(软失败显 —)。测试含窗/日双口径独立性用例。
+  - **按所属 Suite 筛选**:场景列表 `?suiteId=`(suite_members 反查
+    id 集 → PG `_filter_clauses` IN 下推 + Python 兜底双侧;空集/
+    不存在 id 恒假返回空,不 404 不泄露存在性);前端 project 桶
+    工具条下拉 `prj-scen-suite`(下拉源 = 本项目用例集 `listSuites`,
+    读失败不渲染 —— FE-02 纪律;`useScenarioListView` 增 `suiteId`
+    ref 进 params,useServerList 的 params watch 自动回页 1)。
+- **契约面**:openapi.json/error-codes.json 快照重生(error-codes 仅
+  executions.py 行号位移)+ 前端 `api/generated/openapi.ts` 重生
+  (errorCodes.ts noop,无新码);两处测试 mock 补 `todayExecutions`。
+- **验证**:后端全量 **2188 passed + 2 skipped**(0 failed;含
+  test_api_contract 契约守卫);前端 vitest **1536 passed + 1
+  skipped** + vue-tsc 0 + eslint(定向)0。
+- **环境注**:node 18.17 跑 vitest 撞 jsdom ESM 链
+  (`html-encoding-sniffer` ERR_REQUIRE_ESM),须 node 20+(本机
+  nvm v22.23.3,与 CI plate-ci.yml node-version: 20 一致)。
+- **批次 2② 自举翻链(2026-11-23,🟢)**:conftest 钉位
+  `EXEC_CHAIN=server` + `gimbal_server_session.ServerSession` →
+  `ShimServerSession` 垫片(conftest 内),出厂默认路径自此 == 默认
+  被测路径(C3 分裂消除)。垫片设计:run_case 以 legacy 分支同款
+  kwargs(step_to/report_dir/cwd/engine_log_path/on_event/on_log/
+  log_counters/n_runs)委托 `gimbal_launcher.launch` —— 既有按
+  legacy 假引擎编写的用例**零改动续用**(预估 28 文件迁移缩为 5 处:
+  graph/suite 面 fake 缝双绑 `gd.launch` + `gl.launch`
+  ×test_graph_dispatch 3/test_authz_s8_leftovers 1/test_suites_orch_run
+  1);垫片 `slot` 属性读写均吞(池 _spawn 盖章不生效 →
+  `server_slot=None`,case 工件/引擎日志路由与 legacy 期同形);
+  `cancel` 恒 False、`cancel_scopes=("step","unit")`(取消/握手真
+  语义仍由专项用例自带 FakeServerSession 覆盖,先例
+  test_graph_cancel_unit);`start` 捕获池侧 on_log/log_counters(AD2)
+  原样转发保日志事件路径。ad hoc 等价性用例两处 chain 断言随口径
+  更新(legacy→server)。验证:后端全量 **2188 passed + 2 skipped**
+  (0 failed)。**余批次 2③**:删 legacy 链生产面六处(dispatcher
+  链分支/graph_dispatch legacy 分支/suites.py:876/executions.py:821
+  读侧/config.py:120/EXEC_CHAIN 键)+ gimbal_launcher 退役(牵
+  ~30 测试文件 fake 缝迁移)+ md5sign 随退 + D10 suite 端到端补测。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
