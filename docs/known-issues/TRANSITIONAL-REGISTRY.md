@@ -34,7 +34,7 @@
 
 | # | 条目 | 影响 | 退出条件 | 归属 |
 |---|---|---|---|---|
-| C1 | run_dispatcher ~2600 行 / 25 个百行函数 | 新功能易只接一条路径(第 3 类根源) | 重构批次(先抽「执行前置」共用段) | **切片 1 已落(2026-11-23)**:执行前置四缝抽离(`_fanout_auth_preflight` 鉴权预检/`_persist_run_telemetry` 台账写/`_fanout_pool_scaffold` 池脚手架/`_drain_and_finalize` §7 收口序单点)+ `_fanout` 过时双链 docstring 清账;**百行函数 25→5**(dispatch_target 652/_fanout 573/_fanout_graph 403/_row 293/compute_run_fanout 107,余量后续切片分批) |
+| C1 | run_dispatcher ~2600 行 / 25 个百行函数 | 新功能易只接一条路径(第 3 类根源) | 重构批次(先抽「执行前置」共用段) | **切片 1 已落(2026-11-23)**:执行前置四缝抽离(`_fanout_auth_preflight` 鉴权预检/`_persist_run_telemetry` 台账写/`_fanout_pool_scaffold` 池脚手架/`_drain_and_finalize` §7 收口序单点)+ `_fanout` 过时双链 docstring 清账;**百行函数 25→5**(dispatch_target 652/_fanout 573/_fanout_graph 403/_row 293/compute_run_fanout 107,余量后续切片分批)。**切片 2 已落(2026-11-23)**:dispatch_target 652→161(主体成为按序流水线),14 缝抽离 —— 校验三(`_reject_unsupported_run_options`/`_validate_step_to`/`_validate_debug_request`)、取用七(exec_cfg/绑定/env 标签链+告警/fanout/场景上下文/carry/凭证池/取用圈定)、门禁三(脱敏/auth_aliases 含 graph 全图闸/行级 @slot)、装配三(`_dispatch_config_json`/`_dispatch_job_payload`/`_persist_dispatch_execution` 建行+幂等单写点,clientRef 预查与回查同条件去重);抽缝不改语义(test_adhoc_run 对拍钉住),ruff 净 -1(顺手消基线 `_eq` 重复导入)。dispatch_target 余 161 行 = docstring + 按序流水线,不为 <100 指标强拆 |
 | C2 | jsonpath 三份实现 | 语义漂移风险 | gimbal-core 拆分 | gimbal-core |
 | C3 | legacy 执行链(EXEC_CHAIN) | 测试钉 legacy,server 链覆盖在专项用例 | 自举覆盖 server 链后退役 | **✅ 2026-11-23 已销(B6③)**:legacy 生产链整体删除(dispatcher/graph/suites/EXEC_CHAIN 键/取消文件通道/CLI 逐 case 调用),server 为唯一链且默认被测;台账 chain 键存量 legacy 值仅历史可读 |
 | C4 | 未声明修订场景用存储 binding(过渡形态) | C-2 闸后新增即拒;存量已 rs3 回填 | 存量清零后删过渡分支 | 已基本闭合,观察 |

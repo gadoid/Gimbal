@@ -101,6 +101,10 @@ C6 dispatcher 域切片      ─→ C1(先辨清哪些 except 是承重的)
   **✅ dispatcher/graph 域已扫 + 切片 1 已落(2026-11-23)**:真静默
   降级 8 处补可见;执行前置四缝抽离,百行函数 25→5;余
   dispatch_target/_fanout_graph/_row 分解为后续切片,每片全量绿。
+  **✅ 切片 2 已落(2026-11-23)**:dispatch_target 652→161,
+  14 缝(校验三/取用七/门禁三/装配三,含建行+clientRef 幂等
+  单写点);对拍钉住 + 全量绿 + ruff 净 -1。余 _fanout_graph 403/
+  _row 293/_fanout 573/compute_run_fanout 107 为后续切片。
 - 切片:先抽「执行前置」共用段(登记册 C1 退出条件),25 个百行函数
   分批推进,每片全量绿。
 - 批次 2 删链后重构面已缩小(legacy 分支消除)。

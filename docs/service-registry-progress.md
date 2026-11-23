@@ -2293,6 +2293,28 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   `_fanout_pool_scaffold`/`_drain_and_finalize` §7 顺序不变量单点)
   + `_fanout` 双链 docstring 清账;**百行函数 25→5**(dispatch_target
   652/_fanout 573/_fanout_graph 403/_row 293 留后续切片)。
+- **批次 3 切片 2(2026-11-23,🟢)**:dispatch_target 652→161,主体成为
+  按序流水线。14 缝抽离(抽缝不改语义,test_adhoc_run 逐字段对拍钉住):
+  校验三(`_reject_unsupported_run_options` W19/`_validate_step_to`/
+  `_validate_debug_request`);取用七(`_resolve_dispatch_exec_cfg`
+  分层②④/`_validated_bindings` S6/`_resolve_execution_env` §8.2 三路
+  分流+§6.3 告警/`_resolve_dispatch_fanout` params 单虚行/
+  `_load_scenario_context` W6+S4/`_resolve_carry_policy` 决策 9/
+  `_resolve_cred_project` S8/`_resolve_slot_and_circled` S5+决策 1);
+  门禁三(`_strip_cross_owner_payload` W6 脱敏/`_resolve_auth_aliases`
+  注入清单+graph 全图缺槽 TOK-02 闸/`_dispatch_precheck_gate` M3 §8.5
+  漏斗/`_resolve_row_bindings` M2b Q3 行级 @slot);装配三
+  (`_dispatch_config_json` 台账配方/`_dispatch_job_payload` worker
+  配方/`_persist_dispatch_execution` 建行+clientRef 幂等单写点 ——
+  预查与 IntegrityError 回查同条件两处去重进 `_dup_client_ref_id`)。
+  守卫面同步:owner-compare 白名单计数 2→1(去重后单实现,守卫自身
+  规则的正当计数下降);契约 error-codes 行号位移重生(openapi noop)。
+  ruff 净 -1(顺手消基线 `_eq` 重复导入 F811,零新增)。dispatch_target
+  余 161 行 = docstring + 按序流水线,不为 <100 指标强拆(compute_run_fanout
+  107 同理属内聚算法形态)。验证:全量 **2161+2**(2158+2 首跑 + 3 守卫
+  修复后复跑全绿)、对拍钉住 69 绿、契约双守卫绿。
+  余量:_fanout_graph 403/_row 293/_fanout 573(compute_run_fanout 107
+  维持)留切片 3+。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本

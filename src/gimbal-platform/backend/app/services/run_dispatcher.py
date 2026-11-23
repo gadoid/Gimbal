@@ -924,216 +924,45 @@ async def dispatch_target(
     # 2. Validate datasets.
     # (旧 env 校验块已随 D2 执行环境退役 — 旧客户端多发的 env 键由
     # pydantic extra=ignore 静默忽略。)
-
-    # RunOptions 未接面显式拒绝(W19):step_from 需要被跳过上游的输出
-    # 由外部提供(同 GraphControlSpec 不开放 fromNode 的理由);subscribe
-    # 平台无消费面。生成物形状收下了这两个键,但派发链静默丢弃它们
-    # 会制造"看似生效"的假象 —— 409 说清楚,不兼容不吞。
-    if req.run_options is not None:
-        if req.run_options.step_from is not None:
-            raise Conflict(
-                "run_options_step_from_unsupported",
-                "step_from 尚未接入平台派发链(被跳过步骤的输出平台无从"
-                "提供);请移除该键",
-            )
-        if req.run_options.subscribe:
-            raise Conflict(
-                "run_options_subscribe_unsupported",
-                "subscribe 尚未接入平台派发链;请移除该键",
-            )
-
-    # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
     steps = steps_from_payload(scenario_payload)
-    if req.step_to is not None:
-        if not steps:
-            raise NotFound("no_steps", "scenario has no steps; step_to cannot be set")
-        if req.step_to >= len(steps):
-            raise Conflict(
-                "step_to_out_of_range",
-                f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
-            )
+    _reject_unsupported_run_options(req)   # W19:未接面显式拒绝
+    _validate_step_to(req, steps)
 
-    # 执行配置分层②(设计方案 §5):JWT 手动场景执行吃执行配置(显式
-    # 选定或默认行);令牌(同指纹不变量)/编排 graph(单元自治)/临时
-    # 调用不吃 —— 显式携带而不可用即拒,不静默忽略(似生效未生效)。
-    # ④ 分层:``exec_replay``(重跑)传入终值快照 —— 不回查配置行、
-    # 不走解析(§7:配置后改不影响历史执行;env 回放见 ``env_replay``)。
-    _req_exec_id = getattr(req, "exec_config_id", None)
-    _exec_replay = exec_replay or None
-    _exec_cfg = None
-    if _exec_replay is not None:
-        _req_exec_id = _exec_replay.get("execConfigId") or None
-    else:
-        _exec_eligible = (token is None
-                          and getattr(req, "graph", None) is None
-                          and target.kind == "scenario")
-        if _req_exec_id is not None and not _exec_eligible:
-            raise Conflict(
-                "exec_config_unsupported",
-                "执行配置只对个人(JWT)手动场景执行开放"
-                "(令牌/编排/临时调用不吃)")
-        if _exec_eligible:
-            from .exec_config import ExecConfigNotFound, load_choice
-            try:
-                _exec_cfg = await load_choice(db, user_id, _req_exec_id)
-            except ExecConfigNotFound as e:
-                raise NotFound("exec_config_not_found", str(e)) from None
+    # 执行配置分层②(§5)与 ④ 重跑快照 → _resolve_dispatch_exec_cfg
+    _req_exec_id, _exec_cfg = await _resolve_dispatch_exec_cfg(
+        db, user_id, req, target=target, token=token, exec_replay=exec_replay)
 
-    # authz M2a S6:绑定 = 服务键 → 别名;选的别名须存在且同基础服务
-    # (先行 —— §8.2 标签解析要吃有效身份集合,绑定校验必须在前)
-    _bindings = {k: b.model_dump(by_alias=True)
-                 for k, b in (req.service_bindings or {}).items()}
-    from .service_aliases import (BindingAliasInvalid,
-                                  validate_binding_aliases)
-    try:
-        await validate_binding_aliases(db, _bindings)
-    except BindingAliasInvalid as e:
-        raise Conflict(e.code, e.message,
-                       extra={"service": e.service, "alias": e.alias}) from None
+    # authz M2a S6:绑定校验先行(§8.2 标签解析要吃有效身份集合)
+    _bindings = await _validated_bindings(db, req)
 
-    # §8.2 标签解析链(2026-11-17 环境降级轮):**有效调用身份标签 >
-    # 项目默认 > 平台默认**。显式注入(RunRequest/graph 的
-    # environmentId)与方案/执行配置/偏好链位全部退役;多身份标签
-    # 不一致 → env_mixed 硬拦截(无逃生口)。三路分流:
-    # * rerun(``env_replay``)按首发快照回放,不重解析(P1-3 修复:
-    #   旧通道经 RunRequest.environmentId 传键,字段退役后被 pydantic
-    #   静默丢弃,「按快照回放」实际从未生效);
-    # * graph 单元自治:顶层不解析(快照记空),逐单元在
-    #   materialize_graph 内按各自身份集合解析(P1-2 修复:此前顶层
-    #   无条件解析,宿主标签恒非空,被 graph_dispatch 当重放快照钉
-    #   整图,逐单元解析不可达);
-    # * scenario/adhoc 现解析:有效身份 = 绑定 + 执行配置换用(slot_map)
-    #   后的取用集合;adhoc 无项目归属,身份自 payload 定义扫描
-    #   (call.user = 条目名,与 prepare_adhoc 校验链同口径 —— P1-1
-    #   修复:此前派发侧不填身份名,执行标签恒为平台默认,校验过的
-    #   地址/版本线与实际执行可能不是同一套)。
-    from .env_chain import EnvChoice, EnvMixed, NO_ENV, resolve_execution_tag
-    # 身份/项目坐标先集(rerun 回放也需要 project_id 供硬门地址/分区判定)
-    _tag_names: list[str] = []
-    _project_id: int | None = None
-    if target.kind == "adhoc":
-        from . import service_aliases as _sa
-        _tag_names = list(await _sa.exec_auth_aliases_of_definition(
-            db, definition_from_payload(scenario_payload), _bindings))
-    elif target.kind == "scenario":
-        from sqlalchemy import select as _sel
-        _project_id = (await db.execute(_sel(ComposerScenario.project_id).where(
-            ComposerScenario.scenario_id == target.scenario_id))).scalar()
-        from . import service_aliases as _sa
-        _tag_names = list(await _sa.exec_auth_aliases_of_definition(
-            db, definition_from_payload(scenario_payload), _bindings))
-        if _exec_cfg is not None and _exec_cfg.explicit and _exec_cfg.bindings:
-            from .service_aliases import slot_lookup_overrides as _slo
-            _sm = await _slo(db, steps, _bindings, _exec_cfg.bindings)
-            _tag_names = list(dict.fromkeys(
-                _sm.get(a, a) for a in _tag_names if _sm.get(a, a)))
-    if env_replay is not None:
-        env_choice = EnvChoice.from_snapshot(env_replay) or NO_ENV
-    elif getattr(req, "graph", None) is not None:
-        env_choice = NO_ENV
-    else:
-        try:
-            env_choice = await resolve_execution_tag(
-                db, identity_names=_tag_names, project_id=_project_id)
-        except EnvMixed as e:
-            raise Conflict("env_mixed", str(e),
-                           extra={"identities": e.entries}) from None
+    # §8.2 标签解析链(三路分流)+ §6.3 环境告警 → _resolve_execution_env
+    env_choice, env_warnings, _project_id = await _resolve_execution_env(
+        db, req, target=target, scenario_payload=scenario_payload,
+        steps=steps, bindings=_bindings, exec_cfg=_exec_cfg,
+        exec_replay=exec_replay, env_replay=env_replay)
 
-    # 环境告警（§6.3）:本次标签的版本线 vs 场景钉定 → 写 config_json
-    try:
-        env_warnings = await _check_env_consistency(
-            db, scenario_payload, env_choice.env_id)
-    except Exception as e:  # noqa: BLE001 — 告警失败不阻塞执行,但降级可见
-        env_warnings = []
-        logger.warning(
-            "run_dispatcher: env consistency 告警生成失败(告警面置空): {}",
-            e)
-
-    # fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
-    # 预检与本处共用同一份实现,算法不得漂移)。
-    # 入站参数(设计 2026-11-13 决策 5):params 已在路由入口五道闸校验,
-    # 此处合成为**单虚行**走数据集行既有通路,跳过 compute_run_fanout
-    # —— 互斥族已拒 params+dataSets/injection 组合;方案配方带入的
-    # 数据集行不消费(评审 ①「砍掉比缝合便宜」)。datasetId=None 与
-    # 基线空覆盖行同拍(compute_run_fanout 的 L780 口径)。
-    _params_mode = bool(getattr(req, "params", None))
-    if _params_mode:
-        from .run_params import virtual_row
-        fanout_datasets = [{"datasetId": None,
-                            "rows": [(0, virtual_row(req.params))]}]
-        injections = [None]
-        selected_entries: list = []
-        skipped_while_degraded: list = []
-    else:
-        (fanout_datasets, injections, selected_entries,
-         skipped_while_degraded) = await compute_run_fanout(
-            db, target.scenario_id, scenario_payload, req)
+    # fanout 计算(compute_run_fanout 单源;params 合成单虚行)→
+    # _resolve_dispatch_fanout
+    (fanout_datasets, injections, selected_entries,
+     skipped_while_degraded, _params_mode) = await _resolve_dispatch_fanout(
+        db, target, req, scenario_payload)
     # raw 保留字(决策 3):carry 关闭 + 不取任何方案配方。skip_carry
-    # 必须随任务下发 —— worker 不回查请求上下文(:1343 注释)。
+    # 必须随任务下发 —— worker 不回查请求上下文(配方快照语义)。
     _skip_carry = (getattr(req, "scheme_id", None) == RAW_SCHEME_ID)
 
-    # authz W6:执行人 ≠ 场景属主(引用执行 / suite 聚合跑他人成员)——
-    # 原件不剥(发布不改原件),执行形态在此脱敏:数据集敏感列剥、
-    # payload 去 config.users(快照/任务参数不落作者明文;内置凭证主
-    # 规则在 prepare_exec 本就当空,两者同口径)。adhoc 无存储属主不判。
-    # 临时调用(adhoc):payload 由调用者即席提供,执行人即作者 —— 显式
-    # 记为本人(built_in_users fail-closed,None 会把作者自己的也当空)
-    _scen = (await get_row(db, target.scenario_id)
-             if getattr(target, "kind", "scenario") == "scenario"
-             and target.scenario_id else None)
-    _scen_owner_id = _scen.owner_id if _scen is not None else user_id
-    # S4:carry 作用域第二层(项目层;adhoc/私有区 = None → 个人层)
-    _scen_project_id = _scen.project_id if _scen is not None else None
-    # 分层②决策 9:项目区个人 carry 覆盖「默认不吃、显式吃」(裁决
-    # 单源 exec_config.carry_overrides_for,预览同款);⑧ 项目区链的
-    # 项目默认配置覆盖层压在显式个人之下(§5:显式个人 > 项目配置 >
-    # 项目层 > 公共层);④ 重跑直用快照终值(区规则在首发已裁,
-    # 不二次裁决)
-    if _exec_replay is not None:
-        _exec_carry = _exec_replay.get("carryOverrides") or None
-    else:
-        from .exec_config import (carry_overrides_for,
-                                  merge_carry_overrides,
-                                  project_carry_overrides)
-        _exec_carry = carry_overrides_for(_exec_cfg, _scen_project_id)
-        _proj_ov = await project_carry_overrides(db, _scen_project_id)
-        _exec_carry = merge_carry_overrides(_proj_ov, _exec_carry)
-    # S8 凭证来源:缺省 / 'personal' = 执行人个人池;'project' = 场景所属
-    # 普通项目的项目凭证池(执行人须是项目成员)。编排(graph):全部单元
-    # 须同属一个普通项目 —— 凭证池只有一个,不跨项目混取。
-    cred_project_id: int | None = None
-    _graph = getattr(req, "graph", None)
-    if getattr(req, "credential_source", None) == "project":
-        from .zone import can_use_project_credentials
-        _cred_pid = _scen_project_id
-        if _graph is not None:
-            _unit_ids = list(dict.fromkeys(
-                u.scenario_id for u in
-                [*_graph.before, *_graph.units, *_graph.after]))
-            _unit_pids = set((await db.execute(
-                select(ComposerScenario.project_id).where(
-                    ComposerScenario.scenario_id.in_(_unit_ids))
-            )).scalars().all())
-            if len(_unit_pids) != 1 or None in _unit_pids:
-                raise Conflict(
-                    "credential_source_invalid",
-                    "项目凭证要求编排的全部单元同属一个普通项目")
-            _cred_pid = next(iter(_unit_pids))
-        if not await can_use_project_credentials(db, user_id, _cred_pid):
-            raise Conflict(
-                "credential_source_invalid",
-                "项目凭证只能用于你所在普通项目的场景")
-        cred_project_id = _cred_pid
+    # authz W6 执行人 ≠ 属主的脱敏上下文 + S4/S8 坐标 → _load_scenario_context
+    _scen, _scen_owner_id, _scen_project_id = await _load_scenario_context(
+        db, target, user_id)
+    # 分层②决策 9 carry 覆盖链(④ 重跑直用快照终值)→ _resolve_carry_policy
+    _exec_carry = await _resolve_carry_policy(
+        db, exec_cfg=_exec_cfg, exec_replay=exec_replay,
+        scen_project_id=_scen_project_id)
+    # S8 凭证池裁决(个人池 / 项目池;graph 全单元同项目)→ _resolve_cred_project
+    cred_project_id = await _resolve_cred_project(
+        db, req, user_id, _scen_project_id)
     if _scen_owner_id is not None and user_id != _scen_owner_id:
-        from .scenario_store import (
-            strip_builtin_credentials, strip_sensitive_columns)
-        scenario_payload = strip_builtin_credentials(
-            copy.deepcopy(scenario_payload))
-        fanout_datasets = [
-            {**fd, "rows": [(i, (strip_sensitive_columns([r])[0]
-                                 if r else r))
-                            for i, r in fd["rows"]]}
-            for fd in fanout_datasets]
+        scenario_payload, fanout_datasets = _strip_cross_owner_payload(
+            scenario_payload, fanout_datasets)
 
     # 3. Allocate runId + Execution row
     # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
@@ -1147,198 +976,590 @@ async def dispatch_target(
             f"total runs {total_runs} exceed platform cap "
             f"{settings.MAX_RUNS_PER_EXECUTION} (rows x injections)",
         )
-    # 注入清单 —— 唯一实现(service_aliases.exec_auth_aliases:模板扫描
-    # (steps + config.setup/teardown,webhook v4 §3.2)∪ 生效别名声明
-    # 条目(S6:绑定选别名即换用))。存档口径(§4.1 拍板):
-    # config_json.serviceBindings 只记原始绑定,别名默认只体现于
-    # injectedAuths 清单与实际注入的 users。
-    auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
-        db, definition_from_payload(scenario_payload), _bindings)
-    if _graph is not None:
-        # 编排缺槽按**全图**凭证清单判(与物化同源),不是锚点场景的
-        # 清单 —— 否则单元缺槽要到执行期才步骤级报错。TOK-02
-        # (2026-11-20 审计):此前仅项目凭证池有闸,个人池缺身份会
-        # 静默漏到引擎层匿名调用 —— 双池统一 fail-fast。
-        from . import graph_dispatch as _gd
+    # 注入清单(唯一实现)与 graph 全图缺槽 fail-fast → _resolve_auth_aliases
+    auth_aliases = await _resolve_auth_aliases(
+        db, user_id, scenario_payload, _bindings,
+        graph=getattr(req, "graph", None), cred_project_id=cred_project_id)
+    # S5 取用覆盖 + 决策 1 圈定(重跑照查快照)→ _resolve_slot_and_circled
+    _slot_map, _circled = await _resolve_slot_and_circled(
+        db, steps=steps, bindings=_bindings, exec_cfg=_exec_cfg,
+        exec_replay=exec_replay)
+    # M3 §8.5 预检硬门(三路径统一漏斗)→ _dispatch_precheck_gate
+    await _dispatch_precheck_gate(
+        db, req=req, target=target, project_id=_project_id,
+        scenario_payload=scenario_payload, user_id=user_id,
+        bindings=_bindings, auth_aliases=auth_aliases,
+        slot_map=_slot_map, cred_project_id=cred_project_id,
+        env=env_choice, circled=_circled)
+
+    # M2b Q3 行级 @slot 账号列 fail-fast(含令牌范围核对)→ _resolve_row_bindings
+    row_bindings_cfg = await _resolve_row_bindings(
+        db, user_id, fanout_datasets, req,
+        circled=_circled, token=token, cred_project_id=cred_project_id)
+
+    # B6③(2026-11-23):legacy 链退役,执行链恒 server(EXEC_CHAIN 键已删)。
+    chain = "server"
+    _validate_debug_request(req, total_runs=total_runs)
+
+    # clientRef 幂等预查 + 建执行行(含 0056 唯一索引竞态兜底)→
+    # _persist_dispatch_execution
+    execution = await _persist_dispatch_execution(
+        db, user_id=user_id, req=req, target=target,
+        scenario_payload=scenario_payload, run_id=run_id,
+        total_runs=total_runs, scen_project_id=_scen_project_id,
+        token=token, trace=trace,
+        config_json=_dispatch_config_json(
+            run_id=run_id, req=req, target=target,
+            scenario_payload=scenario_payload,
+            auth_aliases=auth_aliases, cred_project_id=cred_project_id,
+            row_bindings_cfg=row_bindings_cfg, bindings=_bindings,
+            slot_map=_slot_map, exec_carry=_exec_carry, circled=_circled,
+            req_exec_id=_req_exec_id, env_choice=env_choice,
+            env_warnings=env_warnings,
+            skipped_while_degraded=skipped_while_degraded,
+            params_mode=_params_mode, skip_carry=_skip_carry,
+            chain=chain, trace=trace))
+
+    # C11（P3-01）：不再 spawn 进程内 fanout —— 执行配方入队，worker 认领驱动。
+    # 配方是 dispatch 校验后的完整快照（worker 不回查请求上下文）；
+    # chain（C13 台账）恒记 "server"（B6③ 后单链;键保留 = 存量行
+    # legacy 值与新行同形可读,worker 不再消费该键）。配方装配 →
+    # _dispatch_job_payload。
+    from . import execution_queue as _eq
+    payload = _dispatch_job_payload(
+        req=req, chain=chain, execution_id=execution.id, run_id=run_id,
+        user_id=user_id, scenario_payload=scenario_payload,
+        fanout_datasets=fanout_datasets, selected_entries=selected_entries,
+        scen_owner_id=_scen_owner_id, scen_project_id=_scen_project_id,
+        cred_project_id=cred_project_id, auth_aliases=auth_aliases,
+        bindings=_bindings, slot_map=_slot_map, exec_carry=_exec_carry,
+        skip_carry=_skip_carry, env_choice=env_choice)
+    await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
+    # 惰性 ensure:lifespan 未跑（测试 ASGITransport 直连）也能驱动队列
+    _eq.ensure_workers()
+    # RS3 plate_pins 不在此回填：job 经 DB 队列异步驱动，dispatch 返回时
+    # fanout 尚未解析生效修订 —— 由 _fanout 解析出后自行落库。
+
+    return RunResponse(
+        runId=run_id, executionId=execution.id,
+        identityMode=(token.kind if token is not None else "personal"))
+
+
+# ─── C1 切片2:dispatch_target 取用/门禁辅助(抽缝不改语义)─────────
+
+def _reject_unsupported_run_options(req: RunRequest) -> None:
+    """RunOptions 未接面显式拒绝(W19):step_from 需要被跳过上游的输出
+    由外部提供(同 GraphControlSpec 不开放 fromNode 的理由);subscribe
+    平台无消费面。生成物形状收下了这两个键,但派发链静默丢弃它们
+    会制造"看似生效"的假象 —— 409 说清楚,不兼容不吞。
+    """
+    if req.run_options is None:
+        return
+    if req.run_options.step_from is not None:
+        raise Conflict(
+            "run_options_step_from_unsupported",
+            "step_from 尚未接入平台派发链(被跳过步骤的输出平台无从"
+            "提供);请移除该键",
+        )
+    if req.run_options.subscribe:
+        raise Conflict(
+            "run_options_subscribe_unsupported",
+            "subscribe 尚未接入平台派发链;请移除该键",
+        )
+
+
+def _validate_step_to(req: RunRequest, steps: list) -> None:
+    """step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)。"""
+    if req.step_to is None:
+        return
+    if not steps:
+        raise NotFound("no_steps", "scenario has no steps; step_to cannot be set")
+    if req.step_to >= len(steps):
+        raise Conflict(
+            "step_to_out_of_range",
+            f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
+        )
+
+
+def _validate_debug_request(req: RunRequest, *, total_runs: int) -> None:
+    """调试前置(引擎既有约束的收口):单 case 且无乘法、非 graph。"""
+    if getattr(req, "debug", None) is None:
+        return
+    if getattr(req, "graph", None) is not None:
+        raise Conflict("debug_not_supported", "graph 执行不支持调试")
+    if total_runs != 1:
+        raise Conflict(
+            "debug_single_case",
+            "调试执行仅支持单 case（数据集行 × 注入族须为 1）")
+    if int(req.n_runs or 1) != 1:
+        raise Conflict("debug_single_run", "调试执行要求 nRuns=1")
+
+
+async def _resolve_dispatch_exec_cfg(
+    db: AsyncSession, user_id: int, req: RunRequest, *, target: RunTarget,
+    token: object | None, exec_replay: dict | None,
+) -> tuple:
+    """执行配置分层②(设计方案 §5):JWT 手动场景执行吃执行配置(显式
+    选定或默认行);令牌(同指纹不变量)/编排 graph(单元自治)/临时
+    调用不吃 —— 显式携带而不可用即拒,不静默忽略(似生效未生效)。
+    ④ 分层:``exec_replay``(重跑)传入终值快照 —— 不回查配置行、
+    不走解析(§7:配置后改不影响历史执行)。返回 (req_exec_id, exec_cfg)。
+    """
+    _req_exec_id = getattr(req, "exec_config_id", None)
+    if (exec_replay or None) is not None:
+        return exec_replay.get("execConfigId") or None, None
+    _exec_eligible = (token is None
+                      and getattr(req, "graph", None) is None
+                      and target.kind == "scenario")
+    if _req_exec_id is not None and not _exec_eligible:
+        raise Conflict(
+            "exec_config_unsupported",
+            "执行配置只对个人(JWT)手动场景执行开放"
+            "(令牌/编排/临时调用不吃)")
+    if not _exec_eligible:
+        return _req_exec_id, None
+    from .exec_config import ExecConfigNotFound, load_choice
+    try:
+        _exec_cfg = await load_choice(db, user_id, _req_exec_id)
+    except ExecConfigNotFound as e:
+        raise NotFound("exec_config_not_found", str(e)) from None
+    return _req_exec_id, _exec_cfg
+
+
+async def _validated_bindings(db: AsyncSession, req: RunRequest) -> dict:
+    """authz M2a S6:绑定 = 服务键 → 别名;选的别名须存在且同基础服务
+    (先行 —— §8.2 标签解析要吃有效身份集合,绑定校验必须在前)。
+    """
+    _bindings = {k: b.model_dump(by_alias=True)
+                 for k, b in (req.service_bindings or {}).items()}
+    from .service_aliases import (BindingAliasInvalid,
+                                  validate_binding_aliases)
+    try:
+        await validate_binding_aliases(db, _bindings)
+    except BindingAliasInvalid as e:
+        raise Conflict(e.code, e.message,
+                       extra={"service": e.service, "alias": e.alias}) from None
+    return _bindings
+
+
+async def _resolve_execution_env(
+    db: AsyncSession, req: RunRequest, *, target: RunTarget,
+    scenario_payload: dict, steps: list, bindings: dict, exec_cfg,
+    exec_replay: dict | None, env_replay: dict | None,
+):
+    """§8.2 标签解析链(2026-11-17 环境降级轮):**有效调用身份标签 >
+    项目默认 > 平台默认**。显式注入(RunRequest/graph 的
+    environmentId)与方案/执行配置/偏好链位全部退役;多身份标签
+    不一致 → env_mixed 硬拦截(无逃生口)。三路分流:
+    * rerun(``env_replay``)按首发快照回放,不重解析(P1-3 修复:
+      旧通道经 RunRequest.environmentId 传键,字段退役后被 pydantic
+      静默丢弃,「按快照回放」实际从未生效);
+    * graph 单元自治:顶层不解析(快照记空),逐单元在
+      materialize_graph 内按各自身份集合解析(P1-2 修复:此前顶层
+      无条件解析,宿主标签恒非空,被 graph_dispatch 当重放快照钉
+      整图,逐单元解析不可达);
+    * scenario/adhoc 现解析:有效身份 = 绑定 + 执行配置换用(slot_map)
+      后的取用集合;adhoc 无项目归属,身份自 payload 定义扫描
+      (call.user = 条目名,与 prepare_adhoc 校验链同口径 —— P1-1
+      修复:此前派发侧不填身份名,执行标签恒为平台默认,校验过的
+      地址/版本线与实际执行可能不是同一套)。
+
+    返回 (env_choice, env_warnings, project_id);project_id 供下游
+    carry/凭证/硬门坐标用(rerun 回放同样需要)。§6.3 环境告警(本次
+    标签的版本线 vs 场景钉定)一并生成 —— 告警失败不阻塞执行,降级可见。
+    """
+    from .env_chain import EnvChoice, EnvMixed, NO_ENV, resolve_execution_tag
+    # 身份/项目坐标先集(rerun 回放也需要 project_id 供硬门地址/分区判定)
+    _tag_names: list[str] = []
+    _project_id: int | None = None
+    if target.kind == "adhoc":
+        from . import service_aliases as _sa
+        _tag_names = list(await _sa.exec_auth_aliases_of_definition(
+            db, definition_from_payload(scenario_payload), bindings))
+    elif target.kind == "scenario":
+        from sqlalchemy import select as _sel
+        _project_id = (await db.execute(_sel(ComposerScenario.project_id).where(
+            ComposerScenario.scenario_id == target.scenario_id))).scalar()
+        from . import service_aliases as _sa
+        _tag_names = list(await _sa.exec_auth_aliases_of_definition(
+            db, definition_from_payload(scenario_payload), bindings))
+        if exec_cfg is not None and exec_cfg.explicit and exec_cfg.bindings:
+            from .service_aliases import slot_lookup_overrides as _slo
+            _sm = await _slo(db, steps, bindings, exec_cfg.bindings)
+            _tag_names = list(dict.fromkeys(
+                _sm.get(a, a) for a in _tag_names if _sm.get(a, a)))
+    if env_replay is not None:
+        env_choice = EnvChoice.from_snapshot(env_replay) or NO_ENV
+    elif getattr(req, "graph", None) is not None:
+        env_choice = NO_ENV
+    else:
         try:
-            _g_missing, _g_ambig = await _gd.missing_auth_aliases(
-                db, _graph.model_dump(by_alias=True), user_id,
-                cred_project_id=cred_project_id)
-        except _gd.GraphDispatchError as e:
-            raise Conflict("graph_invalid", str(e)) from None
-        if _g_ambig:
-            # D3 收口(2026-11-22):歧义独立报(此前误标「未登记」)
+            env_choice = await resolve_execution_tag(
+                db, identity_names=_tag_names, project_id=_project_id)
+        except EnvMixed as e:
+            raise Conflict("env_mixed", str(e),
+                           extra={"identities": e.entries}) from None
+    try:
+        env_warnings = await _check_env_consistency(
+            db, scenario_payload, env_choice.env_id)
+    except Exception as e:  # noqa: BLE001 — 告警失败不阻塞执行,但降级可见
+        env_warnings = []
+        logger.warning(
+            "run_dispatcher: env consistency 告警生成失败(告警面置空): {}",
+            e)
+    return env_choice, env_warnings, _project_id
+
+
+async def _resolve_dispatch_fanout(
+    db: AsyncSession, target: RunTarget, req: RunRequest,
+    scenario_payload: dict,
+):
+    """fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
+    预检与本处共用同一份实现,算法不得漂移)。
+    入站参数(设计 2026-11-13 决策 5):params 已在路由入口五道闸校验,
+    此处合成为**单虚行**走数据集行既有通路,跳过 compute_run_fanout
+    —— 互斥族已拒 params+dataSets/injection 组合;方案配方带入的
+    数据集行不消费(评审 ①「砍掉比缝合便宜」)。datasetId=None 与
+    基线空覆盖行同拍(compute_run_fanout 的 L780 口径)。
+    返回 (fanout_datasets, injections, selected_entries,
+    skipped_while_degraded, params_mode)。
+    """
+    _params_mode = bool(getattr(req, "params", None))
+    if _params_mode:
+        from .run_params import virtual_row
+        return ([{"datasetId": None,
+                  "rows": [(0, virtual_row(req.params))]}],
+                [None], [], [], _params_mode)
+    (fanout_datasets, injections, selected_entries,
+     skipped_while_degraded) = await compute_run_fanout(
+        db, target.scenario_id, scenario_payload, req)
+    return (fanout_datasets, injections, selected_entries,
+            skipped_while_degraded, _params_mode)
+
+
+async def _load_scenario_context(db: AsyncSession, target: RunTarget,
+                                 user_id: int):
+    """authz W6 的执行上下文:载入场景行取属主/项目坐标。
+    临时调用(adhoc):payload 由调用者即席提供,执行人即作者 —— 显式
+    记为本人(built_in_users fail-closed,None 会把作者自己的也当空)。
+    返回 (scen, scen_owner_id, scen_project_id);S4:carry 作用域第二层
+    (项目层;adhoc/私有区 = None → 个人层)。
+    """
+    _scen = (await get_row(db, target.scenario_id)
+             if getattr(target, "kind", "scenario") == "scenario"
+             and target.scenario_id else None)
+    _scen_owner_id = _scen.owner_id if _scen is not None else user_id
+    _scen_project_id = _scen.project_id if _scen is not None else None
+    return _scen, _scen_owner_id, _scen_project_id
+
+
+async def _resolve_carry_policy(db: AsyncSession, *, exec_cfg,
+                                exec_replay: dict | None,
+                                scen_project_id: int | None):
+    """分层②决策 9:项目区个人 carry 覆盖「默认不吃、显式吃」(裁决
+    单源 exec_config.carry_overrides_for,预览同款);⑧ 项目区链的
+    项目默认配置覆盖层压在显式个人之下(§5:显式个人 > 项目配置 >
+    项目层 > 公共层);④ 重跑直用快照终值(区规则在首发已裁,
+    不二次裁决)。
+    """
+    if (exec_replay or None) is not None:
+        return exec_replay.get("carryOverrides") or None
+    from .exec_config import (carry_overrides_for,
+                              merge_carry_overrides,
+                              project_carry_overrides)
+    _exec_carry = carry_overrides_for(exec_cfg, scen_project_id)
+    _proj_ov = await project_carry_overrides(db, scen_project_id)
+    return merge_carry_overrides(_proj_ov, _exec_carry)
+
+
+async def _resolve_cred_project(db: AsyncSession, req: RunRequest,
+                                user_id: int,
+                                scen_project_id: int | None) -> int | None:
+    """S8 凭证来源:缺省 / 'personal' = 执行人个人池;'project' = 场景所属
+    普通项目的项目凭证池(执行人须是项目成员)。编排(graph):全部单元
+    须同属一个普通项目 —— 凭证池只有一个,不跨项目混取。
+    """
+    if getattr(req, "credential_source", None) != "project":
+        return None
+    from .zone import can_use_project_credentials
+    _graph = getattr(req, "graph", None)
+    _cred_pid = scen_project_id
+    if _graph is not None:
+        _unit_ids = list(dict.fromkeys(
+            u.scenario_id for u in
+            [*_graph.before, *_graph.units, *_graph.after]))
+        _unit_pids = set((await db.execute(
+            select(ComposerScenario.project_id).where(
+                ComposerScenario.scenario_id.in_(_unit_ids))
+        )).scalars().all())
+        if len(_unit_pids) != 1 or None in _unit_pids:
             raise Conflict(
-                "auth_aliases_ambiguous",
-                "以下身份条目命中多个候选账户(同引用多行且无同标签唯一"
-                "命中),请调整条目环境标签或清理同名账户:"
-                + "、".join(_g_ambig),
-                extra={"aliases": _g_ambig,
-                       "credentialSource": ("project" if cred_project_id
-                                            is not None else "personal")})
-        if _g_missing:
-            if cred_project_id is not None:
-                raise Conflict(
-                    "auth_aliases_missing",
-                    "以下身份条目项目凭证未登记,请项目管理员在项目配置页"
-                    "登记,或改用个人凭证:" + "、".join(_g_missing),
-                    extra={"aliases": _g_missing,
-                           "credentialSource": "project"})
+                "credential_source_invalid",
+                "项目凭证要求编排的全部单元同属一个普通项目")
+        _cred_pid = next(iter(_unit_pids))
+    if not await can_use_project_credentials(db, user_id, _cred_pid):
+        raise Conflict(
+            "credential_source_invalid",
+            "项目凭证只能用于你所在普通项目的场景")
+    return _cred_pid
+
+
+def _strip_cross_owner_payload(scenario_payload: dict, fanout_datasets: list):
+    """authz W6:执行人 ≠ 场景属主(引用执行 / suite 聚合跑他人成员)——
+    原件不剥(发布不改原件),执行形态在此脱敏:数据集敏感列剥、
+    payload 去 config.users(快照/任务参数不落作者明文;内置凭证主
+    规则在 prepare_exec 本就当空,两者同口径)。返回脱敏后的
+    (scenario_payload, fanout_datasets)。
+    """
+    from .scenario_store import (
+        strip_builtin_credentials, strip_sensitive_columns)
+    payload = strip_builtin_credentials(copy.deepcopy(scenario_payload))
+    datasets = [
+        {**fd, "rows": [(i, (strip_sensitive_columns([r])[0]
+                             if r else r))
+                        for i, r in fd["rows"]]}
+        for fd in fanout_datasets]
+    return payload, datasets
+
+
+async def _resolve_auth_aliases(db: AsyncSession, user_id: int,
+                                scenario_payload: dict, bindings: dict, *,
+                                graph, cred_project_id: int | None) -> list:
+    """注入清单 —— 唯一实现(service_aliases.exec_auth_aliases:模板扫描
+    (steps + config.setup/teardown,webhook v4 §3.2)∪ 生效别名声明
+    条目(S6:绑定选别名即换用))。存档口径(§4.1 拍板):
+    config_json.serviceBindings 只记原始绑定,别名默认只体现于
+    injectedAuths 清单与实际注入的 users。
+
+    编排缺槽按**全图**凭证清单判(与物化同源),不是锚点场景的
+    清单 —— 否则单元缺槽要到执行期才步骤级报错。TOK-02
+    (2026-11-20 审计):此前仅项目凭证池有闸,个人池缺身份会
+    静默漏到引擎层匿名调用 —— 双池统一 fail-fast。
+    """
+    auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
+        db, definition_from_payload(scenario_payload), bindings)
+    if graph is None:
+        return auth_aliases
+    from . import graph_dispatch as _gd
+    try:
+        _g_missing, _g_ambig = await _gd.missing_auth_aliases(
+            db, graph.model_dump(by_alias=True), user_id,
+            cred_project_id=cred_project_id)
+    except _gd.GraphDispatchError as e:
+        raise Conflict("graph_invalid", str(e)) from None
+    if _g_ambig:
+        # D3 收口(2026-11-22):歧义独立报(此前误标「未登记」)
+        raise Conflict(
+            "auth_aliases_ambiguous",
+            "以下身份条目命中多个候选账户(同引用多行且无同标签唯一"
+            "命中),请调整条目环境标签或清理同名账户:"
+            + "、".join(_g_ambig),
+            extra={"aliases": _g_ambig,
+                   "credentialSource": ("project" if cred_project_id
+                                        is not None else "personal")})
+    if _g_missing:
+        if cred_project_id is not None:
             raise Conflict(
                 "auth_aliases_missing",
-                "以下身份条目在你的个人凭证池未登记,请先在「凭证管理」"
-                "登记后再发起编排:" + "、".join(_g_missing),
+                "以下身份条目项目凭证未登记,请项目管理员在项目配置页"
+                "登记,或改用个人凭证:" + "、".join(_g_missing),
                 extra={"aliases": _g_missing,
-                       "credentialSource": "personal"})
-        auth_aliases = []      # 已按全图核对;锚点清单不再重复判
-    # S5 失败即中止:注入清单在执行人池解不到账户 → 整单拒发(此前
-    # 告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
-    # 注入/预览同一份(pick_bindings)。分层②:显式选定配置的绑定把
-    # 取用条目换掉(注入标签不变;仅显式选定参与,默认行不自动换用)。
-    _slot_map: dict[str, str] = {}
-    if _exec_replay is not None:
-        _slot_map = dict(_exec_replay.get("slotMap") or {})
-    elif _exec_cfg is not None and _exec_cfg.explicit and _exec_cfg.bindings:
-        from .service_aliases import slot_lookup_overrides
-        _slot_map = await slot_lookup_overrides(
-            db, steps, _bindings, _exec_cfg.bindings)
-    # 决策 1 圈定即承诺(阶段 1):生效配置行(显式选定 > 本人默认;令牌/
-    # graph/adhoc 不吃配置,天然不圈)非空圈定集 = 白名单生效;重跑按
-    # 首发快照照查(§7 配置后改不影响历史执行)。比对在 precheck_hard_gate
-    # 同一道门;行级 @slot 绑定在下方行引用段同一码拦截。
-    if _exec_replay is not None:
-        _circled: frozenset[str] = frozenset(
-            _exec_replay.get("circledAliases") or [])
-    else:
-        _circled = _exec_cfg.circled if _exec_cfg is not None else frozenset()
-    # M3 §8.5 预检硬门(2026-11-17):三路径统一 —— UI/JWT、access
-    # token 都经本漏斗;判定与 /run/precheck 共用一套分类(run_precheck
-    # 私有函数,「不开第二份」)。webhook 定时路径在 integration_runner
-    # 装载前接同一门。graph(逐单元物化)与 adhoc(check_addresses
-    # 专属链)不走此门。旧 auth_aliases_missing 缺失检查由门的
-    # identity_missing/account_missing 细分承接(码更准,文案承接)。
-    if target.kind == "scenario" and getattr(req, "graph", None) is None:
-        from ..routers.run_precheck import PrecheckGateError, precheck_hard_gate
-        try:
-            await precheck_hard_gate(
-                db, project_id=_project_id,
-                definition=definition_from_payload(scenario_payload),
-                user_id=user_id, bindings=_bindings,
-                auth_aliases=auth_aliases,
-                slot_map=_slot_map or None,
-                cred_project_id=cred_project_id, env=env_choice,
-                circled=_circled or None)
-        except PrecheckGateError as e:
-            raise Conflict(e.code, e.message, extra=e.detail) from None
+                       "credentialSource": "project"})
+        raise Conflict(
+            "auth_aliases_missing",
+            "以下身份条目在你的个人凭证池未登记,请先在「凭证管理」"
+            "登记后再发起编排:" + "、".join(_g_missing),
+            extra={"aliases": _g_missing,
+                   "credentialSource": "personal"})
+    return []      # 已按全图核对;锚点清单不再重复判
 
-    # M2b Q3 数据集按账号驱动:行账号列 ``@slot.<槽>`` = 本次凭证池里的
-    # 绑定名。派发前扫全部选中行 fail-fast(缺失 / 环境不符整单拒发);
-    # 令牌调用另核对覆盖绑定 id ⊆ 令牌范围。
-    row_bindings_cfg: dict[str, dict[str, int]] = {}
+
+async def _resolve_slot_and_circled(db: AsyncSession, *, steps: list,
+                                    bindings: dict, exec_cfg,
+                                    exec_replay: dict | None):
+    """S5 失败即中止:注入清单在执行人池解不到账户 → 整单拒发(此前
+    告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
+    注入/预览同一份(pick_bindings)。分层②:显式选定配置的绑定把
+    取用条目换掉(注入标签不变;仅显式选定参与,默认行不自动换用)。
+    决策 1 圈定即承诺(阶段 1):生效配置行(显式选定 > 本人默认;令牌/
+    graph/adhoc 不吃配置,天然不圈)非空圈定集 = 白名单生效;重跑按
+    首发快照照查(§7 配置后改不影响历史执行)。比对在 precheck_hard_gate
+    同一道门;行级 @slot 绑定在 _resolve_row_bindings 同一码拦截。
+    返回 (slot_map, circled)。
+    """
+    _slot_map: dict[str, str] = {}
+    if (exec_replay or None) is not None:
+        _slot_map = dict(exec_replay.get("slotMap") or {})
+    elif exec_cfg is not None and exec_cfg.explicit and exec_cfg.bindings:
+        from .service_aliases import slot_lookup_overrides
+        _slot_map = await slot_lookup_overrides(db, steps, bindings,
+                                                exec_cfg.bindings)
+    if (exec_replay or None) is not None:
+        _circled: frozenset[str] = frozenset(
+            exec_replay.get("circledAliases") or [])
+    else:
+        _circled = exec_cfg.circled if exec_cfg is not None else frozenset()
+    return _slot_map, _circled
+
+
+async def _dispatch_precheck_gate(
+    db: AsyncSession, *, req: RunRequest, target: RunTarget,
+    project_id: int | None, scenario_payload: dict, user_id: int,
+    bindings: dict, auth_aliases: list, slot_map: dict,
+    cred_project_id: int | None, env, circled,
+) -> None:
+    """M3 §8.5 预检硬门(2026-11-17):三路径统一 —— UI/JWT、access
+    token 都经本漏斗;判定与 /run/precheck 共用一套分类(run_precheck
+    私有函数,「不开第二份」)。webhook 定时路径在 integration_runner
+    装载前接同一门。graph(逐单元物化)与 adhoc(check_addresses
+    专属链)不走此门。旧 auth_aliases_missing 缺失检查由门的
+    identity_missing/account_missing 细分承接(码更准,文案承接)。
+    """
+    if target.kind != "scenario" or getattr(req, "graph", None) is not None:
+        return
+    from ..routers.run_precheck import PrecheckGateError, precheck_hard_gate
+    try:
+        await precheck_hard_gate(
+            db, project_id=project_id,
+            definition=definition_from_payload(scenario_payload),
+            user_id=user_id, bindings=bindings,
+            auth_aliases=auth_aliases,
+            slot_map=slot_map or None,
+            cred_project_id=cred_project_id, env=env,
+            circled=circled or None)
+    except PrecheckGateError as e:
+        raise Conflict(e.code, e.message, extra=e.detail) from None
+
+
+async def _resolve_row_bindings(db: AsyncSession, user_id: int,
+                                fanout_datasets: list, req: RunRequest, *,
+                                circled, token: object | None,
+                                cred_project_id: int | None) -> dict:
+    """M2b Q3 数据集按账号驱动:行账号列 ``@slot.<槽>`` = 本次凭证池里的
+    绑定名。派发前扫全部选中行 fail-fast(缺失 / 环境不符整单拒发);
+    令牌调用另核对覆盖绑定 id ⊆ 令牌范围。返回 row_bindings_cfg
+    ({datasetId:rowIndex: {槽: 绑定 id}});无行引用时恒空。
+    """
     _row_refs = [
         (fd.get("datasetId"), i, slot, alias)
         for fd in fanout_datasets for i, r in fd["rows"]
         for slot, alias in run_prepare.row_binding_refs(r).items()]
-    if _row_refs:
-        if getattr(req, "graph", None) is not None:
+    if not _row_refs:
+        return {}
+    if getattr(req, "graph", None) is not None:
+        raise Conflict(
+            "dataset_binding_unsupported",
+            "suite 编排暂不支持数据集账号列(@slot.<槽>)")
+    _hit, _miss, _amb = await run_prepare.lookup_row_bindings(
+        db, user_id, {(s, a) for _d, _i, s, a in _row_refs},
+        cred_project_id=cred_project_id)
+    _src = "project" if cred_project_id is not None else "personal"
+    for code, bad, msg in (
+            ("dataset_binding_missing", set(_miss),
+             ("以下数据集行的账号在项目凭证中未登记:"
+              if cred_project_id is not None else
+              "以下数据集行的账号在你名下没有同名绑定:")),
+            ("dataset_binding_ambiguous", set(_amb),
+             "以下数据集行的账号绑定存在多候选(同系统多标签且无"
+             "唯一命中),请为其补充同标签账户或改绑:")):
+        if bad:
+            rows_out = [
+                {"datasetId": d, "rowIndex": i, "slot": s, "alias": a}
+                for d, i, s, a in _row_refs if (s, a) in bad][:20]
+            raise Conflict(code, msg + "、".join(
+                f"{r['slot']}={r['alias']}(行 {r['rowIndex']})"
+                for r in rows_out),
+                extra={"rows": rows_out, "credentialSource": _src})
+    # 决策 1 圈定即承诺(阶段 1):行级 @slot 的取用名一并计入比对
+    # (与 precheck_hard_gate 的定义级差集同码互补;行引用只在派发
+    # 段可见,故在此拦)。未圈定(空集)= 跳过。
+    if circled:
+        _rows_out_c = sorted({a for _d, _i, _s, a in _row_refs
+                               if a not in circled})
+        if _rows_out_c:
             raise Conflict(
-                "dataset_binding_unsupported",
-                "suite 编排暂不支持数据集账号列(@slot.<槽>)")
-        _hit, _miss, _amb = await run_prepare.lookup_row_bindings(
-            db, user_id, {(s, a) for _d, _i, s, a in _row_refs},
-            cred_project_id=cred_project_id)
-        _src = "project" if cred_project_id is not None else "personal"
-        for code, bad, msg in (
-                ("dataset_binding_missing", set(_miss),
-                 ("以下数据集行的账号在项目凭证中未登记:"
-                  if cred_project_id is not None else
-                  "以下数据集行的账号在你名下没有同名绑定:")),
-                ("dataset_binding_ambiguous", set(_amb),
-                 "以下数据集行的账号绑定存在多候选(同系统多标签且无"
-                 "唯一命中),请为其补充同标签账户或改绑:")):
-            if bad:
-                rows_out = [
-                    {"datasetId": d, "rowIndex": i, "slot": s, "alias": a}
-                    for d, i, s, a in _row_refs if (s, a) in bad][:20]
-                raise Conflict(code, msg + "、".join(
-                    f"{r['slot']}={r['alias']}(行 {r['rowIndex']})"
-                    for r in rows_out),
-                    extra={"rows": rows_out, "credentialSource": _src})
-        # 决策 1 圈定即承诺(阶段 1):行级 @slot 的取用名一并计入比对
-        # (与 precheck_hard_gate 的定义级差集同码互补;行引用只在派发
-        # 段可见,故在此拦)。未圈定(空集)= 跳过。
-        if _circled:
-            _rows_out_c = sorted({a for _d, _i, _s, a in _row_refs
-                                   if a not in _circled})
-            if _rows_out_c:
-                raise Conflict(
-                    "identity_not_circled",
-                    "以下数据集行账号绑定不在本次生效执行配置的圈定集内,"
-                    "请到执行配置页「纳入」后重跑:" + "、".join(_rows_out_c),
-                    extra={"aliases": _rows_out_c})
-        if token is not None:
-            from . import access_token as _at
-            _scope_aliases, _scope_auths = await _at.load_scope(db, token.id)
-            # P1-1(review 2026-11-20):PickedIdentity 无 .id(slots),
-            # 绑定标识 = account_id —— 与十行下方的留档路径同款
-            _out = sorted({a for (s, a), b in _hit.items()
-                           if b.account_id not in _scope_auths})
-            if _out:
-                raise Conflict(
-                    _at.ERR_RESOURCE_NOT_ALLOWED,
-                    "数据集行的账号绑定不在令牌授权范围:" + "、".join(_out),
-                    extra={"aliases": _out})
-        for d, i, s, a in _row_refs:
-            # PickedIdentity 的绑定标识是 account_id(P1 缺陷修复:旧读
-            # .id → 行级绑定留档路径自 P1 起必 AttributeError)
-            row_bindings_cfg.setdefault(f"{d}:{i}", {})[s] =                 _hit[(s, a)].account_id
-
-    from . import execution_queue as _eq
-    # B6③(2026-11-23):legacy 链退役,执行链恒 server(EXEC_CHAIN 键已删)。
-    chain = "server"
-    debug_spec = getattr(req, "debug", None)
-    if debug_spec is not None:
-        # 调试前置（引擎既有约束的收口）：单 case 且无乘法、非 graph
-        if getattr(req, "graph", None) is not None:
-            raise Conflict("debug_not_supported", "graph 执行不支持调试")
-        if total_runs != 1:
+                "identity_not_circled",
+                "以下数据集行账号绑定不在本次生效执行配置的圈定集内,"
+                "请到执行配置页「纳入」后重跑:" + "、".join(_rows_out_c),
+                extra={"aliases": _rows_out_c})
+    if token is not None:
+        from . import access_token as _at
+        _scope_aliases, _scope_auths = await _at.load_scope(db, token.id)
+        # P1-1(review 2026-11-20):PickedIdentity 无 .id(slots),
+        # 绑定标识 = account_id —— 与十行下方的留档路径同款
+        _out = sorted({a for (s, a), b in _hit.items()
+                       if b.account_id not in _scope_auths})
+        if _out:
             raise Conflict(
-                "debug_single_case",
-                "调试执行仅支持单 case（数据集行 × 注入族须为 1）")
-        if int(req.n_runs or 1) != 1:
-            raise Conflict("debug_single_run", "调试执行要求 nRuns=1")
+                _at.ERR_RESOURCE_NOT_ALLOWED,
+                "数据集行的账号绑定不在令牌授权范围:" + "、".join(_out),
+                extra={"aliases": _out})
+    row_bindings_cfg: dict[str, dict[str, int]] = {}
+    for d, i, s, a in _row_refs:
+        # PickedIdentity 的绑定标识是 account_id(P1 缺陷修复:旧读
+        # .id → 行级绑定留档路径自 P1 起必 AttributeError)
+        row_bindings_cfg.setdefault(f"{d}:{i}", {})[s] = (
+            _hit[(s, a)].account_id)
+    return row_bindings_cfg
 
-    # clientRef 幂等预查(设计 2026-11-13 决策 8):外部投递天然
-    # at-least-once,重复 clientRef = 重复业务订单 → 409 回显原
-    # executionId;并发竞态由 0056 部分唯一索引兜底(IntegrityError
-    # 回查映射同 409)。身份维度与索引同拍:令牌 = (token_id,
-    # client_ref);JWT = (owner_id, client_ref) ∧ token_id IS NULL。
+
+async def _dup_client_ref_id(db: AsyncSession, client_ref: str, *,
+                             token_id: int | None, user_id: int) -> int | None:
+    """clientRef 幂等查重(设计 2026-11-13 决策 8):外部投递天然
+    at-least-once,重复 clientRef = 重复业务订单。身份维度与 0056 部分
+    唯一索引同拍:令牌 = (token_id, client_ref);JWT = (owner_id,
+    client_ref) ∧ token_id IS NULL。预查与 IntegrityError 兜底回查共用。
+    """
+    _idem_cond = Execution.client_ref == client_ref
+    if token_id is not None:
+        _idem_cond &= Execution.token_id == token_id
+    else:
+        _idem_cond &= (Execution.token_id.is_(None)
+                       & (Execution.owner_id == user_id))
+    return (await db.execute(
+        select(Execution.id).where(_idem_cond)
+        .order_by(Execution.id).limit(1))).scalar_one_or_none()
+
+
+def _dup_client_ref_conflict(dup_id: int) -> Conflict:
+    """重复提交即首次投递已受理;409 回显原 executionId(重跑走 rerun)。
+    返回异常实例由调用方 raise(兜底路径可带 ``from None`` 消噪)。
+    """
+    return Conflict(
+        "duplicate_client_ref",
+        f"clientRef 已被执行 #{dup_id} 使用;重复提交即首次投递"
+        "已受理,请用原 executionId 查询结果(重跑走 rerun)",
+        extra={"executionId": dup_id})
+
+
+async def _persist_dispatch_execution(
+    db: AsyncSession, *, user_id: int, req: RunRequest, target: RunTarget,
+    scenario_payload: dict, run_id: str, total_runs: int,
+    scen_project_id: int | None, token: object | None,
+    trace: dict | None, config_json: dict,
+) -> Execution:
+    """建执行行(整单落库的单写点)+ clientRef 幂等(设计 2026-11-13
+    决策 8):预查 → 插入;并发竞态由 0056 部分唯一索引兜底(撞
+    IntegrityError 回查映射同 409)。回查也落空 = 违规来自别的约束
+    (与本索引无关)→ 原样上抛,不编造 duplicate_client_ref。
+    列级语义见各字段旁注。
+    """
     if req.client_ref:
-        _idem_cond = Execution.client_ref == req.client_ref
-        if token is not None:
-            _idem_cond &= Execution.token_id == token.id
-        else:
-            _idem_cond &= (Execution.token_id.is_(None)
-                           & (Execution.owner_id == user_id))
-        _dup_id = (await db.execute(
-            select(Execution.id).where(_idem_cond)
-            .order_by(Execution.id).limit(1))).scalar_one_or_none()
+        _dup_id = await _dup_client_ref_id(
+            db, req.client_ref,
+            token_id=(token.id if token is not None else None),
+            user_id=user_id)
         if _dup_id is not None:
-            raise Conflict(
-                "duplicate_client_ref",
-                f"clientRef 已被执行 #{_dup_id} 使用;重复提交即首次投递"
-                "已受理,请用原 executionId 查询结果(重跑走 rerun)",
-                extra={"executionId": _dup_id})
-
+            raise _dup_client_ref_conflict(_dup_id)
     try:
-        execution = await _create_execution(
+        return await _create_execution(
         db,
         # (Case 层解散后执行的挂载点就是场景;临时调用为占位 id)。
         scenario_id=target.scenario_id,
         owner_id=user_id,
         # S8 审计「项目 + 发起人」:执行所属项目 = 场景项目快照
         # (S1.1 项目执行对成员可见的数据源)
-        project_id=_scen_project_id,
+        project_id=scen_project_id,
         total_runs=total_runs,
         # P3:执行形态(scenario | adhoc)—— 非场景形态登记在
         # models.execution.NON_SCENARIO_KINDS,列表/重跑按它判定。
@@ -1355,8 +1576,8 @@ async def dispatch_target(
         # 直读唯一权威 payload.definition.meta.name,不走 _meta_from_row
         # 的整 meta 严格校验 —— 畸形行不拦发起,空值由通知侧兜底链接住。
         scenario_name=str(
-            (definition_from_payload(scenario_payload).get("meta") or {}
-            ).get("name") or ""
+            (definition_from_payload(scenario_payload).get("meta") or {})
+            .get("name") or ""
         ).strip(),
         # 执行时场景快照:与传给 _fanout 的 scenario_payload 同拍同源
         # (同一读取),保证"快照即所执行";深拷贝隔离后续 fanout 内的
@@ -1364,118 +1585,126 @@ async def dispatch_target(
         scenario_snapshot=copy.deepcopy(scenario_payload),
         # RS3：plate_pins 随 fanout 后回填（生效修订在 fanout 内解析）
         plate_pins=None,
-        config_json={
-            "runId": run_id,
-            "scenarioId": target.scenario_id,
-            "dataSetIds": req.data_set_ids,
-            "dataSetSelection": [
-                s.model_dump(by_alias=True) for s in req.data_set_selection
-            ],
-            # 执行环境键已随 D2 退役(不再写入);历史行旧键由前端
-            # RECIPE_LABELS 标签保留可读。
-            # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
-            # 只告警继续(清单如实记录原始请求,与"解不到≠没要求"对齐)。
-            "injectedAuths": auth_aliases,
-            # S8 凭证来源(重跑按此回放;项目凭证另记所用项目)
-            **({"credentialSource": "project",
-                "credentialProjectId": cred_project_id}
-               if cred_project_id is not None else {}),
-            # M2b Q3:行级账号覆盖({datasetId:rowIndex: {槽: 绑定 id}})
-            **({"rowBindings": row_bindings_cfg} if row_bindings_cfg else {}),
-            # 服务键 → {alias}(S6;重跑按此回放)
-            "serviceBindings": _bindings,
-            # 执行指令快照(W19):RunOptions 生成物 dump(snake_case 内层,
-            # 与 RunScheme.options 同形)。旧平铺键 stepTo/nRuns/parallel
-            # 不再写;读侧(rerun/列表投影)带旧行回退映射。
-            "runOptions": (req.run_options.model_dump(mode="json",
-                                                       exclude_none=True)
-                           if req.run_options is not None else None),
-            # 原始请求的注入条目 id(悬空过滤**前**):rerun 按配方重建的
-            # 唯一来源(执行设计 §3.4)—— 只记录请求,不记录判定结果。
-            "injectionEntryIds": req.injection_entry_ids,
-            # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
-            "schemeId": req.scheme_id,
-            # 分层④:执行配置终值快照 —— 重跑回放的依据(空 dict =
-            # 当时无覆盖,与旧行缺键=回落默认链解析可区分);execConfigId
-            # 为链路溯源(回放不回查该行)
-            "execSlotMap": _slot_map,
-            "execCarryOverrides": _exec_carry,
-            # 决策 1 圈定即承诺(阶段 1):圈定集终值快照 —— 重跑照查
-            # (单一规则不豁免);旧行缺键 = 当时未圈,回放空集 = 跳过。
-            "execCircledAliases": sorted(_circled),
-            **({"execConfigId": _req_exec_id}
-               if _req_exec_id is not None else {}),
-            # S2.1 环境选择快照(environmentId/environmentSource;无环境
-            # 时键缺席)—— 重跑按此回放
-            **env_choice.snapshot(),
-            "schemeName": req.scheme_name,
-            # 批次键(执行设计 §1.2):与列同值;rerun 按 config_json 重建
-            # 配方时不带旧批(重跑是新的一次独立发起)。
-            "batchId": req.batch_id,
-            "reportDefinitionId": getattr(req, "report_definition_id", None),
-            # C13:执行链留档（legacy|server;调试恒 server）
-            "chain": chain,
-            # §7.1 追溯块(令牌与 JWT 都写 resolvedServices/builtinAuths;
-            # 令牌另带 token 快照与 outOfScope)
-            **({"resolvedServices": trace["resolvedServices"]}
-               if trace and trace.get("resolvedServices") is not None else {}),
-            **({"builtinAuths": trace["builtinAuths"]}
-               if trace and trace.get("builtinAuths") else {}),
-            **({"token": trace["token"]}
-               if trace and trace.get("token") else {}),
-            **({"outOfScope": trace["outOfScope"]}
-               if trace and trace.get("outOfScope") else {}),
-            **({"environmentWarnings": env_warnings} if env_warnings else {}),
-            # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
-            # entriesSkippedWhileDegraded = 降级期间被跳过的条目 id(因由不限);
-            # 键缺席 = 本次执行没有「降级 + 跳过」同时发生,不是「零跳过」。
-            **({"judgeDegraded": True, "entriesSkippedWhileDegraded": skipped_while_degraded}
-               if skipped_while_degraded else {}),
-            # ── 入站执行参数快照(设计 2026-11-13 §5)────────────────
-            # rerun 回放 params/schemeId("raw" 原样);clientRef 不回放
-            # (与 batchId 同口径:重跑是新的一次独立发起)。carryPolicy
-            # "off" 仅 raw(决策 3);paramsStrict = 场景契约快照。
-            **({"inboundParams": req.params} if _params_mode else {}),
-            **({"carryPolicy": "off"} if _skip_carry else {}),
-            **({"paramsStrict": bool((scenario_payload or {}).get("paramsStrict"))}
-               if _params_mode else {}),
-        },
+        config_json=config_json,
     )
     except IntegrityError:
-        # 并发竞态兜底:预查与插入之间撞 0056 唯一索引 → 回查映射同 409。
-        # 回查也落空 = 违规来自别的约束(与本索引无关)→ 原样上抛,
-        # 不编造 duplicate_client_ref。
         if not req.client_ref:
             raise
         await db.rollback()
-        _idem_cond = Execution.client_ref == req.client_ref
-        if token is not None:
-            _idem_cond &= Execution.token_id == token.id
-        else:
-            _idem_cond &= (Execution.token_id.is_(None)
-                           & (Execution.owner_id == user_id))
-        _dup_id = (await db.execute(
-            select(Execution.id).where(_idem_cond)
-            .order_by(Execution.id).limit(1))).scalar_one_or_none()
+        _dup_id = await _dup_client_ref_id(
+            db, req.client_ref,
+            token_id=(token.id if token is not None else None),
+            user_id=user_id)
         if _dup_id is None:
             raise
-        raise Conflict(
-            "duplicate_client_ref",
-            f"clientRef 已被执行 #{_dup_id} 使用;重复提交即首次投递"
-            "已受理,请用原 executionId 查询结果(重跑走 rerun)",
-            extra={"executionId": _dup_id}) from None
+        raise _dup_client_ref_conflict(_dup_id) from None
 
-    # C11（P3-01）：不再 spawn 进程内 fanout —— 执行配方入队，worker 认领驱动。
-    # 配方是 dispatch 校验后的完整快照（worker 不回查请求上下文）；
-    # chain（C13 台账）恒记 "server"（B6③ 后单链;键保留 = 存量行
-    # legacy 值与新行同形可读,worker 不再消费该键）。
-    from . import execution_queue as _eq
+
+def _dispatch_config_json(
+    *, run_id: str, req: RunRequest, target: RunTarget,
+    scenario_payload: dict, auth_aliases: list,
+    cred_project_id: int | None, row_bindings_cfg: dict, bindings: dict,
+    slot_map: dict, exec_carry, circled, req_exec_id, env_choice,
+    env_warnings, skipped_while_degraded, params_mode: bool,
+    skip_carry: bool, chain: str, trace: dict | None,
+) -> dict:
+    """config_json 台账配方(纯装配):dispatch 校验后的终值快照逐键
+    落档 —— 重跑(rerun)按此回放,worker 不回查请求上下文。
+    """
+    return {
+        "runId": run_id,
+        "scenarioId": target.scenario_id,
+        "dataSetIds": req.data_set_ids,
+        "dataSetSelection": [
+            s.model_dump(by_alias=True) for s in req.data_set_selection
+        ],
+        # 执行环境键已随 D2 退役(不再写入);历史行旧键由前端
+        # RECIPE_LABELS 标签保留可读。
+        # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
+        # 只告警继续(清单如实记录原始请求,与"解不到≠没要求"对齐)。
+        "injectedAuths": auth_aliases,
+        # S8 凭证来源(重跑按此回放;项目凭证另记所用项目)
+        **({"credentialSource": "project",
+            "credentialProjectId": cred_project_id}
+           if cred_project_id is not None else {}),
+        # M2b Q3:行级账号覆盖({datasetId:rowIndex: {槽: 绑定 id}})
+        **({"rowBindings": row_bindings_cfg} if row_bindings_cfg else {}),
+        # 服务键 → {alias}(S6;重跑按此回放)
+        "serviceBindings": bindings,
+        # 执行指令快照(W19):RunOptions 生成物 dump(snake_case 内层,
+        # 与 RunScheme.options 同形)。旧平铺键 stepTo/nRuns/parallel
+        # 不再写;读侧(rerun/列表投影)带旧行回退映射。
+        "runOptions": (req.run_options.model_dump(mode="json",
+                                                 exclude_none=True)
+                       if req.run_options is not None else None),
+        # 原始请求的注入条目 id(悬空过滤**前**):rerun 按配方重建的
+        # 唯一来源(执行设计 §3.4)—— 只记录请求,不记录判定结果。
+        "injectionEntryIds": req.injection_entry_ids,
+        # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
+        "schemeId": req.scheme_id,
+        # 分层④:执行配置终值快照 —— 重跑回放的依据(空 dict =
+        # 当时无覆盖,与旧行缺键=回落默认链解析可区分);execConfigId
+        # 为链路溯源(回放不回查该行)
+        "execSlotMap": slot_map,
+        "execCarryOverrides": exec_carry,
+        # 决策 1 圈定即承诺(阶段 1):圈定集终值快照 —— 重跑照查
+        # (单一规则不豁免);旧行缺键 = 当时未圈,回放空集 = 跳过。
+        "execCircledAliases": sorted(circled),
+        **({"execConfigId": req_exec_id}
+           if req_exec_id is not None else {}),
+        # S2.1 环境选择快照(environmentId/environmentSource;无环境
+        # 时键缺席)—— 重跑按此回放
+        **env_choice.snapshot(),
+        "schemeName": req.scheme_name,
+        # 批次键(执行设计 §1.2):与列同值;rerun 按 config_json 重建
+        # 配方时不带旧批(重跑是新的一次独立发起)。
+        "batchId": req.batch_id,
+        "reportDefinitionId": getattr(req, "report_definition_id", None),
+        # C13:执行链留档（legacy|server;调试恒 server）
+        "chain": chain,
+        # §7.1 追溯块(令牌与 JWT 都写 resolvedServices/builtinAuths;
+        # 令牌另带 token 快照与 outOfScope)
+        **({"resolvedServices": trace["resolvedServices"]}
+           if trace and trace.get("resolvedServices") is not None else {}),
+        **({"builtinAuths": trace["builtinAuths"]}
+           if trace and trace.get("builtinAuths") else {}),
+        **({"token": trace["token"]}
+           if trace and trace.get("token") else {}),
+        **({"outOfScope": trace["outOfScope"]}
+           if trace and trace.get("outOfScope") else {}),
+        **({"environmentWarnings": env_warnings} if env_warnings else {}),
+        # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
+        # entriesSkippedWhileDegraded = 降级期间被跳过的条目 id(因由不限);
+        # 键缺席 = 本次执行没有「降级 + 跳过」同时发生,不是「零跳过」。
+        **({"judgeDegraded": True, "entriesSkippedWhileDegraded": skipped_while_degraded}
+           if skipped_while_degraded else {}),
+        # ── 入站执行参数快照(设计 2026-11-13 §5)────────────────
+        # rerun 回放 params/schemeId("raw" 原样);clientRef 不回放
+        # (与 batchId 同口径:重跑是新的一次独立发起)。carryPolicy
+        # "off" 仅 raw(决策 3);paramsStrict = 场景契约快照。
+        **({"inboundParams": req.params} if params_mode else {}),
+        **({"carryPolicy": "off"} if skip_carry else {}),
+        **({"paramsStrict": bool((scenario_payload or {}).get("paramsStrict"))}
+           if params_mode else {}),
+    }
+
+
+def _dispatch_job_payload(
+    *, req: RunRequest, chain: str, execution_id: int, run_id: str,
+    user_id: int, scenario_payload: dict, fanout_datasets: list,
+    selected_entries: list, scen_owner_id, scen_project_id,
+    cred_project_id: int | None, auth_aliases: list, bindings: dict,
+    slot_map: dict, exec_carry, skip_carry: bool, env_choice,
+) -> dict:
+    """C11 worker 任务配方(纯装配):dispatch 校验后的完整快照,
+    graph 与 cases 两种形态;worker 认领后不回查请求上下文。
+    """
     if getattr(req, "graph", None) is not None:
-        payload = {
+        return {
             "kind": "graph",
             "chain": chain,
             "args": {
-                "execution_id": execution.id, "run_id": run_id,
+                "execution_id": execution_id, "run_id": run_id,
                 "owner_id": user_id,
                 "graph_spec": req.graph.model_dump(by_alias=True),
                 # S2.1:显式位才整图生效;否则逐单元解析(见 graph_dispatch)
@@ -1486,54 +1715,45 @@ async def dispatch_target(
                 "cred_project_id": cred_project_id,
             },
         }
-    else:
-        payload = {
-            "kind": "cases",
-            "chain": chain,
-            "debug": (debug_spec.model_dump(mode="json")
-                      if debug_spec is not None else None),
-            "args": {
-                "execution_id": execution.id, "run_id": run_id,
-                "scenario_payload": dict(scenario_payload),
-                "datasets": fanout_datasets,
-                "injections": selected_entries,
-                "owner_id": user_id,
-                # authz W6:场景属主随任务下发,内置凭证主规则在
-                # _fanout → prepare_exec 判(executor ≠ 属主 ⇒ 当空);
-                # adhoc(临时调用)= 执行人本人(上方 _scen_owner_id;
-                # built_in_users fail-closed,None 一律当空)
-                "scenario_owner_id": _scen_owner_id,
-                # S2.1:环境随配方下发(地址 ③ 层并入部署表)
-                "env_snapshot": env_choice.snapshot(),
-                # S4:carry 作用域第二层(项目层;None = 私有区 → 个人层)
-                "scenario_project_id": _scen_project_id,
-                # S8:项目凭证池(None = 执行人个人池)
-                "cred_project_id": cred_project_id,
-                "auth_aliases": auth_aliases,
-                "halt_at": req.step_to,
-                "n_runs": req.n_runs,
-                "parallel": req.parallel,
-                "service_bindings": _bindings,
-                # 分层②:条目取用覆盖(声明条目 → 池取用条目)与 carry
-                # 覆盖随任务配方下发(纯值;worker 不回查配置行 —— 快照
-                # 语义与方案引用同款,配置后改不影响已派发执行)
-                "slot_map": _slot_map,
-                "exec_carry_overrides": _exec_carry,
-                # 入站参数(设计 2026-11-13 决策 3):raw 保留字 →
-                # prepare_exec 跳过 carry 上下文构建。升级前入队的旧
-                # 配方缺键 = False(缺省不跳),回放语义不受影响。
-                "skip_carry": _skip_carry,
-            },
-        }
-    await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
-    # 惰性 ensure:lifespan 未跑（测试 ASGITransport 直连）也能驱动队列
-    _eq.ensure_workers()
-    # RS3 plate_pins 不在此回填：job 经 DB 队列异步驱动，dispatch 返回时
-    # fanout 尚未解析生效修订 —— 由 _fanout 解析出后自行落库。
-
-    return RunResponse(
-        runId=run_id, executionId=execution.id,
-        identityMode=(token.kind if token is not None else "personal"))
+    debug_spec = getattr(req, "debug", None)
+    return {
+        "kind": "cases",
+        "chain": chain,
+        "debug": (debug_spec.model_dump(mode="json")
+                  if debug_spec is not None else None),
+        "args": {
+            "execution_id": execution_id, "run_id": run_id,
+            "scenario_payload": dict(scenario_payload),
+            "datasets": fanout_datasets,
+            "injections": selected_entries,
+            "owner_id": user_id,
+            # authz W6:场景属主随任务下发,内置凭证主规则在
+            # _fanout → prepare_exec 判(executor ≠ 属主 ⇒ 当空);
+            # adhoc(临时调用)= 执行人本人(即席 payload,属主显式
+            # 记为本人;built_in_users fail-closed,None 一律当空)
+            "scenario_owner_id": scen_owner_id,
+            # S2.1:环境随配方下发(地址 ③ 层并入部署表)
+            "env_snapshot": env_choice.snapshot(),
+            # S4:carry 作用域第二层(项目层;None = 私有区 → 个人层)
+            "scenario_project_id": scen_project_id,
+            # S8:项目凭证池(None = 执行人个人池)
+            "cred_project_id": cred_project_id,
+            "auth_aliases": auth_aliases,
+            "halt_at": req.step_to,
+            "n_runs": req.n_runs,
+            "parallel": req.parallel,
+            "service_bindings": bindings,
+            # 分层②:条目取用覆盖(声明条目 → 池取用条目)与 carry
+            # 覆盖随任务配方下发(纯值;worker 不回查配置行 —— 快照
+            # 语义与方案引用同款,配置后改不影响已派发执行)
+            "slot_map": slot_map,
+            "exec_carry_overrides": exec_carry,
+            # 入站参数(设计 2026-11-13 决策 3):raw 保留字 →
+            # prepare_exec 跳过 carry 上下文构建。升级前入队的旧
+            # 配方缺键 = False(缺省不跳),回放语义不受影响。
+            "skip_carry": skip_carry,
+        },
+    }
 
 
 # ─── C11：worker 任务体入口（payload → fanout）──────────────────

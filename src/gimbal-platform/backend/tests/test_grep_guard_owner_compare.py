@@ -128,7 +128,10 @@ _ALLOWLIST: dict[str, int] = {
     'services/project_promotion.py:elif scen.owner_id == src.owner_id:': 1,
     'services/project_promotion.py:if row.owner_id != applicant_id:': 2,
     'services/project_promotion.py:select(Suite.name).where(Suite.owner_id == suite.owner_id))).all()}': 1,
-    'services/run_dispatcher.py:& (Execution.owner_id == user_id))': 2,
+    # C1 切片2(2026-11-23):clientRef 幂等条件(预查/回查两处同款)去重进
+    # _dup_client_ref_id —— 单一实现在此保留白名单(等值比较 = 幂等身份
+    # 维度与 0056 部分唯一索引同拍,非属主可见性判定)。
+    'services/run_dispatcher.py:& (Execution.owner_id == user_id))': 1,
     'services/run_prepare.py:return DBAuthAccount.owner_id == owner_id': 1,
     'services/scenario_query.py:return (ComposerScenario.owner_id == user.id) & \\': 1,
     'services/scenario_query.py:return ComposerScenario.owner_id == user.id': 1,
