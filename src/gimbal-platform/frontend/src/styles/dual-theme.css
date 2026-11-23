@@ -150,7 +150,7 @@ html[data-theme="dark"] {
   --el-text-color-primary: #e8e8e8;
   --el-text-color-regular: #c4c4c4;
   --el-text-color-secondary: #9b9b9b;
-  --el-text-color-placeholder: #6f6f6f;
+  --el-text-color-placeholder: #909090;  /* AA 修复(同 ink-3;占位符同为文本面) */
   --el-text-color-disabled: #565656;
   --el-border-color: #3b3b3b;
   --el-border-color-light: #303030;

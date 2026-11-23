@@ -260,10 +260,11 @@ def _load_from_path(path: Path, keep_usage_hint: bool) -> list[dict]:
         data = _parse_json(raw)
     elif fmt == InputFormat.yaml:
         data = _parse_yaml(raw)
-    else:
-        # text 模式：占位，未走 schema 解析
+    else:  # pragma: no cover — 防御:auto 已在 _detect_format 内收敛
+        # (2026-11-23 收口:.txt/.text 改内容嗅探后 auto 不再外溢;
+        # 真不可解析文本已在上方 _parse_json/_parse_yaml 处明确报错)
         typer.secho(
-            f"Error: 暂不支持 text 格式的 scenario 文件解析: {path}",
+            f"Error: 未知输入格式: {path}",
             fg=typer.colors.RED, err=True,
         )
         raise typer.Exit(code=2)

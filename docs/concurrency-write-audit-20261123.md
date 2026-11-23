@@ -18,7 +18,7 @@
 | 7 | suite 成员/内容写 | rev 乐观锁(冲突 409 附最新内容,`routers/suites.py` §rev) | ✓ |
 | 8 | suite 发布/下架 | rev 乐观锁同款 + 发布状态门 | ✓ |
 | 9 | **promotions approve/reject/withdraw** | ~~读-判-写(无锁)~~ | **✗→✓ 本批修复** |
-| 10 | adaptation op/batch 状态(applied/skipped/conflict/completed/rolled_back) | applying 状态门(409)+ 批内单 worker 顺序推进;回滚同门 | ✓(单写者形态) |
+| 10 | adaptation op/batch 状态(applied/skipped/conflict/completed/rolled_back) | 409 门:`applied` 幂等重放、conflict/skipped 拒、批非 open/applying 拒;pending 态双击存在读-判-写微窗口(review 复核修正:非「单写者」),后果限单 op 重复应用且冲突路径自愈为 conflict;回滚同门 | ✓(窄面维持观察;后果可自愈,不立修) |
 | 11 | `UserStar` 收藏翻转 | unique (user, scenario) + upsert(并发幂等) | ✓ |
 | 12 | `revoke_grants`(promotion 回滚删授权) | 共享行按 promotion id 整删 —— 多 promotion 共享条目时过度删除 | 挂账在档(E 区,revoke_grants 粒度;「撤销已批准」扩展前须先修) |
 
