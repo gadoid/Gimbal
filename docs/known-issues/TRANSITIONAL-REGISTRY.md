@@ -10,10 +10,10 @@
 
 | # | 条目 | 影响 | 退出条件 | 归属 |
 |---|---|---|---|---|
-| A1 | feat/plate-s1 合入 main | 后续所有基线工作(见 B1)以 main 为准 | 用户拍板合并 | 用户 |
+| A1 | feat/plate-s1 合入 main | 后续所有基线工作(见 B1)以 main 为准 | 用户拍板合并 | **✅ 2026-11-23 已销**:用户拍板「推送 + 快进 main」,origin/main 快进 2c70a12b..b44e7874 = feat/service-registry 顶端,严格包含 plate-s1(merge-base 即其顶端、plate-s1 独有提交 0),不必单独合 |
 | A2 | GitHub Support 工单(GC 旧对象) | 含凭证旧提交仍可按 SHA 取回 | 提交工单并确认 GC(文案在仓外 D:/Gimbal/github-purge-request…md rev2) | 团队 |
 | A3 | 78 处外部系统凭证轮换 | 泄漏凭证若在其他环境复用则有效 | 团队逐个确认轮换(私有环境口令已按拍板豁免) | 团队 |
-| A4 | CI 从未实跑 | 本批全部改动未经 CI 验证 | `workflow_dispatch` 触发一轮全绿 | 用户(GitHub 页面) |
+| A4 | CI 从未实跑 | 本批全部改动未经 CI 验证 | `workflow_dispatch` 触发一轮全绿 | **🟡 2026-11-23 处理中**:plate-ci 接通后首两跑连钉 5 处断点(gen_m2 误删 / 加载已退役脚本的死测试 / json2ts 探活行必退 1 / pytest-xdist 未进 lock / 增量升级门 21 项漂移 → 迁移 0066),已修并于 Python 3.12 + lock 同构环境 12 步全量复现(见 progress「CI 交接处理」);main 实跑全绿后销条 |
 | A5 | 两个待裁定 known-issue | P0 候选 normalize-registry-writeback、P1 dollar-brace-backfill | 用户拍板处置口径 | 用户 |
 | A6 | exists-property-hole 公开承诺文本 | 对外说明未定稿 | 用户过目 | 用户 |
 | A7 | SQLite 时代本地文件 | backend/data/app.db 及 4 个 bak(磁盘,非仓库) | 确认无需回滚后归档删除 | 用户 |
@@ -22,7 +22,7 @@
 
 | # | 条目 | 影响 | 退出条件 | 归属 |
 |---|---|---|---|---|
-| B1 | gen_m2 compat 守卫无真实基线 | 不兼容 M2 变更不会被拦(main 无 schema,恒跳过) | A1 合入后首个含 m2.schema.json 的 main 即闭合 | 合并后即闭 |
+| B1 | gen_m2 compat 守卫无真实基线 | 不兼容 M2 变更不会被拦(main 无 schema,恒跳过) | A1 合入后首个含 m2.schema.json 的 main 即闭合 | **✅ 2026-11-23 已闭**:main(b44e7874)含 m2.schema.json,`compat --base origin/main` 首次以真实基线通过。前置补充:生成器 `scripts/gen_m2.py` 在 90e7918e 退役批次中被误删(在用工具,非一次性脚本 —— CI 两步 + tests/plate/test_m2_step2 + routes_grammar 运行期文案 + 生成物头注均依赖),同日 CI 交接处理恢复(与退役前逐字节同) |
 | B2 | S1.5 质量尾项池 | 快照化/原子重载/ref 多版本/路径可配置等(见 plate-design 修订十) | 合入后按依赖排期 | 后续批次 |
 | B3 | 行级失败原因不入库 | 执行详情顶层 error 仅覆盖 dispatcher 级;行级原因在工件(两击可达) | execution_rows 加 run_error 列(迁移+写入+读侧) | **✅ 2026-11-23 已落**:迁移 0065(live 已升)+ 模型/RowState/终态投影(引擎 runError 优先、派发层 error 次之,[:2000] 防超长)+ 行页 ExecutionRowOut.runError + 报告 groups.runError(前端行头呈现)+ graph 恢复/逐单元行补键;roundtrip + 引擎失败×派发异常双路 e2e 钉死 |
 | B4 | pydantic 无上界 | 依赖漂移风险(2.13 曾与旧代码不兼容) | 钉 `<next-major` 或锁定 | **✅ 实质已闭合未销条**:`8d2a4164`(2026-10-15,登记次日)已钉 `pydantic>=2.6,<3` + `pydantic-settings>=2.0,<3`,requirements.lock 锁 2.14.1(当前全量绿);2026-11-23 复核销条 |

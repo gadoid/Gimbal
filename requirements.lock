@@ -44,6 +44,8 @@ cryptography==50.0.2
     #   gimbal-platform-backend
 datamodel-code-generator==0.28.5
     # via gimbal
+execnet==2.1.2
+    # via pytest-xdist
 fastapi==0.143.1
     # via
     #   gimbal
@@ -142,7 +144,10 @@ pytest==9.1.1
     # via
     #   gimbal
     #   pytest-asyncio
+    #   pytest-xdist
 pytest-asyncio==1.4.0
+    # via gimbal
+pytest-xdist==3.8.0
     # via gimbal
 python-dotenv==1.2.4
     # via

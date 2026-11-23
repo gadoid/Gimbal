@@ -72,7 +72,10 @@ jobs:
       - name: M2 漂移守卫 — gen_m2 check(生成物与当前定义一致)
         run: |
           set -e
-          npx --yes json-schema-to-typescript@16.0.0 --version
+          # 预取 + 版本锁定 + 取不到即红。json2ts 16 无 --version 选项(被当
+          # 普通调用解析 → "Error parsing JSON in file null" 退 1,set -e 判步红);
+          # --help 退 0,首行打印实际解析到的版本。
+          npx --yes json-schema-to-typescript@16.0.0 --help
           python scripts/gen_m2.py check --targets schema,ext,py,ts,dbgcmd
       - name: M2 兼容性守卫 — gen_m2 compat(不兼容变更须递增代际)
         # PR 的目标分支不是 main 时也能正确比对(github.base_ref)

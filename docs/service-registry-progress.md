@@ -2490,6 +2490,80 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
     6. 旁注(不在 CI 门内):ruff 全树 `--select F821` 唯一一条是
       `routers/me.py:192` 的 3.12 f-string 换行语法(target-version
       3.11 配置错位),非未定义名。
+- **CI 交接处理(2026-11-23,fix/ci-main-green;🟢 同构环境 gate 12 步
+  全绿,main 实跑待推送)**
+  - **断点清点 —— 6 处**(交接清单列 2 处,其余 4 处由同构环境 / 干净
+    检出首次暴露;b44e7874 实跑停在 ①):
+    1. `scripts/gen_m2.py` 误随 90e7918e 退役 → **恢复**(与退役前逐
+       字节同)。在用工具而非一次性脚本:plate-ci 两步 + `tests/plate/
+       test_m2_step2.py` 四处加载 + `routes_grammar.py` 运行期报错文案
+       + 生成物头注「禁改」均依赖;清单 1 的「恢复 vs 删步骤」取恢复,
+       **B1 闭合**。
+    2. `tests/plate/test_migrate_pg_driver.py` 加载已退役的
+       `migrate_legacy_case_pg.py` → 删(该脚本退役本身合规)。
+    3. **json2ts 探活行必死**:json-schema-to-typescript@16.0.0 无
+       `--version` 选项,被当普通调用解析 → `Error parsing JSON in
+       file "null"` 退 1,`set -e` 直接判步红(与 ① 无关的第二个必死
+       点)→ 改 `--help`(退 0,首行打印实际解析版本)。
+    4. **pytest-xdist 不在 lock**:后端 pytest 缺省 `-n auto`(11-21
+       提速轮)依赖它,但只钉在 `requirements-platform-constraints.txt`,
+       CI 按 lock 安装 → 后端两步 `unrecognized arguments` → 入根
+       `[dev]` extras 并按头注原命令重生 lock(仅增
+       `pytest-xdist==3.8.0` + `execnet==2.1.2`,其余钉版本零变动)。
+    5. **增量升级门真红**(清单 5「未本地复现」项):快照 0023 → head
+       链本身跑通,终态与模型 **21 项漂移** → 新增迁移 **0066** 一次
+       收敛(见下条)。
+    6. **契约守卫在干净检出即死**:`gen_api_contract.py check` 导入
+       `app.main` 时 `app.core.db` 导入期校验 `DATABASE_URL` 形状 ——
+       CI 检出无 `backend/.env`,本地有故从未暴露 → 脚本内
+       `os.environ.setdefault` 占位 PG 形态(契约面只读路由/模型、不连
+       库;调用方已有值不覆盖,与 `check_migration_drift.py` 同口径)。
+  - **0066_incremental_model_align(含一处实质缺陷)**:① `access_
+    token_scopes` 两枚 FK —— 0057 §⑨ 摘除后重建到新表时**漏带
+    ondelete/onupdate**(0033 建表原有):增量库里删除被令牌范围引用的
+    身份条目/账户会**外键违例**,fresh 库与测试库走 create_all 带级联,
+    故测不出;② 16 列 NOT NULL(0044/0048/0053/0057 建表时
+    created_at/updated_at 及 project_promotions.conflicts/note 未写
+    nullable=False,模型注解为非 Optional);③ `exec_configs.payload`
+    json → jsonb(0053 用 sa.JSON,模型口径 JsonVar=jsonb)。逐项内省
+    现状,已是目标形态即空转(fresh 链 / 测试库不受影响);收紧前先回填
+    NULL(时间戳取另一列、均缺取 now();conflicts→'[]'、note→'');
+    不提供 downgrade(决策 8 同款)。迁移测试 +2:增量终态收敛(含「修前
+    删条目违例 / 修后级联」对照)与 fresh 链空转。**运维**:live 库在
+    0065,部署本提交后后端按产品语义拒绝启动,须在带备份的人工窗口
+    `alembic upgrade head`(runbook-pg.md §4)。
+  - **同构验证环境(此前缺失)**:本机在用的两套环境(3.14 全局 / 3.13
+    `D:\Gimbal` venv)均非 CI 口径 —— CI 是 3.12 + lock(SQLAlchemy
+    2.1.4 / fastapi 0.143.1 / pydantic 2.14.1 …,本地两套都是 2.0.x
+    系),**历次「全量绿」都不在 CI 的依赖面上**。本轮在临时目录搭
+    3.12.16 + lock + 干净 worktree(无 .env)+ 一次性 PG16,不碰现有
+    环境;gate 12 步按 CI 顺序全量复现:pyflakes ✓ / M2 check+compat ✓
+    / 契约 ✓ / plate check ✓ / 方言 81 / plate **687**(首次完整跑通)/
+    执行器 744+1skip(跳过项为 Linux 语义,CI 上真跑)/ 后端全量
+    **2167+3skip** / 空库门 ✓ / 增量升级门(差异 3 = trgm 白名单,
+    拦截 0)/ 非 editable 冒烟 ✓。frontend job 未本地复跑(改动零触及
+    前端树,b44e7874 上 CI 已绿)。Linux 专属路径(真引擎 / 真实 plate
+    用例)本地无法预判,以 main 实跑为准。
+  - **本地复现的两处平台假象(非产品缺陷,记档防重查)**:(a) Windows +
+    Python ≤3.12 的 `time.monotonic()` tick = 15.6 ms ——
+    `plate_client` / `endpoint_declarations` / `query_view_runner`(在飞
+    收敛)的 TTL=0 用例 4 条假失败;同环境仅把时钟换高精度即全绿,CI
+    的 Linux 与本地 3.13+ 不受影响(本轮后端全量加时钟垫片跑)。
+    (b) 不重排参数的 psql 构建(Windows)把 `psql <url> -q -v … -f …`
+    的选项当多余位置参数**忽略且退 0** → `check_migration_drift.py`
+    曾在空库上跑链、报出与真因无关的 0006 错;已改为选项前置 +
+    `alembic_version` 恢复生效守卫。
+  - **交接清单回填**:清单 1 = 恢复(B1 闭);清单 2 = 已删并跑通;
+    清单 3 = 认同,后续全量口径含 plate 树;清单 4(flake)未处理;
+    清单 5 两步 = 均已复现。**遗留(非 CI 面,另批)**:17 个已退役脚本
+    在注释/文档仍有指向(`migrate_legacy_case.py` 等:
+    `src/gimbal/schema/README.md:645/656`、`0049_drop_share_refs.py`
+    报错文案、`gimbal_bootstrap/case_builder.py` 等);
+    `requirements-platform-constraints.txt` 与 lock 的 asyncpg 钉版
+    不一致(0.31.0 / 0.32.0),其 pytest-xdist 一行自本次起冗余;重放
+    造形(`test_migrations._create_retired_tables`)不回退 0063 的
+    carry 唯一键 —— 全量零漂移比对只在 `check_migration_drift.py` 的
+    真实增量路径成立。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本

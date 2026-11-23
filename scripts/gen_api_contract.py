@@ -38,6 +38,7 @@ import argparse
 import ast
 import difflib
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -56,6 +57,11 @@ CODES_MODULE_STEM = "_codes"          # app/routers/_codes.py:整型码单源
 def build_openapi_text() -> str:
     """``create_app().openapi()`` 归一化落盘文本(sort_keys 钉死键序)。"""
     sys.path.insert(0, str(BACKEND))
+    # 契约面只读路由/模型,不连库;但 app.core.db 导入期即校验 DATABASE_URL
+    # 形状(SQLite 退役 fail-fast)—— 干净检出无 backend/.env(CI)时给占位
+    # PG 形态,调用方环境已有的值不覆盖。
+    os.environ.setdefault(
+        "DATABASE_URL", "postgresql+asyncpg://contract:snapshot@localhost/contract")
     from app.main import create_app          # noqa: PLC0415(脚本形态)
     spec = create_app().openapi()
     return json.dumps(spec, ensure_ascii=False, indent=2, sort_keys=True) + "\n"

@@ -147,12 +147,27 @@ def main() -> int:
             psql = shutil.which("psql")
             if not psql:
                 _fail("需要 psql 恢复快照转储(apt install postgresql-client)")
+            # 选项必须排在连接串**之前**:GNU getopt 会把选项重排到位置参数前,
+            # 不重排的 psql 构建(Windows)则把其后的 -v/-f 当多余位置参数忽略且
+            # 退 0 —— 空库继续跑链,报出与真因无关的迁移错误(下方守卫兜底)。
             r = subprocess.run(
-                [psql, target_sync, "-q", "-v", "ON_ERROR_STOP=1",
-                 "-f", args.snapshot_sql],
+                [psql, "-q", "-v", "ON_ERROR_STOP=1",
+                 "-f", args.snapshot_sql, target_sync],
                 stdout=subprocess.DEVNULL)
             if r.returncode != 0:
                 _fail(f"快照转储恢复失败: {args.snapshot_sql}")
+            # 恢复生效守卫:alembic_version 有行才算快照落库
+            chk = psycopg.connect(target_sync, autocommit=True)
+            try:
+                with chk.cursor() as cur:
+                    cur.execute("select version_num from alembic_version")
+                    snap_rev = cur.fetchone()
+            except psycopg.Error as e:
+                _fail(f"快照未落库(alembic_version 不可读):{e}")
+            finally:
+                chk.close()
+            if not snap_rev:
+                _fail(f"快照未落库:{args.snapshot_sql}(alembic_version 空表)")
             label = Path(args.snapshot_sql).name
 
         # ② 窗口:当前检出的迁移链在快照之上升级到 head —— 快照期之后

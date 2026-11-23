@@ -2020,3 +2020,197 @@ def test_0052_project_tokens():
             assert ucol["nullable"] is False
         finally:
             eng.dispose()
+
+
+# ── 0066_incremental_model_align(增量升级门首跑钉出的漂移)────────────
+# plate-ci「增量升级门」(scripts/check_migration_drift.py)此前从未在 PG 面
+# 实跑;接通后首跑钉出迁移链终态与模型 21 项漂移,0066 一次收敛。本组造出
+# 增量库的 0065 终态再升到 head:链重放到 0065 时注册四表与
+# access_token_scopes 两枚 FK 由 0057 自建,漂移天然复现;deployments/
+# exec_configs/project_promotions 三表在重放里被 baseline create_all
+# 抢先建出模型形态,须手工改回 0044/0048/0053 的建表形态。
+
+def _scope_fk_options(c) -> dict:
+    """access_token_scopes 单列 FK → {列: options}(0066 关心的两枚)。"""
+    from sqlalchemy import inspect
+
+    out = {}
+    for fk in inspect(c).get_foreign_keys("access_token_scopes"):
+        cols = fk["constrained_columns"]
+        if len(cols) == 1 and cols[0] in ("alias_name", "auth_id"):
+            out[cols[0]] = fk.get("options") or {}
+    return out
+
+
+def _loose_columns(c) -> list:
+    """本组关心的列里仍可空的 (table, column)。"""
+    from sqlalchemy import text
+
+    return [tuple(r) for r in c.execute(text(
+        "SELECT table_name, column_name FROM information_schema.columns "
+        "WHERE table_schema = current_schema() AND is_nullable = 'YES' AND ("
+        " (column_name IN ('created_at', 'updated_at') AND table_name IN "
+        "  ('auth_accounts', 'deployments', 'exec_configs', "
+        "  'project_promotions', 'service_identities', 'services', "
+        "  'system_env_instances'))"
+        " OR (table_name = 'project_promotions'"
+        "     AND column_name IN ('conflicts', 'note')))")).fetchall()]
+
+
+def _payload_udt(c) -> str:
+    from sqlalchemy import text
+
+    return c.execute(text(
+        "SELECT udt_name FROM information_schema.columns WHERE "
+        "table_schema = current_schema() AND table_name = 'exec_configs' "
+        "AND column_name = 'payload'")).scalar()
+
+
+def test_0066_incremental_model_align():
+    """增量库 0065 终态 → head:FK 级联 / NOT NULL / jsonb 三类收敛,回填
+    生效,被引用条目可删(级联恢复)。终态与模型的**全量**零漂移归
+    scripts/check_migration_drift.py(真实增量路径;重放造形不回退 0063 的
+    carry 唯一键,全量比对在重放终态上不成立)。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.exc import IntegrityError
+
+    with temp_schema() as (_schema, sync_url):
+        _upgrade_to(sync_url, "0065_execution_row_run_error")
+        eng = create_engine(sync_url)
+        try:
+            with eng.begin() as c:
+                # baseline 抢先建出的三表 → 改回迁移建表形态
+                c.exec_driver_sql(
+                    "ALTER TABLE deployments ALTER COLUMN created_at "
+                    "DROP NOT NULL, ALTER COLUMN updated_at DROP NOT NULL")
+                c.exec_driver_sql(
+                    "ALTER TABLE exec_configs ALTER COLUMN created_at "
+                    "DROP NOT NULL, ALTER COLUMN updated_at DROP NOT NULL,"
+                    " ALTER COLUMN payload TYPE json USING payload::json")
+                c.exec_driver_sql(
+                    "ALTER TABLE project_promotions"
+                    " ALTER COLUMN conflicts DROP NOT NULL,"
+                    " ALTER COLUMN note DROP NOT NULL,"
+                    " ALTER COLUMN created_at DROP NOT NULL,"
+                    " ALTER COLUMN updated_at DROP NOT NULL")
+                # 回填样本:时间戳均缺 / 仅缺 created_at / JSONB·TEXT 的 NULL
+                uid = c.execute(text(
+                    "SELECT id FROM users LIMIT 1")).scalar()
+                if uid is None:
+                    c.execute(text(
+                        "INSERT INTO users (username, password_hash,"
+                        " display_name, is_active) VALUES"
+                        " ('t66', 'x', 'T66', true)"))
+                    uid = c.execute(text(
+                        "SELECT id FROM users LIMIT 1")).scalar()
+                pid = c.execute(text(
+                    "SELECT id FROM projects WHERE kind = 'public' "
+                    "LIMIT 1")).scalar()
+                c.execute(text(
+                    "INSERT INTO environments (name, description,"
+                    " created_at, updated_at) VALUES"
+                    " ('t66', '', now(), now())"))
+                env = c.execute(text(
+                    "SELECT id FROM environments "
+                    "WHERE name = 't66'")).scalar()
+                c.execute(text(
+                    "INSERT INTO services (name, system) "
+                    "VALUES ('t66', 't66')"))
+                c.execute(text(
+                    "UPDATE services SET created_at = NULL, "
+                    "updated_at = NULL WHERE name = 't66'"))
+                c.execute(text(
+                    "INSERT INTO exec_configs (scope, scope_id, name, payload,"
+                    " created_at, updated_at) VALUES"
+                    " ('user', 1, 't66', '{\"a\": 1}'::json, NULL, now())"))
+                c.execute(text(
+                    "INSERT INTO project_promotions (project_id, kind,"
+                    " source_id, applicant_id, status, conflicts, note,"
+                    " created_at, updated_at) VALUES"
+                    " (:p, 'scenario', 't66', :u, 'pending', NULL, NULL,"
+                    " NULL, NULL)"),
+                    {"p": pid, "u": uid})
+                c.execute(text(
+                    "INSERT INTO service_identities (alias_name,"
+                    " base_service, env_id) VALUES ('t66-ident', 't66', :e)"),
+                    {"e": env})
+                c.execute(text(
+                    "INSERT INTO access_tokens (user_id, kind, name,"
+                    " token_hash, token_hint, expires_at) VALUES"
+                    " (:u, 'personal', 't66', 'h66', 'x',"
+                    " now() + interval '1 day')"), {"u": uid})
+                c.execute(text(
+                    "INSERT INTO access_token_scopes (token_id, alias_name)"
+                    " SELECT id, 't66-ident' FROM access_tokens"
+                    " WHERE name = 't66'"))
+
+            # 造形自检:漂移在位;FK 无级联 → 删被引用条目即外键违例
+            with eng.connect() as c:
+                assert len(_loose_columns(c)) == 16
+                assert _payload_udt(c) == "json"
+                assert _scope_fk_options(c) == {
+                    "alias_name": {}, "auth_id": {}}
+            with pytest.raises(IntegrityError), eng.begin() as c:
+                c.execute(text(
+                    "DELETE FROM service_identities "
+                    "WHERE alias_name = 't66-ident'"))
+
+            command.upgrade(_cfg(sync_url), "head")
+            assert _revision(sync_url) == "0066_incremental_model_align"
+
+            with eng.connect() as c:
+                assert _scope_fk_options(c) == {
+                    "alias_name": {"onupdate": "CASCADE",
+                                   "ondelete": "CASCADE"},
+                    "auth_id": {"ondelete": "CASCADE"}}
+                assert _loose_columns(c) == []
+                assert _payload_udt(c) == "jsonb"
+                # 回填:均缺 → 同一 now();仅缺 created_at → 取 updated_at
+                svc = c.execute(text(
+                    "SELECT created_at, updated_at FROM services "
+                    "WHERE name = 't66'")).one()
+                assert svc.updated_at == svc.created_at
+                ec = c.execute(text(
+                    "SELECT created_at, updated_at FROM exec_configs "
+                    "WHERE name = 't66'")).one()
+                assert ec.created_at == ec.updated_at
+                pr = c.execute(text(
+                    "SELECT conflicts, note FROM project_promotions "
+                    "WHERE source_id = 't66'")).one()
+                assert pr.conflicts == [] and pr.note == ""
+            # 级联恢复:删条目 → 范围行随之消失,不再外键违例
+            with eng.begin() as c:
+                c.execute(text(
+                    "DELETE FROM service_identities "
+                    "WHERE alias_name = 't66-ident'"))
+            with eng.connect() as c:
+                assert c.execute(text(
+                    "SELECT count(*) FROM access_token_scopes "
+                    "WHERE alias_name = 't66-ident'")).scalar() == 0
+        finally:
+            eng.dispose()
+
+
+def test_0066_fresh_chain_noop():
+    """fresh 链(baseline create_all = 模型形态):stamp 0065 再升 head,
+    0066 整体空转 —— 形态不变、不报错。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+
+    with temp_schema() as (_schema, sync_url):
+        command.upgrade(_cfg(sync_url), "0001_baseline")
+        command.stamp(_cfg(sync_url), "0065_execution_row_run_error")
+        command.upgrade(_cfg(sync_url), "head")
+        assert _revision(sync_url) == "0066_incremental_model_align"
+        eng = create_engine(sync_url)
+        try:
+            with eng.connect() as c:
+                assert _scope_fk_options(c) == {
+                    "alias_name": {"onupdate": "CASCADE",
+                                   "ondelete": "CASCADE"},
+                    "auth_id": {"ondelete": "CASCADE"}}
+                assert _loose_columns(c) == []
+                assert _payload_udt(c) == "jsonb"
+        finally:
+            eng.dispose()

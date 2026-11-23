@@ -26,6 +26,10 @@ dev = [
     "pytest>=8.0,<10",
     # 后端测试为 async(conftest/fixtures);此前 CI 单独补装
     "pytest-asyncio>=0.24,<2",
+    # 后端套件 pytest 缺省 -n auto(backend/pyproject addopts,2026-11-21
+    # 提速轮);此前只钉在 requirements-platform-constraints.txt,CI 按 lock
+    # 安装拿不到,后端两步即报 unrecognized arguments。同 pytest-asyncio 入 dev。
+    "pytest-xdist>=3.8,<4",
     "ruff>=0.4.0",
     "mypy>=1.10",
     "pyyaml>=6.0,<7",
