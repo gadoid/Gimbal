@@ -1913,117 +1913,23 @@ async def _fanout_graph(
     # 恢复重跑必然整图重放,对被测系统重复全部副作用不可接受 → 已开跑
     # (存在事件)的恢复直接 failed 收口、不重跑。cases 链是行级断点
     # (P3.5-2),只有中断行重跑 —— 恢复语义对照见路线图 P3.5。
-    from sqlalchemy import func as _f, select as _sel
-
-    from ..models.execution import ExecutionEvent as _EV
-    try:
-        async with db_factory() as session:
-            _prior = (await session.execute(
-                _sel(_f.count()).select_from(_EV)
-                .where(_EV.execution_id == execution_id))).scalar()
-    except Exception:  # noqa: BLE001 — 查询失败按无进度处理(可重跑)
-        _prior = 0
+    # 预检与收口 → _graph_prior_event_count / _graph_recover_failed
+    _prior = await _graph_prior_event_count(db_factory, execution_id)
     if _prior:
         logger.warning(
             "run_dispatcher: graph execution {} recovered with {} prior "
             "events → failed (at-most-once, no graph replay)",
             execution_id, _prior)
-        finished_ts = _utcnow().isoformat() + "Z"
-        _row_states[execution_id] = []
-        try:
-            async with db_factory() as session:
-                await _upsert_execution_rows(session, [{
-                    "execution_id": execution_id, "seq": 0,
-                    "unit_id": "graph", "branch": "graph", "attempts": 1,
-                    "dataset_id": None, "injection_id": None,
-                    "row_index": 0, "rep": 0,
-                    "status": "failed", "case_dir": "case-graph",
-                    "started_at": None, "finished_at": _iso_to_dt(finished_ts),
-                    "server_slot": None,
-                    "run_error": (
-                        "recovered with prior events "
-                        "(at-most-once, no graph replay)"),
-                }])
-                await session.commit()
-        except Exception as e:  # noqa: BLE001
-            logger.warning(
-                "run_dispatcher: 恢复路径 graph 行留档失败(行台账缺失,"
-                "终态不受影响): {}", e)
-        # N2:恢复收口改经唯一终态迁移(原子守卫 + failed 通知 ——
-        # 此前静默,N2-2 拍板补发);P0-3.2:改带重试版
-        await transition_with_retry(
-            db_factory, execution_id, STATUS_FAILED,
-            dispatcher_error=(
-                f"graph recovery: at-most-once 收口"
-                f"({_prior} prior events, 不整图重放)"))
+        await _graph_recover_failed(db_factory, execution_id, _prior)
         await ingester.finalize()
         return
 
     # 取消轮询器只在真正要下发的路径上启动:上面的恢复分支在 try/finally
-    # 之前返回,_teardown 不会执行 —— 若在此之前启动,轮询任务会一直查库到
-    # 进程退出(恢复后执行已 failed,取消位永远不会置上)。
-    session_holder: dict = {}
-    deliver: dict = {"task": None, "accepted": False}
-    # 单元级取消能力:session 就绪时按 healthz 能力位填 ok 并落 job
-    # payload(旧执行器 False → 不下发,读侧按能力位 409)。B6③ 后单链,
-    # legacy --cancel-file 信号文件通道已随链退役。
-    unit_cancel: dict = {"ok": False, "recorded": False}
-
-    async def _deliver_unit_cancel() -> None:
-        # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
-        # 返回 False);执行已结束(done)则停。能力检查在 session 就绪后做
-        # (取消可能先于 session 到达):旧执行器(cancel_scopes 无 unit)
-        # 停止下发 —— 读了也会被当 step 处理(带 A0 缺陷),按真实结果
-        # 收口并留痕 cancelIgnored=executor_no_unit_cancel。
-        while not cancel_local["done"]:
-            ss = session_holder.get("ss")
-            if ss is not None:
-                if not unit_cancel["ok"]:
-                    logger.info(
-                        "run_dispatcher: graph execution {} executor lacks "
-                        "unit cancel scope; cancel not delivered", execution_id)
-                    return
-                try:
-                    if await ss.cancel(scope="unit"):
-                        deliver["accepted"] = True
-                        logger.info(
-                            "run_dispatcher: graph execution {} unit-level cancel "
-                            "accepted by executor", execution_id)
-                        return
-                except Exception:  # noqa: BLE001
-                    pass
-            await asyncio.sleep(0.5)
-
-    def _on_cancel_set() -> None:
-        # 总是创建下发任务(评审 2026-11-03 §3.1):取消可能落在执行器
-        # 启动窗口(ss.start 轮询 healthz 期间,on_session 未回调、能力位
-        # 未落定),此时若按能力位拦截,轮询器命中一次即 return,能力位
-        # 后来转 True 也无人再触发下发 —— 取消被接受却静默跑完。
-        # 旧执行器的拦截挪进 _deliver_unit_cancel(session 就绪后判)。
-        if deliver["task"] is None:
-            deliver["task"] = asyncio.create_task(_deliver_unit_cancel())
-
-    def _on_session(ss: Any) -> None:
-        session_holder["ss"] = ss
-        capable = "unit" in (getattr(ss, "cancel_scopes", ()) or ())
-        unit_cancel["ok"] = capable
-        if not unit_cancel["recorded"]:
-            unit_cancel["recorded"] = True
-            asyncio.create_task(
-                _record_unit_cancel(db_factory, execution_id, capable))
-
-    cancel_local, cancel_poller = _start_cancel_poller(
-        db_factory, execution_id, on_set=_on_cancel_set)
-
-    def _teardown() -> None:
-        # 进程内快速通道也算命中(写位与轮询之间的窗口),再出清
-        if execution_id in _eq._cancel_hint:
-            cancel_local["set"] = True
-        cancel_local["done"] = True
-        cancel_poller.cancel()
-        if deliver["task"] is not None:
-            deliver["task"].cancel()
-        _eq._cancel_hint.discard(execution_id)
+    # 之前返回,teardown 不会执行 —— 若在此之前启动,轮询任务会一直查库
+    # 到进程退出(恢复后执行已 failed,取消位永远不会置上)。
+    # 单元级取消装置(能力位/下发重试/teardown)→ _GraphCancelCtl
+    cancel = _GraphCancelCtl(db_factory, execution_id)
+    cancel.start()
 
     # 逐单元事件投影(重构方案第 3 处):unit → {started_at, finished_at,
     # status};blocked/cancelled 单元不发事件,从 run.finished.details 按
@@ -2044,7 +1950,7 @@ async def _fanout_graph(
                 cred_project_id=cred_project_id)
         graph = graph_bundle["graph"]
         graph_sem = graph_bundle
-        if cancel_local["set"] or execution_id in _eq._cancel_hint:
+        if cancel.cancel_local["set"] or execution_id in _eq._cancel_hint:
             # ① 物化窗口取消:执行仍 queued、取消位已写 —— 不下发执行器,
             # 走「启动前取消」口径(canceled、零计数;finally 收尾 ingester/轮询)
             logger.info("run_dispatcher: graph execution {} canceled after "
@@ -2055,92 +1961,18 @@ async def _fanout_graph(
             _row_states.pop(execution_id, None)
             return
         await _mark_running(db_factory, execution_id)
-        # B-1(2026-10-13):suite 执行接入版本模型 —— 台账三件套与单场景
-        # dispatcher 同点写(pins 来自成员声明合并[R25 已统一到交集生效
-        # 修订],baseline 判定输入同口径;m2_hash 取 /convert 附带身份,
-        # 随台账一次写)。台账性质:判定/写库失败不阻断执行。
-        # b2-3/b2-4/b2.5:追溯台账(PIN ∪ INTEGRATION)+ integration 标识
-        # 补取,均抽为 run_semantics 可测函数(补取只进台账,不动执行副本)
-        from . import run_semantics as _rs_g
-        _g_pins = await _rs_g.graph_pins_with_identity(
-            {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
-             if v and ref_category(v) in (PIN, INTEGRATION)},
-            plate_client.resolve)
-        _g_baseline = None
-        try:
-            from . import run_semantics
-            async with db_factory() as _g_sem_s:
-                _g_baseline = await run_semantics.assess_baseline(
-                    _g_sem_s,
-                    meta_plate=graph_sem.get("meta_plate") or {},
-                    endpoints_used=graph_sem.get("endpoints_used") or {},
-                    unanchored_services=(
-                        graph_sem.get("unanchored_services") or []))
-        except Exception:  # noqa: BLE001
-            logger.opt(exception=True).warning(
-                "run_dispatcher: graph 入库标准判定失败 (execution={})",
-                execution_id)
-        _g_m2 = (graph_sem.get("m2_info") or {}).get("hash")
-        if _g_pins or _g_baseline is not None or _g_m2:
-            try:
-                from sqlalchemy import update as sa_update
-                _g_values: dict = {}
-                if _g_pins:
-                    _g_values["plate_pins"] = _g_pins
-                if _g_m2:
-                    _g_values["m2_hash"] = str(_g_m2)
-                if _g_baseline is not None:
-                    _g_values["baseline_eligible"] = _g_baseline[0]
-                    _g_values["baseline_block"] = _g_baseline[1]
-                    _g_values["baseline_evidence"] = _g_baseline[2] or None
-                async with db_factory() as _g_pin_sess:
-                    await _g_pin_sess.execute(
-                        sa_update(Execution)
-                        .where(Execution.id == execution_id)
-                        .values(**_g_values))
-                    await _g_pin_sess.commit()
-            except Exception:  # noqa: BLE001
-                logger.warning(
-                    "graph plate_pins 回填失败 (execution={})", execution_id)
+        # B-1 台账三件套(pins/baseline/m2_hash,判定失败不阻断)→
+        # _persist_graph_semantics
+        await _persist_graph_semantics(db_factory, execution_id, graph_sem)
 
-        def _on_event(d: dict) -> None:
-            et = d.get("event_type")
-            if et == "scenario.start":
-                u = d.get("unit")
-                if u:
-                    unit_events.setdefault(u, {}).setdefault(
-                        "started_at", d.get("timestamp"))
-            elif et == "scenario.end":
-                u = d.get("unit")
-                if u:
-                    e = unit_events.setdefault(u, {})
-                    e["finished_at"] = d.get("timestamp")
-                    e["status"] = d.get("status")
-            elif et == "gates.evaluated":
-                # 第 4 处:执行器结构化判定门结论 → 落执行记录
-                proj["gates"] = {"gates": d.get("gates") or [],
-                                 "passed": bool(d.get("passed"))}
-            elif et == "run.finished":
-                proj["attempts"] = int(d.get("attempts") or 0)
-                details = d.get("details")
-                if isinstance(details, list):
-                    for row in details:
-                        if not isinstance(row, dict):
-                            continue
-                        uid = row.get("unit") or row.get("unit_id")
-                        st = row.get("status")
-                        if (uid and st in ("blocked", "canceled",
-                                           "cancelled", "halted")
-                                and uid not in unit_events):
-                            unit_events[uid] = {"status": st}
-            ingester.on_event(d)
-
+        # 逐单元事件投影 → _graph_event_projection
+        on_event = _graph_event_projection(unit_events, proj, ingester)
         result = await graph_dispatch.execute_graph(
             db_factory, execution_id, run_dir, graph,
-            on_event=_on_event, on_log=ingester.on_log,
+            on_event=on_event, on_log=ingester.on_log,
             log_counters=ingester.pump_counters,
             m2_info=graph_sem.get("m2_info"),
-            on_session=_on_session)
+            on_session=cancel.on_session)
         if result.launch_status == "ok":
             # 总状态由 run.finished 的 exit_code 推导(重构方案第 3 处):
             # 判定门不通过只改退出码,按 scenario.end 取总状态会吞掉
@@ -2158,12 +1990,291 @@ async def _fanout_graph(
         status = "dispatcher_error"
     finally:
         await ingester.finalize()
-        _teardown()
+        cancel.teardown()
 
-    # ② 取消收口判定(方案 §2):取消位命中且至少一个**主体**单元被执行器记
-    # cancelled → 执行 canceled;命中但主体已全部启动/结束(没有单元可停)
-    # → 按真实结果收口,config.cancelIgnored 留痕供详情页解释。
-    main_refs = [u.get("ref") for u in graph_spec.get("units", []) if u.get("ref")]
+    # ② 取消收口判定(方案 §2,取消位命中且主体单元有 cancelled →
+    # canceled;否则按真实结果收口并留痕 cancelIgnored)→ _graph_cancel_verdict
+    final_status, cancel_ignored = _graph_cancel_verdict(
+        graph_spec, unit_events,
+        cancel_set=cancel.cancel_local["set"], result=result,
+        capable=cancel.capable)
+    if final_status is not None:
+        status = final_status
+
+    # 台账(重构方案第 3 处)行装配与落库 + 计数(计数按单元累加;
+    # blocked/cancelled 入 skipped)→ _graph_result_rows / _persist_graph_rows
+    finished_ts = _utcnow().isoformat() + "Z"
+    _row_states[execution_id] = []   # 无行级 registry;读侧回落 DB
+    attempts_total = proj["attempts"] or int(
+        getattr(result, "attempts", 0) or 0) or 1
+    ordered_units, rows_to_write = _graph_result_rows(
+        execution_id, status, graph_spec, unit_events, attempts_total)
+    await _persist_graph_rows(db_factory, execution_id, rows_to_write,
+                              ordered_units, finished_ts)
+    cfg_patch: dict = {}
+    if proj.get("gates"):
+        # 判定门结论(第 4 处):经事件通道落 config_json,21 页实测值来源
+        cfg_patch["gatesEvaluated"] = proj["gates"]
+    if cancel_ignored:
+        cfg_patch["cancelIgnored"] = cancel_ignored
+    if cfg_patch:
+        try:
+            async with db_factory() as session:
+                await _config_json_merge(session, execution_id, cfg_patch)
+                await session.commit()
+        except Exception as e:  # noqa: BLE001 — 结论留档 best-effort,降级可见
+            logger.warning(
+                "run_dispatcher: cancel 结论留档失败(config_json 未含"
+                " cancelIgnored): {}", e)
+    await _finalize_execution(db_factory, execution_id, status=final_status)
+
+
+# ── graph 编排执行体辅助(C1 切片 3,2026-11-23)──────────────────────
+
+async def _graph_prior_event_count(db_factory: Any, execution_id: int) -> int:
+    """graph 恢复预检:执行已有事件数(存在即「已开跑」)。查询失败按
+    无进度处理(可重跑)。
+    """
+    from sqlalchemy import func as _f, select as _sel
+
+    from ..models.execution import ExecutionEvent as _EV
+    try:
+        async with db_factory() as session:
+            return (await session.execute(
+                _sel(_f.count()).select_from(_EV)
+                .where(_EV.execution_id == execution_id))).scalar()
+    except Exception:  # noqa: BLE001 — 查询失败按无进度处理(可重跑)
+        return 0
+
+
+async def _graph_recover_failed(db_factory: Any, execution_id: int,
+                                prior: int) -> None:
+    """恢复重跑收口(整图 at-most-once):seq=0 图行留档 + N2 唯一终态迁移
+    (原子守卫 + failed 通知 —— 此前静默,N2-2 拍板补发;P0-3.2 带重试版)。
+    行留档失败仅告警(行台账缺失,终态不受影响)。
+    """
+    finished_ts = _utcnow().isoformat() + "Z"
+    _row_states[execution_id] = []
+    try:
+        async with db_factory() as session:
+            await _upsert_execution_rows(session, [{
+                "execution_id": execution_id, "seq": 0,
+                "unit_id": "graph", "branch": "graph", "attempts": 1,
+                "dataset_id": None, "injection_id": None,
+                "row_index": 0, "rep": 0,
+                "status": "failed", "case_dir": "case-graph",
+                "started_at": None, "finished_at": _iso_to_dt(finished_ts),
+                "server_slot": None,
+                "run_error": (
+                    "recovered with prior events "
+                    "(at-most-once, no graph replay)"),
+            }])
+            await session.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: 恢复路径 graph 行留档失败(行台账缺失,"
+            "终态不受影响): {}", e)
+    await transition_with_retry(
+        db_factory, execution_id, STATUS_FAILED,
+        dispatcher_error=(
+            f"graph recovery: at-most-once 收口"
+            f"({prior} prior events, 不整图重放)"))
+
+
+class _GraphCancelCtl:
+    """graph 单元级取消装置(取消方案 2026-11-02 P2 + §6「可」项):
+    取消轮询器置位后 —— ① 物化完成、下发执行器之前命中 → 不下发,
+    canceled 零计数收口(调用方处理);② 在飞 → 向执行器
+    ``cancel(scope="unit")``(runId 返回前每 0.5s 重试)。
+    能力门禁:session 就绪时按 healthz cancel_scopes 落 job payload
+    (旧执行器空能力 → 不下发,读侧按能力位 409)。B6③ 后单链,legacy
+    --cancel-file 信号文件通道已随链退役。取消落在执行器启动窗口时总是
+    先创建下发任务,session 就绪后按能力位决定发或停(评审 2026-11-03
+    §3.1)—— 旧执行器停发并留痕 cancelIgnored=executor_no_unit_cancel。
+    """
+
+    def __init__(self, db_factory: Any, execution_id: int) -> None:
+        self._db_factory = db_factory
+        self._execution_id = execution_id
+        self.session: Any = None
+        self.capable = False
+        self.accepted = False
+        self._recorded = False
+        self.task: Any = None
+        self.cancel_local: dict = {}
+        self.poller: Any = None
+
+    def start(self) -> None:
+        """启动取消轮询器(on_set 钩子创建下发任务)。"""
+        self.cancel_local, self.poller = _start_cancel_poller(
+            self._db_factory, self._execution_id, on_set=self.on_cancel_set)
+
+    async def _deliver(self) -> None:
+        # 执行器受理前每 0.5s 重试:POST /runs 可能尚未返回 runId(cancel()
+        # 返回 False);执行已结束(done)则停。能力检查在 session 就绪后做
+        # (取消可能先于 session 到达):旧执行器(cancel_scopes 无 unit)
+        # 停止下发 —— 读了也会被当 step 处理(带 A0 缺陷),按真实结果
+        # 收口并留痕 cancelIgnored=executor_no_unit_cancel。
+        while not self.cancel_local["done"]:
+            ss = self.session
+            if ss is not None:
+                if not self.capable:
+                    logger.info(
+                        "run_dispatcher: graph execution {} executor lacks "
+                        "unit cancel scope; cancel not delivered",
+                        self._execution_id)
+                    return
+                try:
+                    if await ss.cancel(scope="unit"):
+                        self.accepted = True
+                        logger.info(
+                            "run_dispatcher: graph execution {} unit-level "
+                            "cancel accepted by executor", self._execution_id)
+                        return
+                except Exception:  # noqa: BLE001
+                    pass
+            await asyncio.sleep(0.5)
+
+    def on_cancel_set(self) -> None:
+        # 总是创建下发任务(评审 2026-11-03 §3.1):取消可能落在执行器
+        # 启动窗口(ss.start 轮询 healthz 期间,on_session 未回调、能力位
+        # 未落定),此时若按能力位拦截,轮询器命中一次即 return,能力位
+        # 后来转 True 也无人再触发下发 —— 取消被接受却静默跑完。
+        # 旧执行器的拦截挪进 _deliver(session 就绪后判)。
+        if self.task is None:
+            self.task = asyncio.create_task(self._deliver())
+
+    def on_session(self, ss: Any) -> None:
+        # 单元级取消能力:session 就绪时按 healthz 能力位落 job payload
+        # (旧执行器 False → 不下发,读侧按能力位 409)
+        self.session = ss
+        self.capable = "unit" in (getattr(ss, "cancel_scopes", ()) or ())
+        if not self._recorded:
+            self._recorded = True
+            asyncio.create_task(
+                _record_unit_cancel(self._db_factory, self._execution_id,
+                                    self.capable))
+
+    def teardown(self) -> None:
+        # 进程内快速通道也算命中(写位与轮询之间的窗口),再出清
+        from . import execution_queue as _eq
+        if self._execution_id in _eq._cancel_hint:
+            self.cancel_local["set"] = True
+        self.cancel_local["done"] = True
+        self.poller.cancel()
+        if self.task is not None:
+            self.task.cancel()
+        _eq._cancel_hint.discard(self._execution_id)
+
+
+async def _persist_graph_semantics(db_factory: Any, execution_id: int,
+                                  graph_sem: dict) -> None:
+    """B-1(2026-10-13):suite 执行接入版本模型 —— 台账三件套与单场景
+    dispatcher 同点写(pins 来自成员声明合并[R25 已统一到交集生效修订],
+    baseline 判定输入同口径;m2_hash 取 /convert 附带身份,随台账一次写)。
+    台账性质:判定/写库失败不阻断执行。
+    b2-3/b2-4/b2.5:追溯台账(PIN ∪ INTEGRATION)+ integration 标识
+    补取,均抽为 run_semantics 可测函数(补取只进台账,不动执行副本)。
+    """
+    from . import run_semantics as _rs_g
+    _g_pins = await _rs_g.graph_pins_with_identity(
+        {k: v for k, v in (graph_sem.get("meta_plate") or {}).items()
+         if v and ref_category(v) in (PIN, INTEGRATION)},
+        plate_client.resolve)
+    _g_baseline = None
+    try:
+        from . import run_semantics
+        async with db_factory() as _g_sem_s:
+            _g_baseline = await run_semantics.assess_baseline(
+                _g_sem_s,
+                meta_plate=graph_sem.get("meta_plate") or {},
+                endpoints_used=graph_sem.get("endpoints_used") or {},
+                unanchored_services=(
+                    graph_sem.get("unanchored_services") or []))
+    except Exception:  # noqa: BLE001
+        logger.opt(exception=True).warning(
+            "run_dispatcher: graph 入库标准判定失败 (execution={})",
+            execution_id)
+    _g_m2 = (graph_sem.get("m2_info") or {}).get("hash")
+    if not (_g_pins or _g_baseline is not None or _g_m2):
+        return
+    try:
+        from sqlalchemy import update as sa_update
+        _g_values: dict = {}
+        if _g_pins:
+            _g_values["plate_pins"] = _g_pins
+        if _g_m2:
+            _g_values["m2_hash"] = str(_g_m2)
+        if _g_baseline is not None:
+            _g_values["baseline_eligible"] = _g_baseline[0]
+            _g_values["baseline_block"] = _g_baseline[1]
+            _g_values["baseline_evidence"] = _g_baseline[2] or None
+        async with db_factory() as _g_pin_sess:
+            await _g_pin_sess.execute(
+                sa_update(Execution)
+                .where(Execution.id == execution_id)
+                .values(**_g_values))
+            await _g_pin_sess.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "graph plate_pins 回填失败 (execution={})", execution_id)
+
+
+def _graph_event_projection(
+    unit_events: dict, proj: dict, ingester: _EventIngester,
+) -> Callable[[dict], None]:
+    """逐单元事件投影(重构方案第 3 处):unit → {started_at, finished_at,
+    status};blocked/cancelled 单元不发事件,从 run.finished.details 按
+    unit id 补齐。总状态不再取「最后一个 scenario.end」—— 后置通过
+    会覆盖主体失败、判定门失败只改 exit_code 会被吞。返回 on_event 回调
+    (尾端恒转发 ingester 落库)。
+    """
+
+    def _on_event(d: dict) -> None:
+        et = d.get("event_type")
+        if et == "scenario.start":
+            u = d.get("unit")
+            if u:
+                unit_events.setdefault(u, {}).setdefault(
+                    "started_at", d.get("timestamp"))
+        elif et == "scenario.end":
+            u = d.get("unit")
+            if u:
+                e = unit_events.setdefault(u, {})
+                e["finished_at"] = d.get("timestamp")
+                e["status"] = d.get("status")
+        elif et == "gates.evaluated":
+            # 第 4 处:执行器结构化判定门结论 → 落执行记录
+            proj["gates"] = {"gates": d.get("gates") or [],
+                             "passed": bool(d.get("passed"))}
+        elif et == "run.finished":
+            proj["attempts"] = int(d.get("attempts") or 0)
+            details = d.get("details")
+            if isinstance(details, list):
+                for row in details:
+                    if not isinstance(row, dict):
+                        continue
+                    uid = row.get("unit") or row.get("unit_id")
+                    st = row.get("status")
+                    if (uid and st in ("blocked", "canceled",
+                                       "cancelled", "halted")
+                            and uid not in unit_events):
+                        unit_events[uid] = {"status": st}
+        ingester.on_event(d)
+
+    return _on_event
+
+
+def _graph_cancel_verdict(graph_spec: dict, unit_events: dict, *,
+                           cancel_set: bool, result: Any,
+                           capable: bool) -> tuple:
+    """② 取消收口判定(方案 §2):取消位命中且至少一个**主体**单元被执行器
+    记 cancelled → 执行 canceled;命中但主体已全部启动/结束(没有单元可
+    停)→ 按真实结果收口,config.cancelIgnored 留痕供详情页解释。
+    返回 (final_status, cancel_ignored) —— final_status 非 None 即取消收口。
+    """
+    main_refs = [u.get("ref") for u in graph_spec.get("units", [])
+                 if u.get("ref")]
 
     def _is_main(uid: str) -> bool:
         return any(uid == r or uid.startswith(r + "#") for r in main_refs)
@@ -2171,26 +2282,26 @@ async def _fanout_graph(
     main_cancelled = any(
         ev.get("status") in ("cancelled", "canceled") and _is_main(uid)
         for uid, ev in unit_events.items())
-    final_status: str | None = None
-    cancel_ignored: str | None = None
-    if cancel_local["set"] and result is not None:
-        if main_cancelled:
-            status = "canceled"
-            final_status = STATUS_CANCELED
-        elif not unit_cancel["ok"]:
-            # 旧执行器(cancel_scopes 无 unit):取消被读侧接受(启动窗口
-            # 能力位未落定)但未下发 —— 与「所有单元已启动」区分留痕,
-            # 读侧 cancel_note 给对应解释。
-            cancel_ignored = "executor_no_unit_cancel"
-        else:
-            cancel_ignored = "all units already started"
+    if not (cancel_set and result is not None):
+        return None, None
+    if main_cancelled:
+        return STATUS_CANCELED, None
+    if not capable:
+        # 旧执行器(cancel_scopes 无 unit):取消被读侧接受(启动窗口
+        # 能力位未落定)但未下发 —— 与「所有单元已启动」区分留痕,
+        # 读侧 cancel_note 给对应解释。
+        return None, "executor_no_unit_cancel"
+    return None, "all units already started"
 
-    # 台账(重构方案第 3 处):seq=0 图行(与 at-most-once 恢复路径同形)
-    # + seq=1..n 逐单元行(按物化单元清单顺序;×重复变体按 unit 标签
-    # `ref#k` 追加在基座 ref 之后)。无事件且无 details 的单元按
-    # blocked 记(被 control.only 裁剪 / 未跑)。
-    finished_ts = _utcnow().isoformat() + "Z"
-    _row_states[execution_id] = []   # 无行级 registry;读侧回落 DB
+
+def _graph_result_rows(execution_id: int, status: str, graph_spec: dict,
+                       unit_events: dict, attempts_total: int) -> tuple:
+    """台账行装配(重构方案第 3 处):seq=0 图行(与 at-most-once 恢复路径
+    同形)+ seq=1..n 逐单元行(按物化单元清单顺序;×重复变体按 unit
+    标签 `ref#k` 追加在基座 ref 之后)。无事件且无 details 的单元按
+    blocked 记(被 control.only 裁剪 / 未跑)。返回
+    (ordered_units, rows_to_write) —— ordered_units 供计数消费。
+    """
     ordered_units: list[tuple[str, dict]] = []
     for u in [*graph_spec.get("before", []),
               *graph_spec.get("units", []),
@@ -2205,8 +2316,6 @@ async def _fanout_graph(
         if not evs:
             evs = [(ref, {"status": "blocked"})]
         ordered_units.extend(evs)
-    attempts_total = proj["attempts"] or int(
-        getattr(result, "attempts", 0) or 0) or 1
     rows_to_write: list[dict] = [
         {"execution_id": execution_id, "seq": 0,
          "unit_id": "graph", "branch": "graph",
@@ -2232,10 +2341,18 @@ async def _fanout_graph(
             "run_error": str(ev["error"])[:2000]
             if ev.get("error") else None,
         })
+    return ordered_units, rows_to_write
+
+
+async def _persist_graph_rows(db_factory: Any, execution_id: int,
+                              rows_to_write: list, ordered_units: list,
+                              finished_ts: str) -> None:
+    """行台账落库 + 计数:upsert 单源(P3.5-2 job 重跑 graph 执行 —— 恢复
+    时 graph 整图重放,事件 seq 已由 ingester 续接);计数按单元累加,
+    blocked/cancelled 入 skipped。行留档失败仅告警(行台账缺失,计数照常)。
+    """
     try:
         async with db_factory() as session:
-            # P3.5-2:job 重跑 graph 执行 —— 行 upsert 单源(恢复时 graph
-            # 整图重放,事件 seq 已由 ingester 续接)
             await _upsert_execution_rows(session, [
                 {**r, "finished_at": r["finished_at"]
                  or _iso_to_dt(finished_ts)}
@@ -2245,30 +2362,14 @@ async def _fanout_graph(
         logger.warning(
             "run_dispatcher: graph 行留档失败(行台账缺失,计数照常): {}",
             e)
-    # 计数与终态(计数按单元累加;blocked/cancelled 入 skipped)
-    n_pass = sum(1 for _, ev in ordered_units if ev.get("status") == "passed")
+    n_pass = sum(1 for _, ev in ordered_units
+                 if ev.get("status") == "passed")
     n_fail = sum(1 for _, ev in ordered_units
                  if ev.get("status") in ("failed", "error", "halted"))
     await _bump_counters(db_factory, execution_id,
                          passed=n_pass,
                          failed=n_fail,
                          skipped=max(len(ordered_units) - n_pass - n_fail, 0))
-    cfg_patch: dict = {}
-    if proj.get("gates"):
-        # 判定门结论(第 4 处):经事件通道落 config_json,21 页实测值来源
-        cfg_patch["gatesEvaluated"] = proj["gates"]
-    if cancel_ignored:
-        cfg_patch["cancelIgnored"] = cancel_ignored
-    if cfg_patch:
-        try:
-            async with db_factory() as session:
-                await _config_json_merge(session, execution_id, cfg_patch)
-                await session.commit()
-        except Exception as e:  # noqa: BLE001 — 结论留档 best-effort,降级可见
-            logger.warning(
-                "run_dispatcher: cancel 结论留档失败(config_json 未含"
-                " cancelIgnored): {}", e)
-    await _finalize_execution(db_factory, execution_id, status=final_status)
 
 
 # ── 执行前置共用段(C1 切片 1,2026-11-23)────────────────────────

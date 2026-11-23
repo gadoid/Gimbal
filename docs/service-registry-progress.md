@@ -2315,6 +2315,26 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   修复后复跑全绿)、对拍钉住 69 绿、契约双守卫绿。
   余量:_fanout_graph 403/_row 293/_fanout 573(compute_run_fanout 107
   维持)留切片 3+。
+- **批次 3 切片 3(2026-11-23,🟢)**:_fanout_graph 403→161,七缝抽离
+  (抽缝不改语义,graph 取消域 51 测试对拍钉住):
+  恢复两缝(`_graph_prior_event_count` 已开跑预检 /
+  `_graph_recover_failed` at-most-once failed 收口 —— 行留档 + N2 唯一
+  终态迁移单点);取消装置闭包群(session_holder/deliver/unit_cancel 三
+  dict + `_deliver_unit_cancel`/`_on_cancel_set`/`_on_session`/`_teardown`
+  四闭包)收敛为 `_GraphCancelCtl` 类(能力位/下发重试/teardown 单点,
+  物化窗口/收口判定消费 `cancel.cancel_local["set"]` 与 `capable`);
+  B-1 台账三件套 `_persist_graph_semantics`(pins/baseline/m2_hash,
+  判定失败不阻断);事件投影 `_graph_event_projection`(逐单元投影 +
+  run.finished.details 补齐 + gates 落 proj);取消收口判定
+  `_graph_cancel_verdict`(主体 cancelled → canceled / 留痕
+  cancelIgnored 两态);行装配+落库 `_graph_result_rows` /
+  `_persist_graph_rows`(seq=0 图行 + 逐单元行 + 计数累加)。
+  自查钉出一处悬引用:execute_graph 续行 `on_session=_on_session` 漏改
+  (F821),graph 取消域对拍当场钉出即修为 `cancel.on_session` —— 对拍
+  纪律有效性的实证。ruff 错误码画像与基线完全一致(零新增)。
+  验证:全量 **2160+2** + 契约行号位移重生(2 行)后守卫绿;
+  取消/恢复域 51 对拍绿。余量:_fanout 573(C1 切片 1 已抽执行前置
+  四缝)/_row 293 留切片 4。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本
