@@ -2490,10 +2490,11 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
     6. 旁注(不在 CI 门内):ruff 全树 `--select F821` 唯一一条是
       `routers/me.py:192` 的 3.12 f-string 换行语法(target-version
       3.11 配置错位),非未定义名。
-- **CI 交接处理(2026-11-23,fix/ci-main-green;🟢 同构环境 gate 12 步
-  全绿,main 实跑待推送)**
-  - **断点清点 —— 6 处**(交接清单列 2 处,其余 4 处由同构环境 / 干净
-    检出首次暴露;b44e7874 实跑停在 ①):
+- **CI 交接处理(2026-11-23,fix/ci-main-green;🟢 Windows + Linux 双平台
+  同构环境 gate 全绿;main 实跑:首跑 c06e6f0c 前 5 步 + frontend 绿、
+  停在断点 ⑦,修后重跑)**
+  - **断点清点 —— 7 处**(交接清单列 2 处,其余 5 处由同构环境 / 干净
+    检出 / main 实跑首次暴露;b44e7874 实跑停在 ①,c06e6f0c 首跑停在 ⑦):
     1. `scripts/gen_m2.py` 误随 90e7918e 退役 → **恢复**(与退役前逐
        字节同)。在用工具而非一次性脚本:plate-ci 两步 + `tests/plate/
        test_m2_step2.py` 四处加载 + `routes_grammar.py` 运行期报错文案
@@ -2518,6 +2519,12 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
        CI 检出无 `backend/.env`,本地有故从未暴露 → 脚本内
        `os.environ.setdefault` 占位 PG 形态(契约面只读路由/模型、不连
        库;调用方已有值不覆盖,与 `check_migration_drift.py` 同口径)。
+    7. **测试依赖开发机全局 git 身份**:`tests/plate/_release_fx.py` 的
+       `init_artifacts_branch` 直调 `git commit-tree` 漏传 `IDENT`(同
+       文件 `git()` 包装本就带)→ 61 个发版用例在无全局 user.name 的
+       干净 runner 上连环红(`Author identity unknown`)→ 补 `*IDENT`
+       (全仓其余 git 直调已逐一核:只读或自带身份)。Windows 面发现
+       不了 —— 开发机全局配了身份。
   - **0066_incremental_model_align(含一处实质缺陷)**:① `access_
     token_scopes` 两枚 FK —— 0057 §⑨ 摘除后重建到新表时**漏带
     ondelete/onupdate**(0033 建表原有):增量库里删除被令牌范围引用的
@@ -2541,9 +2548,13 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
     / 契约 ✓ / plate check ✓ / 方言 81 / plate **687**(首次完整跑通)/
     执行器 744+1skip(跳过项为 Linux 语义,CI 上真跑)/ 后端全量
     **2167+3skip** / 空库门 ✓ / 增量升级门(差异 3 = trgm 白名单,
-    拦截 0)/ 非 editable 冒烟 ✓。frontend job 未本地复跑(改动零触及
-    前端树,b44e7874 上 CI 已绿)。Linux 专属路径(真引擎 / 真实 plate
-    用例)本地无法预判,以 main 实跑为准。
+    拦截 0)/ 非 editable 冒烟 ✓。**Linux 面同批复现**(WSL
+    Ubuntu-24.04,/var/tmp 一次性目录:系统 Python 3.12.3 + 同一份
+    lock,PG 16.16 + Ubuntu 官方 psql 16.15,不用 sudo、不装系统包):
+    第 6–12 步方言 81 / plate 687 / 执行器 **745**(Linux-only 用例真
+    跑)/ 后端 **2167+3skip**(无时钟垫片)/ 空库门 / 增量升级门(0 拦
+    截)/ 冒烟全绿;第 1–5 步与 frontend job 由 main 首跑(c06e6f0c)
+    实跑验证为绿。
   - **本地复现的两处平台假象(非产品缺陷,记档防重查)**:(a) Windows +
     Python ≤3.12 的 `time.monotonic()` tick = 15.6 ms ——
     `plate_client` / `endpoint_declarations` / `query_view_runner`(在飞

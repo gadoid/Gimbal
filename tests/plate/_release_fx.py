@@ -67,8 +67,10 @@ def commit(cwd: Path, msg: str) -> str:
 
 def init_artifacts_branch(repo: Path, worktree: Path) -> Path:
     """孤儿构件分支（plate/artifacts）+ worktree 检出（3.6/B3）。"""
+    # commit-tree 直调也须带 IDENT:此前漏带,靠开发机全局 git 身份才过 ——
+    # 干净环境(CI runner / 无全局 user.name 的机器)61 个发版用例连环红。
     r = subprocess.run(
-        ["git", "-C", str(repo), "commit-tree", EMPTY_TREE,
+        ["git", "-C", str(repo), *IDENT, "commit-tree", EMPTY_TREE,
          "-m", "init: plate/artifacts"],
         capture_output=True, text=True, encoding="utf-8")
     assert r.returncode == 0, r.stderr

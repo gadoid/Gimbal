@@ -138,7 +138,7 @@ C6 dispatcher 域切片      ─→ C1(先辨清哪些 except 是承重的)
 ## 6. 批次 5:合并窗口项(0-5 拍板后低峰)
 
 > **窗口已开(2026-11-23)**:用户拍板「推送 + 快进 main」,origin/main
-> 快进 2c70a12b..1077bc59(A1 闭合)。main CI 的 5 处断点已于同日 CI
+> 快进 2c70a12b..1077bc59(A1 闭合)。main CI 的 7 处断点已于同日 CI
 > 交接处理修清(见 progress「CI 交接处理」),转绿以 main 实跑为准;
 > 实跑全绿前 C5 大 diff 建议暂缓。
 - C5 CRLF/LF 统一(.gitattributes 一次性大 diff,避开活跃分支期);
