@@ -98,6 +98,17 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
 
 **原地升级记录**:
 
+- **2026-11-24 00:0x — 0065_execution_row_run_error + 0066_incremental_model_align
+  原地升级**(本地部署轮,commit `0ef83781`):实测 live 库停在 **0064**
+  —— 11-23 两处「live 库在 0065 / 已备份升级」记录与实况不符(0065
+  彼时未在任何库执行,磁盘亦无 11-18 后 dump;progress/登记册已勘误)。
+  备份 `app-pg-20261124-000548-pre0065.dump`(backend 目录,pg_restore
+  --list 与 live 43 表逐一对账无缺)→ `alembic upgrade head` 一步连过
+  0065+0066;终态核对:run_error text NULL / access_token_scopes 两枚
+  FK 补级联 / 16 列 NOT NULL(唯一空值 exec_configs 时间戳成对回填,
+  各表行数不变)/ exec_configs.payload json→jsonb。0066 无 downgrade,
+  回滚 = dump 重放(§5)。
+
 - **2026-10-14 01:1x — 回滚/升级演练(第 10 类必修收口)**:取 pre-0022
   备份 `app-pg-20261013-225931-pre0022.dump` → pg_restore 进临时库
   `gimbal_rb_drill`(0021,55 场景完整)→ `alembic upgrade head` 回放

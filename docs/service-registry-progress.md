@@ -2157,7 +2157,10 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   - A3=C12 手配自助建条目:追认维持(翻案退路继续在档)。
 - **B3 行级失败原因入库**(登记册 B3 工程项,commit `197938e8`):
   迁移 **0065**(execution_rows.run_error TEXT NULL,live 库 pg_dump
-  备份后升级 head)+ 写链(RowState.run_error + 终态回写块投影:引擎
+  备份后升级 head;*(2026-11-24 勘误:当时 live 库并未升级 —— 部署轮
+  实测停在 0064,磁盘亦无 11-18 后 dump,本句与实况不符;实际升级发生在
+  11-24 本地部署轮,连过 0065+0066,见文末「本地部署轮」)*)
+  + 写链(RowState.run_error + 终态回写块投影:引擎
   `runError` 优先、派发层异常 `error` 键次之,`[:2000]` 防超长;
   `_ROW_UPSERT_COLS`/`_persist_row_terminal`/graph 恢复分支带
   at-most-once 原因/graph 逐单元行取 `ev.error`)+ 读链(行页
@@ -2538,7 +2541,10 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
     不提供 downgrade(决策 8 同款)。迁移测试 +2:增量终态收敛(含「修前
     删条目违例 / 修后级联」对照)与 fresh 链空转。**运维**:live 库在
     0065,部署本提交后后端按产品语义拒绝启动,须在带备份的人工窗口
-    `alembic upgrade head`(runbook-pg.md §4)。
+    `alembic upgrade head`(runbook-pg.md §4)。*(2026-11-24 勘误:
+    live 库实测在 **0064** 而非 0065 —— 0065 当时未在任何库执行,也
+    没有 11-18 后的 dump;该窗口于 11-24 部署轮实际执行,见文末
+    「本地部署轮」。)*
   - **同构验证环境(此前缺失)**:本机在用的两套环境(3.14 全局 / 3.13
     `D:\Gimbal` venv)均非 CI 口径 —— CI 是 3.12 + lock(SQLAlchemy
     2.1.4 / fastapi 0.143.1 / pydantic 2.14.1 …,本地两套都是 2.0.x
@@ -2608,6 +2614,30 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   验证:后端全量 **2161 passed + 2 skipped**(0 failed;较 2188 净
     减 27 = launcher 专属测试三文件 + 双链等价臂);契约快照重生
     (openapi noop、error-codes 行号位移)。
+- **本地部署轮(2026-11-24,🟢;commit `0ef83781` 工作树同源)**:
+  - **库**:机器 11-23 20:17 重启后 Docker/三服务全停;拉起 Docker
+    Desktop + live PG 容器 `gimbal-pg`(卷 `231f225d…`,恢复干净)。
+    实测 alembic **0064**(上文两处「live 库在 0065」记录不符,已勘误)
+    → pg_dump 备份 `app-pg-20261124-000548-pre0065.dump`(backend 目录,
+    43 表对账无缺)→ `alembic upgrade head` 连过 **0065+0066**;终态
+    逐项核对:run_error text NULL / access_token_scopes 两 FK 级联 /
+    16 列 NOT NULL(唯一空值 = exec_configs 时间戳成对回填)/ payload
+    json→jsonb;各表行数不变。0066 无 downgrade,回滚 = dump 重放。
+  - **三服务**:uvicorn 8000 / vite 5173 / plate 8890 全绿;运行面
+    实证 openapi 含 `ExecutionRowOut.runError`、plate 构件根生效
+    (`/api/system/fin/lines` ok)、审计三面 0/0/0(authored URL /
+    未登记身份 / 明文快照,65 场景)。dist 重建(`index-DcYvOHCA.js`)。
+  - **旧容器清理**:`gimbal-pg-15432`(10-07 建,Exited)与 `gimbal-pg`
+    同卷抢 15432 端口 —— 删容器(不带 -v),卷与 live 库无恙。
+  - **前端修复**:`/suites/new` 静态别名缺 `:id` 的建表 dev 告警清零
+    (别名改 `:id(new)` 同记录;全量 174 文件 **1540+1skip** /
+    vue-tsc 0 / eslint 0;headless Chromium 控制台复核零告警)。
+  - **运维环境(不入库,记档)**:venv 两包 editable 元数据刷新
+    (对齐现行 pyproject;`plate.exe` 入口补装)+ bcrypt 4.0.1→
+    **5.0.0**(对齐 lock;后端/plate/执行器三进程带载升级 = 停服
+    窗口约 1 分钟,重启后探针全绿),`pip check` 清零。venv 与
+    lock 尚余 30+ 项版本漂移(3.13 vs CI 3.12 口径),沿用「不碰
+    现有环境」拍板,收敛另批。
 
 ## 5. 已知风险与待决
 
