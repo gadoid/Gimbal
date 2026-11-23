@@ -2,7 +2,7 @@
 
 > **模块**：`gimbal-platform/frontend`（断言注册表水化与保存）
 > **状态**：已知未修复（**待裁定**，见 §3）
-> **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（E）
+> **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（E）
 > **适用范围**：`assertion_registry` 场景级节的四个水化入口 → 任意保存路径。
 
 ---

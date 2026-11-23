@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI + SQLAlchemy 2.0 async(Mapped 风格)+ Pydantic v2 + pytest(asyncio_mode=auto);Vue 3 `<script setup>` + Element Plus + Pinia + vitest(jsdom)。
 
-**Spec:** `docs/superpowers/specs/2026-09-14-run-scheme-workbench-design.md`(本计划实现其 §11 阶段①②;阶段③④另出计划 B)
+**Spec:** `docs/implemented/specs/2026-09-14-run-scheme-workbench-design.md`(本计划实现其 §11 阶段①②;阶段③④另出计划 B)
 
 ## Global Constraints
 

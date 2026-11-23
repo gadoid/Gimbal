@@ -809,7 +809,7 @@ rows:
 > 记录;其中「判定与投影基于 Set」等纪律仍然有效。
 
 下面三条与判定面 / 取数缓存 / JSON 列有关。改存储引擎时必须保持
-（出处：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §4）。
+（出处：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §4）。
 
 **约束一：判定面不持久化。** 悬空判定用的「契约声明面」运行时从 plate 契约
 派生，**只存在于进程内**（取数与缓存是 `plate_client.get_endpoint_full` 的
@@ -981,7 +981,7 @@ body 叶子路径 ∪ 这些叶子的容器前缀
 `jsonpath.exists(body, path)` 兜底（`_path_resolvable()`）—— 兜底**只对 dict 宿主**生效，
 且还要过写侧**同一判据** `_host_conflict`（Z1：非 dict 宿主上不再取 `getattr` 的属性可达性，
 故 `$.note.replace` 这类在宿主是字符串时**判死**；见
-`docs/superpowers/specs/2026-09-13-judgment-surface-convergence-design.md` §4.2 / §4.4）。兜底比可注入面
+`docs/implemented/specs/2026-09-13-judgment-surface-convergence-design.md` §4.2 / §4.4）。兜底比可注入面
 **多认「空容器本身」**（`body={"items":[]}` 的 `$.items`）—— 这一格**只会少判死**，
 方向与既有行为一致（该兜底分支的 docstring 已写明：空容器的宿主就是 dict，
 与上面那条收紧是两件事）。

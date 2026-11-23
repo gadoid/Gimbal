@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI + SQLAlchemy + Pydantic v2(后端);Vue 3 + Element Plus + Pinia + vitest(前端)。
 
-**Spec:** `src/gimbal-platform/docs/superpowers/specs/2026-08-25-auth-users-card-and-auths-page-design.md`
+**Spec:** `src/gimbal-platform/docs/implemented/specs/2026-08-25-auth-users-card-and-auths-page-design.md`
 
 ## Global Constraints
 

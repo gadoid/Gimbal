@@ -2,7 +2,7 @@
 
 > **模块**：`gimbal-platform`（判定面 × plate 契约声明面）
 > **状态**：**已接受**（不是待修缺陷；本记录说明边界与残余风险）
-> **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3（「声明面模板粒度」）
+> **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3（「声明面模板粒度」）
 
 ---
 
@@ -52,7 +52,7 @@ if not e.path.startswith(parent.path + "."):
           data.append(None)     # 自动扩展到该下标
   ```
 
-  即可注入面 spec 已记录的后果（`docs/superpowers/specs/2026-09-12-injectable-path-surface-design.md:104`）：表现为**请求载荷与断言结果的变化**，而不是步骤失败。
+  即可注入面 spec 已记录的后果（`docs/implemented/specs/2026-09-12-injectable-path-surface-design.md:104`）：表现为**请求载荷与断言结果的变化**，而不是步骤失败。
 - **元素数不固定的响应**：声明面只能给到外层容器（`$.items`）或模板叶子（`$.items.sku`）；「第几个元素」的级联校验/展示在声明面无处安放 —— 响应侧的实例级标注属于被搁置的设计，不在本记录主张之列。
 
 **读者应当这么做**：

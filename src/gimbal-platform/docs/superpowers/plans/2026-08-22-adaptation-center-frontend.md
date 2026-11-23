@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI + SQLAlchemy async(后端);Vue 3 `<script setup>` + pinia + Element Plus + vitest/@vue/test-utils(前端)。
 
-**Spec:** `docs/superpowers/specs/2026-08-22-adaptation-center-frontend-design.md`(P5 设计;§2 四项已裁定决策为权威);上位 spec `docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md`(§5.4 op 契约、§5.5 流程、C10/C12/C13)。
+**Spec:** `docs/implemented/specs/2026-08-22-adaptation-center-frontend-design.md`(P5 设计;§2 四项已裁定决策为权威);上位 spec `docs/implemented/specs/2026-08-21-asset-domain-complete-design.md`(§5.4 op 契约、§5.5 流程、C10/C12/C13)。
 
 ## Global Constraints
 
@@ -3228,9 +3228,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 12: 全量验证 + spec 回写 + 计划勾选
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md`(§7 增 P5 段)
-- Modify: `docs/superpowers/specs/2026-08-22-adaptation-center-frontend-design.md`(状态行 + errata)
-- Modify: `docs/superpowers/plans/2026-08-22-adaptation-center-frontend.md`(勾选全部 `- [ ]`)
+- Modify: `docs/implemented/specs/2026-08-21-asset-domain-complete-design.md`(§7 增 P5 段)
+- Modify: `docs/implemented/specs/2026-08-22-adaptation-center-frontend-design.md`(状态行 + errata)
+- Modify: `docs/implemented/plans/2026-08-22-adaptation-center-frontend.md`(勾选全部 `- [ ]`)
 
 **Interfaces:**
 - Consumes: Tasks 1-11 全部产出。
@@ -3283,7 +3283,7 @@ endpoint 级 pending,无字段数据,字段级信息由影响抽屉承担)
 - [x] **Step 4: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md docs/superpowers/specs/2026-08-22-adaptation-center-frontend-design.md docs/superpowers/plans/2026-08-22-adaptation-center-frontend.md
+git add docs/implemented/specs/2026-08-21-asset-domain-complete-design.md docs/implemented/specs/2026-08-22-adaptation-center-frontend-design.md docs/implemented/plans/2026-08-22-adaptation-center-frontend.md
 git commit -m "docs: P5 完成回写(asset spec §7 + P5 spec 状态/errata)
 
 Co-Authored-By: Claude <noreply@anthropic.com>"

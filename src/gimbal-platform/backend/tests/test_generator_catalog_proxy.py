@@ -1,6 +1,6 @@
 """Generator-catalog proxy 面单测 —— plate generators dim 代理三态。
 
-设计: src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md §后端代理
+设计: src/gimbal-platform/docs/implemented/specs/2026-08-26-constant-pool-design.md §后端代理
 与 test_strategy_catalog.py 同构: plate ok / plate 404 / plate 5xx /
 连不上,验证信封解包与错误码映射(502 plate_unavailable、404
 generator_kind_not_found)。

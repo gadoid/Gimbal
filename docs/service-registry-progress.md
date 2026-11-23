@@ -2,7 +2,7 @@
 
 > 分支 `feat/service-registry` · 2026-11-16
 > 设计源：`docs/service-registry-redesign.md`（四层模型 / 表结构 / 契约边界）
-> 欠账台账：`docs/component-impact-ledger.md`（C1–C5）
+> 欠账台账：`docs/implemented/component-impact-ledger.md`（C1–C5）
 
 ## 1. 一句话状态
 
@@ -1221,7 +1221,7 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
 归层、AuthAccount 无 refresh_token 列)。**三决策点拍板:决策 2 = 撤
 /carry-config 深链;决策 3 = 引擎缺凭证 fail-fast + 环境变量逃生口;
 决策 1(§8.10 圈定升运行时白名单)挂起** —— 设计定稿见
-`docs/identity-registry-driven-plan.md`。修复按批次落 commit
+`docs/implemented/identity-registry-driven-plan.md`。修复按批次落 commit
 (fd060592..daf04ace 七连):
 
 - **P3 清理(评审轮遗留)**:`carry_injection.merge_carry_tiers` 单源化
@@ -1398,7 +1398,7 @@ v4 落地后逐项复核样式与交互,修六类不合理点(纯前端;业务�
   (= `AuthAccount.system` 派生对齐,零迁移)、模型更名 auth_account/
   url·alias·slot 退役、快照兜底仅属主私有自跑(W6)、分享自备同名
   已是现状 —— 立项理由从「堵漏」改写为「治理收敛」;
-- **v2 修订稿**入档 `docs/credential-identity-reform-design.md`
+- **v2 修订稿**入档 `docs/implemented/credential-identity-reform-design.md`
   (修订说明表 9 行全部带证据;v1 漏项五条补登:直写 API 422 闸/
   同属主副本口径/测试面翻转清点/revive 可见行为/account_fields 表单;
   TOK-05 护栏接力说明;验收口径修正);

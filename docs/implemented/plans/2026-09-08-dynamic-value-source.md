@@ -1929,7 +1929,7 @@ function onVsSelect(row: Record<string, unknown>) {
 ### Task 10: 回归收尾 + 文档 + 手验清单
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-09-07-dynamic-value-source-design.md`(状态行 → 已实施 + commit hash)
+- Modify: `docs/implemented/specs/2026-09-07-dynamic-value-source-design.md`(状态行 → 已实施 + commit hash)
 - Modify: `docs/FIELD-UI-MAPPING.md`(enum select 通道 + 查钮/徽标条目)
 - Modify: `docs/PLATE-API-SURFACE.md`(GET /api/query-views + query_views/value_source wire 说明)
 

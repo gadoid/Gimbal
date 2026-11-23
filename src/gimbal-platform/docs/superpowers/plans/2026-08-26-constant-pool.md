@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI + SQLAlchemy async + Pydantic v2(plate 与 platform backend);Vue 3 + Element Plus + Pinia + @vue/test-utils/vitest(jsdom);pytest(fastapi TestClient / httpx ASGITransport + MockTransport)。
 
-**Spec:** `src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md`(本计划从 spec 取证;执行者应同时读 spec 对应章节)
+**Spec:** `src/gimbal-platform/docs/implemented/specs/2026-08-26-constant-pool-design.md`(本计划从 spec 取证;执行者应同时读 spec 对应章节)
 
 > **实现进度(2026-08-27 更新):已全部完成并合并。**
 >
@@ -120,7 +120,7 @@
 ```python
 """generators dim HTTP 面单测 —— M6 通用路由上的第 9 个(语法级)dim。
 
-设计: src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md §plate
+设计: src/gimbal-platform/docs/implemented/specs/2026-08-26-constant-pool-design.md §plate
 全部走既有通用 handler(list/full),零新路由代码;钉死 9 个规范 kind
 清单(P1)与"描述符由镜像 schema 内省派生"(P6);P7 直接 import 引擎
 specs 对照,防 plate 镜像与引擎漂移(双权威手工同步的失效触发器)。
@@ -737,7 +737,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ```python
 """Constants-pool API 面单测 —— per-user 常量条目 CRUD。
 
-设计: src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md §后端
+设计: src/gimbal-platform/docs/implemented/specs/2026-08-26-constant-pool-design.md §后端
 覆盖: owner 隔离(B1/B2)、互斥校验(B3/B4)、name 规则(B5)、
 409 字典 detail(B6)、PATCH 不可变 entry_kind/按行校验(B7)、
 删除(B8)、字面量四类型往返(B9)。
@@ -1272,7 +1272,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ```python
 """Generator-catalog proxy 面单测 —— plate generators dim 代理三态。
 
-设计: src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md §后端代理
+设计: src/gimbal-platform/docs/implemented/specs/2026-08-26-constant-pool-design.md §后端代理
 与 test_strategy_catalog.py 同构: plate ok / plate 404 / plate 5xx /
 连不上,验证信封解包与错误码映射(502 plate_unavailable、404
 generator_kind_not_found)。

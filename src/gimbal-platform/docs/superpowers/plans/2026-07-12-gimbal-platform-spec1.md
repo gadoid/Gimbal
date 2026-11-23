@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the Spec-1 平台骨架 + 读路径 (platform skeleton + read path) per `docs/superpowers/specs/2026-07-12-gimbal-platform-spec1-design.md`. After this plan the user can log in, browse a public/own case list, open the real 27-step `Scenario_Test_9.json` in a read-only Prism-style configurator with L1 field hiding + L3 platform default preset hiding, and manage users from `/admin/users`.
+**Goal:** Build the Spec-1 平台骨架 + 读路径 (platform skeleton + read path) per `docs/implemented/specs/2026-07-12-gimbal-platform-spec1-design.md`. After this plan the user can log in, browse a public/own case list, open the real 27-step `Scenario_Test_9.json` in a read-only Prism-style configurator with L1 field hiding + L3 platform default preset hiding, and manage users from `/admin/users`.
 
 **Architecture:**
 - Single repo at `D:/Gimbal/gimbal-platform/` with `backend/` (FastAPI + SQLAlchemy async + SQLite + JWT + Fernet) and `frontend/` (Vite + Vue 3 + TS + Pinia + Vue Router + Element Plus + Prism theme tokens).

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vue 3 + Element Plus + Pinia(vitest + vue-tsc)/ FastAPI + pydantic(pytest)/ plate 引擎零改动。
 
-**Spec:** `docs/superpowers/specs/2026-09-11-assertion-registry-field-binding-design.md`(T0 已实施 bd15cc56;本计划覆盖 §12 的 T1-T6 与 T8)
+**Spec:** `design/archive/2026-09-11-assertion-registry-field-binding-design.md`(T0 已实施 bd15cc56;本计划覆盖 §12 的 T1-T6 与 T8)
 
 > **进度 · 暂停点(2026-09-11)**:Task 1-5 已完成并双审收口(SDD 台账:`.superpowers/sdd/2026-09-11-assertion-registry-v2/progress.md`,含 Task 6 dispatch 恢复注记)—
 > T1 `8d0da1ce`+`a6502ca4` / T2 `83a25038`+`ce32505f` / T3 `7d2930a6` / T4 `cde95c12`(WIP 选择性暂存) / T5 `244c0138`+`dfdef5eb`。
@@ -1356,8 +1356,8 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 8: 文档标注(spec 任务 T8)
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-09-10-dataset-driven-refactor-design.md`(头部 + §8.4)
-- Modify: `docs/superpowers/specs/2026-09-11-assertion-registry-field-binding-design.md`(§12 状态列)
+- Modify: `docs/implemented/specs/2026-09-10-dataset-driven-refactor-design.md`(头部 + §8.4)
+- Modify: `design/archive/2026-09-11-assertion-registry-field-binding-design.md`(§12 状态列)
 
 - [ ] **Step 1: 2026-09-10 spec 头部加取代注记**
 
@@ -1373,8 +1373,8 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C d:/Gimbal/Gimbal add docs/superpowers/specs/2026-09-10-dataset-driven-refactor-design.md \
-  docs/superpowers/specs/2026-09-11-assertion-registry-field-binding-design.md
+git -C d:/Gimbal/Gimbal add docs/implemented/specs/2026-09-10-dataset-driven-refactor-design.md \
+  design/archive/2026-09-11-assertion-registry-field-binding-design.md
 git -C d:/Gimbal/Gimbal commit -m "docs(spec): 2026-09-10 spec 取代标注 + v2 §12 任务状态收口
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"

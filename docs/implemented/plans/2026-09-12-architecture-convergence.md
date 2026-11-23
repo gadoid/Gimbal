@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vue 3 + TS(vitest/@vue/test-utils)/ FastAPI + Pydantic + SQLAlchemy(pytest)。
 
-**Spec:** `docs/superpowers/specs/2026-09-12-architecture-convergence-design.md`(权威)
+**Spec:** `docs/implemented/specs/2026-09-12-architecture-convergence-design.md`(权威)
 
 ## Global Constraints
 
@@ -1067,7 +1067,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `docs/PLATFORM-SCENARIO-COMPOSER-API.md`(§2.6 / §4.18 / §5 + 新增一节)
 - Modify: `docs/adr/0003-retired-features-log.md`(退场表加行)
 - Create: `docs/known-issues/` 下各记录
-- Modify: `docs/superpowers/specs/2026-09-12-injectable-path-surface-design.md`(头部修订标注)
+- Modify: `docs/implemented/specs/2026-09-12-injectable-path-surface-design.md`(头部修订标注)
 
 - [ ] **Step 1: API 文档**:§2.6 `RunRequest` 补 `dataSetSelection` / `injectionEntryIds`(写明两键同发本键优先);§4.18 补交叉公式、409 `row_index_out_of_range`、**有界软取(3s)与降级从严**、悬空 skip 的可见性(`judgeDegraded` 标记);§5 补「判定面不持久化 / 不依赖 JSON 键序 / 显式 null 语义」;**新增一节「断言条目与可注入面」**。
 - [ ] **Step 2: ADR 0003**:退场表加行(手工版本号协议 `endpointFullVersion`、四个视图的本地判定函数、`endpoint_declarations._CACHE`、`bodyPathSetOf` 若在本阶段退场);并按该 ADR 的规则清理代码中承载历史叙述的注释。

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3 + Pydantic v2 + FastAPI(plate/平台后端);Vue 3 + TypeScript + Pinia(前端)。
 
-**Spec:** `docs/superpowers/specs/2026-08-17-strategy-syntax-service-design.md`
+**Spec:** `docs/implemented/specs/2026-08-17-strategy-syntax-service-design.md`
 
 ## Global Constraints
 

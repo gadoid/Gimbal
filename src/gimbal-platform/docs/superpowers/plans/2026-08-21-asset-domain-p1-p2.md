@@ -10,7 +10,7 @@
 
 **Tech Stack:** FastAPI + SQLAlchemy async(aiosqlite)/ pytest-asyncio;Vue 3 + Pinia + Element Plus + vitest。
 
-**Spec:** `src/gimbal-platform/docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md`(§3 存储结构、§4 数据集、§7 P1/P2、§9 C1-C4/C10)
+**Spec:** `src/gimbal-platform/docs/implemented/specs/2026-08-21-asset-domain-complete-design.md`(§3 存储结构、§4 数据集、§7 P1/P2、§9 C1-C4/C10)
 
 ## Global Constraints
 

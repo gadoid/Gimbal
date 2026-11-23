@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3 + Pydantic v2 + FastAPI + SQLAlchemy(后端);Vue 3 + TypeScript + Pinia + Element Plus(前端)。
 
-**Spec:** `docs/superpowers/specs/2026-08-13-scenario-plate-unification-design.md`
+**Spec:** `docs/implemented/specs/2026-08-13-scenario-plate-unification-design.md`
 
 ## Global Constraints
 

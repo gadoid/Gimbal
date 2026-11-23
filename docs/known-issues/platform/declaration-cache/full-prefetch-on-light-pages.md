@@ -2,7 +2,7 @@
 
 > **模块**：`gimbal-platform/frontend`（`useInjectableSurface.ensure` + `useEndpointFull`）
 > **状态**：**已接受**（不是待修缺陷；本记录说明边界与残余风险）
-> **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3（「轻量页新增 `/full` 取数」）
+> **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3（「轻量页新增 `/full` 取数」）
 
 ---
 

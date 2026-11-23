@@ -2,7 +2,7 @@
 
 > **模块**：`gimbal-platform`（后端 `endpoint_declarations` ↔ 前端 `useEndpointFull`）
 > **状态**：**已按阶段二·① 收口**（前端补 300 s TTL，与后端同量级）
-> **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3
+> **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3
 >
 > 以下正文是**收口前**的记载（保留历史，不改写）。已作废的陈述逐条更正见文末
 > [修复记录](#修复记录)。

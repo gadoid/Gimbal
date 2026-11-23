@@ -2,7 +2,7 @@
 
 面向外部系统(含 Agent)的接入指南:如何持 Gimbal 访问令牌执行
 场景 / 注册定时任务,并在执行完成后接收回调。设计与决策背景见
-`superpowers/plans/gimbal-token-authz-v4-r10.4/token-authz-v4-tech-plan-r10.4.md`
+`implemented/plans/gimbal-token-authz-v4-r10.4/token-authz-v4-tech-plan-r10.4.md`
 (库内);本文只写接入方需要知道的事实。v3 入站模型已于 2026-11-04
 随存储一并移除(§10)。
 > **⚠️ 口径更新(2026-11-07,authz 改造 M1/M1.x 已实施)**:本文中

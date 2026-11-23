@@ -632,7 +632,7 @@ python -m gimbal.schema.teardown
 ## api→call 变更过程（历史记录）
 
 本节是 `step.api` → `step.call` 迁移的唯一现行文档入口；历史计划文档
-（`docs/superpowers/plans/`）是各阶段的时点存档，不再重复维护。
+（`docs/implemented/plans/`）是各阶段的时点存档，不再重复维护。
 
 | 时间 | 事件 |
 |------|------|

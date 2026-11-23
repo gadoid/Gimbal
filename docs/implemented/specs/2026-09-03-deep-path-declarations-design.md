@@ -1,7 +1,7 @@
 # 深层路径声明与 name↔path 解绑 设计(spec)
 
 > 日期:2026-09-03 · 分支:feat/io-declarations-and-strategy-badges
-> 前置:docs/superpowers/specs/2026-09-01-io-declarations-unification-design.md(declarations 单一真源)
+> 前置:docs/implemented/specs/2026-09-01-io-declarations-unification-design.md(declarations 单一真源)
 > 案例端点:fin.order_entrust.order_dispatch(supplier 数组深层叶子注入)
 
 ## 1. 背景与问题
@@ -178,4 +178,4 @@ setByPath 中间节点按下一 segment 类型建容器(string → dict,number �
   dispatch 端点落地(用户 WIP 协调)
 - **批二(纯前端,plate 零改)**:深层派生行 → 「+ 同级」按钮
 
-实现计划:docs/superpowers/plans/2026-09-03-deep-path-declarations.md
+实现计划:docs/implemented/plans/2026-09-03-deep-path-declarations.md

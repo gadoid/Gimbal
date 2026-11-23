@@ -1,6 +1,6 @@
 """strategy dim HTTP 面单测 —— M6 通用路由上的第 8 个 dim。
 
-设计: docs/superpowers/specs/2026-08-17-strategy-syntax-service-design.md §3.1
+设计: docs/implemented/specs/2026-08-17-strategy-syntax-service-design.md §3.1
 全部走既有通用 handler(list/detail/full/系统作用域/references),零新路由代码;
 本文件验证注册后这些路由对 strategy dim 的行为。
 """

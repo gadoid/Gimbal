@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vue 3 + TS + Element Plus(vitest/@vue/test-utils)/ FastAPI + Pydantic(pytest)/ plate convert 链不变。
 
-**Spec:** `docs/superpowers/specs/2026-09-12-assertion-registry-v3-merge-injection-design.md`(权威;冲突以 spec 为准)
+**Spec:** `docs/implemented/specs/2026-09-12-assertion-registry-v3-merge-injection-design.md`(权威;冲突以 spec 为准)
 
 ## Global Constraints
 

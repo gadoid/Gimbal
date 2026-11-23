@@ -8,7 +8,7 @@
 
 **Tech Stack:** pydantic(plate)/ pytest / Vue3 + vitest + vue-tsc
 
-**Spec:** docs/superpowers/specs/2026-09-03-deep-path-declarations-design.md(决策编号 D1-D12 下文引用)
+**Spec:** docs/implemented/specs/2026-09-03-deep-path-declarations-design.md(决策编号 D1-D12 下文引用)
 
 ## Global Constraints
 
@@ -42,7 +42,7 @@
 
 ```python
 """深层路径声明(D1-D3):name 别名制、通道形态边界、包含四格。
-设计依据:docs/superpowers/specs/2026-09-03-deep-path-declarations-design.md"""
+设计依据:docs/implemented/specs/2026-09-03-deep-path-declarations-design.md"""
 import pytest
 from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, RequestSpec
 

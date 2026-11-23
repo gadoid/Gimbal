@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vue 3 + TS + Element Plus(vitest/@vue/test-utils)/ FastAPI + Pydantic(pytest)/ plate `/full` 契约。
 
-**Spec:** `docs/superpowers/specs/2026-09-12-injectable-path-surface-design.md`(权威;本计划是它的实施论证)
+**Spec:** `docs/implemented/specs/2026-09-12-injectable-path-surface-design.md`(权威;本计划是它的实施论证)
 
 ## Global Constraints
 
@@ -956,7 +956,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 6: 文档修订标注 + 全量回归
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-09-12-assertion-registry-v3-merge-injection-design.md`(头部加修订标注)
+- Modify: `docs/implemented/specs/2026-09-12-assertion-registry-v3-merge-injection-design.md`(头部加修订标注)
 
 - [ ] **Step 1: v3 spec 加修订标注**
 

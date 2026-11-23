@@ -270,7 +270,7 @@ users / auths / constants / carry / service-aliases / data-sets / run-schemes / 
 | 执行链 = `gimbal run launch <case.json> -o jsonl` CLI 子进程 | `app/services/gimbal_launcher.py` |
 | `orchestration` 与 `definition.steps` 严格同序同长 | `app/models/composer_scenario.py` |
 | `scenarioId` 正则 `^sc-[a-z0-9-]+$` | `app/schemas/scenario_composer.py` |
-| 路线图把自举定为 I1，排在 P4 之后，验收"不改 schema" | `docs/superpowers/plans/GIMBAL-待实现功能与路线图-2026-09-28.md` §2.9 |
+| 路线图把自举定为 I1，排在 P4 之后，验收"不改 schema" | `docs/implemented/plans/GIMBAL-待实现功能与路线图-2026-09-28.md` §2.9 |
 
 ---
 

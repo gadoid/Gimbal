@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+ / Pydantic v2 / pytest 8
 
-**Spec:** [docs/superpowers/specs/2026-06-17-scenario-vars-and-generator-design.md](../specs/2026-06-17-scenario-vars-and-generator-design.md)
+**Spec:** [docs/implemented/specs/2026-06-17-scenario-vars-and-generator-design.md](../specs/2026-06-17-scenario-vars-and-generator-design.md)
 
 ---
 

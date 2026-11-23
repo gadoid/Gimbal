@@ -22,7 +22,7 @@
 > (state=form 的解析态面);`assertable_paths` 对应响应 `assertable=true`
 > 条目的 path 集(响应面单脸,state 不被读取)。现行契约见 plate
 > `io_spec.py` 与
-> [2026-09-05 目录化设计](superpowers/specs/2026-09-05-field-state-catalog-design.md)。
+> [2026-09-05 目录化设计](implemented/specs/2026-09-05-field-state-catalog-design.md)。
 
 ---
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.14 + tree-sitter 0.26 / tree-sitter-php(已装并验证:入口 `Language(tree_sitter_php.language_php())`)+ pydantic 2.12.5(沿 plate)+ pytest。
 
-**Spec:** `docs/superpowers/specs/2026-09-15-sut-request-surface-twin-generator-design.md`(911cf45a;本计划含 §5 目录条修订,见 Task 11)
+**Spec:** `docs/implemented/specs/2026-09-15-sut-request-surface-twin-generator-design.md`(911cf45a;本计划含 §5 目录条修订,见 Task 11)
 
 ## Global Constraints
 
@@ -1859,7 +1859,7 @@ cd src/gimbal-plate/tools && export PYTHONIOENCODING=utf-8 PYTHONUTF8=1 && pytho
 **Files:**
 - Create: `src/gimbal-plate/gimbal_plate/systems/fin/endpoint_generated/__init__.py`
 - Modify: `src/gimbal-plate/gimbal_plate/systems/fin/__init__.py`(干净文件;**绝不碰** `endpoint/__init__.py`)
-- Modify: `docs/superpowers/specs/2026-09-15-sut-request-surface-twin-generator-design.md`(§5 目录条修订)
+- Modify: `docs/implemented/specs/2026-09-15-sut-request-surface-twin-generator-design.md`(§5 目录条修订)
 - Test: `src/gimbal-plate/tools/twin_generator/tests/test_install.py`
 
 **Interfaces:**
@@ -1950,7 +1950,7 @@ spec §5 目录条改为:
 ```bash
 cd src/gimbal-plate/tools/twin_generator && python -m pytest tests -v
 cd D:/Gimbal/Gimbal/src/gimbal-plate && python -c "from gimbal_plate.systems.fin import ALL_ENDPOINTS; print(len(ALL_ENDPOINTS))"
-git add src/gimbal-plate/gimbal_plate/systems/fin/endpoint_generated/__init__.py src/gimbal-plate/gimbal_plate/systems/fin/__init__.py docs/superpowers/specs/2026-09-15-sut-request-surface-twin-generator-design.md src/gimbal-plate/tools/twin_generator/tests/test_install.py
+git add src/gimbal-plate/gimbal_plate/systems/fin/endpoint_generated/__init__.py src/gimbal-plate/gimbal_plate/systems/fin/__init__.py docs/implemented/specs/2026-09-15-sut-request-surface-twin-generator-design.md src/gimbal-plate/tools/twin_generator/tests/test_install.py
 git commit -m "feat(twin-gen): 安装接线 — endpoint_generated 自动发现包 + fin 聚合合并 + spec §5 修订
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"

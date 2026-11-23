@@ -10,7 +10,7 @@
 > **历史层提示(2026-09-02)**:§2.3-§2.5 描述的
 > `assertable_fields ⊆ fields` / `IOFieldBinding.name-path` / enum 一致性约束,
 > 其校验语义已由 declarations 归一化原样继承(`DeclarationEntry` 条目级校验
-> + assertable 旗标,见 [2026-09-01 归一化设计](../../../docs/superpowers/specs/2026-09-01-io-declarations-unification-design.md));本文引用的旧类名/键名为当时规范层记录。
+> + assertable 旗标,见 [2026-09-01 归一化设计](../../../docs/implemented/specs/2026-09-01-io-declarations-unification-design.md));本文引用的旧类名/键名为当时规范层记录。
 
 ---
 

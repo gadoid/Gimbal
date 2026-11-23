@@ -1,7 +1,7 @@
 """Subprocess launcher for ``gimbal run launch {case-path}`` (V3.2 执行链).
 
 执行调用的唯一形态是 CLI 子进程(设计见
-docs/superpowers/specs/2026-08-24-run-launch-subprocess-design.md):
+docs/implemented/specs/2026-08-24-run-launch-subprocess-design.md):
 平台把逐行合成的数据驱动用例落盘为 scenario.json,交给
 ``gimbal run launch <case> -o json`` 执行,同步收 JSON RunResult。
 

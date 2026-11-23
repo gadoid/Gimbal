@@ -1,6 +1,6 @@
 # 前端重构实施总结 — feat/frontend-signal-refactor 分支
 
-> 对应方案:`docs/superpowers/plans/gimbal-platform-refactor-plan/plan.md`(v2.2 定稿 + 实施进度块)
+> 对应方案:`docs/implemented/plans/gimbal-platform-refactor-plan/plan.md`(v2.2 定稿 + 实施进度块)
 > 分支:26 个提交,基线 d3dcdf50,未推送。全量 907 条测试绿 / vue-tsc 0 错 / vite build 通过。
 
 ## 一、交付总览

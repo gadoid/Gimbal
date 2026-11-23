@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vue 3 `<script setup>` + TypeScript + Element Plus + Pinia;vitest + @vue/test-utils 挂载级测试;vue-tsc 类型门。
 
-**Spec:** [docs/superpowers/specs/2026-09-10-dataset-driven-refactor-design.md](../specs/2026-09-10-dataset-driven-refactor-design.md)(§5 编排器 / §6 编辑器 / §7 命名 / §9 兼容 / §11 测试矩阵是本计划的验收依据)
+**Spec:** [docs/implemented/specs/2026-09-10-dataset-driven-refactor-design.md](../specs/2026-09-10-dataset-driven-refactor-design.md)(§5 编排器 / §6 编辑器 / §7 命名 / §9 兼容 / §11 测试矩阵是本计划的验收依据)
 
 ## Global Constraints
 
@@ -32,7 +32,7 @@
 
 **Files:**
 - Create: `.superpowers/sdd/2026-09-10-dataset-driven-refactor/task-0-report.md`(SDD workspace,git-ignored)
-- Modify(仅当发现 §9.2 矩阵外的新消费方): `docs/superpowers/specs/2026-09-10-dataset-driven-refactor-design.md` §9.2
+- Modify(仅当发现 §9.2 矩阵外的新消费方): `docs/implemented/specs/2026-09-10-dataset-driven-refactor-design.md` §9.2
 
 **Interfaces:**
 - Consumes: spec §9.2 兼容矩阵(9 行)。
@@ -66,7 +66,7 @@ Grep pattern: exportScenario|materialize
 
 - [ ] **Step 3: 结论裁决**
 
-全部落在矩阵内 → 报告写"零新消费方,§9.2 矩阵完整",任务完成(零提交,台账留痕)。发现矩阵外消费方 → 在 spec §9.2 表追加一行(功能/消费什么/影响/结论),提交 spec:`git add docs/superpowers/specs/2026-09-10-dataset-driven-refactor-design.md` + commit `docs(spec): §9.2 消费方盘点补录`。
+全部落在矩阵内 → 报告写"零新消费方,§9.2 矩阵完整",任务完成(零提交,台账留痕)。发现矩阵外消费方 → 在 spec §9.2 表追加一行(功能/消费什么/影响/结论),提交 spec:`git add docs/implemented/specs/2026-09-10-dataset-driven-refactor-design.md` + commit `docs(spec): §9.2 消费方盘点补录`。
 
 ---
 

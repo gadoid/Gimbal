@@ -10,7 +10,7 @@
 > `state` 三态(form/collapse/carry,默认 form),`type` 全条目必填,
 > `children` 内联树取代 `schema_`(wire 不再有 `schema` 键),`required`
 > 默认 False。文中 wire 示例已按现行契约更新;详见
-> [2026-09-05 目录化设计](superpowers/specs/2026-09-05-field-state-catalog-design.md)。
+> [2026-09-05 目录化设计](implemented/specs/2026-09-05-field-state-catalog-design.md)。
 >
 > **重要边界**：
 > - **Plate 提供**「**EndpointSpec 抽象**」 — 一个被测系统接口的结构定义（method / path / 请求字段 / 响应字段 / 失败参考 / 业务备注）
@@ -389,7 +389,7 @@
 - **平台代理**：`GET /api/strategy-catalog/{kind}/full`（unwrap `data.item`）；plate 不可达 → `502 plate_unavailable`，404 → `strategy_kind_not_found`
 
 ### S3. 列出查询视图（query-views 索引，动态取数源）
-> 2026-09-08 新增（[动态取数源 spec](superpowers/specs/2026-09-07-dynamic-value-source-design.md) §3.4）。数据 dim 与 S1/S2 的语法 dim 又不同：items 是 `EndpointSpec.query_views`（端点注记）的**全库索引投影** —— 跨端点聚合、纯投影零状态（按需 build，无缓存一致性面）。与 grammar dim 同宿 `routes_grammar` 路由（注册次序敏感：必须先于 `/{dim}` 通配注册，否则 `/api/query-views` 被吞成 `dim="query-views"` → 404 dim_not_found）。
+> 2026-09-08 新增（[动态取数源 spec](implemented/specs/2026-09-07-dynamic-value-source-design.md) §3.4）。数据 dim 与 S1/S2 的语法 dim 又不同：items 是 `EndpointSpec.query_views`（端点注记）的**全库索引投影** —— 跨端点聚合、纯投影零状态（按需 build，无缓存一致性面）。与 grammar dim 同宿 `routes_grammar` 路由（注册次序敏感：必须先于 `/{dim}` 通配注册，否则 `/api/query-views` 被吞成 `dim="query-views"` → 404 dim_not_found）。
 - **触发**：Canvas value_source 绑定字段点「查」→ 平台后端 rows 路由取索引（TTL memo + 熔断）；前端不直连
 - **请求**：`GET /api/query-views`
 - **响应**（示例为 2026-09-08 v1 两视图形态；2026-09-09 客户域三视图入册后目录共 5 视图）：

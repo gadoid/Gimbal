@@ -12,7 +12,7 @@
 > 单一承重存储(binding/carry/view_only 三通道),`IOFieldBinding` / `CarryEntry`
 > 类与三轴线上键已清除。约束语义(path 归一 / name==末段 / enum 成员一致)
 > 原样继承到 `DeclarationEntry._validate_entry`,现行契约见
-> `io_spec.py` 与 [2026-09-01 归一化设计](../../../docs/superpowers/specs/2026-09-01-io-declarations-unification-design.md)。
+> `io_spec.py` 与 [2026-09-01 归一化设计](../../../docs/implemented/specs/2026-09-01-io-declarations-unification-design.md)。
 
 ---
 

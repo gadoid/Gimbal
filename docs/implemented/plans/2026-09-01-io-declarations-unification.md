@@ -9,7 +9,7 @@
 
 **Tech Stack:** Pydantic v2(模型/校验器/序列化器)/ FastAPI(backend 切读)/ pytest(plate 与 backend)/ 无前端改动。
 
-**Spec:** `docs/superpowers/specs/2026-09-01-io-declarations-unification-design.md`(已评审定稿,3719ef7;本计划从 spec 立论,执行者须同时读 spec —— B1–B7 裁定、§3.5 落点闭合、§8 测试矩阵是本计划的验收依据)
+**Spec:** `docs/implemented/specs/2026-09-01-io-declarations-unification-design.md`(已评审定稿,3719ef7;本计划从 spec 立论,执行者须同时读 spec —— B1–B7 裁定、§3.5 落点闭合、§8 测试矩阵是本计划的验收依据)
 
 ## Global Constraints
 

@@ -1,6 +1,6 @@
 """generators dim HTTP 面单测 —— M6 通用路由上的第 9 个(语法级)dim。
 
-设计: src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md §plate
+设计: src/gimbal-platform/docs/implemented/specs/2026-08-26-constant-pool-design.md §plate
 全部走既有通用 handler(list/full),零新路由代码;钉死 9 个规范 kind
 清单(P1)与"描述符由镜像 schema 内省派生"(P6);P7 直接 import 引擎
 specs 对照,防 plate 镜像与引擎漂移(双权威手工同步的失效触发器)。

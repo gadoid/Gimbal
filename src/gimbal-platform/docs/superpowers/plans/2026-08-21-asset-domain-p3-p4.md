@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI + SQLAlchemy async(aiosqlite)+ httpx(MockTransport 测试替身)+ pytest-asyncio。plate 侧零改动:轻量列表 `GET /api/endpoint`(自带 version/updated_at)+ 全量 `GET /api/endpoint/{id}/full` 均为既有 M6 语法路由,信封 `{ok, dim, data:{items|item}}`。
 
-**Spec:** `src/gimbal-platform/docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md`(§3.3/§3.4 存储、§5 变更适配组件、§7 「P3+P4 规划裁定(2026-08-21,用户已确认)」、§9 C5/C12)
+**Spec:** `src/gimbal-platform/docs/implemented/specs/2026-08-21-asset-domain-complete-design.md`(§3.3/§3.4 存储、§5 变更适配组件、§7 「P3+P4 规划裁定(2026-08-21,用户已确认)」、§9 C5/C12)
 
 ## Global Constraints
 
@@ -3091,8 +3091,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 11: 全量验证 + spec/计划回写
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md`(§7 实施进度)
-- Modify: `docs/superpowers/plans/2026-08-21-asset-domain-p3-p4.md`(checkbox 勾选核对)
+- Modify: `docs/implemented/specs/2026-08-21-asset-domain-complete-design.md`(§7 实施进度)
+- Modify: `docs/implemented/plans/2026-08-21-asset-domain-p3-p4.md`(checkbox 勾选核对)
 
 **Interfaces:**
 - Consumes: Task 1-10 全部产出。
@@ -3110,10 +3110,10 @@ Expected: vitest 113 tests 全绿;build 干净退出。
 
 - [x] **Step 3: spec §7 实施进度回写**
 
-`docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md` §7 —— 在 "**P1+P2 已完成并推送**" 段落(`…npm run build\` 干净。`)之后新起一段插入:
+`docs/implemented/specs/2026-08-21-asset-domain-complete-design.md` §7 —— 在 "**P1+P2 已完成并推送**" 段落(`…npm run build\` 干净。`)之后新起一段插入:
 
 ```markdown
-**P3+P4 已完成** — 分支 `strbody_avaliable`,提交区间为计划 Task 1 至本任务的实际提交(以 `git log --oneline` 为准,11 个 feat 提交)。实施计划:`docs/superpowers/plans/2026-08-21-asset-domain-p3-p4.md`。落地:`catalog_versions.spec_json` 列 + `adaptation_ops` 表;`adaptation_service`(catalog_diff / impact / open_batch / apply_op / rollback_batch / create_op)与 `adaptation_ops` 纯引擎(草案生成 + 收敛应用 + C5 寻址校验);`routers/adaptations.py` 八端点全 admin-only。验证基线:后端 pytest 全绿(133 既有 + 新增)、前端 vitest 113 不回归、`npm run build` 干净。P5(前端适配中心)另立计划。
+**P3+P4 已完成** — 分支 `strbody_avaliable`,提交区间为计划 Task 1 至本任务的实际提交(以 `git log --oneline` 为准,11 个 feat 提交)。实施计划:`docs/implemented/plans/2026-08-21-asset-domain-p3-p4.md`。落地:`catalog_versions.spec_json` 列 + `adaptation_ops` 表;`adaptation_service`(catalog_diff / impact / open_batch / apply_op / rollback_batch / create_op)与 `adaptation_ops` 纯引擎(草案生成 + 收敛应用 + C5 寻址校验);`routers/adaptations.py` 八端点全 admin-only。验证基线:后端 pytest 全绿(133 既有 + 新增)、前端 vitest 113 不回归、`npm run build` 干净。P5(前端适配中心)另立计划。
 ```
 
 - [x] **Step 4: 核对计划 checkbox**
@@ -3123,7 +3123,7 @@ Expected: vitest 113 tests 全绿;build 干净退出。
 - [x] **Step 5: 提交文档回写**
 
 ```bash
-git add docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md docs/superpowers/plans/2026-08-21-asset-domain-p3-p4.md
+git add docs/implemented/specs/2026-08-21-asset-domain-complete-design.md docs/implemented/plans/2026-08-21-asset-domain-p3-p4.md
 git commit -m "docs(platform): spec §7 回写 P3+P4 完成基线
 
 Co-Authored-By: Claude <noreply@anthropic.com>"

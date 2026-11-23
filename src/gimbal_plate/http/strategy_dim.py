@@ -1,6 +1,6 @@
 """strategy dim —— 策略语法的服务化(第 8 个 M6 dim,语法级)。
 
-设计: docs/superpowers/specs/2026-08-17-strategy-syntax-service-design.md
+设计: docs/implemented/specs/2026-08-17-strategy-syntax-service-design.md
 
 与现有 7 个数据 dim 的唯一概念差异: 本 dim 的 items **不是数据实例**,
 而是从 ``StrategyUnion`` 内省出的 kind 描述符 —— 回答"策略有哪些 kind、

@@ -132,7 +132,7 @@ def _generate_vars(self) -> None:
             raise ValueError(...)
 ```
 
-详见 [spec §6.4](../superpowers/specs/2026-06-17-scenario-vars-and-generator-design.md)。
+详见 [spec §6.4](../implemented/specs/2026-06-17-scenario-vars-and-generator-design.md)。
 
 ### Phase 2：构建查询根
 

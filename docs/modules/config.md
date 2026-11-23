@@ -103,7 +103,7 @@ generator: Any = Field(
 
 preprocessor Phase 1.5 调用 `self._cfg.generator.generate(spec)`。
 
-详见 [spec §6.2](../superpowers/specs/2026-06-17-scenario-vars-and-generator-design.md)。
+详见 [spec §6.2](../implemented/specs/2026-06-17-scenario-vars-and-generator-design.md)。
 
 ---
 

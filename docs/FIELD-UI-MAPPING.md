@@ -12,7 +12,7 @@
 > `required` 默认翻转为 False(未声明即选填,星标去噪音);响应面单脸
 > (全量 + assertable,state 不被读取)。本文 §1.2 表已按现行契约更新。
 > 现行契约单点源:`io_spec.py` +
-> `docs/superpowers/specs/2026-09-05-field-state-catalog-design.md`。
+> `docs/implemented/specs/2026-09-05-field-state-catalog-design.md`。
 
 > **状态更新(2026-09-02,IO declarations 归一化后)**:plate IO 侧已收敛为
 > `declarations` 单一承重存储(`DeclarationEntry` 通道标记条目,binding /
@@ -21,7 +21,7 @@
 > view_only 通道 `assertable=True` 条目的 path 集。本文 §1.2 表已按
 > 现行 schema 更新;§2-§4 的映射语义(ui_kind / source_kind / Type C
 > 差集)不变,只是挂载点从旧三轴换到声明条目。现行契约单点源:
-> `io_spec.py` + `docs/superpowers/specs/2026-09-01-io-declarations-unification-design.md`。
+> `io_spec.py` + `docs/implemented/specs/2026-09-01-io-declarations-unification-design.md`。
 
 ---
 
@@ -344,11 +344,11 @@ Canvas 请求签字段的 state 控制回路（字段状态目录化 + 找回闭
 **为什么需要搜索框**：行尾下拉只挂渲染行，carry 字段不进渲染树
 （buildNode 剪除）→ carry→form 无 UI 路径；plate 共识 carry 字段
 （备注族）靠搜索框才能进场景表单（09-05 spec §10.0 挂账，2026-09-07
-已实施，见 [2026-09-07 spec](superpowers/specs/2026-09-07-field-recovery-and-export-threading-design.md) §2）。
+已实施，见 [2026-09-07 spec](implemented/specs/2026-09-07-field-recovery-and-export-threading-design.md) §2）。
 
 ### 2.11 动态取数源（value_source 查钮 / 选择器 / 徽标，2026-09-08）
 
-Canvas 请求签字段的组合期取数回路（[2026-09-07 动态取数源 spec](superpowers/specs/2026-09-07-dynamic-value-source-design.md) §7）：
+Canvas 请求签字段的组合期取数回路（[2026-09-07 动态取数源 spec](implemented/specs/2026-09-07-dynamic-value-source-design.md) §7）：
 
 | 视觉 / 交互 | 字段 | 触发条件 / 语义 |
 |---|---|---|

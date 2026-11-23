@@ -1,6 +1,6 @@
 """Constants-pool API 面单测 —— per-user 常量条目 CRUD。
 
-设计: src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md §后端
+设计: src/gimbal-platform/docs/implemented/specs/2026-08-26-constant-pool-design.md §后端
 覆盖: owner 隔离(B1/B2)、互斥校验(B3/B4)、name 规则(B5)、
 409 字典 detail(B6)、PATCH 不可变 entry_kind/按行校验(B7)、
 删除(B8)、字面量四类型往返(B9)。

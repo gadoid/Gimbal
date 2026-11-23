@@ -8,7 +8,7 @@
 
 **Tech Stack:** Pydantic v2(plate 契约)/ FastAPI + SQLAlchemy async + SQLite(create_all 重建纪律)/ Vue 3 + vitest(前端)。
 
-**Spec:** `docs/superpowers/specs/2026-08-31-carry-fields-storage-injection-design.md`(本计划从 spec 立论,执行者须同时读 spec)
+**Spec:** `docs/implemented/specs/2026-08-31-carry-fields-storage-injection-design.md`(本计划从 spec 立论,执行者须同时读 spec)
 
 ## Global Constraints
 

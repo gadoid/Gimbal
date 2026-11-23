@@ -206,7 +206,7 @@ UI 路径被前端挡下,但**绕过 UI 的下发**(直接 `POST /runs` 带 `inj
 
 ### 4.4 外溢:必须修订一份公开承诺
 
-`docs/superpowers/specs/2026-09-12-injectable-path-surface-design.md:105` 写着:
+`docs/implemented/specs/2026-09-12-injectable-path-surface-design.md:105` 写着:
 
 > 只放宽、不收紧 —— 没有任何路径会变得更严,不会出现「原本能跑的条目突然被判死」
 

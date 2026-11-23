@@ -2,7 +2,7 @@
 
 > **模块**：`gimbal-platform/backend`（判定面）+ 引擎写侧
 > **状态**：**行为已收口**（阶段二 Task 6：收紧非 dict 宿主 + 写侧按同一判据拦截）；**公开承诺文本待用户过目**（见文末 [修复记录](#修复记录) §4）
-> **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（Z1）
+> **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（Z1）
 > **适用范围**：`run_injection._path_resolvable` 的 `exists` 兜底 —— dispatch 侧悬空判定与注入物化。
 >
 > 以下正文是**修复前**的记载（保留历史）。**就地改真**只两处：失效的行号改按符号指、
@@ -153,7 +153,7 @@ set_value({'note':'hello'}, '$.note.replace', 'X') -> {'note': {'replace': 'X'}}
 ### 4. 外溢：公开承诺文本**尚未**落盘（待用户过目）
 
 正文 §3 第 2 条要求的承诺修订 ——
-`docs/superpowers/specs/2026-09-12-injectable-path-surface-design.md` §5.2 的「只放宽、不收紧」——
+`docs/implemented/specs/2026-09-12-injectable-path-surface-design.md` §5.2 的「只放宽、不收紧」——
 **修订稿已写好但未提交**：改的是**对用户的公开承诺**，须用户过目后再落盘（阶段二 Task 9 的第 12 项；
 措辞见 `.superpowers/sdd/2026-09-13-judgment-surface-convergence/task-9-report.md` §2）。
 ⇒ 本记录的状态因此写作「行为已收口，**承诺文本待过目**」，不写成彻底关闭。

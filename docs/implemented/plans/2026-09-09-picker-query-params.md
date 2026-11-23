@@ -8,7 +8,7 @@
 
 **Tech Stack:** Pydantic v2(plate)/ FastAPI + httpx(backend)/ Vue 3 + TS + vitest(frontend)
 
-**Spec:** `docs/superpowers/specs/2026-09-07-dynamic-value-source-design.md` §13(修订 7,2026-09-09;§3.3 校验 / §4.2 组装 / §5 缓存为其上游依据)
+**Spec:** `docs/implemented/specs/2026-09-07-dynamic-value-source-design.md` §13(修订 7,2026-09-09;§3.3 校验 / §4.2 组装 / §5 缓存为其上游依据)
 
 ## Global Constraints
 
@@ -1217,7 +1217,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 6: 三套件回归 + dispatch 零漂验证 + spec 补注 + 手验清单
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-09-07-dynamic-value-source-design.md`(§13.5 carry 承载一句 + §13.8 手验留痕位)
+- Modify: `docs/implemented/specs/2026-09-07-dynamic-value-source-design.md`(§13.5 carry 承载一句 + §13.8 手验留痕位)
 
 **Interfaces:**
 - Consumes: Task 1-5 全部产物。
@@ -1258,7 +1258,7 @@ Expected: 全绿;`tests/plate/test_dispatch_baseline.py` **零重钉通过**(绑
 - [ ] **Step 4: 提交**
 
 ```bash
-git add docs/superpowers/specs/2026-09-07-dynamic-value-source-design.md
+git add docs/implemented/specs/2026-09-07-dynamic-value-source-design.md
 git commit -m "docs(spec): §13.5 carry 承载实施注 — 级联绑定挂 carry 字段经找回翻 form
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"

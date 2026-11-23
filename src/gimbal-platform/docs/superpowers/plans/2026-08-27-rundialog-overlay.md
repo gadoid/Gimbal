@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI + Pydantic v2(`populate_by_name` + alias 驼峰)+ SQLAlchemy async + pytest;Vue 3 `<script setup>` + Pinia + element-plus + vitest;plate /convert(gimbal-plate,零改动);gimbal CLI 子进程。
 
-**Spec:** [docs/superpowers/specs/2026-08-27-rundialog-overlay-observability-design.md](../specs/2026-08-27-rundialog-overlay-observability-design.md)(本计划从 spec 立论,执行者两份都读)
+**Spec:** [docs/implemented/specs/2026-08-27-rundialog-overlay-observability-design.md](../specs/2026-08-27-rundialog-overlay-observability-design.md)(本计划从 spec 立论,执行者两份都读)
 
 ## Global Constraints
 

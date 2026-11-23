@@ -2,7 +2,7 @@
 
 > **模块**：`gimbal-platform`（判定面的路径归一：后端 `_template_path` / 前端 `toTemplatePath`）
 > **状态**：**已接受**（不是待修缺陷；本记录说明边界与残余风险）
-> **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3（「`[*]` 归一无覆盖」）
+> **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3（「`[*]` 归一无覆盖」）
 
 ---
 

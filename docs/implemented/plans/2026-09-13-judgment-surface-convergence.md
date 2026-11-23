@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3 / FastAPI / httpx / pytest / loguru;Vue 3 / TypeScript / vitest / @vue/test-utils。
 
-**Spec:** `docs/superpowers/specs/2026-09-13-judgment-surface-convergence-design.md`
+**Spec:** `docs/implemented/specs/2026-09-13-judgment-surface-convergence-design.md`
 
 ## Global Constraints
 
@@ -43,7 +43,7 @@
 | `frontend/src/components/composer/CaseComposerCanvas.vue` | 改 | 删两处渲染期取数 |
 | `frontend/src/types/plate.ts` | 改 | `declared_surface` 字段 |
 | `docs/known-issues/**` | 改 | 四条记录 + README 索引 |
-| `docs/superpowers/specs/2026-09-12-injectable-path-surface-design.md` | 改 | `:105` 公开承诺修订(需用户过目) |
+| `docs/implemented/specs/2026-09-12-injectable-path-surface-design.md` | 改 | `:105` 公开承诺修订(需用户过目) |
 
 ---
 
@@ -469,7 +469,7 @@ git commit -m "refactor(endpoint_declarations): 退化为派生层,取数与缓�
 - Modify: `src/gimbal-platform/backend/app/routers/endpoint_catalog.py:41-74`
 - Modify: `src/gimbal-platform/backend/app/core/config.py:100-118`
 - Modify: `src/gimbal-platform/backend/tests/test_endpoint_catalog_proxy.py`
-- Modify: `docs/superpowers/specs/2026-09-13-judgment-surface-convergence-design.md`(补 §3.5)
+- Modify: `docs/implemented/specs/2026-09-13-judgment-surface-convergence-design.md`(补 §3.5)
 
 **Interfaces:**
 - Consumes: `plate_client.get_endpoint_full`、`endpoint_declarations.declared_paths_of`、`run_injection.injectable_universe`
@@ -632,7 +632,7 @@ Expected: PASS
 - [ ] **Step 7: 提交**
 
 ```bash
-git add -A src/gimbal-platform/backend docs/superpowers/specs/2026-09-13-judgment-surface-convergence-design.md
+git add -A src/gimbal-platform/backend docs/implemented/specs/2026-09-13-judgment-surface-convergence-design.md
 git commit -m "feat(endpoint-catalog): 代理返回 declared_surface,取数统一到 plate_client(含 3s 超时统一)"
 ```
 
@@ -1118,7 +1118,7 @@ git commit -m "fix(frontend): 契约降级后有界退避重试 + 失败态可�
 - Modify: `docs/known-issues/README.md`(索引行同步 —— **不得再滞后**)
 - Modify: `docs/adr/0003-retired-features-log.md`(退场行:前端声明半归一化、`toTemplatePath` 退出判定路径、`pathResolvable` 前缀扫描)
 - Modify: `docs/PLATFORM-SCENARIO-COMPOSER-API.md`(代理响应新增 `declared_surface`)
-- Modify: `docs/superpowers/specs/2026-09-12-injectable-path-surface-design.md:105`(公开承诺修订)
+- Modify: `docs/implemented/specs/2026-09-12-injectable-path-surface-design.md:105`(公开承诺修订)
 
 - [ ] **Step 1: 逐项改**（按上表,每条记录按 README 约定「改记录、保留历史、不删文件」）
 - [ ] **Step 2: M 的裁定写进 API 文档**（画布样本候选 vs 编辑器声明候选 = 有意差异,附「前提:用户显式触发」）

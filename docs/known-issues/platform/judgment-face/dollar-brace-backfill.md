@@ -2,7 +2,7 @@
 
 > **模块**：`gimbal-platform/backend`（注入物化：偏离值 → `Assign` 策略）
 > **状态**：已知未修复（**待裁定**，见 §3）
-> **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（G）
+> **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（G）
 > **适用范围**：`run_injection._assign_strategy` 对用户偏离值的兜底键注入。
 
 ---

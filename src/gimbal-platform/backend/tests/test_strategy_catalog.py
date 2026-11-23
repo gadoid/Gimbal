@@ -1,6 +1,6 @@
 """strategy_catalog 代理路由测试 —— Platform → Plate 的策略语法 dim 代理。
 
-设计: docs/superpowers/plans/2026-08-17-strategy-syntax-service.md Task 3
+设计: docs/implemented/plans/2026-08-17-strategy-syntax-service.md Task 3
 
 用 httpx.MockTransport 替换 app.services.plate_client 的单例 client,
 锁定三路行为:

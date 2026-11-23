@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12+、FastAPI、pydantic v2、gimbal-plate（`EndpointSpec`）、PyYAML、pytest。
 
-**Spec:** `docs/superpowers/specs/2026-09-28-platform-self-bootstrap-design.md`
+**Spec:** `docs/implemented/specs/2026-09-28-platform-self-bootstrap-design.md`
 
 ## Global Constraints
 
@@ -1868,7 +1868,7 @@ python -m pytest tests/test_contract_drift.py -q
 - 契约漂移只做单向检查（声明 ⊆ 实际），反向会因动态字段恒红
 - 执行台账（`executions`）不自动清理 —— 它是审计面
 
-见 `docs/superpowers/specs/2026-09-28-platform-self-bootstrap-design.md`。
+见 `docs/implemented/specs/2026-09-28-platform-self-bootstrap-design.md`。
 ```
 
 - [ ] **Step 7: Commit**

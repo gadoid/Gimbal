@@ -1,6 +1,6 @@
 """strategy dim 内省单测 —— kind 清单 / 字段派生 / base 拆分。
 
-对应设计: docs/superpowers/specs/2026-08-17-strategy-syntax-service-design.md §3
+对应设计: docs/implemented/specs/2026-08-17-strategy-syntax-service-design.md §3
 strategy dim 是"语法级 dim"(items 是 kind 描述符而非数据实例)。
 """
 from __future__ import annotations

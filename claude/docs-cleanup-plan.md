@@ -26,7 +26,7 @@
 | 区 | 数量 | 性质 |
 |---|---|---|
 | `claude/` | 以当期清单为准(不写死计数) | plate 线 + 集成线 + 日志/导入线设计方案,2026-10-07~16,状态行覆盖率高 |
-| `src/gimbal-platform/docs/superpowers/plans/` | 32 份 | 2026-07-12 ~ 10 月的平台/执行器/suite 计划与总案,多数已交付 |
+| `src/gimbal-platform/docs/implemented/plans/` | 32 份 | 2026-07-12 ~ 10 月的平台/执行器/suite 计划与总案,多数已交付 |
 | `src/gimbal-platform/docs/` | ~12 份 | reviews(6 份历史评审)/runbook/feature-gaps/DEFERRED/迁移文档 |
 | `docs/`(根) | 20+ 份 | 活文档区(例外见 §0 原则 7) |
 | `design/` | 2 份 + archive/ | 技能设计;archive 维持现状 |
