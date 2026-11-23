@@ -278,23 +278,29 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-AI-02 | `Anthropic` provider（占位） | [ai/providers/anthropic.py](src/gimbal/ai/providers/anthropic.py) |
 | R-AI-03 | Prompt 模板：`assemble` / `diagnose` / `generate_data`（占位） | [ai/prompts/](src/gimbal/ai/prompts/) |
 
-### 1.20 模型契约（ModelRegistry，待实现但已设计定稿）
+### 1.20 模型契约（**方案已废弃 —— 由 plate 契约仓库路线承接，已落地**）
 
-> 来源：[change/GIMBAL-ModelRegistry-变更方案-v3.md](change/GIMBAL-ModelRegistry-变更方案-v3.md)（**状态：设计定稿 · 待实现**）
+> **状态更新（2026-11-23）**：ModelRegistry（数据类/EndpointSpec 双场景复用）方案**未实施、不再排期**
+> —— 「把被测系统接口沉淀为契约规范」的目标由 **plate 契约仓库**承接并已落地（2026-10-07/08）：
+> `systems/<system>/endpoints/*.md`（frontmatter + `gimbal:endpoint` 块 = binding/responses/declarations）、
+> `endpoint_id` 引用键（场景步骤 `call.view_hints.endpoint_id`）+ `scenario_endpoint_refs` 表关联、
+> 内容寻址 hash 与代际管理。149 接口迁移见 commit `51609dda`；概念见 `docs/概念地图.md` ①。
+> 原方案文档归档于 [design/archive/](../design/archive/)（PathRegistry v1 → ModelRegistry v2/v3 演进史）。
+> 下表保留为**方案考古记录**（「核心文件已就位」为当时快照，`src/ModelRegistry/` 现不存在）。
 
-| # | 需求（已设计） | 落地点 |
+| # | 需求（已设计，未实施） | 原设计落地点 |
 |---|---|---|
-| R-MR-01 | 新建 `ModelRegistry` 模块（按 service 组织） | [src/ModelRegistry/](src/ModelRegistry/)（核心文件已就位，目录 `settlement/` 等未建） |
-| R-MR-02 | `EndpointSpec` 数据类（含 method/path/request/responses/summary/tags/mock_hook） | [src/ModelRegistry/spec.py](src/ModelRegistry/spec.py) |
-| R-MR-03 | `_Registry` 单例（collect / resolve / warm，含 threading.Lock） | [src/ModelRegistry/core.py](src/ModelRegistry/core.py) |
-| R-MR-04 | `service 名 = 目录名 = import 路径` 约定 + `_aliases.py` 集中 alias 表 | [src/ModelRegistry/_aliases.py](src/ModelRegistry/_aliases.py) |
-| R-MR-05 | 双场景复用：scenario 加载器（轻量，取数据类做字段检查）+ mock server（重量，取整个 spec 做路由/响应/hook） | 设计文档 §2 |
-| R-MR-06 | 加载期 `extra="forbid"` + round-trip 无损自检 | 设计文档 §3.4 |
-| R-MR-07 | 字段类型按 PHP 真实线格式（数字串保持 `str`） | 设计文档 §3.1 |
-| R-MR-08 | 禁用 `exclude_none`，httpx 透传 null | 设计文档 §3.2 |
-| R-MR-09 | `contract_validation.mode` 三态开关（off / warn / strict）平滑过渡 | 设计文档 §0 |
-| R-MR-10 | response_model 同步建模（强烈建议） | 设计文档 §5.1 |
-| R-MR-11 | schema 导出（JSON Schema / OpenAPI） | 设计文档 §5.2 |
+| R-MR-01 | 新建 `ModelRegistry` 模块（按 service 组织） | ~~src/ModelRegistry/~~（未实施） |
+| R-MR-02 | `EndpointSpec` 数据类（含 method/path/request/responses/summary/tags/mock_hook） | 设计文档 §2 → 由 plate endpoint 契约块承接 |
+| R-MR-03 | `_Registry` 单例（collect / resolve / warm） | 设计文档 §2 → 由 plate 目录加载器承接 |
+| R-MR-04 | `service 名 = 目录名 = import 路径` 约定 | 设计文档 §4 → 由 `systems/<system>/` 目录树承接 |
+| R-MR-05 | 双场景复用（加载器字段检查 + mock server） | 设计文档 §2 → mock 未承接（无诉求） |
+| R-MR-06 | 加载期 `extra="forbid"` + round-trip 自检 | 设计文档 §3.4 → 由规范形重渲染 CI 检查承接（`fda9abd9`） |
+| R-MR-07 | 字段类型按 PHP 真实线格式（数字串保持 `str`） | 设计文档 §3.1 → 由 declarations 类型标注承接 |
+| R-MR-08 | 禁用 `exclude_none`，httpx 透传 null | 设计文档 §3.2（引擎侧通用约束，无独立落点） |
+| R-MR-09 | `contract_validation.mode` 三态开关 | 设计文档 §0 → 未承接（零 breaking 由渐进迁移实践替代） |
+| R-MR-10 | response_model 同步建模 | 设计文档 §5.1 → 由 responses.declarations 承接 |
+| R-MR-11 | schema 导出（JSON Schema / OpenAPI） | 设计文档 §5.2 → 由契约快照渲染承接 |
 
 ### 1.21 业务场景样本（已落地）
 

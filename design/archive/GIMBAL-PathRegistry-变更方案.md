@@ -1,6 +1,14 @@
 # GIMBAL 变更方案：引入 PathRegistry,以契约模型替代裸字典请求
 
-**状态**：设计定稿 · 待实现
+> **⚠️ 已废弃（2026-11-23 归档注记）**：本方案未实施 —— 「接口契约规范」
+> 目标由 **plate 契约仓库路线**承接并已落地（2026-10-07/08：
+> `systems/<system>/endpoints/*.md` frontmatter + `gimbal:endpoint`
+> 块 = binding/responses/declarations；`endpoint_id` 为引用键，
+> 场景步骤 `call.view_hints.endpoint_id` 引用 + `scenario_endpoint_refs`
+> 表关联；149 接口迁移见 commit `51609dda`）。数据类/EndpointSpec
+> 双场景复用路线不再排期。归档保留考古价值。
+
+**状态**:**已废弃**(被 plate 契约仓库路线取代,见头部注记)
 **影响版本**：v1.0 RC（含 breaking change，见 §7）
 **核心目标**：把"被测系统的接口长什么样"从散落在各 scenario 的裸 dict,沉淀为可执行、可校验、可导出的**契约模型**,服务于 PHP→Java 迁移的接口与数据一致性验证。
 

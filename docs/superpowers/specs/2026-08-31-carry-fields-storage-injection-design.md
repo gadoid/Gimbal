@@ -1,6 +1,6 @@
 # 非绑定字段(传递默认字段)的存储与注入设计
 
-> 状态:设计已与编排者确认,待实现
+> 状态:**已实现**(状态行 2026-11-23 补记:carry 字段面已落地 —— plate 字段声明 + step.field_states 三态目录化 + 注入链多轮演进至实例档)
 > 日期:2026-08-31
 > 影响范围:`gimbal_plate/schema/endpoint/io_spec.py` · `gimbal-platform/backend/app/services/run_materialize.py` · `run_dispatcher.py` · `adaptation_service.py`/`adaptation_ops.py` · platform PG 新表 · 前端编排器与配置页
 > 关联:[PRD-case-composer.md](../../PRD-case-composer.md) §5.4 Type C · [FIELD-UI-MAPPING.md](../../FIELD-UI-MAPPING.md) §3.5 · [ENDPOINT_SPEC_V2.md](../../../src/gimbal-plate/gimbal_plate/design/ENDPOINT_SPEC_V2.md)

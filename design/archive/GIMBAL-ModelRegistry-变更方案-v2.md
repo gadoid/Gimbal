@@ -1,5 +1,13 @@
 # GIMBAL 变更方案 v2：引入 ModelRegistry,以契约模型 + EndpointSpec 替代裸字典请求
 
+> **⚠️ 已废弃（2026-11-23 归档注记）**：本方案未实施 —— 「接口契约规范」
+> 目标由 **plate 契约仓库路线**承接并已落地（2026-10-07/08：
+> `systems/<system>/endpoints/*.md` frontmatter + `gimbal:endpoint`
+> 块 = binding/responses/declarations；`endpoint_id` 为引用键，
+> 场景步骤 `call.view_hints.endpoint_id` 引用 + `scenario_endpoint_refs`
+> 表关联；149 接口迁移见 commit `51609dda`）。数据类/EndpointSpec
+> 双场景复用路线不再排期。归档保留考古价值。
+
 **状态**：设计定稿 · 待实现
 **版本**：v2（在 v1 基础上整合多轮讨论修订；v1 为 PathRegistry 方案）
 **影响版本**：v1.0 RC（含 breaking change，见 §9）

@@ -1,6 +1,14 @@
 # GIMBAL 变更方案 v3（Final）:引入 ModelRegistry,以数据类 + EndpointSpec 双场景复用替代裸字典请求
 
-**状态**:设计定稿 · 待实现
+> **⚠️ 已废弃（2026-11-23 归档注记）**：本方案未实施 —— 「接口契约规范」
+> 目标由 **plate 契约仓库路线**承接并已落地（2026-10-07/08：
+> `systems/<system>/endpoints/*.md` frontmatter + `gimbal:endpoint`
+> 块 = binding/responses/declarations；`endpoint_id` 为引用键，
+> 场景步骤 `call.view_hints.endpoint_id` 引用 + `scenario_endpoint_refs`
+> 表关联；149 接口迁移见 commit `51609dda`）。数据类/EndpointSpec
+> 双场景复用路线不再排期。归档保留考古价值。
+
+**状态**:**已废弃**(被 plate 契约仓库路线取代,见头部注记)
 **版本**:v3（在 v2 基础上整合多轮讨论最终修订;v1=PathRegistry 方案,v2=单 EndpointSpec 方案,v3=双场景复用方案)
 **影响版本**:v1.0 RC（**对存量 scenario 零 breaking change**,见 §9 与 §4.1 的 `contract_validation.mode` 渐进开关)
 **核心目标**:把"被测系统的接口长什么样"从散落在各 scenario 的裸 dict,沉淀为可执行、可校验、可导出、可 mock 的**契约规范**,服务于 PHP→Java 迁移的接口与数据一致性验证,并为后续 SpringDoc 式接口文档 / 调试 / mock 打底。

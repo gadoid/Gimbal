@@ -1,7 +1,7 @@
 # ④ 步骤编辑页 IO 卡片化(request / response 双签)— 设计文档
 
 - 日期:2026-08-18
-- 状态:已评审(对话定稿),待实现
+- 状态:**已实现**(状态行 2026-11-23 补记:CaseComposerCanvas io-card 面板/IO 双签卡片已落地,本 spec 状态行此前未随实现更新)
 - 前置:变量工作台迁移 Canvas 已完成(2026-08-18-var-workbench-canvas-*.md,5 commit 已落地)
 - 范围:纯前端(`src/gimbal-platform/frontend`);plate 侧零改动
 
