@@ -2432,6 +2432,64 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
     合并窗口**之后**,不在本批强推。
   验证:后端全量 **2166+2**(xdist 119s);前端 **1538+1**、
   vue-tsc 0、eslint 0 错。
+- **合入主干 + CI 交接(2026-11-23,🟡 main CI 红,待 owner 处理)**
+  - **合并已完成**(用户拍板「推送 + 快进 main」):feat/service-registry
+    推送 23 提交(a7484f15..1077bc59);origin/main 快进
+    2c70a12b..1077bc59 —— 纯快进(merge-tree 产物树逐字节相同,
+    main 反向独有提交 0),**A1 闭合**(sr 严格包含 plate-s1:
+    merge-base 即 plate-s1 顶端),plate-s1 不必单独合。
+  - **CI 现状**:plate-ci@1077bc59(main 触发)`failure` —— frontend
+    job 绿;gate job 在「未定义名称守卫 — pyflakes」步红,其后全部
+    跳过。run 45158261064。
+  - **本批已修(3 处未定义名,pyflakes 守卫本地复现转绿)**:
+    ① run_dispatcher `_fanout_pool_scaffold` 的 `"ServerSessionPool"`
+    前向引用指向模块级不存在的名字(仅函数内局部导入;C1 切片 1
+    引入,历次 ruff 对拍误归「基线既有」)→ TYPE_CHECKING 守卫导入
+    + 注解去引号;② ③ test_run_capacity / test_scenario_visibility_
+    and_copy 残留 `gl.LaunchResult`(B6③ 迁移删了 `gl` 别名导入、
+    漏了使用点)→ 改直导 LaunchResult。**这两处测试此前一直在空转
+    通过**:NameError 发生在断言依赖的副作用之后,被 `_row` 兜底
+    except 吞成 dispatcher_error。契约 error-codes 行号随之上移 7 行
+    已重生。验证:pyflakes 守卫绿、后端全量 2166+2(复跑绿)。
+  - **交接清单(owner 处理 CI)**:
+    1. **gen_m2 两步已死**:`plate-ci.yml` 的「M2 漂移守卫 /
+      兼容性守卫」调用 `scripts/gen_m2.py`,该脚本在 11-22 退役批次
+      **90e7918e**(「已耗尽的一次性迁移/对账脚本退役(18 个)」)
+      中被删 —— 但它是 679 行的在用工具(gen/check/compat),不像
+      一次性迁移脚本,疑为归类错误。**须拍板**:恢复 vs 删 CI 步骤。
+      本地验证(未提交,仅临时取出):`git show 90e7918e^:scripts/
+      gen_m2.py > scripts/gen_m2.py` 后 `check --targets schema,ext,
+      py,ts,dbgcmd` 通过(「6 个入库生成物与当前定义一致」),
+      `compat --base origin/main` 通过 —— 即生成器与入库生成物完全
+      同步,退役没换来任何东西;且 **compat 对新 main 首次有了真实
+      基线**(对旧 main 2c70a12b 输出「基线尚无 schema,跳过」=
+      登记册 B1 登记的病)→ 恢复脚本才真正闭 B1;删步骤则 B1 应改
+      记为「守卫随生成器退役」。同一退役批次的连带悬空引用:
+      `gimbal_plate/http/routes_grammar.py:435` 运行期报错文案仍让
+      用户跑该脚本;`docs/CONTRIBUTING.md:32`、`docs/概念地图.md:14`;
+      各生成物文件头「生成: scripts/gen_m2.py gen,禁改」(生成器
+      没了则「禁改」文件无人能合法变更)。
+    2. **plate 测试树无法收集**:`tests/plate/test_migrate_pg_driver.py`
+      加载已退役的 `scripts/migrate_legacy_case_pg.py`(同批次,这次
+      退役本身合规 —— 一次性迁移)→ 「plate 全量」步收集期报错。
+      处置方向:删该测试文件,然后**首次完整跑一遍 tests/plate**
+      (状态未知)。
+    3. **验证盲区勘误**:此前收尾各批所报「引擎树 745 passed」仅
+      覆盖 `tests/unit + tests/integration`;**`tests/plate` 从未在
+      本地跑过**(且自 11-22 起收集即报错)。后续全量验证口径应
+      含 plate 树。
+    4. **负载敏感 flake 观察项**:`test_fanout_teardown_order ::
+      test_server_chain_trailing_logs_flushed_before_terminal` xdist
+      满载偶发(本轮 2 次全量中 1 次;单跑 3/3 绿)—— 与
+      convert_per_row 同类,待查轮询窗。
+    5. **本地已复现通过的其余 CI 步**:`plate check --all --json`、
+      方言纪律 81、执行器全量 745、空库门、REST 契约守卫。
+      **未本地复现**(需 psql/会写库/需联网装 wheel):增量升级门
+      `check_migration_drift.py`、非 editable 安装冒烟 —— 修完上面
+      两项后这两步的状态未知。
+    6. 旁注(不在 CI 门内):ruff 全树 `--select F821` 唯一一条是
+      `routers/me.py:192` 的 3.12 f-string 换行语法(target-version
+      3.11 配置错位),非未定义名。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本

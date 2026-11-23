@@ -231,14 +231,15 @@ async def test_run_step_to_passes_halt_at(
     )
     await _seed_ds(client, bob)
 
+    from app.services.gimbal_launcher import LaunchResult  # B6③ 清漏:旧 gl 别名已删
     from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     calls: list[dict] = []
 
     async def _capture(case_path, **kw: object):
         calls.append(kw)
-        return gl.LaunchResult(launch_status="ok", exit_code=0,
-                               total=1, passed=1)
+        return LaunchResult(launch_status="ok", exit_code=0,
+                            total=1, passed=1)
 
     monkeypatch.setattr(fe, "launch", _capture)
 

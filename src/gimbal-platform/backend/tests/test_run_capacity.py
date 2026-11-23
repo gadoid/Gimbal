@@ -59,6 +59,7 @@ async def test_worker_serializes_executions_across_queue(client, monkeypatch):
     队列 worker 数界定(EXEC_WORKERS=1 → 串行:两 execution 的 launch
     时间线互不重叠;行级 parallel 仍由行 sem 承担)。"""
     from app.services import plate_client as pc, execution_queue as eq
+    from app.services.gimbal_launcher import LaunchResult  # B6③ 清漏:旧 gl 别名已删
     from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
 
     eq.reset_worker_state()
@@ -76,7 +77,7 @@ async def test_worker_serializes_executions_across_queue(client, monkeypatch):
         state["peak"] = max(state["peak"], state["live"])
         await asyncio.sleep(0.02)
         state["live"] -= 1
-        return gl.LaunchResult(launch_status="ok", exit_code=0, total=1, passed=1)
+        return LaunchResult(launch_status="ok", exit_code=0, total=1, passed=1)
 
     monkeypatch.setattr(fe, "launch", launch)
 

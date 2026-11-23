@@ -41,7 +41,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from loguru import logger
@@ -88,6 +88,13 @@ from .run_prepare import (
     prepare_exec,
     resolve_exec_auths,
 )
+
+if TYPE_CHECKING:
+    # 仅注解用(_fanout_pool_scaffold 返回类型):运行期在函数体内局部
+    # 导入(避开模块加载期的环);注解经 __future__ annotations 延迟
+    # 求值,不在此处求值。CI 的 pyflakes 未定义名守卫此前在此报
+    # F821(引号前向引用指向一个模块级不存在的名字)。
+    from .gimbal_server_session import ServerSessionPool
 
 
 # ─── shutdown 状态 + 队列 worker 桥（C11）───────────────────────
@@ -2434,7 +2441,7 @@ async def _persist_run_telemetry(db_factory, execution_id: int, prep) -> None:
 
 
 def _fanout_pool_scaffold(datasets, injections, *, parallel: int,
-                          debug: "dict | None") -> "ServerSessionPool":
+                          debug: dict | None) -> ServerSessionPool:
     """会话池脚手架:槽位上限钳制(P3 收尾 —— parallel 可到
     MAX_RUNS_PER_EXECUTION,不钳制会一次冷启动上百个引擎进程,行排队
     等空闲槽位)+ 池构建。启动(start)由调用方绑定本执行 ingester。"""
