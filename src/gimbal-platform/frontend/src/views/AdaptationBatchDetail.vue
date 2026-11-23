@@ -254,8 +254,10 @@ const statusClass: Record<string, string> = {
 // authz W8(9.7 统一契约):403 按 code 分发 —— capability_forbidden
 // (getBatch 是 users.manage 面)显 §8「仅管理员」占位而非误报 404;
 // 其他 403(如 password_change_required,守卫会引去改密页)不误占。
+// B5 切片 1 示范:hasCode 判等(码字面量经 ApiErrorCode 契约 union
+// 编译期校验 —— 拼写漂移 vue-tsc 即红)。
 function isAdminOnly(e: unknown): boolean {
-  return e instanceof ApiError && e.code === 'capability_forbidden'
+  return e instanceof ApiError && e.hasCode("capability_forbidden")
 }
 
 async function reload(): Promise<void> {

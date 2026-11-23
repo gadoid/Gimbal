@@ -38,6 +38,13 @@ export class ApiError extends Error {
     this.code = code
     this.detail = detail
   }
+
+  /** B5 切片 1:字符串错误码 typed 判等 —— ``code`` 参数收
+   *  ``ApiErrorCode``(契约生成 union),拼写错编译期暴露;
+   *  数值商务码/未登记串照常返回 false(运行时事实优先)。 */
+  hasCode(code: import('./generated/errorCodes').ApiErrorCode): boolean {
+    return this.code === code
+  }
 }
 
 function extractErrorPayload(err: AxiosError): ApiErrorPayload {

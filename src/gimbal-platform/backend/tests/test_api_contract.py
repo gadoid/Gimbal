@@ -30,3 +30,24 @@ def test_contract_snapshot_no_drift() -> None:
         + proc.stderr
         + "\n处置:python scripts/gen_api_contract.py gen(产物随提交入库)"
     )
+
+
+def test_frontend_contract_no_drift() -> None:
+    """B5 切片 1:前端生成物(openapi.ts/errorCodes.ts)与契约快照一致。
+
+    后端契约重生(gen_api_contract.py gen)后必须同步重跑前端生成器,
+    否则本用例红 —— 生成物是前端类型对账基线(contractGuard.ts 的
+    assignability 断言锚在它上面)。
+    """
+    repo = _repo_root()
+    proc = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "gen_frontend_contract.py"),
+         "--check"],
+        capture_output=True, text=True, cwd=repo, timeout=120,
+    )
+    assert proc.returncode == 0, (
+        "前端契约生成物漂移(契约快照重生成后未同步前端):\n"
+        + proc.stdout
+        + proc.stderr
+        + "\n处置:python scripts/gen_frontend_contract.py(产物随提交入库)"
+    )
