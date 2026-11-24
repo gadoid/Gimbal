@@ -2831,10 +2831,23 @@ B2 大头已在 plate-s1 落地;md5sign 有 fin SUT 协议硬依赖),两处用�
   B5 切片 2/C11 销问)+ wrapup-plan 批次 4/5 状态 + plate-version-model
   §4.2 与 read.py REF_REQUIRED 现状注记(本节)。
 
-**留观察/后续**:C6 引擎树 122 处(独立轮)、C7 前端 613 行(与 D5 交叠)、
-B5 余域 37 api 文件手写类型迁移;错误码面遗留一处后端松尾巴:
-`SuiteSubmitIn.publishUnpublished` 字段仍在 schema 但路由已不消费
-(「不再级联代发布」残件,随下次 suites 契约轮清)。
+**余量三批(G-I,同日续)**:
+- **批 G(C6 引擎树)**:src/gimbal 48 文件 122 处全量闭环 —— 补 warning
+  15(五 reporter 旁路此前整事件静默丢弃等)、刻意静默 18(8 补注释)、
+  原达标 84;jsonpath 镜像豁免。tests/unit 709 + tests/integration 35 绿。
+- **批 H(C7 第二切片)**:ADR #25 补录(弹窗 chips/prefix/preset/
+  mergePolicy,770eea04)→ 后端余域 ≈200 处 + 前端 ≈180 处改现在时;
+  覆盖外 ≈105 行原样保留列档(重开 = 各自立项轮)。后端 2217 + 前端
+  174 文件绿;grep 守卫锚随 noqa 措辞剥离同步。
+- **批 I(B5 切片 3 + 死字段)**:guard 扩 projects/users/auth_sessions
+  三域 6 断言(五域);publishUnpublished 死字段两面退役(后端两 schema
+  字段+过期注释/前端 CompositionBody+addSuiteMembers+SuiteManage/
+  5 测试载荷剥键;契约 0 残留)。前端 1543 + 后端 2217 绿。
+- **存疑待裁定(批 H 报告)**:models/user.py docstring 角色取值列举
+  (``user | member | admin``)与列注释(user|admin|super_admin,0036
+  更名)疑似不同步 —— 纯文档疑点,随下次 auth 契约轮核对;
+  core/db.py RuntimeError 消息字符串内的「SQLite 已退役 2026-10-14」
+  为运行时文案,按「字符串字面量不碰」规则保留。
 
 ## 5. 已知风险与待决
 
