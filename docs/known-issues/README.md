@@ -42,7 +42,10 @@
 >     ├── registry/                   # 断言注册表与其前端消费
 >     ├── scenario-store/             # 场景读形状
 >     ├── run-journal/                # 执行日志（JSONL）
->     └── documentation/              # 文档债
+>     ├── documentation/              # 文档债
+>     ├── composer/                   # 编排器（查询取数链）
+>     ├── integration/                # 集成模板（owner × 项目成员关系）
+>     └── suites/                     # 套件（能力投影）
 > ```
 >
 > ## 当前登记
@@ -76,3 +79,6 @@
 | [platform/frontend/audit-moderate-tail.md](platform/frontend/audit-moderate-tail.md) | platform/frontend × CI | P2 | **已收口**（critical/high 清零 + vue-tsc 3.3.13 落地 + 审计门在位） | vitest 2→5 / vite 5→6 / vue-tsc 2→3.3.13(exact) 升级落地；剩 4 moderate 全为 editorconfig 链无修复版本；「reactive v-model 误报」初判已勘误 = 上游 #6322/#6352 静态属性 `//` 破坏 codegen，7 处改常量绑定规避 |
 | [platform/scenario-store/facets-scope-mismatch.md](platform/scenario-store/facets-scope-mismatch.md) | platform(front × back) | P2 | **已修复**（2026-11-24 收尾轮） | mine 桶 facets 改发 `scope='mine'` + API 类型面收窄到端点词表 `mine|all` + 前后端双钉;FilterPopover 计数恢复服务端口径 |
 | [platform/auth/datamodel-codegen-pysec-tail.md](platform/auth/datamodel-codegen-pysec-tail.md) | dev 工具链（M2 生成器 × CI pip-audit 门） | P2 | 未修复（pip-audit 门显式 ignore 白名单指回本条） | `datamodel-code-generator==0.28.5`（M2 生成器钉死）9 条 PYSEC,fix 跨大版本 0.60~0.64 —— 升级须重生全量生成物过双守卫,独立轮;生产运行时零暴露 |
+| [platform/composer/query-view-resolution-gap.md](platform/composer/query-view-resolution-gap.md) | platform(查询取数链) | **P1** | **已修复**（2026-11-24,01-04 落地） | D2 地址退役后查询取数仍走 authored config.services ⇒ 新场景恒 `service_url_required`;修为 scenarioId+stepIndex 上下文通道（执行链同款单源解析）+ `service_url` 显式覆盖保留,六新错误码进契约;D2 漏接下游补登记 |
+| [platform/integration/owner-membership-bypass.md](platform/integration/owner-membership-bypass.md) | platform/backend（集成模板权限） | **P1** | **已修复**（2026-11-24,01-03 §4.1 落地） | S8 成员闸漏盖 owner:被移出项目的创建者凭属主身份仍可改/删模板、自有实例照跑、继续吃项目凭证 —— 四面同门收口（_can_manage+可见性前置/执行闸/凭证池双保险/移除联动暂停） |
+| [platform/suites/access-projection.md](platform/suites/access-projection.md) | platform(front × back)（套件能力投影） | **P1** | **已修复**（2026-11-24,01-03 §4.2 落地） | 普通项目非属主成员被误标公共只读（canEdit/canRun 恒 False,写闸却放行）+「复制到我的」必然失败;修为 access='member' 按表 B 投影,fork 死入口撤;跨区复制策略留 §5 拍板 |

@@ -2753,6 +2753,41 @@ build 绿;dist 已随同源重建换入。
 - **A4 再注**:两轮 push 红归因 CI 慢机面并已修;销条条件不变
   (本分支合入后的下一轮 push 全绿,或一次 dispatch)。
 
+### 缺陷修复轮(2026-11-24,🟢 同分支 fix/core-wrapup,外部评估 01-03/01-04 落地)
+
+五篇调研文档先评审(事实逐条对照代码核实,**全部属实**,含 file:line
+±5 行漂移、零虚构),用户拍板先做 01-03(§4 两缺陷)与 01-04;
+§5 产品缺口与 01-01/01-02/01-05 留待拍板/独立 UX 轮。
+
+- **01-04 查询取数断链修复(P1)**:rows 路由旧前提「service_url 由
+  前端按 authored config.services 求值」随 D2 地址退役断裂(新场景
+  恒 `service_url_required`,此前未登记 = D2 漏接下游)。修 = 上下文
+  通道(`scenarioId + stepIndex` → `query_context.py` 服务端按执行链
+  同款单源解析:表 B 读闸 → 步骤服务 → 生效身份 → 标签链 → 部署表;
+  复用 `resolve_execution_tag`/`deployment_urls`,零第二套规则)+
+  `service_url` 直传保留为显式覆盖(评审修正①:灰度兼容);六新错误
+  码进契约(评审修正②:`environment_mixed` 按低频口径);未保存草稿
+  文案提示先保存(§5.2 推荐路径)。前端 Canvas 改传上下文三元组,
+  `declaredUrlOf` 内嵌地址消费删除;后端 8 钉 + 前端 10 断言面。
+- **01-03 §4.1 集成 owner 旁路修复(P1)**:S8 成员闸漏盖 owner(其
+  注释自述目标即含被移出成员 ⇒ 漏接非设计)。四面同门:
+  `_can_manage` 普通项目属主须现任成员 + PATCH/DELETE `_visible`
+  前置(移出属主 404);执行闸 `_member_gate` 不豁免 owner(指纹闸
+  仍豁免,两个关注点);`instance_cred_project_id` holder 成员复核
+  双保险;`remove_member` 联动暂停(W0a⑤ 同款,盖 owner + 订阅者
+  实例,执行闸权威 + 联动提前收口)。回归 4 用例 + 集成家族 125 绿。
+- **01-03 §4.2 套件投影修复(P1)**:`_access_and_caps` 的「project_id
+  非空即 public」是普通项目概念诞生前投影 —— 修为 access='member'
+  按表 B(canEdit=contributor/canRun=member),`canShare=False`
+  (fork 404 死入口撤);前端类型扩 'member' + 只读成员横幅。回归
+  3 用例(四方能力矩阵)+ 套件家族 35 绿。
+- **登记**:三缺陷各立 known-issue(composer/query-view-resolution-
+  gap、integration/owner-membership-bypass、suites/access-projection)
+  含修复记录;README 表 +3 行、目录树 +3 目录。
+- **未做(留拍板)**:01-03 §5(项目场景菜单/导入策略、项目集成
+  创建、执行配置前端、报告定义)与 01-02 五项待拍板 —— 产品决策
+  不搭缺陷车;01-01 壳层与 01-05 工作台卡模型 = 独立 UX 轮。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
