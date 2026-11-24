@@ -581,8 +581,8 @@
 | RS2 重投影 | ✅ | /convert 按 meta.plate 重投影 + path_params |
 | RS3 平台切换 | ✅ | meta.plate 回填/消费点按修订/Suite 交集/plate_pins |
 | RS4a 字段级适配 | ✅ | compare/save-check/submit/stale + ops 自动起草 |
-| RS4b 结构级 op | ✅ 后端 | 5 种 op + 引用改写 + stepTo 清空;前端编辑器待做 |
+| RS4b 结构级 op | ✅ 前后端 | 5 种 op + 引用改写 + stepTo 清空;前端编辑器已落(`StructureOpEditor.vue` + `AdaptationFlow.vue`,2026-11-24 状态核 对齐) |
 | RS5 冷化 | ✅ | 可冷化判定查询 |
 | 环境告警 | ✅ | 混合环境 + 版本线不一致(V5-B) |
-| Suite 整体适配 | ○ | 版本分布端点已有;scope=Suite/副本连 Suite 待做 |
-| 导入导出 R19 | ○ | 待做 |
+| Suite 整体适配 | ✅(执行面 ○) | `POST /api/adaptations/submit-suite` 逐成员 compare→submit 聚合 + `suite_copy.deep_copy_suite` 副本连 Suite(引用重映射/forked_from);scope=Suite 的**运行面**(整套编排单次派发)仍待做 |
+| 导入导出 R19 | ✅ | `POST /api/scenarios/import/precheck` + `POST /api/scenarios/import`(两阶段,scenario_import.py)+ `GET /api/scenarios/{id}/export`(可执行形态,与 preview 同源) |

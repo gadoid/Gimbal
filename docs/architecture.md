@@ -283,6 +283,23 @@ class CLIContext(BaseModel):
 
 > 历史备注：曾有仿 Docker Registry v2 的资产仓库（`repository/` 包及其数据模型），已随资产引用机制移除——用例的唯一去向是平台数据库。
 
+## 部署边界（单进程，2026-11-24 明示裁定）
+
+平台服务端是**单进程语义**，这是设计约束而非缺陷，能力口径按此读：
+
+- **禁多 worker**：活跃行级状态在进程内存（`run_dispatcher._row_states`）、
+  调度器是进程内线程/子进程 —— 多 worker 会让两者分裂（runbook 硬约束,
+  `src/gimbal-platform/docs/runbook-pg.md` §1；systemd unit 同款注释）。
+- **禁 `--reload`**：执行器触发约束延续,起服一律手动重启。
+- **PG 启动只校验不迁移**：current ≠ head 拒绝启动（`pg_schema_behind`）,
+  DDL 由人在带备份的窗口手动执行。
+- 因此**不承诺**：水平扩展 / 多实例高可用 / 无停机滚动升级 / 多进程共享
+  活跃执行状态。JSONL 执行日志的进程内 append 已修
+  （`_jsonl_lock` + 单次 `os.write`）,跨进程双写者仍非内核级原子 ——
+  单进程部署规避之;开多 worker 会重新暴露。
+- 若未来需要 HA：另立工程（活跃状态外置、调度所有权、日志单写者模型）,
+  不是调大 worker 数能解决的。
+
 ## 执行流程（端到端）
 
 ```

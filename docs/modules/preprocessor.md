@@ -337,6 +337,6 @@ def _pick_base_url(self) -> str:
 
 ## 已知问题
 
-模板变量替换机制（`_resolve_value` → `resolve_template` → `_get_nested`）当前能覆盖绝大多数用例，但存在若干已知遗留缺陷（`${}` 不支持 JSONPath 高级语法、嵌入式缺失静默原样保留、headers/body 对 None 处理不一致等）。
+模板变量替换机制（`_resolve_value` → `resolve_template_strict` → `_get_nested`）：缺失变量已 fail-fast（见设计原则 8）。剩余已知限制为**语法能力面**（`${}` 内仅点号路径，不支持 `[i]`/通配/过滤器/递归、不支持嵌套 `${}`、无字面量转义）——公开支持口径见 [`docs/modules/utils.md`](utils.md) 的「`${}` 语法支持面」表。
 
-完整登记与触发修复的信号见：[`docs/known-issues/preprocessor/template-substitution.md`](../known-issues/preprocessor/template-substitution.md)。
+完整登记与触发修复的信号见：[`docs/known-issues/preprocessor/template-substitution.md`](../known-issues/preprocessor/template-substitution.md)（2026-11-24 口径收敛:旧「嵌入式缺失静默原样保留」的 P0 表述已失效）。

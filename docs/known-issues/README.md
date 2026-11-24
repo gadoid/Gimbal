@@ -30,7 +30,7 @@
 > docs/known-issues/
 > ├── README.md                       # 本文件（约定 + 总览）
 > ├── preprocessor/
-> │   └── template-substitution.md    # 模板变量替换机制遗留问题（未修复的设计妥协）
+> │   └── template-substitution.md    # 模板变量替换机制遗留问题（部分已修:fail-fast 已落地;剩余=语法限制）
 > ├── plugins/
 > │   └── collector/
 > │       └── README.md               # gimbal-collector 插件（已实现 + 已知局限）
@@ -47,7 +47,7 @@
 >
 > | 文件 | 模块 | 优先级 | 状态 | 摘要 |
 > |------|------|--------|------|------|
-> | [preprocessor/template-substitution.md](preprocessor/template-substitution.md) | preprocessor + utils | P0/P1/P2 | 未修复（设计妥协） | 模板变量替换机制的若干遗留问题 |
+> | [preprocessor/template-substitution.md](preprocessor/template-substitution.md) | preprocessor + utils | P0/P1/P2 | **部分已修**（2026-11-24 勘误：缺失变量 fail-fast 已落地） | 剩余 = 模板语法能力限制（`${}` 内仅点号路径/不支持嵌套/无转义），公开口径见 `docs/modules/utils.md`；旧 P0「静默失败」不再成立 |
 > | [plugins/collector/README.md](plugins/collector/README.md) | plugins/collector | P0/P1/P2 | 已实现（功能有局限） | 报告插件：缺请求头详情、缺断言详情、无脱敏、单一格式 |
 > | [platform/judgment-face/exists-property-hole.md](platform/judgment-face/exists-property-hole.md) | platform/backend + 引擎写侧 | **P0**（候选） | **行为已收口**（阶段二 Task 6）；**承诺文本待用户过目** | 阶段二 Z1：`exists` 兜底不再穿透非 dict 宿主（`$.note.replace` 类判死）+ 写侧按同一判据拦截；**空容器宽容按裁定保留**；公开承诺修订稿未落盘（待过目） |
 > | [platform/registry/normalize-registry-writeback.md](platform/registry/normalize-registry-writeback.md) | platform/frontend ＋ backend | **P0**（候选） | **已修复**（2026-11-24 裁定：隔离区+后端闸） | 阶段二 E：非对象条目随保存写回 ⇒ 静默丢数据 —— 现改为 `unrecognized` 隔离键原样写回（编辑器可见）+ 后端 `entries` 逐元素 dict 写侧闸（422 `assertion_registry_invalid`），数据零丢失 |
@@ -56,7 +56,7 @@
 > | [platform/declaration-cache/full-prefetch-on-light-pages.md](platform/declaration-cache/full-prefetch-on-light-pages.md) | platform/frontend | P2 | 已接受局限 | 轻量页也预取「每步的 `/full`」：**成功端点**每 300s 窗口 ≤1 次（TTL 未过期 + 在飞收敛）；失败端点另受有界退避，见 `no-retry-after-degradation.md` |
 > | [platform/judgment-face/wildcard-normalization-gap.md](platform/judgment-face/wildcard-normalization-gap.md) | platform（前/后端） | P2 | 已接受局限 | `[*]` 不被归一：前端判死、后端靠 `exists` 兜底才可能判活（手写路径才触发） |
 > | [platform/judgment-face/declaration-template-granularity.md](platform/judgment-face/declaration-template-granularity.md) | platform × plate 契约 | P2 | 已接受局限 | 声明面是模板态（`[i]` 不进目录）⇒ 覆盖单位是模板，无法表达「只第 N 个」；写侧按 `_set_at` 补位 |
-> | [platform/run-journal/jsonl-append-race.md](platform/run-journal/jsonl-append-race.md) | platform/backend | **P1** | 未修复 | `_append_jsonl` 并发 append 非原子 ⇒ 撕裂行（现场物证 2026-09-12.jsonl:6764），并使两条测试误报 |
+> | [platform/run-journal/jsonl-append-race.md](platform/run-journal/jsonl-append-race.md) | platform/backend | **P1** | **已修复（进程内面）** 2026-10-13；跨进程双写者保持观察 | `_append_jsonl` 进程内写锁 + 二进制单次 append（`_jsonl_lock` + `os.open/os.write`）；剩余面 = 跨进程双写者仍非内核级原子（与修复前相同,唯一证据源仍是 per-case `result.json`） |
 > | [platform/declaration-cache/warn-once-stale-fallback-wording.md](platform/declaration-cache/warn-once-stale-fallback-wording.md) | platform/backend | P2 | 未修复 | `_warn_once` 固定模板尾在回退路径上描述错误后果（回退 ≠ 降级） |
 > | [platform/judgment-face/children-shape-unreachable.md](platform/judgment-face/children-shape-unreachable.md) | platform/frontend × plate | P2 | 按裁定不需处理 | `children` 非数组形状**理论不可达**（plate pydantic 强制 + 声明面每次现拉）；附一处滞后注释 |
 > | [platform/registry/case-composer-catalog-untested.md](platform/registry/case-composer-catalog-untested.md) | platform/frontend | P2 | 未修复 | `CaseComposerCatalog` 全仓零测试覆盖（仅两条测试注释提到它） |

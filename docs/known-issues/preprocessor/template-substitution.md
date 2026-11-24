@@ -1,7 +1,7 @@
 # 遗留问题：模板变量替换机制
 
 > **模块**：[`gimbal.preprocessor`](../../modules/preprocessor.md) + [`gimbal.utils.jsonpath`](../../modules/utils.md)
-> **状态**：已知未修复
+> **状态**：**部分已修**（缺失变量 fail-fast 已落地；剩余 = 语法能力限制，属 I-08 公开口径范畴）。2026-11-24 口径收敛勘误见文末[修复记录](#修复记录)。
 > **适用范围**：仅**预处理阶段**的模板替换（`ScenarioPreprocessor._resolve_value` → `resolve_template` → `_get_nested`）。
 > 已确认 [`gimbal.context.resolver`](../../modules/context.md) 中的 `SpecResolver` 没有任何外部调用方，**不在本登记范围内**。
 
@@ -37,8 +37,15 @@ root["auth"]    = ...   # 浅拷贝 AuthRegistry.snapshot()
 
 ### 决策记录
 
+> **（2026-11-24 勘误:下述「缺失变量策略 = 静默」已不再是现行行为** ——
+> 主链已改走 `resolve_template_strict` + `_MISSING` 哨兵
+> （`gimbal/utils/jsonpath.py:694`）+ 预处理器 `_resolve_or_fail`
+> （`scenario_preprocessor.py:395`）:**路径真不存在 → 抛
+> `ValueError`(fail-fast)**;「key 存在但值为 None」仍是合法值返回 None。
+> 下述原文保留为历史决策记录,不可按现行实现读。）
+
 - **类型归一**：**不在本层处理**。下游 Pydantic schema 强转解决。
-- **缺失变量策略**：当前是**静默**（返回 None 或保留原样），**不**采用 fail-fast。
+- **缺失变量策略**：当前是**静默**（返回 None 或保留原样），**不**采用 fail-fast。*(已失效,见上勘误 —— 现行为 = fail-fast)*
 - **演进节奏**：作为较早期版本，遗留至后续迭代。
 
 ---
@@ -68,6 +75,12 @@ root["auth"]    = ...   # 浅拷贝 AuthRegistry.snapshot()
 **与文档的冲突**：[`gimbal/utils/jsonpath.py:38`](../../src/gimbal/utils/jsonpath.py#L38) 与 [`gimbal/context/resolver.py:38`](../../src/gimbal/context/resolver.py#L38) 注释均写"`${}` 内部默认 JSONPath，$ 可省略"，与实现矛盾。
 
 ### 1.2 嵌入式模板缺失变量时静默原样保留
+
+> **（2026-11-24 勘误:已失效** —— 主链现走 `resolve_template_strict`
+> （`gimbal/utils/jsonpath.py:694`）+ `_resolve_or_fail`
+> （`scenario_preprocessor.py:395`）,缺失路径直接抛 `ValueError`,
+> 嵌入式模板同样先过 strict 判据。下述「松散 `_replacer` 保留原样」
+> 的描述仅对未走 strict 的旁支调用面成立,主链不可按此读。）
 
 **位置**：[`gimbal/utils/jsonpath.py:651-656`](../../src/gimbal/utils/jsonpath.py#L651-L656) `_replacer`
 
@@ -159,6 +172,10 @@ return strategy
 
 ### 2.5 `_resolve_value` 缺失变量时返回 `None` 与"变量值真为 None"撞车
 
+> **（2026-11-24 勘误:已失效** —— `_resolve_or_fail` 显式区分
+> 「路径真不存在 → `_MISSING` → 抛 ValueError」与「key 存在但值为
+> None → 返回 None(合法值)」,撞车面已收口。原文保留为历史。）
+
 **位置**：[`scenario_preprocessor.py:364-368`](../../src/gimbal/preprocessor/scenario_preprocessor.py#L364-L368)
 
 **行为**：
@@ -181,6 +198,11 @@ if resolved is None:
 ## 3. P2（结构性 / 风格性 / 可维护性）
 
 ### 3.1 整个机制无 fail-fast 钩子
+
+> **（2026-11-24 勘误:已失效** —— fail-fast 钩子已落地
+> （`resolve_template_strict` + `_resolve_or_fail` 的 ValueError),
+> 主链缺失变量在预处理阶段即 fail。剩余的语法能力限制(§1.1/§2.1/§2.2)
+> 仍有效,公开口径见 `docs/modules/utils.md` 的「`${}` 语法支持面」。）
 
 - 认证失败 [`scenario_preprocessor.py:200-201`](../../src/gimbal/preprocessor/scenario_preprocessor.py#L200-L201) 会 `raise`
 - 模板解析阶段**没有同等的 fail 机制**，所有失败都退化到 warning 或静默
@@ -240,4 +262,27 @@ root["auth"]    = self._auth_registry.snapshot()    # 浅拷贝
 
 > 修改时在此追加，**不要删除历史条目**。格式：`### YYYY-MM-DD — 简述`。
 
-<!-- 暂无 -->
+### 2026-11-24 — 口径收敛勘误(部分已修;状态改「部分已修」)
+
+- **缺失变量 fail-fast 已落地**(落实轮次在本文档登记之后):主链
+  `resolve_template_strict` + `_MISSING` 哨兵(`gimbal/utils/jsonpath.py`
+  :609 哨兵/:630 `_get_nested`/:694 strict)+ 预处理器 `_resolve_or_fail`
+  （`scenario_preprocessor.py:395`）—— 路径真不存在 → `ValueError`
+  (fail-fast);key 存在但值为 None = 合法值返回 None。本文档原 P0 面
+  (§0 决策记录「静默策略」、§1.2、§2.5、§3.1)随之失效,已逐节就地
+  勘误;原文保留为历史,不可按现行实现读。
+- **仍有效的部分**:语法能力限制 —— §1.1(`${}` 内仅点号路径,
+  `[i]`/`[*]`/过滤器/递归不支持)、§2.1(嵌套 `${}` 不支持)、§2.2
+  (无字面量转义)、§1.4(整串保类型,设计取舍)—— 与公开文档
+  `docs/modules/utils.md`「`${}` 语法支持面」互链,按 I-08 口径管理
+  (P2 功能限制,不再按旧 P0 读)。
+- **失效引用清理**:`gimbal/context/resolver.py` 文件已不存在
+  (§1.1「与文档的冲突」一处引用随之失效);文内 `jsonpath.py` 行号
+  均有漂移(如 `_TEMPLATE_VAR_RE` 现于 :609、`_get_nested` 于 :630),
+  不逐行刷新,以函数名 + 文件定位。
+- **README 总表**行同步改「部分已修」;`docs/modules/preprocessor.md`
+  §已知问题的陈旧摘要(「嵌入式缺失静默原样保留」)同批修正。
+- 本条剩余开放面 = **语法能力扩展**(有真实用例需求时再立项,不阻塞
+  主链);缺失变量 fail-fast 语义由
+  `backend/tests/test_run_injection.py::test_template_value_class_fails_in_the_preprocessor_not_in_the_assign`
+  等既有用例钉住。

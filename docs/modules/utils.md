@@ -148,6 +148,24 @@ resolve_template("${auth.codfish.token}", {"auth": {"codfish": AuthSession(...)}
 - Pydantic `@property`
 - 点号分隔的嵌套路径：`auth.codfish.token`
 
+**`${}` 语法支持面（公开口径，2026-11-24 收敛；known-issue
+template-substitution 剩余面 = 本表的「不支持」列）**：
+
+| 语法 | 支持 | 说明 |
+| --- | --- | --- |
+| 点号路径 `${auth.x.token}` | ✅ | dict 嵌套 / 对象属性 / `@property` |
+| 下标 `[0]` / `[-1]` | ❌ | `_get_nested` 只走 `dict.get`/`getattr` |
+| 通配 `[*]` / 过滤器 `[?…]` | ❌ | 模板层不解析 JSONPath 算子 |
+| 递归下降 `$..field` | ❌ | 同上 |
+| 嵌套 `${a${b}c}` | ❌ | 正则 `\$\{([^}]+)\}` 在首个 `}` 截断 |
+| 字面量转义（保留 `${...}` 原文） | ❌ | 无转义机制；需要原样时不要写成模板形态 |
+| 整串单 `${}` 保留原类型 | ✅ | 设计取舍（int/dict 原样返回，不 coerce） |
+| 缺失变量 | 视模式 | 松散模式嵌入式保留原样；**主链走 strict**：路径不存在 → `ValueError`（fail-fast，`resolve_template_strict` + `_MISSING`） |
+
+扩展原则：上表「不支持」项按**真实用例需求**排期（有场景推动才立项，
+不为主链前置）；新增语法须同步本表与
+[`known-issues/preprocessor/template-substitution.md`](../known-issues/preprocessor/template-substitution.md)。
+
 #### resolve_template_strict
 
 模板变量解析（严格模式）：

@@ -12,6 +12,7 @@ Gimbal 把"场景编排 / 策略执行 / 状态机驱动 / 插件扩展"装进�
 - **完整的扩展点**：自定义 `StrategyExecutor` / `Reporter` / `Authenticator`；通过 `PluginLoader` 流水线以插件形式接入。
 - **Event + Hook 双总线**：Event 通知型，Hook 介入型可中断 / 改写 payload；均支持 `plugin_name` 精确热卸载。
 - **CI / Git 上下文透传**：`bootstrap` 收集 CI provider / build URL / commit / 触发人等进 `Configuration.run_meta`，`Engine.run` 在 reporter 订阅完成后发布 `RunMetaEvent`，HTML / JSON 报告头部与事件流都能拿到。
+- **部署边界（明示设计约束）**：平台服务端为单进程语义（活跃行级状态与调度器在进程内；禁多 worker / 禁 `--reload`），不承诺水平扩展 / 多实例 HA / 无停机滚动升级 —— 详见 `docs/architecture.md` §部署边界 与 `src/gimbal-platform/docs/runbook-pg.md`。
 
 ## 安装
 

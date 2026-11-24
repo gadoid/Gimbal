@@ -1,24 +1,34 @@
 <!-- AnalyticsDeferred.vue — 数据分析(执行设计 §4,按 4 号原型实现)。
      本期延后,这一页是说明页,不是空洞:延后之后没有任何日常能力跟着消失
-     — 该在别处的已经在了(§4.1);解锁它的唯一前置是行级/步骤级结果
-     落库(§4.2)。侧边栏入口置灰保留(§4.4):延后的东西藏起来,过几个
-     月没人记得它存在,那条落库前置也就跟着沉了;点进来撞上这条说明,
-     前置就一直可见。本页自身正常渲染(当前路由高亮如常)+ 琥珀「延后」小标。
-     纪律:不渲染示意性假数据 — 落库后的四块只给名称与理由,不给编造的图。 -->
+     — 该在别处的已经在了(§4.1)。
+     前提勘误(2026-11-24 口径收敛,登记表 I-07 拍板「正式延后并修前提」):
+     行级/步骤级/事件/行级失败原因**已落库**(ExecutionRow / ExecutionStep /
+     ExecutionEvent / execution_rows.run_error,迁移 0065)—— 旧文案
+     「行级靠扫 JSONL、步骤级只在 result.json、等落库」已失效;现在的
+     延后理由是**产品排期定位**(聚合页排在 AI Native 之后的批次),
+     不再是数据缺失。侧边栏入口置灰保留(§4.4):点进来撞上这条说明,
+     排期定位就一直可见。本页自身正常渲染(当前路由高亮如常)+ 琥珀
+     「延后」小标。纪律不变:不渲染示意性假数据 — 四块只给名称与理由,
+     不给编造的图。 -->
 <template>
   <ListPage title="数据分析" icon="pie" width="standard"
     subtitle="「最近整体怎么样、问题集中在哪」 — 跨执行聚合。单次执行的问题,执行记录和字段来源分析已经回答得了">
     <template #actions>
-      <span class="deferred-badge" data-testid="analytics-deferred-badge">延后 · 等行级落库</span>
+      <span class="deferred-badge" data-testid="analytics-deferred-badge">延后 · 排期定位</span>
     </template>
 
-    <!-- 前置说明(琥珀:待办/前置族) -->
+    <!-- 定位说明(琥珀:待办/前置族) -->
     <div class="deferred-notice">
-      <div class="notice-title">本期延后 — 解锁它的唯一前置:行级 / 步骤级结果落库</div>
+      <div class="notice-title">本期延后 — 理由是排期定位,不再是数据缺失</div>
       <p class="notice-body">
-        行级状态今天靠扫 <code class="mono">data/runs/*.jsonl</code> 按 executionId 逐条回放,步骤级明细只在 case 目录的
-        <code class="mono">result.json</code> 工件里 — <strong>单执行读得出,跨执行聚合不出来</strong>。
-        侧边栏入口因此置灰保留、而不是删掉:留个灰入口,点进来就撞上这条说明,前置就一直看得见。
+        行级 / 步骤级 / 事件 / 行级失败原因<strong>已经在库里</strong>
+        （<code class="mono">execution_rows</code> / <code class="mono">execution_steps</code> /
+        <code class="mono">execution_events</code>,行级失败原因
+        <code class="mono">run_error</code> 随迁移 0065 落库）——
+        旧的「等行级落库」前提已失效。现在的延后是<strong>产品排期裁定</strong>
+        （2026-11-24:跨执行聚合页排在平台收尾与 AI Native 之后的批次,先做
+        最小三块,不做完整仪表盘）。
+        侧边栏入口因此置灰保留、而不是删掉:留个灰入口,点进来就撞上这条说明,定位就一直看得见。
       </p>
     </div>
 
@@ -43,38 +53,39 @@
       </div>
     </div>
 
-    <!-- 落库之后这一页给什么(设计保留;只给名称与理由,不渲染假数据) -->
+    <!-- 排期后这一页给什么(设计保留;只给名称与理由,不渲染假数据) -->
     <div class="ana-card">
-      <div class="card-title">落库之后,这一页给什么 <span class="card-dim">(设计已保留 — 图表规范:一张图只有一根 y 轴;单序列不给图例;四色分类已过 CVD 校验)</span></div>
+      <div class="card-title">排期到时,这一页给什么 <span class="card-dim">(数据已就绪 — 图表规范:一张图只有一根 y 轴;单序列不给图例;四色分类已过 CVD 校验)</span></div>
       <div class="wait-row">
-        <span class="wait-tag">需落库</span>
+        <span class="wait-tag">数据已就绪</span>
         <div class="wait-body">
           <div class="wait-name">失败原因构成 — 配置类 vs 用例类</div>
           <p class="wait-desc">
             断言失败 / 字段注入 / 连接认证 / 超时。这条切分是这一页存在的最强理由:它直接决定下一步去服务注册还是去编排页,
-            而且只有平台算得出来 — 失败行的字段落在 carry 层还是 form 层,字段来源分析那条链已经算过了。
+            而且只有平台算得出来 — 行级失败原因已在 <code class="mono">execution_rows.run_error</code>,
+            字段落在 carry 层还是 form 层,字段来源分析那条链已经算过了。
           </p>
         </div>
       </div>
       <div class="wait-row">
-        <span class="wait-tag">需落库</span>
+        <span class="wait-tag">数据已就绪</span>
         <div class="wait-body">
           <div class="wait-name">失败聚类 · 按接口</div>
-          <p class="wait-desc">问题集中在哪几个接口 — 行级失败明细按 endpoint 归并。</p>
+          <p class="wait-desc">问题集中在哪几个接口 — 行级失败明细按 endpoint 归并(行级明细在 <code class="mono">execution_rows</code>)。</p>
         </div>
       </div>
       <div class="wait-row">
-        <span class="wait-tag">需落库</span>
+        <span class="wait-tag">数据已就绪</span>
         <div class="wait-body">
           <div class="wait-name">不稳定用例的步骤级粒度</div>
-          <p class="wait-desc">翻转次数在 execution 级算得出,落到哪一步要解析 result.json。</p>
+          <p class="wait-desc">翻转次数在 execution 级算得出;步骤级结果在 <code class="mono">execution_steps</code>,不必再解析 result.json。</p>
         </div>
       </div>
       <div class="wait-row">
-        <span class="wait-tag">需落库</span>
+        <span class="wait-tag">数据已就绪</span>
         <div class="wait-body">
           <div class="wait-name">行级耗时分布</div>
-          <p class="wait-desc">execution 级时长已在 KPI 带;行级分布要等落库。</p>
+          <p class="wait-desc">execution 级时长已在 KPI 带;行级耗时随行级台账落库(<code class="mono">execution_rows</code>),聚合即可出分布。</p>
         </div>
       </div>
     </div>
