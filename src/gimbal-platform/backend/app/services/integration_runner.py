@@ -530,10 +530,20 @@ async def instance_cred_project_id(
     db, inst: IntegrationTask, tpl: IntegrationTask,
 ) -> int | None:
     """S8:实例执行用的项目凭证池 —— ``credential_source='project'`` 且
-    模板属普通项目 → 该项目;否则 None(持有人个人池)。"""
+    模板属普通项目 → 该项目;否则 None(持有人个人池)。
+
+    01-03 §4.1 双保险:holder(含 owner)须仍是项目成员 —— 被移出即
+    不再吃项目凭证池(执行前成员闸通常先拦,此处防闸序/复活钩子的
+    失效面);非成员回落个人池,预检按 missing_credential 口径暂停。"""
     if inst.credential_source != "project":
         return None
-    return await normal_project_of(db, tpl)
+    pid = await normal_project_of(db, tpl)
+    if pid is None or inst.holder_id is None:
+        return pid
+    from .zone import can_use_project_credentials
+    if not await can_use_project_credentials(db, inst.holder_id, pid):
+        return None
+    return pid
 
 
 async def _slot_bindings_of(db, tpl: IntegrationTask,
@@ -893,7 +903,50 @@ async def pause_subscriber_instances(
                     body=message, link="/integrations")
         except Exception:  # noqa: BLE001
             logger.warning("integration: pause notify failed")
-    return len(holders)
+
+
+async def pause_instances_of_removed_member(project_id: int, user_id: int) -> int:
+    """01-03 §4.1:成员移除联动 —— 暂停该成员在**本项目模板**上的全部
+    持有实例(owner 自有实例含:属主身份不替代成员关系)。
+
+    W0a⑤ 同口径:只动 idle 行(运行中跑完即被执行前成员闸兜死);
+    paused_reason 沿用 made_private(恢复路径 = 重新确认订阅,与
+    S8 执行闸同枚举)。执行闸是权威,本联动 = 即时收口 + 人话通知。"""
+    async with db_module.SessionLocal() as db:
+        tpl_ids = (await db.execute(select(IntegrationTask.id).where(
+            IntegrationTask.template_id.is_(None),
+            IntegrationTask.project_id == project_id,
+            IntegrationTask.removed_at.is_(None)))).scalars().all()
+        if not tpl_ids:
+            return 0
+        rows = (await db.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id.in_(tpl_ids),
+            IntegrationTask.holder_id == user_id,
+            IntegrationTask.state == "idle"))).scalars().all()
+        msg = ("你已被移出模板所属项目,执行已暂停;重新加入项目后请"
+               "重新确认订阅")
+        for r in rows:
+            r.state = "paused"
+            r.paused_reason = "made_private"
+            r.last_error = msg[:500]
+        await db.commit()
+        for r in rows:
+            tpl = await db.get(IntegrationTask, r.template_id)
+            await _record_activity(db, r, tpl, "integration.paused",
+                                   {"reason": "made_private",
+                                    "memberRemoved": True})
+        count = len(rows)
+    if count:
+        try:
+            from .notifications import create_notification
+            async with db_module.SessionLocal() as ndb:
+                await create_notification(
+                    ndb, user_id=user_id, type_="integration",
+                    title=f"{count} 个项目集成任务已暂停",
+                    body=msg, link="/integrations")
+        except Exception:  # noqa: BLE001
+            logger.warning("integration: member-removal notify failed")
+    return count
 
 
 async def run_instance(instance_id: int, *, lease=None) -> dict:
@@ -1045,19 +1098,28 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             from ..services.zone import public_project_id as _ppid_cg
 
             # S8:普通项目模板对仍是项目成员的持有人放行(「成员也可以
-            # 订阅」);非成员(被移出项目)按转私有同口径暂停
+            # 订阅」);非成员(被移出项目)按转私有同口径暂停。
+            # 01-03 §4.1(2026-11-24):成员复核**不再豁免 owner** ——
+            # 普通项目模板的属主被移出项目后,自有实例同样暂停(指纹闸
+            # consent_gate 仍 owner 豁免:自有内容无需自我确认,但成员
+            # 门按持有者判,属主身份不替代成员关系)。
+            _member_gate = (inst.holder_id is not None and (
+                consent_gate or                       # 非 owner 持有(P2.3/S8 原面)
+                (tpl.project_id is not None           # §4.1:普通项目模板的 owner
+                 and inst.holder_id == tpl.owner_id)))
             _member_ok = False
-            if consent_gate and tpl.project_id is not None:
+            if _member_gate and tpl.project_id is not None:
                 from ..services.zone import can_use_project_credentials
                 _member_ok = await can_use_project_credentials(
                     db, inst.holder_id, tpl.project_id)
-            if (consent_gate and tpl.project_id != await _ppid_cg(db)
+            if (_member_gate and tpl.project_id != await _ppid_cg(db)
                     and not _member_ok):
                 return await _pause_consent_changed(
                     db, inst, tpl,
                     paused_reason="made_private",
-                    message="模板已转为私有,执行已暂停;模板重新公开后请"
-                            "重新确认订阅", lease=lease)
+                    message="模板已转为私有,或持有人已不在模板所属项目"
+                            "成员中 —— 执行已暂停;满足条件后请重新确认"
+                            "订阅", lease=lease)
             # S2.1:模板环境(指纹与执行同一份,不吃持有人偏好)
             try:
                 tpl_env = await _template_env(db, scen, scheme_payload)

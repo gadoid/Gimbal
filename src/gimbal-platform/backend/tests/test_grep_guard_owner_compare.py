@@ -118,6 +118,11 @@ _ALLOWLIST: dict[str, int] = {
     'services/execution_store.py:scope = (Execution.owner_id == owner_id if owner_id is not None': 1,
     'services/integration_runner.py:IntegrationTask.holder_id != tpl.owner_id,': 2,
     'services/integration_runner.py:IntegrationTask.holder_id == holder,': 2,
+    # 01-03 §4.1(2026-11-24):owner 实例的成员复核分支选择(同上方
+    # ``_token`` 复核的「属主实例」面,终态类);移除联动的持有实例
+    # 检索(个人数据查询,同 ensure_instance 类)。
+    'services/integration_runner.py:IntegrationTask.holder_id == user_id,': 1,
+    'services/integration_runner.py:and inst.holder_id == tpl.owner_id)))': 1,
     'services/integration_runner.py:and (inst.holder_id != user_id': 1,
     'services/integration_runner.py:and inst.holder_id != tpl.owner_id)': 1,
     'services/integration_runner.py:if _token is not None and inst.holder_id == tpl.owner_id:': 1,

@@ -796,3 +796,8 @@ async def remove_member(
     # M2b Q2:被移出的成员若是项目令牌负责人 → 提醒其余管理员换绑
     from .project_tokens import notify_holder_lost
     await notify_holder_lost(db, project_id, member_user_id)
+    # 01-03 §4.1:被移出成员在本项目模板上的持有实例(含其自建的
+    # owner 实例)联动暂停 —— 执行前成员闸是权威,这里是即时收口 +
+    # 人话通知(与令牌换绑提醒同挂 remove 之后)。
+    from ..services import integration_runner as _ir
+    await _ir.pause_instances_of_removed_member(project_id, member_user_id)
