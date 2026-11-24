@@ -51,3 +51,26 @@ def test_frontend_contract_no_drift() -> None:
         + proc.stderr
         + "\n处置:python scripts/gen_frontend_contract.py(产物随提交入库)"
     )
+
+
+def test_platform_api_doc_consistent() -> None:
+    """I-04 收口守卫(2026-11-24):平台 API 文档不得描述不存在的端点。
+
+    `docs/PLATFORM-SCENARIO-COMPOSER-API.md` 曾长期携带成节不实的
+    `/api/cases` 家族(known-issue platform-api-doc-false-sections);
+    文档重写后,端点级对账在本用例与 plate-ci 显式步骤双挂 —— 文档新增
+    /改错端点、或把退役端点从退役注记改回「在役」表述,均在此红。
+    """
+    repo = _repo_root()
+    proc = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "check_api_doc.py")],
+        capture_output=True, text=True, cwd=repo, timeout=120,
+    )
+    assert proc.returncode == 0, (
+        "平台 API 文档与 openapi 快照漂移(文档描述了不存在的端点):\n"
+        + proc.stdout
+        + proc.stderr
+        + "\n处置:按端点级重写文档,或把历史端点移入退役注记"
+          "(行内含「已退役/~~/❌」不计);见 known-issue "
+          "platform-api-doc-false-sections.md"
+    )

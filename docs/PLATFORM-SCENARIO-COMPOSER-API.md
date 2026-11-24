@@ -4,7 +4,10 @@
 > 范围：覆盖 `frontend/src/api/scenario-composer.ts` 的 16 个 client 方法
 > 关系文档：`docs/http-api.md`（Plate 一期 M6 路由语法）、`docs/PLATFORM_REQUIREMENTS.md`、`docs/PRD-case-composer.md`
 >
-> 文档状态：**契约已定 · 后端实现 TODO**。所有 `IMPLEMENTATION STATUS` 字段标注 ⏳ 表示待实现。
+> 文档状态：**已实现**（后端 + 前端全量落地；端点级对账由
+> `scripts/check_api_doc.py` 在 CI 守卫 —— 文档中的端点与
+> `contract/openapi.json` 快照逐条比对,文档出现快照没有的端点即红）。
+> Case 层与执行环境链已退役,文中相应章节按退役注记读。
 
 ---
 
@@ -13,8 +16,8 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Platform (gimbal-platform) — 组合层                          │
-│  • Scenarios / Cases / DataSets / Runs                      │
-│  • 1:1 (Scenario↔Case) · 1:N (Case↔DataSet)                 │
+│  • Scenarios / DataSets / Runs（Case 层已解散,见 §2.2 退役注） │
+│  • 1:N（Scenario↔DataSet,归属在场景;数据集列表按 scenarioId） │
 │  • 仅做组装 + 存储 + 触发运行,不做结构校验                    │
 └─────────────────────────────────────────────────────────────┘
                               │  POST /convert
@@ -28,8 +31,8 @@
 
 **关键约束**：
 - Platform **不**前置校验 Scenario 结构,只在最后一步调 Plate `/convert`。
-- 1:1 关系：每个 Case 恰好绑定一个 Scenario（`case.scenarioId`）。
-- 1:N 关系：一个 Case 可拥有多个 DataSet,每个 DataSet 包含 `rows[]`。
+- Case 层**已解散**（运行配方整体并入 `RunRequest`,见 §2.6 退役注）；
+  数据集直接挂场景（`POST /api/scenarios/{scenarioId}/data-sets`）。
 - 校验流向：`Platform 拼 dict → 一次性 POST /api/scenario/action/convert → 失败回前端`。
 
 ---
@@ -56,7 +59,7 @@ Authorization: Bearer <access_token>
 
 ### 1.3 响应信封
 
-**成功**直接返回数据本体（与现有 `cases.py` 一致,**不**嵌套 `data`），便于前端 `http.get<T>('/...')` 直接拿到数组：
+**成功**直接返回数据本体（与平台各路由模块一致,**不**嵌套 `data`），便于前端 `http.get<T>('/...')` 直接拿到数组：
 
 ```json
 [{ ... }, { ... }]
@@ -133,25 +136,16 @@ Authorization: Bearer <access_token>
 }
 ```
 
-### 2.2 Case
+### 2.2 Case（**已退役**）
 
-```json
-{
-  "caseId": "case-001",
-  "scenarioId": "sc-order-create",
-  "name": "order_create_正常路径",
-  "description": "正常 qty=1 路径",
-  "env": "test-env-A",
-  "auth": { "name": "admin@fin", "type": "bearer" },
-  "retry": { "maxAttempts": 0, "intervalMs": 500 },
-  "dataSetIds": ["ds-001", "ds-002"],
-  "lastRunStatus": "PASS",
-  "lastRunAt": "2026-08-12T13:00:00Z",
-  "createdBy": "王",
-  "updatedAt": "2026-08-12T13:00:00Z",
-  "starred": false
-}
-```
+> **本节描述的模型已不存在**（架构收敛:Case 层解散,提交见
+> `docs/known-issues/platform/documentation/platform-api-doc-false-sections.md`）。
+> 原 1:1 Case(每 case 绑定一个 scenario,携 env/auth/retry/dataSetIds)
+> 的职责去向:运行配方并入 [`RunRequest`](#26-runrequest)（数据集选择 /
+> service 绑定 / stepTo / nRuns / parallel）;执行环境随 D2 退役（§4.17）;
+> 运行级 retry 不做;数据集改挂场景（§4.14）。现行 `app/schemas/
+> scenario_composer.py` 与路由注册表中**均无** Case;`/api/cases` 家族
+> 端点不存在（§3/§4.8）。
 
 ### 2.3 DataSet
 
@@ -189,15 +183,14 @@ Authorization: Bearer <access_token>
 }
 ```
 
-### 2.5 RunEnv
+### 2.5 RunEnv（**已退役**）
 
-```json
-{
-  "envId": "test-env-A",
-  "name": "test-env-A",
-  "baseUrl": "http://test-a.fin.local:8000"
-}
-```
+> **本节描述的模型已不存在**:执行环境链随 D2 整体删除
+> （`RunEnv` / `/api/envs` / `envs.yaml` / `envId`,提交 `0f136c7`）。
+> 2026-11-17 环境降级轮后,运行级 `environmentId` 显式位亦全链退役 ——
+> 环境按**身份标签链**解析（条目标签 > 项目默认 > 平台默认,§2.6/§4.18
+> 预检硬门）。现行环境管理面 = 服务注册的
+> `environments` / `system_env_instances`（`/api/environments`）。
 
 ### 2.6 RunRequest
 
@@ -297,24 +290,27 @@ Authorization: Bearer <access_token>
 
 | 路径 | 方法 | 角色 | 状态 |
 | --- | --- | --- | --- |
-| `/api/scenarios` | GET | 列表场景 | ⏳ |
-| `/api/scenarios` | POST | 创建场景 | ⏳ |
-| `/api/scenarios/{scenarioId}` | GET | 详情 | ⏳ |
-| `/api/scenarios/{scenarioId}` | PUT | 更新 | ⏳ |
-| `/api/scenarios/{scenarioId}` | DELETE | 删除 | ⏳ |
-| `/api/scenarios/{scenarioId}/star` | POST | 收藏 | ⏳ |
-| `/api/scenarios/preview-plate` | POST | Plate /convert 预校验 | ⏳ |
-| `/api/cases` | GET | 列表用例（跨场景） | ⏳ |
-| `/api/cases/{caseId}` | GET | 详情 | ⏳ |
-| `/api/cases/{caseId}` | PATCH | 局部更新 | ⏳ |
-| `/api/cases/{caseId}` | DELETE | 删除 | ⏳ |
-| `/api/data-sets` | GET | 列表（可按 caseId 过滤） | ⏳ |
-| `/api/data-sets/{datasetId}` | GET | 详情 | ⏳ |
-| `/api/data-sets/{datasetId}` | PUT | 更新 | ⏳ |
-| `/api/data-sets/{datasetId}` | DELETE | 删除 | ⏳ |
-| `/api/cases/{caseId}/data-sets` | POST | 关联创建 | ⏳ |
-| `/api/envs` | GET | 列表执行环境 | ❌ 已退役（D2，`0f136c7`） |
-| `/api/runs` | POST | 触发一次运行 | ⏳ |
+| `/api/scenarios` | GET | 列表场景 | ✅ |
+| `/api/scenarios` | POST | 创建场景 | ✅ |
+| `/api/scenarios/{scenarioId}` | GET | 详情 | ✅ |
+| `/api/scenarios/{scenarioId}` | PUT | 更新 | ✅ |
+| `/api/scenarios/{scenarioId}` | DELETE | 删除 | ✅ |
+| `/api/scenarios/{scenarioId}/star` | POST | 收藏 | ✅ |
+| `/api/scenarios/preview-plate` | POST | Plate /convert 预校验 | ✅ |
+| `/api/data-sets` | GET | 列表（可按 `scenarioId` 过滤） | ✅ |
+| `/api/data-sets/{datasetId}` | GET | 详情 | ✅ |
+| `/api/data-sets/{datasetId}` | PUT | 更新 | ✅ |
+| `/api/data-sets/{datasetId}` | DELETE | 删除 | ✅ |
+| `/api/scenarios/{scenarioId}/data-sets` | POST | 场景下创建数据集 | ✅ |
+| `/api/runs` | POST | 触发一次运行 | ✅ |
+
+> ~~`/api/cases` 家族（GET 列表 / GET·PATCH·DELETE `{caseId}` /
+> POST `{caseId}/data-sets`）~~ —— **端点不存在,Case 层已解散**
+> （§2.2 退役注;数据集创建实路径见 §4.14）。
+> `/api/envs` —— **已退役**（D2,`0f136c7`;现行环境管理面 =
+> `/api/environments`,§4.17）。
+> 全量端点快照以 `contract/openapi.json` 为准（CI 文档守卫
+> `scripts/check_api_doc.py` 对账）。
 
 ---
 
@@ -375,9 +371,9 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ### 4.3 `GET /api/scenarios/{scenarioId}`
 
-**角色**：场景详情（前端 `views/CaseComposer.vue:726` 的 `loadScenario` —— 编排页
-按 scenarioId 取回整份 `{meta, steps, config, resource}` 重建 `definition`；运行面板
-`components/composer/RunPanelHost.vue:115` 同走此端点取展示名 / 步数）
+**角色**：场景详情（前端编排页 `views/CaseComposer.vue` 的 `loadScenario` —— 按
+scenarioId 取回整份 `{meta, steps, config, resource}` 重建 `definition`；编排器
+运行装配 `composables/useRunAssembly.ts` 同走此端点取展示名 / 步数与注册表水化）
 
 **响应**：`200 OK` → `Scenario`
 
@@ -467,76 +463,37 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ---
 
-### 4.8 `GET /api/cases`
+### 4.8–4.11 `/api/cases` 家族（**已退役——端点不存在**）
 
-**角色**：跨场景用例总览（前端 `Cases.vue`） + 场景下用例列表（前端 `CasesOfScenario.vue`）  
-**权限**：登录用户
-
-**Query 参数**：
-
-| 名称 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `scenarioId` | string | 否 | 过滤 `scenarioId`（`CasesOfScenario.vue` 用） |
-| `q` | string | 否 | 模糊匹配 `name` / `caseId` / `scenarioId` |
-| `system` | string | 否 | 透过关联 scenario 的 `meta.system` 过滤 |
-| `module` | string | 否 | 透过关联 scenario 的 `meta.module` 过滤 |
-
-**响应**：`200 OK` → `Case[]`（§2.2）
-
----
-
-### 4.9 `GET /api/cases/{caseId}`
-
-**角色**：用例详情（前端 `CaseEditorBasic.vue`）
-
-**响应**：`200 OK` → `Case`
-
-**错误**：`404 case_not_found`
-
----
-
-### 4.10 `PATCH /api/cases/{caseId}`
-
-**角色**：局部更新用例（覆盖 env / auth / retry / dataSetIds / name / description）  
-**权限**：作者本人或 admin
-
-**请求体**：`Partial<Case>`，**仅允许修改以下字段**：
-
-- `name`
-- `description`
-- `env`
-- `auth.{name, type}`
-- `retry.{maxAttempts, intervalMs}`
-- `dataSetIds[]`
-
-禁止通过此接口修改 `scenarioId`（绑定关系由 `POST /cases` 创建时确定，删除走 `DELETE` 重建）。
-
-**响应**：`200 OK` → `Case`
-
----
-
-### 4.11 `DELETE /api/cases/{caseId}`
-
-**角色**：删除用例（前端 `CasesOfScenario.vue` ⋯ → 删除）  
-**权限**：作者本人或 admin
-
-**级联**：删除 case → 删除其下所有 data_set。
-
-**响应**：`204 No Content`
+> **整节退役注（甲类重写,2026-11-24）**:原 `GET /api/cases`、
+> `GET /api/cases/{caseId}`、`PATCH /api/cases/{caseId}`、
+> `DELETE /api/cases/{caseId}` 四节描述的端点**从未实现且不会实现**
+> —— Case 层已解散（§2.2 退役注）,路由注册表（`app/main.py` 的
+> `include_router` 清单）无 cases,`app/routers/` 下无 `cases.py`。
+>
+> 职责去向:
+> - 「跨场景用例总览」→ 场景列表 `GET /api/scenarios`（§4.1,按
+>   `q` / `system` / `module` 过滤）;
+> - 「用例详情 / 局部更新 / 删除」→ 场景整包读写 `GET·PUT·DELETE
+>   /api/scenarios/{scenarioId}`（§4.3–4.5,PUT 是整容器替换语义）;
+> - 「case 下的数据集」→ 场景下创建 `POST
+>   /api/scenarios/{scenarioId}/data-sets`（§4.14）与按 `scenarioId`
+>   过滤的列表（§4.12）。
 
 ---
 
 ### 4.12 `GET /api/data-sets`
 
-**角色**：数据集列表（前端 `CaseDataSetsList.vue`）
+**角色**：数据集列表（前端数据集列表页,编排器数据页同源）
 
 **Query 参数**：
 
 | 名称 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `caseId` | string | 否 | 过滤 `caseId`（`CaseDataSetsList.vue` 进入时必传） |
+| `scenarioId` | string | 否 | 按属主场景过滤（Case 层解散后无 `caseId` 键） |
 
-**响应**：`200 OK` → `DataSetSummary[]`（§2.4，含前 3 行 preview）
+**响应**：`200 OK` → `DataSetSummary[]`（§2.4，含前 3 行 preview）。可见性 =
+只读属主场景与所在项目的数据集（r3二.1:项目区同事的预览剥敏感列）。
 
 ---
 
@@ -548,10 +505,12 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ---
 
-### 4.14 `POST /api/cases/{caseId}/data-sets`
+### 4.14 `POST /api/scenarios/{scenarioId}/data-sets`
 
-**角色**：在 case 下创建数据集（前端 `CaseDataSetsList.vue` 「+ 新建数据集」）  
-**权限**：case 的作者或 admin
+**角色**：在**场景**下创建数据集（前端数据集列表 「+ 新建数据集」；Case 层
+解散后数据集直接挂场景,`app/routers/data_sets.py` 的 `create_router`,
+`app/main.py` 注册先于 `/api/scenarios/{scenarioId}`）  
+**权限**：场景属主（项目区另有共享写口径）
 
 **请求体**：`DataSetDraft`（§2.3 去掉 `datasetId` / `caseId` / `lastRunStatus` / `lastRunAt`）
 
@@ -559,7 +518,7 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 **错误**：
 
-- `404 case_not_found`
+- `404 scenario_not_found`
 - `422 inconsistent_row_columns`：`rows[]` 各行的 keys 必须一致
 
 ---
@@ -577,7 +536,7 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 ### 4.16 `DELETE /api/data-sets/{datasetId}`
 
 **角色**：删除数据集  
-**权限**：所属 case 的作者或 admin
+**权限**：属主场景的 owner（项目区另有共享写口径）
 
 **响应**：`204 No Content`
 
@@ -879,29 +838,33 @@ PLATE_TIMEOUT_SEC: float = 30.0
 
 ---
 
-## 7. 实现 TODO（按优先级）
+## 7. 实现落点（**已全部实现**,本节取代旧「实现 TODO」清单）
 
-1. ⏳ `app/schemas/scenario_composer.py` — Pydantic 模型（Scenario / Case / DataSet / RunEnv / RunRequest / PreviewPlateResponse）
-2. ⏳ `app/services/scenario_store.py` — 文件型 CRUD
-3. ⏳ `app/services/case_store.py` — 文件型 CRUD
-4. ⏳ `app/services/data_set_store.py` — 文件型 CRUD
-5. ⏳ `app/services/plate_client.py` — httpx 包装 Plate `/convert` / `/run`
-6. ⏳ `app/services/run_dispatcher.py` — 行级展开 + 调 Plate
-7. ⏳ `app/routers/scenarios.py` — §4.1–4.7
-8. ⏳ `app/routers/cases.py` — **追加** §4.8–4.11（在现有 `cases.py` 之外或合并均可）
-9. ⏳ `app/routers/data_sets.py` — §4.12–4.16
-10. ⏳ `app/routers/envs.py` — §4.17
-11. ⏳ `app/routers/runs.py` — §4.18
-12. ⏳ 在 `app/main.py` 注册以上 router
-13. ⏳ 单元测试 `tests/test_scenario_composer_api.py`
-14. ⏳ 端到端测试：UI 提交 scenario → 调 Plate → 启动执行 → executions 表可见
+| 模块 | 现状 |
+| --- | --- |
+| `app/schemas/scenario_composer.py` | ✅ Pydantic 模型（Scenario / DataSet / RunRequest / PreviewPlateResponse…;**无 Case / RunEnv**,§2.2/§2.5 退役注） |
+| `app/services/scenario_store.py` | ✅ PG 持久化 CRUD（文件型方案从未上线） |
+| `app/services/data_set_store.py` | ✅ PG 持久化 CRUD |
+| `app/services/plate_client.py` | ✅ httpx 包装 Plate `/convert`（含信封契约断言,J-1 收口）/ 契约取数 |
+| `app/services/run_dispatcher.py` | ✅ 行级展开 + convert + fan-out(单进程,§6/runbook 边界) |
+| `app/routers/scenarios.py` | ✅ §4.1–4.7 |
+| `app/routers/data_sets.py` | ✅ §4.12–4.16（创建走 `create_router` 挂 `/scenarios/{id}/data-sets`,§4.14） |
+| ~~`app/routers/cases.py` / `envs.py`~~ | ❌ **不存在,亦不计划** —— Case 层/执行环境链已退役（§2.2/§2.5/§4.8） |
+| `app/routers/runs.py` | ✅ §4.18 |
+| 路由注册 | ✅ `app/main.py` |
+| 测试 | ✅ `tests/test_scenario_composer_api.py` + `test_scenario_composer_plate_integration.py` + 全链 e2e |
+
+> 端点级对账守卫:`scripts/check_api_doc.py`（CI 步骤 + `test_api_contract.py`
+> 双守卫)——本文档 §3 表与 §4 标题中的端点逐条比对 `contract/openapi.json`,
+> 文档出现快照没有的端点即失败(known-issue §7 预留的「端点清单与实际
+> include_router 对账」形态)。
 
 ---
 
 ## 8. 安全 / 审计
 
 - 所有写操作记录到 `data/audit.jsonl`：`{ts, user_id, action, target_type, target_id, payload_hash}`
-- 删除走软删除标记 `deleted_at`,默认 7 天后清理（与现有 `cases` 行为一致）
+- 删除走软删除标记 `deleted_at`,默认 7 天后清理（存储层通用行为）
 - Plate 凭据：`PLATE_BASE_URL` 不携带 API key（一期 Plate 无鉴权）；如未来加 auth,从 `PLATE_API_KEY` 环境变量读取
 
 ---

@@ -1249,7 +1249,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1115"
+        "app/routers/scenarios.py:1117"
       ],
       "statuses": [
         409
@@ -1398,7 +1398,7 @@
         "app/routers/report_definitions.py:225",
         "app/routers/report_definitions.py:245",
         "app/routers/report_definitions.py:252",
-        "app/routers/scenarios.py:639",
+        "app/routers/scenarios.py:641",
         "app/routers/webhook_deliveries.py:54",
         "app/services/project_promotion.py:59",
         "app/services/project_promotion.py:69",
@@ -1433,7 +1433,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1364",
+        "app/routers/scenarios.py:1368",
         "app/routers/suites.py:1863"
       ],
       "statuses": [
@@ -1628,7 +1628,7 @@
       ],
       "sites": [
         "app/routers/scenarios.py:280",
-        "app/routers/scenarios.py:1440"
+        "app/routers/scenarios.py:1444"
       ],
       "statuses": [
         502
@@ -1650,7 +1650,7 @@
         "app/routers/endpoint_catalog.py:154",
         "app/routers/endpoint_catalog.py:311",
         "app/routers/scenarios.py:293",
-        "app/routers/scenarios.py:1452"
+        "app/routers/scenarios.py:1456"
       ],
       "statuses": [
         422,
@@ -1674,7 +1674,7 @@
         "app/routers/integration.py:872",
         "app/routers/runs.py:265",
         "app/routers/scenarios.py:285",
-        "app/routers/scenarios.py:1445",
+        "app/routers/scenarios.py:1449",
         "app/routers/strategy_catalog.py:58"
       ],
       "statuses": [
@@ -1812,7 +1812,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1050",
+        "app/routers/scenarios.py:1052",
         "app/routers/suites.py:1782"
       ],
       "statuses": [
@@ -2338,7 +2338,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:866"
+        "app/routers/scenarios.py:868"
       ],
       "statuses": [
         409
@@ -2712,7 +2712,7 @@
       "sites": [
         "app/routers/integration.py:728",
         "app/routers/report_definitions.py:230",
-        "app/routers/scenarios.py:1370",
+        "app/routers/scenarios.py:1374",
         "app/routers/suites.py:1869"
       ],
       "statuses": [

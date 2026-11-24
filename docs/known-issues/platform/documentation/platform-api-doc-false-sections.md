@@ -127,3 +127,32 @@ serviceBindings / stepTo / nRuns / parallel) lives entirely in
 2. **该文档的任何一轮修订**：请连甲类一并做端点级重写（否则又是半真）；
 3. **ADR-0003 补录旧退场**（见 `pre-plan-retirement-comments.md`）：两者是同一时期的历史叙述债，同一轮做最省；
 4. **文档被纳入 CI 校验**（例如端点清单与实际 `include_router` 对账）—— 那时本条应转为自动化门禁，而不是人工清单。
+
+---
+
+## 8. 修复记录(2026-11-24,I-04 端点级重写 + CI 守卫)
+
+按本记录 §0 的甲/乙分类完成,未做整文重写:
+
+- **甲类(端点级)**:§2.2 Case / §2.5 RunEnv 整节改退役注(职责去向指向
+  §2.6/§4.17);§1.3「与现有 cases.py 一致」引用清障;§0 架构图与关键约束
+  去 Case 化;§3 端点总览表重写(⏳ → ✅,cases 家族四行删除并以划线退役注
+  标明,数据集创建行改实路径 `/api/scenarios/{scenarioId}/data-sets`);
+  §4.8–4.11 四节合并为单一退役注(职责逐项去向);§4.12 过滤键
+  `caseId` → 实况 `scenarioId`;§4.14 整节按实路径重写;§4.16 权限口径
+  改属主场景;§7「实现 TODO」表改为「实现落点」实况表(显式标注
+  cases.py/envs.py 不存在亦不计划)。
+- **乙类(可独立修)**:§4.3 组件引用改现役文件(`views/CaseComposer.vue`
+  的 `loadScenario` + `composables/useRunAssembly.ts`;原引用的
+  `RunPanelHost.vue` 已不存在)。
+- **文档状态行**:头注「契约已定 · 后端实现 TODO」→「已实现」,并以
+  `contract/openapi.json` 快照为端点权威。
+- **§7 第 4 条兑现 —— CI 校验落地**:`scripts/check_api_doc.py`
+  (解析文档 §3 表行 + §4 标题的端点引用,与 openapi 快照比对,路径
+  参数占位符归一 —— 文档 camelCase vs FastAPI snake_case;退役语境
+  行不计)。三挂:plate-ci 显式步骤(REST 契约守卫后)+ pytest 双守卫
+  (`test_api_contract.py::test_platform_api_doc_consistent`)+
+  workflow paths 触发加 `docs/**`。红样验证:注入 `/api/cases` 行即退 1。
+- 本条转自动化门禁,状态 = **已修复(守卫在位)**;§7 重开条件 1–3 保持
+  人工警觉,条件 4 已兑现。§8(旧)安全/审计节的「与现有 cases 行为一致」
+  同批清障。

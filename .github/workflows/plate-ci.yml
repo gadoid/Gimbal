@@ -13,6 +13,7 @@ on:
       - "src/gimbal-platform/**"
       - "tests/**"
       - "scripts/**"
+      - "docs/**"
       - "pyproject.toml"
       - ".github/workflows/plate-ci.yml"
   push:
@@ -85,6 +86,12 @@ jobs:
       # 用例,此步骤给出一目了然的失败名)。重生:gen_api_contract.py gen。
       - name: REST 契约守卫 — openapi/错误码快照漂移比对
         run: python scripts/gen_api_contract.py check
+      # I-04 收口守卫(2026-11-24):平台 API 文档端点级对账 —— 文档不得
+      # 描述 openapi 快照中不存在的端点(known-issue
+      # platform-api-doc-false-sections 的自动化形态,其 §7 第 4 条预留)。
+      # backend pytest 里有同口径用例(test_platform_api_doc_consistent)。
+      - name: 平台 API 文档守卫 — 端点级对账
+        run: python scripts/check_api_doc.py
       - name: 入库闸门 — plate check(规则编号即错误码)
         run: |
           set -e
