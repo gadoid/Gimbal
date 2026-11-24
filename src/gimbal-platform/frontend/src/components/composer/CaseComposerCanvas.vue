@@ -635,6 +635,9 @@ import { parseJson } from '../../utils/json'
 const props = defineProps<{
   steps: StepView[]
   orchestration: Orchestration
+  /** 已保存场景的 scenarioId(01-04 查询上下文通道);未保存草稿
+   *  /composer/new 传 null —— 不带上下文,后端提示先保存再查。 */
+  scenarioId?: string | null
   /** 场景服务声明 dict(config.services)—— 别名下拉/双写消费(spec §1.4) */
   services?: Record<string, string>
   /** 跨路由跳转消费(spec §5.3 期望列头→断言卡):挂载后一次性切步+定位 */
@@ -1327,15 +1330,27 @@ const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
 
 /**
- * 查询上下文(§7.2/§6.1;2c 换源):服务 URL 走 authored services 声明;
+ * 查询上下文(§7.2/§6.1;2c 换源;01-04 地址解析移交后端):
+ * 地址不再走 authored config.services 内嵌声明(地址面已随 D2 环境
+ * 退役,新场景恒空 ⇒ 修前恒 service_url_required)—— 已保存场景带
+ * scenarioId + stepIndex,由后端按执行链同款解析(步骤服务 → 生效
+ * 身份 → 标签链 → 部署表);未保存草稿无稳定 scenarioId,不带上下文,
+ * 后端 query_context_required 的文案即「先保存再查」提示。
  * 查询别名 = headers auth 引用首命中(修订 11)▸ 注册表条目 × 个人池
  * 装载(§3.6)。后端凭证闸把 alias=None 视作「无凭证」(bearer 视图
  * 422 query_credential_required)。
  */
-function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
+function resolveQueryContext(step: StepView): {
+  scenarioId?: string
+  stepIndex: number
+  service?: string
+  queryAlias: string | null
+} {
   const svc = stepService(step)
   return {
-    serviceUrl: declaredUrlOf(svc) || undefined,
+    ...(props.scenarioId ? { scenarioId: props.scenarioId } : {}),
+    stepIndex: activeStepIdx.value,
+    ...(svc ? { service: svc } : {}),
     queryAlias: headerAuthTagOf(step) ?? queryAliasOf(svc),
   }
 }
@@ -1495,7 +1510,7 @@ async function vsLoad(g: ValueSourceGroup, refresh: boolean, params: Record<stri
     await ensureMyAccounts()
     const ctx = resolveQueryContext(step)
     const res = await fetchQueryViewRows(g.view, {
-      refresh, serviceUrl: ctx.serviceUrl, queryAlias: ctx.queryAlias,
+      refresh, ...ctx,
       ...(params && Object.keys(params).length ? { params } : {}),
     })
     const label = firstRowKeyLabel(res.rows[0] ?? {})
@@ -2124,11 +2139,9 @@ const refWarning = computed<{ text: string; level: 'warn' | 'error' } | null>(()
   return null
 })
 
-/** 当前引用键的已声明 URL(未声明 → 空,模板给占位提示) */
-const declaredUrlOf = (svc: string) => (props.services ?? {})[svc] || ''
-
 /** 地址提示行(M2a S6):声明值 > 「由执行环境的部署地址给出」。
- *  只展示,不写 payload(写了就成快照,部署表的动态性失效)。 */
+ *  只展示,不写 payload(写了就成快照,部署表的动态性失效)。
+ *  (01-04 后查询地址已不再消费声明值 —— 本提示仅供编辑期参考。) */
 const svcUrlHint = computed(() => {
   const cur = stepService(currentStep.value)
   const declared = (props.services ?? {})[cur]

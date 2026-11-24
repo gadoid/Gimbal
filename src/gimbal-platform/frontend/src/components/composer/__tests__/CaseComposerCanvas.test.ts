@@ -361,6 +361,8 @@ let activePinia: ReturnType<typeof createPinia>
  *  (场景服务声明 dict,spec §1.4 服务引用双显用)。 */
 type CanvasMountOpts = {
   steps: StepView[]
+  /** 01-04:已保存场景的 scenarioId(上下文通道);不传 = 未保存草稿 */
+  scenarioId?: string
   services?: Record<string, string>
   /** 三级收敛:存储范围(config.service_scope)—— 实例引用 */
   serviceScope?: ServiceScopeRef[]
@@ -401,6 +403,7 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
       return () => h(CaseComposerCanvas, {
         steps: steps,
         orchestration: orch.value,
+        scenarioId: opts.scenarioId,
         services: services,
         serviceScope: opts.serviceScope,
         plateRefOf: opts.plateRefOf,
@@ -2430,7 +2433,9 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       },
       request: { kind: 'request', body: {} },
     })]
-    // services 声明 → resolveQueryContext 的 serviceUrl 源(R3 钉取数上下文)
+    // 01-04:resolveQueryContext 不再消费 services 内嵌地址(地址面已随
+    // D2 退役)—— 钉的是上下文通道形状(stepIndex + service + queryAlias;
+    // mountCanvas 未传 scenarioId → 不带该键)
     // 2c 换源:queryAlias 候选 = 注册表条目 × 本人池装载(§3.6)——
     // registry:query-qa(base fin,default-ref);池有默认账户 → 装载命中
     const { listAllAliases } = await import('@/api/service-aliases')
@@ -2460,7 +2465,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // + 非刷新 — alias=null 会被后端凭证闸 422(query_credential_required),
     // 此钉即凭证链防回归
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
-      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'query-qa',
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'query-qa',
     })
     await w.find('tr.vsp-row').trigger('click')      // 选第一行
     expect(steps[0].request!.body).toMatchObject({ a: '1', b: '2' })   // 组内扇出全落
@@ -2496,7 +2501,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // beforeEach draft 无 config.users → queryAlias 诚实 null
     // (bearer 视图将 422 提示配置,§7.5 降级态)
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v2', {
-      refresh: false, serviceUrl: undefined, queryAlias: null,
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: null,
     })
     await w.find('tr.vsp-row').trigger('click')      // 选行 → 扇出
     const body = steps[0].request!.body as {
@@ -2554,7 +2559,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await flushPromises()
     // 装载命中 pangyan;backup 池里没装 → 不取
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
-      refresh: false, serviceUrl: undefined, queryAlias: 'pangyan',
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'pangyan',
     })
     w.unmount()
   })
@@ -2593,7 +2598,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await w.find('.vs-query-btn').trigger('click')
     await flushPromises()
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
-      refresh: false, serviceUrl: undefined, queryAlias: null,
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: null,
     })
     w.unmount()
   })
@@ -2639,7 +2644,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await w.find('.vs-query-btn').trigger('click')       // step1(fin)查
     await flushPromises()
     expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'finUser',
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'finUser',
     })
     await w.findAll('.step-row')[1].trigger('click')     // 切到 step2(sysY)
     await flushPromises()
@@ -2647,7 +2652,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await flushPromises()
     // yUser 池里没装 → null(不回退他侧条目)
     expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, serviceUrl: 'http://y.example', queryAlias: null,
+      refresh: false, stepIndex: 1, service: 'sysY', queryAlias: null,
     })
     w.unmount()
   })
@@ -2687,7 +2692,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await w.find('.vs-query-btn').trigger('click')
     await flushPromises()
     expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'userB',
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'userB',
     })
     w.unmount()
   })
@@ -2726,7 +2731,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await w.find('.vs-query-btn').trigger('click')
     await flushPromises()
     expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'ghost',
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'ghost',
     })
     w.unmount()
   })
@@ -2769,6 +2774,42 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     w.unmount()
   })
 
+  it('01-04 上下文通道:已保存场景带 scenarioId + stepIndex + service;未保存不带', async () => {
+    // 地址解析移交后端 —— 已保存场景(mountCanvas 传 scenarioId)时
+    // fetchQueryViewRows 收到上下文三元组;未保存(不传)则不带该键,
+    // 后端 query_context_required 文案提示先保存再查。
+    const steps = [mkStep({
+      call: {
+        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-vs' },
+      },
+      request: { kind: 'request', body: {} },
+    })]
+    const saved = mountCanvas({ steps, scenarioId: 'sc-ctx-1' })
+    await flushPromises()
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+      view: 'v', rows: [], truncated: false,
+      fetched_at: 'T', cached: false, stale: false,
+    })
+    await saved.w.find('.vs-query-btn').trigger('click')
+    await flushPromises()
+    expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
+      refresh: false, scenarioId: 'sc-ctx-1', stepIndex: 0,
+      service: 'fin', queryAlias: null,
+    })
+    saved.w.unmount()
+
+    const draft = mountCanvas(steps)            // 未保存:无 scenarioId 键
+    await flushPromises()
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockClear()
+    await draft.w.find('.vs-query-btn').trigger('click')
+    await flushPromises()
+    const call = (fetchQueryViewRows as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call?.[1]).not.toHaveProperty('scenarioId')
+    expect(call?.[1]).toMatchObject({ stepIndex: 0, service: 'fin' })
+    draft.w.unmount()
+  })
+
   it('参数确认携 params 查询;单对象行点选点列扇出(§13.4)', async () => {
     const steps = [mkStep({
       call: {
@@ -2798,7 +2839,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await w.find('.vsp-param-query').trigger('click')      // 确认 → 携参拉行集
     await flushPromises()
     expect(fetchQueryViewRows).toHaveBeenCalledWith('customer_part', {
-      refresh: false, serviceUrl: undefined, queryAlias: null,
+      refresh: false, stepIndex: 0, service: 'fin', queryAlias: null,
       params: { customer_id: 'C1' },
     })
     // 单对象行点选 → 点列扇出(扁平键经 onVsSelect 既有通路直写 body)

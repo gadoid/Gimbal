@@ -173,6 +173,7 @@
               v-model:steps="definition.steps"
               v-model:orchestration="orchestration"
               v-model:field-states="uiFieldStates"
+              :scenario-id="savedScenarioId"
               :plate-ref-of="plateRefOf"
               :service-kinds="serviceKinds"
               :auth-drafts="authDrafts"
@@ -479,6 +480,9 @@ let registryHydrated = true
 // services/users/vars 合并;resource 取各系统并集。仅首次、且
 // config/resource 未被编辑过时生效 — 详见 useSystemPrefill 契约。
 const isNewScenario = computed(() => !scenarioId.value || scenarioId.value === 'new')
+/** 01-04 查询上下文通道:已保存场景才有稳定 scenarioId(新建态不带,
+ * 后端 query_context_required 文案提示先保存再查)。 */
+const savedScenarioId = computed(() => (isNewScenario.value ? null : scenarioId.value ?? null))
 // D6:预填种下的变量名传给 lintDraft 豁免(未接线素材 ≠ 用户手写死数据)
 const { prefilledVars } = useSystemPrefill(definition, isNewScenario)
 

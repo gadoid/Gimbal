@@ -1,23 +1,29 @@
 """query-views rows 路由 —— 组合期取数解释器入口(2026-09-07 spec §4.1)。
 
-CurrentUser 鉴权(查询身份是场景执行账号,不是平台用户自己);
-service_url/query_alias 由前端按 authored config.services /
-config.users 首键(2026-09-09 裁定:查询身份 = 执行身份)求值后传入
-(组合上下文在调用方;后端无集中 resolver,与 _apply_services 同语义)。
+CurrentUser 鉴权(查询身份是场景执行账号,不是平台用户自己)。
+
+地址来源(01-04 修复批,2026-11-24)双通道二选一:
+* **上下文通道**(推荐,前端默认):``scenarioId + stepIndex`` →
+  ``query_context.resolve_query_context`` 服务端按执行链同款解析
+  (步骤服务 → 生效身份 → 标签链 → 部署表);旧前提「service_url 由
+  前端按 authored config.services 求值传入」随 D2 环境退役失效
+  (新场景 config.services 恒空 ⇒ 恒 service_url_required);
+* **显式覆盖通道**:`service_url` 直传保留(调试/私有 SUT 直连),
+  给定时跳过上下文解析。两通道都缺 → ``query_context_required``。
 """
 from __future__ import annotations
 
 import json
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import AuthSession
 from app.core.db import get_db
 from app.core.deps import CurrentUser
-from app.services import query_view_runner
+from app.services import query_context, query_view_runner
 from app.services.run_prepare import _materialize_identities, _resolve_identities
 
 router = APIRouter(prefix="/query-views", tags=["query-views"])
@@ -65,7 +71,34 @@ async def get_rows(
     query_alias: str | None = None,
     service: str | None = None,
     params: str = "",
+    # 01-04 上下文通道:已保存场景 + 步骤位(与 service_url 显式覆盖
+    # 二选一;都不给 → query_context_required)
+    scenario_id: Annotated[str | None, Query(alias="scenarioId")] = None,
+    step_index: Annotated[int | None, Query(alias="stepIndex", ge=0)] = None,
 ) -> dict:
+    # ── 地址来源(01-04):显式覆盖优先,上下文解析兜底,双缺拒绝 ──
+    ctx_owner_id, ctx_service = user.id, service
+    if not service_url:
+        if scenario_id is None or step_index is None:
+            raise HTTPException(status_code=422, detail={
+                "code": "query_context_required",
+                "msg": "缺少查询上下文:请传 scenarioId + stepIndex"
+                       "(前端已保存场景),或显式 service_url(直连覆盖)"})
+        try:
+            ctx = await query_context.resolve_query_context(
+                db, user=user, scenario_id=scenario_id,
+                step_index=step_index)
+        except query_context.QueryContextError as e:
+            raise HTTPException(
+                status_code=e.status,
+                detail={"code": e.code, "msg": e.message}) from e
+        service_url = ctx.service_url
+        ctx_owner_id = ctx.owner_id
+        ctx_service = ctx.service
+        # 查询身份缺省 = 步骤生效别名(执行视角);显式 query_alias 优先
+        # (headers ${auth.<tag>} 引用就是该步执行身份的声明,前端解析)
+        if query_alias is None:
+            query_alias = ctx.query_alias
     click: dict[str, Any] | None = None
     if params:
         try:
@@ -90,7 +123,8 @@ async def get_rows(
     try:
         r = await query_view_runner.fetch_rows(
             name, refresh=refresh, service_url=service_url,
-            owner_id=user.id, query_alias=query_alias, service=service,
+            owner_id=ctx_owner_id, query_alias=query_alias,
+            service=ctx_service,
             load_credential=_loader(db), click_params=click)
     except query_view_runner.QueryViewError as e:
         raise HTTPException(status_code=e.status,

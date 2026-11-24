@@ -41,6 +41,11 @@ export async function fetchQueryViewRows(
   name: string,
   opts: {
     refresh?: boolean
+    /** 01-04 上下文通道(推荐):已保存场景 + 步骤位 → 后端按执行链
+     * 同款解析地址(身份/标签链/部署表);与 serviceUrl 显式覆盖二选一。 */
+    scenarioId?: string | null
+    stepIndex?: number
+    /** 显式覆盖通道(调试/私有 SUT 直连);给定时后端跳过上下文解析 */
     serviceUrl?: string
     queryAlias?: string | null
     /** 调用步骤的服务名(同源兜底:与视图声明的 service 不符 → 后端 422) */
@@ -52,6 +57,8 @@ export async function fetchQueryViewRows(
   const { data } = await http.get(`/query-views/${encodeURIComponent(name)}/rows`, {
     params: {
       refresh: opts.refresh ? 1 : 0,
+      ...(opts.scenarioId ? { scenarioId: opts.scenarioId } : {}),
+      ...(opts.stepIndex !== undefined ? { stepIndex: opts.stepIndex } : {}),
       ...(opts.serviceUrl ? { service_url: opts.serviceUrl } : {}),
       ...(opts.queryAlias ? { query_alias: opts.queryAlias } : {}),
       ...(opts.service ? { service: opts.service } : {}),

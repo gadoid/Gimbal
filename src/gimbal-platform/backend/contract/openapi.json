@@ -19690,6 +19690,39 @@
               "title": "Params",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "scenarioId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scenarioid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stepIndex",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stepindex"
+            }
           }
         ],
         "responses": {
