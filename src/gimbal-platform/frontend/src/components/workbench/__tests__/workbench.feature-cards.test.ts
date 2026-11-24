@@ -10,12 +10,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import WorkbenchView from '@/views/WorkbenchView.vue'
+import { workbenchRegistry } from '@/components/workbench/registry'
 import { useAuthStore } from '@/stores/auth'
 import { resetUserPreferencesForTest } from '@/composables/useUserPreferences'
 import * as composerApi from '@/api/scenario-composer'
 import * as adaptationsApi from '@/api/adaptations'
 import * as authSessionsApi from '@/api/auth_sessions'
 import * as catalogServices from '@/utils/catalog-services'
+
+// 同 workbench.assembly:本文件同挂满板 WorkbenchView,CI 慢机实证
+// (f25aacc8)同类超时面 —— 预热消主因,整测档位同步拉开防再红。
+vi.setConfig({ testTimeout: 15000 })
 
 vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/api/executions', () => ({
@@ -85,8 +90,13 @@ const scen = (id: string, schemeCount: number, visibility = 'private') => ({
   steps: [], config: { vars: {} }, tags: [], starred: false, visibility, schemeCount,
 }) as never
 
-beforeEach(() => {
+beforeEach(async () => {
   setActivePinia(createPinia())
+  // 预热注册表全部异步卡 loader:冷 fork 下动态 import 偶发超 waitCard
+  // 5s 窗(f25aacc8 CI 在 assembly 面实测引爆,本文件同挂 WorkbenchView
+  // 同类隐患)—— 同 fork 模块缓存命中后挂载即时(与 WorkbenchView
+  // .test.ts 同法)。
+  await Promise.all(workbenchRegistry.map((d) => d.component()))
   localStorage.clear()
   // 布局偏好实例是模块作用域单例:不清零会带着上一条用例的 order 进来
   resetUserPreferencesForTest()

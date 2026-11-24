@@ -15,6 +15,12 @@ import * as scenarioApi from '@/api/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
 import { resetUserPreferencesForTest } from '@/composables/useUserPreferences'
 
+// CI 慢机(f25aacc8/e2819115 两轮 push 实证,本地 4 连全绿测不出):
+// 满板挂载 + 市场交互在默认 5s testTimeout 内跑不完 → TestTimeoutError。
+// 预热(见 beforeEach)已消动态 import 主因,这里再把「整测超时」档位
+// 拉开 —— 只作用本文件(forks 池每文件独立进程,不外溢)。
+vi.setConfig({ testTimeout: 15000 })
+
 vi.mock('@/api/constants', () => ({
   list: vi.fn().mockResolvedValue([]),
 }))
@@ -60,8 +66,13 @@ function mountPage() {
   })
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   setActivePinia(createPinia())
+  // 预热注册表全部异步卡 loader(f25aacc8 CI 实测:冷 fork 下动态
+  // import 偶发超 waitCards 5s 窗,本地 4 连全绿测不出)—— 同 fork 模块
+  // 缓存命中后挂载即时,断言不再依赖取模块往返运气(与 WorkbenchView
+  // .test.ts 同法,本文件是它的工作台组装全量面)。
+  await Promise.all(workbenchRegistry.map((d) => d.component()))
   localStorage.clear()
   // 布局偏好实例是模块作用域单例:不清零会带着上一条用例的 order 进来
   resetUserPreferencesForTest()
