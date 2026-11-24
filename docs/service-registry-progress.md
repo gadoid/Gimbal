@@ -2714,6 +2714,45 @@ WorkbenchView 满载偶发超时一并根治:预热异步卡 loader 模块缓存
 验证:typecheck 0 错 / vitest 174 文件 4 连 1542 过+1 跳 /
 build 绿;dist 已随同源重建换入。
 
+### 核心功能收尾轮(2026-11-24,🟢 分支 fix/core-wrapup)
+
+用户拍板四候选全做;f25aacc8/e2819115 两轮 push 红是 CI 慢机新
+环境面(workbench.assembly 超默认 5s 整测超时,非原批断点回归),
+一并修:
+
+- **CI 慢机超时修复**:assembly + feature-cards 两测试文件补注册表
+  全量 loader 预热(`Promise.all(workbenchRegistry.map(d =>
+  d.component()))`,与 WorkbenchView.test.ts 同法)+ 文件级
+  `vi.setConfig({ testTimeout: 15000 })`(forks 池每文件独立进程,
+  不外溢)。
+- **facets-scope-mismatch 修复**(冒烟偶得的 P2):mine 桶 facets 改发
+  `scope='mine'`;API 类型面收窄到端点词表 `mine|all`(正是类型面
+  留着 `private` 才让误用编译期不响);前后端双钉(前端钉改口径,
+  后端新增 `test_facets_scope_mine`)。
+- **auth 限流 + CI 安全门**(login-rate-limit-gap 提前收口,用户裁定):
+  `core/rate_limit.py` 进程内双键滑动窗(login/register IP+账号,
+  refresh 仅 IP;429 数值码 **4291** + Retry-After;拒绝不记窗;
+  9 档 settings 可调,`AUTH_RATE_LIMIT_ENABLED=False` 旁路);限流先于
+  bcrypt;conftest 全套件旁路 + 专测 8 用例;契约快照重生(4291 进
+  error-codes.json / errorCodes.ts)。CI:gate 加 `pip-audit` 门;
+  新 `dast` job(ZAP baseline,workflow_dispatch 手动,首次 dispatch
+  即冒烟 —— 本机无 gh 凭证)。
+- **pip-audit 首跑发现**(OSV,21 条/3 包):certifi PYSEC-2026-4320
+  与 opentelemetry-api CVE-2026-126360 两个运行时补丁位随 lock 重生
+  提钉(requirements.in 加下界,uv pip compile,diff 仅两钉);
+  datamodel-code-generator 0.28.5 的 9 条 PYSEC(M2 生成器钉死,
+  fix 跨大版本 0.60~0.64)另立登记 datamodel-codegen-pysec-tail.md
+  + CI 门显式 `--ignore-vuln` 白名单指回。
+- **登记表三 P2 收口**:truncated-dead-field(§3①:`truncated` 移出
+  CacheEntry,行集载荷改 `(rows, truncated)` 元组,共享 TTL/LRU/回退
+  语义不变,`RowsResult` 与 API 面形状不动);warn-once-stale-fallback
+  -wording(后果短语由调用方传,回退路径报「旧快照继续服务,非降级」,
+  钉子加固:回退告警不得含「调用侧降级」);pre-plan-retirement
+  -comments(§4-2 最小成本步:ADR-0003 表头加覆盖边界注记「无行 ≠
+  从未退场」;五要素补录仍独立)。
+- **A4 再注**:两轮 push 红归因 CI 慢机面并已修;销条条件不变
+  (本分支合入后的下一轮 push 全绿,或一次 dispatch)。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
