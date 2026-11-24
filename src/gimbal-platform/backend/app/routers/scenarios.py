@@ -274,6 +274,13 @@ async def preview_plate(
             scenario_owner_id=user.id,   # 草稿:执行人即作者
             # S2.1:草稿若对应已存场景,项目默认环境按该行取
             scenario_id=(scenario_dict.get("meta") or {}).get("scenarioId"))
+    except plate_client.PlateInvalidResponseError as e:
+        # 200-ok 坏信封(convert 回包缺 converted)= plate 侧契约违约,
+        # 专码与 endpoint_catalog 的 plate_invalid_envelope 对齐(J-1)。
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "plate_invalid_response", "message": e.message},
+        )
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(
             status_code=502,
@@ -1426,6 +1433,13 @@ async def export_scenario(
             scenario_owner_id=row.owner_id,
             scenario_id=row.scenario_id,
             project_id=row.project_id,
+        )
+    except plate_client.PlateInvalidResponseError as e:
+        # 200-ok 坏信封 = plate 侧契约违约,专码对齐 preview-plate
+        # (J-1;子类先于基类捕获)。
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "plate_invalid_response", "message": e.message},
         )
     except plate_client.PlateUnavailableError as e:
         raise HTTPException(

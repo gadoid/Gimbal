@@ -40,7 +40,7 @@ class PlateMock:
     def __init__(self) -> None:
         self.convert_calls: list[dict] = []
         self.run_calls: list[dict] = []  # D2 run bodies (stubbed upstream)
-        self.behaviour: str = "ok"  # ok | echo | 4xx | 5xx | unavailable
+        self.behaviour: str = "ok"  # ok | echo | 4xx | 5xx | unavailable | convert_no_converted
         # carry 预解析面(T9):GET /api/service 目录 + /api/endpoint/{id}/full。
         # 空目录默认 → derive_base 全失败 → carry 全跳过:
         # 既有等价测试行为不变(兼容关键),carry 用例自行注入服务。
@@ -158,6 +158,12 @@ class PlateMock:
                     return httpx.Response(500, text="plate crashed")
                 if self.behaviour == "unavailable":
                     raise httpx.ConnectError("connection refused", request=request)
+                if self.behaviour == "convert_no_converted":
+                    # J-1 半畸形信封:200+ok 但 data 缺 converted ——
+                    # plate_client 单点契约断言的靶形状(J-1 收口测试面)。
+                    return httpx.Response(
+                        200, json={"ok": True, "dim": "scenario",
+                                   "data": {"consumer": "gimbal"}})
             if path.endswith("/api/scenario/action/run"):
                 self.run_calls.append(json.loads(request.content))
                 # D2 stays stubbed upstream; mirror its future shape.
@@ -441,6 +447,26 @@ async def test_preview_plate_connect_error_returns_502(
     )
     assert r.status_code == 502
     assert r.json()["detail"]["code"] == "plate_unavailable"
+
+
+async def test_preview_plate_bad_convert_envelope_returns_502_invalid_response(
+    client: AsyncClient, plate_mock: PlateMock
+) -> None:
+    """J-1 收口:200+ok 但缺 converted = plate 侧契约违约,信令面在
+    plate 边界即断(专码 502 plate_invalid_response,对齐 endpoint_catalog
+    的 plate_invalid_envelope 先例)—— 半畸形回包不再以「空场景」流向
+    下游物化/引擎。"""
+    plate_mock.behaviour = "convert_no_converted"
+    headers = await _register_and_login(client)
+    r = await client.post(
+        "/api/scenarios/preview-plate",
+        headers=headers,
+        json=_draft(),
+    )
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert detail["code"] == "plate_invalid_response"
+    assert "converted" in detail["message"]
 
 
 # ── run dispatcher ────────────────────────────────────────────────

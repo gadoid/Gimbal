@@ -169,3 +169,48 @@ async def test_breaker_opens_after_consecutive_unavailable(
     # M6 行级 JSONL 停写:熔断的权威落点 = execution_rows 行终态
     # (plate_unavailable);JSONL 不再断言行级记录。calls==3 已证开路后
     # 不再打 plate,行级终态由 _wait_terminal + 行状态覆盖。
+
+
+async def test_convert_contract_violation_lands_as_plate_unavailable(
+    client, monkeypatch
+):
+    """J-1 收口:200-ok 坏信封(converted 缺失)在 plate 边界即断 ——
+    PlateInvalidResponseError(PlateUnavailableError 子类)走 dispatcher
+    既有 except 分支,行终态 plate_unavailable(与「plate 不可达」同族
+    = plate 侧故障),不再以空场景流入物化/引擎。"""
+    from sqlalchemy import select
+
+    from app.core import db as db_module
+    from app.models.execution import ExecutionRow
+    from app.services import plate_client as pc
+    from tests import _fake_engine as fe  # B6③:假引擎缝(legacy 链退役)
+
+    async def bad_convert(scenario):
+        raise pc.PlateInvalidResponseError(
+            "plate_invalid_response: convert 回包 ok 但 data.converted "
+            "缺失或非对象")
+
+    async def noop_launch(*a, **k):
+        from tests.helpers import launch_ok
+        return launch_ok()
+
+    monkeypatch.setattr(fe, "launch", noop_launch)
+    monkeypatch.setattr(pc, "convert", bad_convert)
+
+    headers = await register_and_login(client)
+    await client.post("/api/scenarios", headers=headers,
+                      json=make_draft("sc-plate", vars_map={"customer_id": "1"}))
+    r = await client.post("/api/runs", headers=headers, json={
+        "scenarioId": "sc-plate", "dataSetIds": [],
+        "runOptions": {"parallel": 1}})
+    assert r.status_code == 201, r.text
+    eid = r.json()["executionId"]
+    await _wait_terminal(eid)
+
+    async with db_module.SessionLocal() as session:
+        rows = (await session.execute(
+            select(ExecutionRow).where(ExecutionRow.execution_id == eid)
+        )).scalars().all()
+    assert rows, "行级台账应已落库"
+    assert all(row.status == "plate_unavailable" for row in rows), \
+        [row.status for row in rows]

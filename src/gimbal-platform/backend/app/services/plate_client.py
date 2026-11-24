@@ -89,6 +89,24 @@ class PlateRejectedError(Exception):
         self.status_code = status_code
 
 
+class PlateInvalidResponseError(PlateUnavailableError):
+    """Plate answered 2xx + ``ok`` but the envelope violates the response
+    contract(``data`` / ``data.converted`` 缺失或非对象)。
+
+    **子类化** :class:`PlateUnavailableError` 而非 PlateRejectedError:
+    200-ok 坏信封是 **plate 侧故障**(网关回了垃圾),不是对客户端payload
+    的裁决 —— 归 502 族(对齐 endpoint_catalog 的 ``plate_invalid_envelope``
+    先例,test_endpoint_catalog_proxy.py 钉);子类化让全部既有 catch 位
+    (dispatcher 行 → ``plate_unavailable``、integration → channel、
+    adhoc/import → 502 族)零改动继承同一归类,信令面(preview / export
+    check)按子类型显式给 ``plate_invalid_response`` 专码。
+
+    审计挂账 J-1 的单点收口(static-constraint-audit-20261123.md):此前
+    半畸形回包经 ``data.get("converted") or {}`` 全链静默空,以「空场景」
+    流到引擎才炸。
+    """
+
+
 # ─── singleton client ─────────────────────────────────────────────
 _client: httpx.AsyncClient | None = None
 
@@ -212,7 +230,20 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
             message=str(envelope.get("error") or envelope),
             errors=[],
         )
-    return envelope.get("data") or {}
+    # 信封契约断言(J-1 单点收口,2026-11-24):ok=true 但 data /
+    # data.converted 缺失或非对象 = plate 侧响应契约违约 —— 此前
+    # `.get("converted") or {}` 全链静默空,半畸形回包以「空场景」流到
+    # 物化/引擎才炸;在此单点断言,全部调用面经异常分类统一继承。
+    data = envelope.get("data")
+    converted = data.get("converted") if isinstance(data, dict) else None
+    if not isinstance(converted, dict):
+        raise PlateInvalidResponseError(
+            "plate_invalid_response: convert 回包 ok 但 data.converted "
+            f"缺失或非对象(data keys="
+            f"{sorted(data) if isinstance(data, dict) else type(data).__name__}, "
+            f"body={resp.text[:120]!r})"
+        )
+    return data
 
 
 # ─── /full 契约取数(进程级缓存)────────────────────────────────────

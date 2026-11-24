@@ -93,7 +93,7 @@ report_definitions)均 fail-fast(413/422)。
 
 | # | 项 | 说明 |
 |---|---|---|
-| J-1 | plate convert 回包 ok 但缺 converted → 全链 `.get or {}` 静默空,半畸形响应以空场景走到引擎才炸;PlateMock 恒回灌有效形状 = 测试盲区 | 修复方向:plate_client.convert 信封断言(converted 必须 dict,违约显式报错并归类)—— 涉及异常分类学,不随审计批顺手改 |
+| J-1 | ~~plate convert 回包 ok 但缺 converted → 全链 `.get or {}` 静默空~~ **✅ 2026-11-24 已落**:plate_client.convert 信封契约断言(`PlateInvalidResponseError(PlateUnavailableError)` 子类,502 族 = endpoint_catalog `plate_invalid_envelope` 之姊妹;8 调用面零改动继承分类,preview/export 信令面给专码 `plate_invalid_response`);PlateMock 新 behaviour `convert_no_converted` 补测试盲区(三形态单测 + preview 专码 + dispatcher 行终态) | 修复方向照原案落:单点信封断言 + 异常分类(见 test_plate_client_convert_contract.py / test_preview_plate_bad_convert_envelope_returns_502_invalid_response) |
 | J-2 | 队列旧配方缺键语义缺省:升级前入队的配方升级后跑,skip_carry 缺键=False = **多做 carry 注入**(对被测系统多打副作用);兼容取向「多做事」而非拒绝,无版本标记 | 与配方版本化一并立项(若立);当前窗口 = 单次升级瞬态 |
 | J-3 | share_refs 表无 ORM 模型、裸 SQL 读写,其 CHECK/unique 仅活在迁移(0013/0049)—— 模型侧零表达 | E 区挂账(退役路径基建,动它须先有消费者) |
 

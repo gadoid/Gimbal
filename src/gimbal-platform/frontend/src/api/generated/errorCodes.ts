@@ -124,6 +124,7 @@ export const ERROR_CODES = {
   "password_change_required": true,
   "password_too_short_for_masking": true,
   "plate_invalid_envelope": true,
+  "plate_invalid_response": true,
   "plate_rejected": true,
   "plate_unavailable": true,
   "platform_template_public": true,
