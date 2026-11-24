@@ -626,7 +626,10 @@ class ScenarioRunner:
         # 4.5 收集单元输出（finalize 前快照；调度器喂下游用）
         try:
             outputs = dict(scenario_ctx.channels.variables_snapshot())
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — 快照失败降级可见(outputs 置空)
+            logger.warning(
+                "[ScenarioRunner] 单元输出快照失败,outputs 置空(下游拿到空输出): {}",
+                e)
             outputs = {}
 
         # 4.7 teardown 括号（评审 #9）：必达逆序执行——失败不改变主判定,

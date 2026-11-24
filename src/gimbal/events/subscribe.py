@@ -137,6 +137,7 @@ class AttachedSubscriptions:
             try:
                 self._bus.unsubscribe(sid)
             except Exception:  # noqa: BLE001
+                # 刻意静默:run 收口撤销订阅 best-effort,单条失败不中断清理
                 pass
         self._subscription_ids.clear()
         if self._loguru_sink_ids:
@@ -145,12 +146,14 @@ class AttachedSubscriptions:
                 try:
                     _root.remove(sid)
                 except Exception:  # noqa: BLE001
+                    # 刻意静默:sink 已不存在等瞬态,清理继续
                     pass
             self._loguru_sink_ids.clear()
         for fh in self._files:
             try:
                 fh.close()
             except Exception:  # noqa: BLE001
+                # 刻意静默:文件句柄关闭失败交由 GC 兜底,清理继续
                 pass
         self._files.clear()
 

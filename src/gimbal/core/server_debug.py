@@ -481,6 +481,8 @@ def _event_dict(event: Any) -> dict:
     try:
         if hasattr(event, "model_dump"):
             return event.model_dump(mode="json")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001 — 序列化失败降级可见(仅剩 event_type)
+        logger.warning(
+            "[Server] 事件序列化失败,降级为仅 event_type 字典(SSE 侧字段缺失): {}",
+            e)
     return {"event_type": getattr(event, "event_type", type(event).__name__)}

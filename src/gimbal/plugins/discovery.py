@@ -42,7 +42,9 @@ def discover_entry_points(group: Optional[str] = None) -> list[tuple[str, str]]:
     for ep in group_eps:
         try:
             entry = f"{ep.module}:{ep.attr}" if ep.attr else ep.value
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — 跳过降级可见
+            logger.warning(
+                "[Discovery] entry point 条目解析失败,该插件跳过: %s", e)
             continue
         out.append((ep.name, entry))
 

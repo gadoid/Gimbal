@@ -6,7 +6,10 @@ from gimbal.core.runner import RunResult
 from gimbal.events.types import (
     FrameworkEvent, StepFailedEvent, ScenarioEndEvent,
 )
+from gimbal.log import get_logger
 from gimbal.reporter.base import ReportArtifact, ReporterBase
+
+logger = get_logger(__name__)
 
 
 class IMNotifier(ReporterBase):
@@ -68,8 +71,9 @@ class IMNotifier(ReporterBase):
             elif isinstance(event, ScenarioEndEvent):
                 if event.status in ("failed", "error") and self._send_immediately:
                     self._post(f"[WARN] Scenario {event.scenario_id} {event.status}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[im_notifier] 失败事件推送失败,IM 未收到该失败通知: {}", e)
 
     def finalize(self, run_result: RunResult, ctx) -> ReportArtifact:
         """构造 PASS/FAIL 汇总 Markdown 并推送，返回 content-only 的 ReportArtifact（含失败步骤计数）。"""
@@ -104,8 +108,10 @@ Total: {run_result.total}  Passed: {run_result.passed}  Failed: {run_result.fail
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 _ = resp.read()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[im_notifier] webhook 发送失败,消息未送达(channel={}): {}",
+                self._channel, e)
 
     def _build_payload(self, text: str) -> dict:
         """根据 _channel 构造钉钉/Slack/飞书各自的 webhook payload，未识别 channel 回退为 ``{"text": text}``。"""

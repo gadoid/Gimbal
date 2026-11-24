@@ -448,8 +448,11 @@ class PlanScheduler:
             try:
                 result.run_index = run_no
                 result.retries_used = retries_used
-            except Exception:  # noqa: BLE001  # 非 ScenarioRunResult 的替身结果
-                pass
+            except Exception as e:  # noqa: BLE001  # 非 ScenarioRunResult 的替身结果,降级可见
+                logger.warning(
+                    "[PlanScheduler] 单元结果标注 run_index/retries 失败"
+                    "(attempts 简况缺失): unit_id={} : {}",
+                    getattr(unit, "id", "?"), e)
             raw_results.append(result)
             if self._result_failed(result):
                 break   # 稳定性语义：某次 run 失败即停止后续 n_runs
@@ -603,6 +606,7 @@ class PlanScheduler:
         try:
             return bool(stop_requested())
         except Exception:  # noqa: BLE001
+            # 刻意静默:信号源读取失败按未置位处理(见 docstring),不让调度中断
             return False
 
     @staticmethod
@@ -640,6 +644,8 @@ class PlanScheduler:
             })
         try:
             base.attempts = attempts
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001 — 标注失败降级可见
+            logger.warning(
+                "[PlanScheduler] 结果标注 attempts 简况失败(聚合缺 n_runs 简况): {}",
+                e)
         return base

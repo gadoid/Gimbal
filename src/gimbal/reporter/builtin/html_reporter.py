@@ -22,7 +22,10 @@ from gimbal.events.types import (
     StepFailedEvent,
     StepStartEvent,
 )
+from gimbal.log import get_logger
 from gimbal.reporter.base import ReportArtifact, ReporterBase
+
+logger = get_logger(__name__)
 
 
 # 内嵌 CSS / JS 字符串模板；用 {{}} 转义 f-string 的花括号
@@ -290,9 +293,10 @@ class HtmlReporter(ReporterBase):
             elif isinstance(event, RunMetaEvent):
                 # 缓存 run_meta；后到的覆盖先到的（CLI 通常只发一次）
                 self._run_meta = dict(event.meta or {})
-        except Exception:
+        except Exception as e:
             # 事件处理异常不能影响主流程
-            pass
+            logger.warning(
+                "[html] 事件处理失败,该事件数据未进报告(渲染可能缺行): {}", e)
 
     def _upsert_step(self, sc_id: str, step_id: str, defaults: dict[str, Any]) -> dict[str, Any]:
         """插入或更新 step 记录；保留 (sc_id, step_id) 的出现顺序。"""

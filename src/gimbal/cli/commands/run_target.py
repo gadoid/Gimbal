@@ -64,6 +64,7 @@ def _run_loaded(cli_ctx, configuration, target, *, expect_kind, output,
             try:
                 configuration.event_bus.unsubscribe(jsonl_sub)
             except Exception:  # noqa: BLE001
+                # 刻意静默:收口撤销订阅 best-effort,失败不影响 shutdown
                 pass
         shutdown(configuration)
     _print_run_report(result, output, artifacts=engine.artifacts)

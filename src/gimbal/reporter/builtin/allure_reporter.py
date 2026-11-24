@@ -11,7 +11,10 @@ from gimbal.events.types import (
     ScenarioEndEvent, ScenarioStartEvent, StepEndEvent, StepFailedEvent,
     StepStartEvent, VariablePromotedEvent,
 )
+from gimbal.log import get_logger
 from gimbal.reporter.base import ReportArtifact, ReporterBase
+
+logger = get_logger(__name__)
 
 
 def _now() -> int:
@@ -60,8 +63,9 @@ class AllureReporter(ReporterBase):
                 self._close_scenario(event)
             elif isinstance(event, VariablePromotedEvent):
                 self._record_promotion(event)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[allure] 事件处理失败,该事件数据未写入 allure 报告: {}", e)
 
     def finalize(self, run_result, ctx) -> ReportArtifact:
         summary_path = self._results_dir / "gimbal-summary.json"
@@ -102,8 +106,10 @@ class AllureReporter(ReporterBase):
                 data["children"] = meta["step_uids"]
                 data["stop"] = _now()
                 self._write_json(f"{meta['uid']}-container.json", data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(
+                    "[allure] 场景 container 回写失败(children/stop 字段缺失): {}",
+                    e)
 
     def _open_step(self, ev):
         uid = _uid()
@@ -134,8 +140,9 @@ class AllureReporter(ReporterBase):
             data["stage"] = "finished"
             data["stop"] = _now()
             self._write_json(f"{uid}-result.json", data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[allure] step 结果回写失败(step 状态停留在 running): {}", e)
 
     def _close_step_failed(self, ev):
         uid = self._current_step_uid
@@ -149,8 +156,9 @@ class AllureReporter(ReporterBase):
             data["stop"] = _now()
             data["statusDetails"] = {"message": ev.error[:1000], "trace": (ev.error + "\n")[:2000]}
             self._write_json(f"{uid}-result.json", data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[allure] 失败 step 结果回写失败(失败详情缺失): {}", e)
 
     def _attach_request(self, v):
         self._attach_text("request.txt", f"{v['method']} {v['url']}\n\n{v['request_body']!r}")
@@ -176,8 +184,9 @@ class AllureReporter(ReporterBase):
                 data = json.loads(result_path.read_text(encoding="utf-8"))
                 data.setdefault("attachments", []).append({"name": name, "source": f"{uid}-attachment.txt", "type": "text/plain"})
                 self._write_json(f"{self._current_step_uid}-result.json", data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(
+                    "[allure] 附件索引写入失败,附件未挂到 step 结果: {}", e)
 
 
 def factory(user_config):

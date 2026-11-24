@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from gimbal.core.runner import RunResult
+from gimbal.log import get_logger
 from gimbal.reporter.base import ReportArtifact, ReporterBase
+
+logger = get_logger(__name__)
 
 
 class JsonReporter(ReporterBase):
@@ -45,8 +48,9 @@ class JsonReporter(ReporterBase):
                 "type": getattr(event, "event_type", type(event).__name__),
                 "payload": event.model_dump() if hasattr(event, "model_dump") else str(event),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[json] 事件时间线记录失败,该事件缺失于 timeline: {}", e)
 
     def finalize(self, run_result: RunResult, ctx) -> ReportArtifact:
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")

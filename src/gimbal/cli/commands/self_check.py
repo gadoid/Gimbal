@@ -203,10 +203,12 @@ def self_check(ctx: typer.Context) -> None:
         try:
             configuration.event_bus.unsubscribe_plugin(OWNER)
         except Exception:  # noqa: BLE001
+            # 刻意静默:自检收尾清理 best-effort,失败交由下方 shutdown 兜底
             pass
         try:
             configuration.hook_registry.unregister_plugin(OWNER)
         except Exception:  # noqa: BLE001
+            # 刻意静默:自检收尾清理 best-effort,失败交由下方 shutdown 兜底
             pass
 
         # 2. 走统一的卸载入口（验证 Issue 5 的修复）

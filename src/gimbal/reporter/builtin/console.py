@@ -14,7 +14,10 @@ from gimbal.events.types import (
     StepFailedEvent,
     StepStartEvent,
 )
+from gimbal.log import get_logger
 from gimbal.reporter.base import ReportArtifact, ReporterBase
+
+logger = get_logger(__name__)
 
 
 _RESET = "\x1b[0m"
@@ -130,8 +133,9 @@ class ConsoleReporter(ReporterBase):
                         f"      ← {v['status_code']} ({v['duration_ms']:.1f}ms)",
                         _GREY, not nc,
                     ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[console] 事件渲染失败,该事件进度未打印: {}", e)
 
     def finalize(self, run_result: RunResult, ctx) -> ReportArtifact:
         nc = self._no_color

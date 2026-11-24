@@ -486,6 +486,7 @@ def launch(
             try:
                 configuration.event_bus.unsubscribe(jsonl_sub)
             except Exception:  # noqa: BLE001
+                # 刻意静默:收口撤销订阅 best-effort,失败不影响 shutdown
                 pass
         if attached_subscribe is not None:
             attached_subscribe.detach()
