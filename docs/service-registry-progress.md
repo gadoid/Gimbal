@@ -2788,6 +2788,54 @@ build 绿;dist 已随同源重建换入。
   创建、执行配置前端、报告定义)与 01-02 五项待拍板 —— 产品决策
   不搭缺陷车;01-01 壳层与 01-05 工作台卡模型 = 独立 UX 轮。
 
+### 收尾工程批轮(2026-11-24,🟢 分支 fix/core-wrapup,收尾排布第二部分六批 A-F)
+
+三路 Explore 调研先行(量级重估:C5 库内真实 CRLF 仅 9 文件非「大 diff」;
+B2 大头已在 plate-s1 落地;md5sign 有 fin SUT 协议硬依赖),两处用户拍板:
+**md5sign 按设计保持**(与被测系统协议强耦合,登记销问,重开 = SUT 协议
+迁移确认)、**REF_REQUIRED 成文销问**(维持「调用方保证」)。每批全量绿
+再进下一批:
+
+- **批 A(C5 + B2-④)**:`.gitattributes` 补钉缺口扩展名(*.sh/css/html/
+  php/js/mjs/ini/txt/csv/in/lock/example/npmrc/sql + dotfile)→ renormalize
+  9 文件(两个 CRLF .sh 的 CI 活性风险消除)+ `.editorconfig` 编辑器层兜底
+  + 磁盘态 checkout-index 刷新(670 w/crlf→LF,索引侧 i/crlf 清零);
+  cmd_reload 写死 `_REPO/systems` 改 `load_registry()` 无参(批 A 顺带钉出
+  01-03 集成收口轮漏重生契约位点,补齐)。plate 687 + 后端 2215 绿。
+- **批 B(C6 余域 + grep 守卫)**:activity 六源聚合(整文件此前无 logger)
+  等 routers 全域 + integration/access_token/通知预检降级面 22 处补
+  logger.warning;「可见性由载荷/返回值/收口结果承载」判例 14 条入白名单;
+  新守卫 `test_grep_guard_wide_except.py` 双断言(守卫自修两 bug:raise
+  判定补 MULTILINE、注释行排除)。ruff 净 -28。后端 2217 绿。
+- **批 C(C7 主链路注释)**:顺序纪律兑现 —— ADR-0003 先行补录计划前退场
+  12 行(13-24,五要素 pickaxe 考据:D2 执行环境/exec_runs/fill_plate_
+  defaults/repeat 维/env.lines/SQLite/②层区规则/S7.4/§8.2 链位/
+  marks_store/legacy launch 链/steps api 形态)→ 六文件注释改现在时
+  (run_dispatcher 日期/勘误/「此前」grep 清零;设计文档名日期属活锚保留)。
+  契约位点随行号漂移重生。plate 687 + 后端 2217 绿。
+- **批 D(B5 切片 2 + hasCode)**:contractGuard 扩 suites 域 5 形状
+  (latestRun Any 面 Omit 摘除);扫描器补元组赋值形态(QueryViewError/
+  ImportRejected)→ sut_auth_expired/scenario_id_exists/alias_name_taken/
+  mapping_stale/query_credential_required/service_url_required 六码补进
+  契约;hasCode 迁移 7 点位。**三处真实链死链顺手修**:suiteErrDetail 摸
+  `e.response`(拦截器已换 ApiError)恒 null —— 改 ApiError.detail 优先;
+  ImportDialog 409 自愈分支恢复可达;`suite_member_publish_required` 死
+  分支(后端已退役该码 → suite_member_not_public + pendingMembers)改挂
+  现行码。前端 1543 绿 + vue-tsc 绿 + 契约双守卫绿。
+- **批 E(B2-② reload)**:`POST /api/admin/reload` 触达运行服务 —— 新
+  registry 独立构建、构建成功才换入(半加载态不存在),失败 503
+  reload_failed 旧快照原样服务(身份断言钉死);嵌入模式 409;G5 working
+  快照标识 `working@<sha7>`(.git 文件直读,healthz git_head 收编同源);
+  ErrorCode 冻结集同步计数。plate 691(687+4)+ 后端 2217 绿。
+- **批 F(登记收口)**:登记册六行(C5 ✅/C6 第一轮/C7 第一切片/B2 ✅/
+  B5 切片 2/C11 销问)+ wrapup-plan 批次 4/5 状态 + plate-version-model
+  §4.2 与 read.py REF_REQUIRED 现状注记(本节)。
+
+**留观察/后续**:C6 引擎树 122 处(独立轮)、C7 前端 613 行(与 D5 交叠)、
+B5 余域 37 api 文件手写类型迁移;错误码面遗留一处后端松尾巴:
+`SuiteSubmitIn.publishUnpublished` 字段仍在 schema 但路由已不消费
+(「不再级联代发布」残件,随下次 suites 契约轮清)。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
