@@ -130,8 +130,11 @@ export function useScenarioListView(
   async function loadFacets(): Promise<void> {
     try {
       facets.value = await fetchScenarioFacets(
+        // facets 端点只收 mine|all(恒 422 登记条的坑面):列表口径的
+        // private 在 facets 未实现,mine 桶这里下推 mine(只统计自己
+        // 创建的)—— 修前恒 422 静默回落池 uniq。
         bucket === 'mine'
-          ? { q: effQ() || undefined, scope: 'private' as const }
+          ? { q: effQ() || undefined, scope: 'mine' as const }
           : bucket === 'public'
             ? { q: effQ() || undefined, visibility: 'public' as const }
             : { q: effQ() || undefined, projectId: opts.projectId })

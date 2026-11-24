@@ -81,8 +81,10 @@ export async function fetchScenarioSignals(ids: string[]): Promise<
 export async function fetchScenarioFacets(params: {
   q?: string
   visibility?: 'public' | 'private'
-  /** 与列表同口径的浏览镜头(§5.1;S7.0:private = 我的私有)。 */
-  scope?: 'private' | 'mine' | 'all'
+  /** 浏览镜头(§5.1)。注意:facets 端点只收 mine|all —— 端点从未实现
+   *  列表的 private 口径,传 private 恒 422(facets-scope-mismatch 登记
+   *  的坑面,类型面收窄到端点词表,防止再误用)。 */
+  scope?: 'mine' | 'all'
   /** 项目口径(A 级批次 2026-11-18):项目详情场景页签;给定时取代
    *  visibility/scope 分桶。 */
   projectId?: number

@@ -146,13 +146,16 @@ describe('useScenarioListView(服务端化)', () => {
     const v = useScenarioListView('mine')
     await flushPromises()
     const facetsCall = vi.mocked(composerApi.fetchScenarioFacets).mock.calls[0]
-    expect(facetsCall?.[0]).toEqual({ scope: 'private' })
+    // facets 端点只收 mine|all:mine 桶必须下推 scope=mine(只统计自己
+    // 创建的)—— 修前误用列表口径的 private,恒 422 静默回落池 uniq
+    // (known-issue facets-scope-mismatch 的钉子)。
+    expect(facetsCall?.[0]).toEqual({ scope: 'mine' })
 
     v.q.value = '订单'
     await flushPromises()
     expect(
       vi.mocked(composerApi.fetchScenarioFacets).mock.lastCall?.[0],
-    ).toEqual({ q: '订单', scope: 'private' })
+    ).toEqual({ q: '订单', scope: 'mine' })
 
     // 请求失败 → facets 置 null(FilterPopover 回落当前页 uniq 池)
     vi.mocked(composerApi.fetchScenarioFacets).mockRejectedValueOnce(new Error('502'))

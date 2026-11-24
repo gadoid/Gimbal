@@ -117,6 +117,25 @@ async def test_facets_endpoint(client, owner):
     assert m_mods == {"trade": 1}
 
 
+async def test_facets_scope_mine(client, owner):
+    """scope=mine 验收钉(known-issue facets-scope-mismatch):200 且只
+    统计自己创建的 —— 修前前端 mine 桶误发 scope=private,而端点词表
+    只有 mine|all,恒 422 静默回落池 uniq。"""
+    r = await client.get("/api/scenarios/facets",
+                         params={"scope": "mine"}, headers=owner)
+    assert r.status_code == 200, r.text
+    mods = {x["value"]: x["count"] for x in r.json()["modules"]}
+    # 三条种子全是 owner 创建(author 元数据是 alice/bob 不影响镜头口径)
+    assert mods == {"trade": 2, "asset": 1}
+
+    # member 一条都没创建 → mine 计数空
+    member = await register_and_login(client, "m3minemember", "m3-pass-123")
+    r = await client.get("/api/scenarios/facets",
+                         params={"scope": "mine"}, headers=member)
+    assert r.status_code == 200, r.text
+    assert r.json()["modules"] == []
+
+
 async def test_facets_project_scope(client, owner):
     """projectId facets(A 级批次 2026-11-18):行集收敛到项目快照列,
     取代 scope/visibility 分桶;读门与项目详情同口径(非成员 404)。"""
