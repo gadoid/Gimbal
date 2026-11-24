@@ -1026,6 +1026,26 @@ def test_template_value_class_writes_the_vars_value_not_the_literal():
     assert st.required is False
 
 
+def test_template_null_var_writes_null_silently():
+    """裁定钉(dollar-brace-backfill G,2026-11-24「null 是合法值」):
+    整串 `${var}` 指向**显式 null 变量**的结局 —— 预处理把 source/
+    default 双双解析成 None(key 存在但值为 None = 合法值,不是 missing)
+    → Assign 因平台补的 `required:false` 不 FAILED,**静默把 null 写进
+    target**。这是裁定后的期望行为,不是缺陷;语义反面(变量缺失 →
+    预处理 ValueError)由上一条钉住。"""
+    composed = _compose("${var.opt}")
+    composed["config"]["vars"]["opt"] = None            # 显式 null(合法,spec §4.3)
+    st = _preprocess(composed)[0].strategy[-1]
+    assert st.source is None and st.default is None     # 双双解析成 None
+    assert st.required is False
+
+    from gimbal.strategy.executor_base import StrategyStatus
+
+    result, view = _real_assign_execute(st.model_dump())
+    assert result.status is StrategyStatus.PASSED, result.message
+    assert view.scratch["$.call.request.body"] is None  # 静默写 null,不失败
+
+
 async def test_baseline_ledger_written_on_dispatch(
     client, plate_mock: PlateMock, monkeypatch
 ):

@@ -43,18 +43,25 @@ def _assign_strategy(value: Any, target: str) -> dict[str, Any]:
     assign.py 先 default 后 required,读不到时写字面量而非失败。
     其余值(含普通字符串 / dict / list / null)不带键,基座字段全取默认。
 
-    **整串 `"${...}"` 类不可兜**(引擎语义所限,记录不兜;不加键也不改
-    行为):引擎在**任何策略执行之前**先整体预处理整个 scenario
-    (gimbal/core/scenario_runner.py:258-266),`_resolve_strategy` 把
-    `Assign.source` 与 `Assign.default` **一并**过 `_resolve_or_fail`
-    (gimbal/preprocessor/scenario_preprocessor.py:416-429),于是
+    **整串 `"${...}"` 类同样补键(裁定 2026-11-24,dollar-brace-backfill
+    G:接受「null 是合法值」,改文档不改行为 —— 取代旧文「不可兜;不加键
+    也不改行为」,那句对 null 情形不成立)。**引擎在**任何策略执行之前**先
+    整体预处理整个 scenario(gimbal/core/scenario_runner.py:258-266),
+    `_resolve_strategy` 把 `Assign.source` 与 `Assign.default` **一并**过
+    `_resolve_or_fail`(gimbal/preprocessor/scenario_preprocessor.py:
+    416-429),三种情形:
       · config.vars 无同名变量 → 预处理阶段直接 `ValueError`
-        (…source 模板变量未找到)—— **比 Assign 早**,default 从未被
-        读过,失败点也不是 BEFORE_REQUEST;
-      · config.vars 有同名变量 → source/default 双双被改写成变量值 →
-        写下去的是 vars 值,**字面量不写入**(该偏离对该字段不生效)。
-    平台侧唯一的解法是往 config.vars 塞哨兵变量 —— spec §3 把「compose
-    不触碰 config.vars」定为核心保证,不做。编辑器对该类显形告警。
+        (…source 模板变量未找到)—— **比 Assign 早**,补的 default 从未
+        被读过,失败点也不是 BEFORE_REQUEST(**「兜不住」仅指这一种**);
+      · 变量存在且非 null → source/default 双双被改写成变量值 → 写下去
+        的是 vars 值,**字面量不写入**(该偏离对该字段不生效,补键无副作用);
+      · 变量存在且为 **null** → source/default 均解析成 None(key 存在但
+        值为 None = 合法值,不是 missing)→ `required:false` 挡住 FAILED
+        → **静默写 JSON null**。这是裁定后的**期望行为**:显式 null ≠
+        「用户没填值」,与 carry_binding 的 NULL≠空 约定同向(spec §4.3);
+        要求「必须有值」的场合应改用 `$.` 类引用或在下游加断言。
+    平台侧不往 config.vars 塞哨兵变量(spec §3 把「compose 不触碰
+    config.vars」定为核心保证,不做);编辑器对该类显形告警(含 null 结局)。
 
     边界二(不可修):JSON null 偏离值无法送达 —— plate 导出
     `model_dump(mode="json", exclude_none=True, ...)`

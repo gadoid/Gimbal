@@ -172,11 +172,13 @@ it('ARE-5b: 整串 ${...} 值 → 注记按**变量引用先展开**叙述(不�
   await selectOnlyRow(w)
   const note = w.find('.are-val-note')
   expect(note.exists()).toBe(true)
-  // 真话:变量缺失 → 开始前即失败;变量存在 → 写入的是变量值
+  // 真话:变量缺失 → 开始前即失败;变量存在 → 写入的是变量值;
+  // 变量为 null → 写入 null(2026-11-24 裁定:null 是合法值)
   expect(note.text()).toContain('变量引用')
   expect(note.text()).toContain('失败')
   expect(note.text()).toContain('变量的值')
-  // 判别力:这一类**兜不住**,不得搬 $. 类的兜底叙述
+  expect(note.text()).toContain('null')
+  // 判别力:这一类对「变量缺失」**兜不住**,不得搬 $. 类的兜底叙述
   expect(note.text()).not.toContain('兜底')
   w.unmount()
 })

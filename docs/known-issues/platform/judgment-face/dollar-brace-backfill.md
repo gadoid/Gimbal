@@ -1,7 +1,7 @@
 # 阶段二待修：`${...}` 类值也补了 `default` / `required`（G）
 
 > **模块**：`gimbal-platform/backend`（注入物化：偏离值 → `Assign` 策略）
-> **状态**：已知未修复（**待裁定**，见 §3）
+> **状态**：**已裁定并落盘**（2026-11-24：改文档路线，行为维持现状；见 §3 顶部裁定行与文末[修复记录](#修复记录)）
 > **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（G）
 > **适用范围**：`run_injection._assign_strategy` 对用户偏离值的兜底键注入。
 
@@ -83,6 +83,8 @@ return source.startswith("${") and source.endswith("}")
 
 ## 3. 待裁定
 
+> **裁定已作（2026-11-24，用户拍板）**：结论 = **改文档（下方选项 2）**——行为维持现状（`${...}` 类继续补键；变量为 null 时静默写 null），docstring 与编辑器注记改为与行为一致；§3.3 的语义问题答 = **「引用了一个值为 null 的变量」不算「用户没填值」**——显式 null 是合法值（与 carry_binding NULL≠空 约定同向，spec §4.3），静默写 null 是裁定后的期望行为而非缺陷；要求「必须有值」的场合改用 `$.` 类引用或下游断言。下方决策清单保留为裁定前的历史；实装见文末[修复记录](#修复记录)。
+
 > 原文见 spec §7：**G `${...}` 类补键** —— *改为只对 `$.` 类补键（与 docstring 对齐、恢复旧行为），还是接受「变量存在但为 null 时静默写 null」并改文档。*
 
 留给维护者的决策（**本记录不下结论**）：
@@ -99,3 +101,15 @@ return source.startswith("${") and source.endswith("}")
 2. **H 落点裁定**（spec §7）或注入物化的任何新一轮改动；
 3. **`config.vars` 的 null 语义变化**：若「显式 null」的约定被修订（spec §4.3），本条的取舍需要重算；
 4. **`Assign` 基座默认值变化**：`src/gimbal/schema/strategy.py` 的 `required` / `default` 默认值若变动，本记录的三行表要重核。
+
+---
+
+## 修复记录
+
+**2026-11-24 — 裁定落盘（改文档路线；`_assign_strategy` 代码零改动）**
+
+- `run_injection._assign_strategy` docstring 重写：「不可兜」收窄为「变量缺失时兜不住（预处理器先抛 ValueError）」；三种情形逐条写明（缺失 → 预处理 `ValueError` / 非 null → 写 vars 值 / **null → `required:false` 静默写 null = 期望行为**）并记录裁定与理由（NULL≠空 约定同向）。
+- 新增裁定钉 `tests/test_run_injection.py::test_template_null_var_writes_null_silently`（显式 null 变量 → 预处理解析成 None → Assign **PASSED** 且 target 落 null）；既有 `test_assign_shape_carries_literal_fallback_for_reference_shapes`（`${...}` 类补键形状）自此为契约钉。
+- 编辑器 `AssertionRegistryEditor.vue` `valueRefNote` 的 `${...}` 分支补第三种结局文案（「变量恰好是 null → 把 null 原样写入字段」）；`ARE-5b` 断言同步（注记须含 null 结局、仍不得搬 `$.` 类「兜底」叙述）——「与后端同一份语义、两处必须同改」头注纪律履行。
+- §1 三行表继续成立：「补键后（现状）」列 = 裁定后的期望列；「不补键」列降格为历史反事实。§4 重开条件不变。
+- 范围边界遵守：`$.` 类补键未动（裁定明文不顺手改）。
