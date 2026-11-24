@@ -2672,6 +2672,34 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
   改「数据已落库、延后=排期裁定」;architecture.md 新增「部署边界」;
   utils.md 新增「${} 语法支持面」公开口径表。
 
+### 评估清单第二轮(2026-11-24,P0×3+P1×4)
+
+第二轮外部清单 7 项逐条核实:2 项 P0(I-01 同款注册表丢数据、convert
+契约)与 1 项 P1(Windows 编码)看的是修复前/已修基线,直接判过时;
+其余按用户拍板「4/5 裁定成文、剩余按建议」落地:
+
+- **P1-4/P1-5 裁定成文**:architecture.md 新增「超时与取消语义
+  (协作式)」(四问四答,原只活在 run_dispatcher.py:145-148 与
+  gimbal_server_session.py:273-315 注释里)与「可观测性边界」(与
+  I-07 同场拍板,指标面合并排期,不前置埋点工程)两节。
+- **P0-3 供应链升级**(2e190b05):vitest 2.1.9→5.1.1(清 tinypool
+  两条 critical RCE gadget + vitest UI critical)、vite 5.4→6.4.6(清
+  dev-server high)、plugin-vue→6.0.11;plate-ci 加 npm audit
+  --audit-level=high 门,Node 20→22(vitest 5/plugin-vue 6 硬要求,
+  生产 dist 构建同走 Node 22,package.json 加 engines);vitest≥4
+  语义适配 3 文件 9 用例;vue-tsc 3 升级被上游回归阻塞(reactive
+  v-model 误插 .value ×8 + 兄弟条件块收窄重置 ×26,实测 31 处误报),
+  边界登记 audit-moderate-tail.md。
+- **P1-6 收口**:生产 .env REGISTRATION_OPEN=true→false(库中 23 用户
+  早已越过 bootstrap,注册面当敞即收,重启后 4006 实证);限流/DAST
+  登记 auth/login-rate-limit-gap.md(P2,与下次 auth 演进同批)。
+- **验证**:vue-tsc 0 错 / vitest 174 文件 1542 过+1 跳 / vite 6 build
+  绿(Node 22,Node 18 在 plugin-vue 6 即挂) / dist 换入 8188
+  (bak-20261124-1503) / 无头浏览器 4 页全挂载 0 控台错误(唯一
+  422 = 冒烟偶得的前置潜伏项,登记 facets-scope-mismatch.md:P2)。
+- **P1-7**:核实为已失效项(gen_m2 _run 早已显式 encoding="utf-8",
+  评估基点 c9d4ce27 就已带),README 开发节补一行 Windows 提示即可。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
