@@ -497,6 +497,11 @@ const readonlyBanner = computed<{ text: string; tone: string } | null>(() => {
   if (d.access === 'public') {
     return { text: '公共 Suite —— 只读;先「复制到我的」,在副本上运行或编辑', tone: 'info' }
   }
+  if (d.access === 'member' && !canEdit.value) {
+    // §4.2:普通项目只读成员 —— 可运行,编辑需项目可写角色;
+    // 不给「复制到我的」(普通项目非属主 fork 404,必然失败入口已撤)
+    return { text: '项目成员视角:可运行;编辑需项目可写角色', tone: 'info' }
+  }
   return null
 })
 

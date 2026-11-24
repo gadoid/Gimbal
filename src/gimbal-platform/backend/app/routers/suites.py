@@ -164,18 +164,40 @@ async def _access_and_caps(
     db: AsyncSession, user: CurrentUser, suite: Suite,
 ) -> dict:
     """§7.6 判定投影(重构方案:前端不自己推导角色)。调用前读闸
-    须已过;access 为 None 仅发生在公共读者,能力位全 False。
-    W3 起 admin 与公共读者同权(Admin+ 仅剩下架公共对象,服务端
-    public_admin 判定,不进此投影)。"""
+    须已过;access 为 None 仅发生在私有非属主(项目成员经表 B member
+    在读闸放行,此处补投影)。W3 起 admin 与公共读者同权(Admin+ 仅
+    剩下架公共对象,服务端 public_admin 判定,不进此投影)。
+
+    01-03 §4.2(2026-11-24):修前「project_id 非空即 public」是普通
+    项目概念诞生前的投影 —— 普通项目非属主成员被误标公共只读
+    (canEdit/canRun 恒 False,而写闸走表 B contributor 放行),且前端
+    按 access='public' 渲染的「复制到我的」在普通项目 fork 404
+    (必然失败入口)。修后:普通项目 = access 'member',edit/run 随
+    表 B 真值;公共项目读者维持只读(先复制再跑,不变量 7)。"""
+    from ..services.zone import public_project_id
+    from ._ownership import can
+
     if user.id == suite.owner_id:
         access = "owner"
     elif suite.project_id is not None:
-        access = "public"
+        access = ("member"
+                  if suite.project_id != await public_project_id(db)
+                  else "public")
     else:
         # S7.4:引用访问已退役;私有非属主无访问(项目成员经表 B member)
         access = None
     if access is None:
         return {}
+    if access == "member":
+        return {
+            "access": "member",
+            # 表 B suite.write = contributor(项目可写角色)/ run = member
+            "canEdit": await can(db, user, "suite", "write", suite),
+            "canRun": await can(db, user, "suite", "run", suite),
+            # 跨区复制策略未定(普通项目非属主 fork 404)—— 不给
+            # 必然失败的入口位
+            "canShare": False,
+        }
     return {
         "access": access,
         # 写 = 属主(表 B suite.write);public 先复制再跑(不变量 7)
