@@ -100,12 +100,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _warn_once(endpoint_id: str, reason: object) -> None:
+def _warn_once(endpoint_id: str, reason: object,
+               consequence: str = "调用侧降级(carry 空面 / 悬空判定只认 body 面)",
+               ) -> None:
     """降级告警(**时间老化**):同一端点在 `_WARN_COOLDOWN_SEC` 内至多一条。
 
     表大小 ~ 冷却窗内失败过的端点数:下表顺手回收窗外的条目,故调用方字符串
     (错拼/改名)驱动的增长有界(spec §1.1 S);回收时机与 `TtlLruCache.lookup`
-    的惰性过期同风格。"""
+    的惰性过期同风格。
+
+    ``consequence`` 由调用方给(known-issue warn-once-stale-fallback-wording
+    收口):冷缓存路径 = 调用侧降级;过期回退路径 = 旧快照继续服务 ——
+    两个结论相反,固定模板尾会把回退误报成降级。"""
     now = time.monotonic()
     last = _WARNED_AT.get(endpoint_id)
     if last is not None and now - last < _WARN_COOLDOWN_SEC:
@@ -115,9 +121,8 @@ def _warn_once(endpoint_id: str, reason: object) -> None:
         _WARNED_AT.pop(aged, None)
     _WARNED_AT[endpoint_id] = now
     logger.warning(
-        "endpoint_declarations: {} 声明面不可得({}) — 调用侧降级"
-        "(carry 空面 / 悬空判定只认 body 面)",
-        endpoint_id, reason,
+        "endpoint_declarations: {} 声明面不可得({}) — {}",
+        endpoint_id, reason, consequence,
     )
 
 
@@ -157,7 +162,10 @@ async def declarations_of(endpoint_id: str) -> list | None:
         _warn_once(endpoint_id, res.reason)
         return None
     if res.stale:
-        _warn_once(endpoint_id, f"刷新失败({res.reason}),回退旧快照")
+        # 后果短语按真实行为给:回退 ≠ 降级 —— 旧契约面继续服务
+        # (fail-open-to-old),不是「carry 空面」。
+        _warn_once(endpoint_id, f"刷新失败({res.reason}),回退旧快照",
+                   consequence="旧快照继续服务,非降级")
     decls = _decls_of_item(res.item)
     if decls is None:
         # 两种垃圾形状都到这里,故原因串把两条都点出来(告警是降级链路唯一的遥测,

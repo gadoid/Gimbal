@@ -7,11 +7,13 @@
 
 **载荷泛化**(2026-09-13,架构收敛 §3.1):条目载荷是 ``payload`` 而非
 ``rows`` —— 一套 TTL/LRU/回退语义由三个消费者共用:query-view 行集
-(``list[dict]``)、契约声明面的 **path 投影**(``endpoint_declarations._proj_cache``
+(``(rows, truncated)`` 元组,§5.1/§5.3 截断标记由行集在自己载荷里携带,
+命中也透出)、契约声明面的 **path 投影**(``endpoint_declarations._proj_cache``
 持有的裸 ``frozenset(paths)``;``(decls, frozenset(...))`` 元组形态已退场)
 与 ``plate_client.get_endpoint_full`` 的整份契约 item。
-字段叫 ``rows`` 会让后两个消费者"名不副实";``truncated`` 仍只对行集有意义
-(声明面 / 契约 item 恒为默认 ``False``)。
+字段叫 ``rows`` 会让后两个消费者"名不副实";``truncated`` 不是缓存字段
+(known-issue truncated-dead-field 收口:此前挂 CacheEntry 上,声明面/
+契约 item 条目恒 False 无人读 —— 2026-11-24 移进行集载荷)。
 """
 from __future__ import annotations
 
@@ -21,12 +23,10 @@ from typing import Any, Callable, Hashable
 
 
 class CacheEntry:
-    __slots__ = ("payload", "truncated", "fetched_wall", "fetched_mono")
+    __slots__ = ("payload", "fetched_wall", "fetched_mono")
 
-    def __init__(self, payload: Any, truncated: bool,
-                 fetched_wall: str, fetched_mono: float):
+    def __init__(self, payload: Any, fetched_wall: str, fetched_mono: float):
         self.payload = payload
-        self.truncated = truncated   # §5.1 截断标记随行集入缓存(命中也透出)
         self.fetched_wall = fetched_wall
         self.fetched_mono = fetched_mono
 
@@ -53,11 +53,9 @@ class TtlLruCache:
         self._data.pop(key, None)
         return None, False         # 超 STALE_MAX_WINDOW:真过期
 
-    def put(self, key: Hashable, payload: Any, fetched_wall: str,
-            truncated: bool = False) -> None:
+    def put(self, key: Hashable, payload: Any, fetched_wall: str) -> None:
         self._data.pop(key, None)
-        self._data[key] = CacheEntry(payload, truncated, fetched_wall,
-                                     self._clock())
+        self._data[key] = CacheEntry(payload, fetched_wall, self._clock())
         while len(self._data) > self._max:
             self._data.popitem(last=False)
 

@@ -300,6 +300,11 @@ async def test_stale_fallback_warning_carries_the_cause(monkeypatch):
     assert any("plate status 503" in s for s in stale), seen
     # 动作短语仍在(裁定要的是「补原因」,不是推翻 D3/改动作语义)
     assert all("回退旧快照" in s for s in stale), seen
+    # 收口钉(known-issue warn-once-stale-fallback-wording,2026-11-24):
+    # 回退 ≠ 降级 —— 模板尾不得把 fail-open-to-old 误报成「调用侧降级」,
+    # 后果短语按真实行为给(旧快照继续服务)。
+    assert all("调用侧降级" not in s for s in stale), seen
+    assert all("旧快照继续服务" in s for s in stale), seen
     plate_client.set_client_for_tests(None)
 
 

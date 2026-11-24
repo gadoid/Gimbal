@@ -1,7 +1,7 @@
 # 声明面缓存条目上的 `truncated` 恒为 `False`（死字段）
 
 > **模块**：`gimbal-platform/backend`（`app/services/query_view_cache.py` × `app/services/endpoint_declarations.py`）
-> **状态**：已知未修复（「一套缓存」裁定的固有代价）
+> **状态**：**已修复**（2026-11-24 收尾轮：§3 ①方向 —— `truncated` 移出 `CacheEntry`,由行集在自己载荷里携带）
 > **来源**：架构收敛执行会话自查（非 spec 条目）
 
 ---
@@ -71,3 +71,17 @@ _proj_cache().put(endpoint_id, proj, _now_iso())
 1. **第三个消费者加入共享缓存**：字段归属需要重新划分；
 2. **`query_view_runner` 的截断语义变化**（或行集侧不再需要 `truncated`）；
 3. **有人按 `truncated` 误判声明面被截断**（说明该字段已经开始误导读者）。
+
+## 修复记录（2026-11-24,fix/core-wrapup 轮）
+
+按 §3 的**方向 ①**收口（「一套缓存」裁定不破 —— 共享的仍是 TTL/LRU/回退语义,
+只是截断标记不再占缓存字段位）:
+
+- `CacheEntry` 撤 `truncated` 槽位;`TtlLruCache.put` 撤 `truncated` 参数
+  (声明面 `_proj_cache` 与 `plate_client._full_cache` 的既有三参调用零变化);
+- 行集载荷改 `(rows, truncated)` 元组:put 侧(`query_view_runner` 取数成功)
+  与四个命中/回退消费点同步解包;`RowsResult` 形状与 API 面
+  (`routers/query_views.py` 的 `truncated` 键)不变;
+- 命中透出截断标记的行为钉(`test_query_view_runner.py` 162-166)原样保留。
+- 验证:targeted 74 绿(endpoint_declarations / query_view_cache /
+  query_view_runner / query_views_route)。
