@@ -13,8 +13,8 @@
 | A1 | feat/plate-s1 合入 main | 后续所有基线工作(见 B1)以 main 为准 | 用户拍板合并 | **✅ 2026-11-23 已销**:用户拍板「推送 + 快进 main」,origin/main 快进 2c70a12b..b44e7874 = feat/service-registry 顶端,严格包含 plate-s1(merge-base 即其顶端、plate-s1 独有提交 0),不必单独合 |
 | A2 | GitHub Support 工单(GC 旧对象) | 含凭证旧提交仍可按 SHA 取回 | 提交工单并确认 GC(文案在仓外 D:/Gimbal/github-purge-request…md rev2) | 团队 |
 | A3 | 78 处外部系统凭证轮换 | 泄漏凭证若在其他环境复用则有效 | 团队逐个确认轮换(私有环境口令已按拍板豁免) | 团队 |
-| A4 | CI 从未实跑 | 本批全部改动未经 CI 验证 | `workflow_dispatch` 触发一轮全绿 | **🟡 2026-11-23 处理中**:plate-ci 接通后连钉 7 处断点(gen_m2 误删 / 加载已退役脚本的死测试 / json2ts 探活行必退 1 / pytest-xdist 未进 lock / 增量升级门 21 项漂移 → 迁移 0066 / 契约守卫干净检出导入即崩 / 测试辅助 commit-tree 漏传 git 身份),已修并于 Python 3.12 + lock 同构环境在 Windows 与 Linux 双平台 gate 全量复现(见 progress「CI 交接处理」);main 实跑全绿后销条 |
-| A5 | 两个待裁定 known-issue | P0 候选 normalize-registry-writeback、P1 dollar-brace-backfill | 用户拍板处置口径 | 用户 |
+| A4 | CI 从未实跑 | 本批全部改动未经 CI 验证 | `workflow_dispatch` 触发一轮全绿 | **🟡 2026-11-23 处理中**:plate-ci 接通后连钉 7 处断点(gen_m2 误删 / 加载已退役脚本的死测试 / json2ts 探活行必退 1 / pytest-xdist 未进 lock / 增量升级门 21 项漂移 → 迁移 0066 / 契约守卫干净检出导入即崩 / 测试辅助 commit-tree 漏传 git 身份),已修并于 Python 3.12 + lock 同构环境在 Windows 与 Linux 双平台 gate 全量复现(见 progress「CI 交接处理」);main 实跑全绿后销条。*(2026-11-24 证据注记:GitHub plate-ci run#4 于 main 顶端 `0ef83781` **push 触发全绿**(frontend+gate 双 job,2026-11-23 23:44 CST)—— 全绿 run 已实际存在;字面退出条件「workflow_dispatch 触发」未跑(本机无 gh 凭证),销条待一次 dispatch 或用户追认 push-run 即可,无需再改代码。另:`fix/ci-main-green` 顶端(前端路由修复 `566b1f0e` + 本批 6 提交)尚未有 CI run,随下次 PR/push 兑现)* |
+| A5 | 两个待裁定 known-issue | P0 候选 normalize-registry-writeback、P1 dollar-brace-backfill | 用户拍板处置口径 | **✅ 2026-11-24 已销**:用户拍板两项裁定并同日落盘 —— ①normalize-registry-writeback(E)= **隔离区+后端闸**(`unrecognized` 隔离键原样写回 + `validate_registry_shape` 写侧闸 422,提交 `40f37b16`);②dollar-brace-backfill(G)= **改文档不改行为**(「null 是合法值」,docstring/编辑器注记对齐,提交 `eca14bdc`);裁定行+修复记录入各自 known-issue,README 总表行同步。重开条件不变(各自 §4) |
 | A6 | exists-property-hole 公开承诺文本 | 对外说明未定稿 | 用户过目 | 用户 |
 | A7 | SQLite 时代本地文件 | backend/data/app.db 及 4 个 bak(磁盘,非仓库) | 确认无需回滚后归档删除 | 用户 |
 

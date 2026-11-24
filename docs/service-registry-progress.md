@@ -2639,6 +2639,39 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
     lock 尚余 30+ 项版本漂移(3.13 vs CI 3.12 口径),沿用「不碰
     现有环境」拍板,收敛另批。
 
+### 实现问题清单收口轮(2026-11-24,🟢 六批全部落盘;分支 fix/ci-main-green)
+
+外部评估清单(实现问题 2026-11-24,基线 c9d4ce27)经逐条核实(10 条中
+9 条属实、I-10 实质过时 —— GitHub plate-ci run#4 已于 main 顶端
+0ef83781 push 触发全绿)后,用户拍板四项裁定并按批复落地:
+
+- **裁定(登记表 A5 销条)**:①I-01 normalize-registry-writeback(E,P0
+  候选)= 隔离区+后端闸;②I-02 dollar-brace-backfill(G,P1)= null 是
+  合法值(改文档不改行为);③I-07 数据分析 = 正式延后并修前提(数据已
+  落库,定位排期,AI Native 之后先做最小三块);④I-06 = 接受单进程
+  边界并写明(HA 不立项)。I-09 为策略项不立项:首个外部消费方待选,
+  不四面铺开。
+- **六批提交**:eca14bdc(I-02 裁定落盘+裁定钉)/ 5fed720a(I-03/J-1
+  convert 信封单点收口,PlateInvalidResponseError 子类化 502 族,
+  PlateMock 新 behaviour 补测试盲区)/ 40f37b16(I-01 前端隔离区
+  unrecognized + validate_registry_shape 写侧闸 422 + graph_dispatch
+  isinstance 存量兜底;ARE 隔离条 ARE-20/21)/ d4eaaac8(I-04 平台
+  API 文档端点级重写 + check_api_doc 三挂守卫:CI 步骤+pytest 双守卫
+  + paths docs/**,注入 /api/cases 红样验证)/ 0eef8f6e(I-05 四子项
+  口径收敛 + I-07 前提修正 + I-06 部署边界节 + I-08 ${} 语法公开口径
+  表)+ 本条(登记收口)。
+- **验证**:逐批定向全绿(injection 15 / plate-contract+integration+
+  resilience 27 / 闸 14 / api_contract 3 / 前端 ARE 31 + views 415 +
+  typecheck 0);契约快照随两批错误码重生(error-codes.json
+  +plate_invalid_response/+assertion_registry_invalid,前端
+  errorCodes.ts 同步)。本节落盘时的全量复跑见下轮部署记录。
+- **文档联动**:两个待裁定 known-issue 均加「裁定行+修复记录」
+  (exists-property-hole 范式);template-substitution 改「部分已修」
+  并逐节勘误;platform-api-doc-false-sections 改「已修复(守卫在位)」
+  (§7 第 4 条「文档纳入 CI 校验」兑现);AnalyticsDeferred 文案前提
+  改「数据已落库、延后=排期裁定」;architecture.md 新增「部署边界」;
+  utils.md 新增「${} 语法支持面」公开口径表。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |
