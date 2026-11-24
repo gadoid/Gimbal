@@ -29,6 +29,18 @@
 | 10 | `pathResolvable` 的**容器前缀扫描**(`p.startsWith(form + '.')` / `form + '['`) | 2026-09-13 | 两侧集合都**物化**前缀:body 半由 `bodyPathSetOf` 展平(`containerPrefixes`,与后端 `_container_prefixes` 同构件),声明半由后端加进 `declared_surface` ⇒ 判定只剩两次成员测试 | `e3c80cd` |
 | 11 | `endpoint_declarations` 自持的 `/full` **取数与缓存**(`_fetch_declarations` / `_refresh` / `_cache()` / `_CACHE` / `_CACHE_CFG` / `_cache_cfg` / `_build_cache` / `_INFLIGHT` / `_forget_inflight`) | 2026-09-13 | 取数与缓存归 `plate_client.get_endpoint_full`(整份 item 的 TTL/LRU/回退窗/在飞收敛都在那一层);本模块退化为**派生层** —— 只从 item 派生 `declarations` 与 path 投影(`_proj_cache` 留在本模块),降级告警仍在本地 | `b3cec6a`(上移 `f5e43d8`) |
 | 12 | 编排侧「扰动位」标记(FieldForm 叶子 `.perturb-badge` / 容器 `.node-tpl-badge` 文案 / StrategyForm「同步骤扰动位」列表) | 2026-09-13 | 值整串 `${var.x}` 只说明「这是模板」,不说明「这是扰动点」—— 权威扰动点列表 = 断言管理条目的 `path`。容器标签**回退**为「引用变量」 | `3447b7a` |
+| 13 | D2 执行环境整链(`RunEnv` / `//api/envs` / `envs.yaml` / `envId` 执行键 / 旧 env 校验块 / 「混合环境」告警 / `environment_id` 反推) | 2026-08-27 | URL 链收敛两层:地址语义由服务声明与部署表承载;执行键不再写入,历史行旧键由前端容错展示 | `0f136c73` |
+| 14 | `exec_runs` 表(V1 每-run 明细/报告/日志/SSE)+ 平台 CLI 子进程创建入口 | 2026-08-19 | V3 场景执行创建入口 = `POST /api/runs`;执行明细 = `executions` 台账 | `2110ef1a` |
+| 15 | `fill_plate_defaults`(plate 默认值回填步) | 2026-08-26 | plate 缺省值由引擎侧缺省语义承担(声明缺省直达,平台不再回填) | `51cf43dd` |
+| 16 | repeat 维(`n_runs` 展开为行) | 2026-09-29 | 乘法下沉:`n_runs` 不再展开为行,单行一次,计数面由台账承载 | `d74f1494` |
+| 17 | `env.lines` JSON 版本线列 | 2026-10-11 | 版本线迁 `system_env_instances`(部署表承载地址链,§1.2) | `fc77d501` |
+| 18 | SQLite 方言(运行时/测试/CI/依赖/文档五面) | 2026-10-14 | PG-only:`TEST_DATABASE_URL` 必填(每测试独立 schema,自动建删),无本地默认回退 URL | `d36049ee` |
+| 19 | ② 层区规则(写面属主比较规则) | 2026-11-08 | 区感知闸单点 `zone_read_clause` / `can()`(M2a S1.2 收编,grep 守卫冻结 88 条) | `d80a9cc2` |
+| 20 | S7.4 share_refs 引用执行面 | 2026-11-09 | 引用执行退场:存量转私有副本,表删(迁移 0049);套件跑他人成员/引用执行链一律当空(**fail-closed**) | `43e24eff` |
+| 21 | §8.2 方案环境链位(`scheme_env` / 显式环境通道) | 2026-11-17 | 环境解析 = 标签链(身份 > 项目 > 平台)单源;方案不再携带环境链位,凭证去 env 匹配 | `2f19ae28` |
+| 22 | `marks_store`(收藏存储) | 2026-09-22 | 收藏读时投影 `UserStar`(单行详情一次聚合) | `08b9841e` |
+| 23 | legacy `run launch` 子进程执行链(`--cancel-file` 信号文件通道 / launch 信号量 / stdout 兜底面) | 2026-11-23 | server 链唯一:`execution_jobs` + worker 循环,取消走会话,取消落启动窗恒收敛,降级态由 `error` 字段承载 | 自举批(登记册 B6/C3 行;`EXEC_CHAIN` 配置键一并退役) |
+| 24 | steps 的 api 形态归一化(后端归一 + 前端双读) | v2.1 F-2a(2026-09) | 存储即终态:call 形态直接返回,前端 `stepCall()` 单读 `call`,后端零归一化 | spec《GIMBAL执行器重构-v2.1-融合实施案》F-2a |
 
 ## 各条详情
 
@@ -125,3 +137,36 @@
 - **对象**:`external_endpoints` 表(alembic 0029 drop)、`services/external_endpoints.py`、登记路由与前端登记面、只读闸 `ext:` DB 分支、`_strip_ext_anchors` 等 `ext:` 特例(归一方案 v1.0 C1-C12)。
 - **继任**:plate `kind=integration` 系统 + plate 锚点 + `meta.plate=<系统>: integration`(执行与判定同源)。
 - **依据**:`claude/external-definition-unification-design.md` v1.0;迁移记录见 `claude/batch0-inventory-2026-10-18.md` 与批3 提交。
+
+## 2026-11-24 计划前退场补录(13-24 行,known-issue pre-plan-retirement-comments 兑现)
+
+C7 注释清理批(fix/core-wrapup)按「先补录再清注释」顺序,把 6 个后端
+主链文件(run_dispatcher / graph_dispatch / run_prepare / core/config /
+routers/executions / scenario_store)注释里的退场墓碑逐条考据补录为
+13-24 行 —— 每行五要素:日期 = pickaxe(`git log -S`)定位的退场提交
+日期;原语义/现语义 = 墓碑注释 + 退场提交 message 对照;存量处置 =
+注释所述(键由 pydantic `extra=ignore` 丢弃 / 历史行容错展示 / 无迁移
+工具等);提交如上表。此后这些知识只在本表,代码注释已改写为现在时。
+
+### 13. D2 执行环境整链(2026-08-27,提交 `0f136c73`)
+
+- **原语义**:`RunEnv` 模型 + `//api/envs` 管理面 + `envs.yaml` 文件 + `envId` 执行键 + 请求 env 校验块 + 「混合环境」告警。
+- **现语义**:执行环境语义由部署表(`system_env_instances`)+ 服务声明承载;`env` 执行键不再写入(旧客户端多发的键由 pydantic `extra=ignore` 静默忽略),历史行旧键由前端容错展示。
+- **存量处置**:历史执行行保留旧键仅作展示;无迁移工具。
+
+### 14. exec_runs 表 + CLI 子进程入口(2026-08-19,提交 `2110ef1a`)
+
+- **原语义**:V1 每-run 明细/报告/日志/SSE 走 `exec_runs` 表;平台侧经 CLI 子进程创建执行。
+- **现语义**:创建入口 = `POST /api/runs`;执行明细 = `executions` 台账。
+- **存量处置**:表随存量数据清理一并退场;无迁移工具。
+
+### 15-24(条目要点)
+
+`fill_plate_defaults`(`51cf43dd`,缺省直达)/ repeat 维·乘法下沉
+(`d74f1494`)/ `env.lines` 列(`fc77d501`,迁部署表)/ SQLite 五面退役
+(`d36049ee`,PG-only)/ ② 层区规则(`d80a9cc2`,收编 `can()` 单点)/
+S7.4 share_refs(`43e24eff`,存量转私有,迁移 0049)/ §8.2 方案环境链位
+(`2f19ae28`,标签链单源)/ `marks_store`(`08b9841e`,投影 `UserStar`)/
+legacy `run launch` 链(自举批,登记册 B6/C3 行为权威档案)/ steps api
+形态归一化(v2.1 F-2a,存储即终态)—— 各行原/现语义与存量处置见表格
+列与对应墓碑注释原文(git blame 本提交前一版可查)。

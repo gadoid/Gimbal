@@ -10,7 +10,7 @@ Per-row fan-out of a Scenario's selected DataSets:
    模板扫描 ∪ serviceBindings 绑定)。
 4. 落盘 case 文件(``DATA_DIR/runs/cases/<runId>/``)。
 5. 执行器 server 实例执行(``gimbal_server_session``:POST /runs + SSE;
-   legacy ``run launch`` 子进程链已随 B6③ 退役,2026-11-23)。
+   legacy 链退场,ADR-0003 #23)。
 
 Mirrors the in-flight task pattern in ``app/routers/executions.py``
 (tracked ``set[asyncio.Task]`` + ``_shutting_down`` flag + ``drain_*``
@@ -78,7 +78,7 @@ from .run_injection import (
 )
 from .run_materialize import materialize_run_copy
 from . import run_prepare, service_aliases
-# N1(2026-11-01):装载准备(凭证清单/解析、compose、内置 users、数据集
+# 装载准备(凭证清单/解析、compose、内置 users、数据集
 # 查找、prepare_exec 统一入口)迁往 run_prepare —— 本模块只做派发与
 # 执行编排;ResolvedAuth/AuthResolveError 亦由 run_prepare 定义。
 from .run_prepare import (
@@ -92,14 +92,14 @@ from .run_prepare import (
 if TYPE_CHECKING:
     # 仅注解用(_fanout_pool_scaffold 返回类型):运行期在函数体内局部
     # 导入(避开模块加载期的环);注解经 __future__ annotations 延迟
-    # 求值,不在此处求值。CI 的 pyflakes 未定义名守卫此前在此报
+    # 求值,不在此处求值。CI 的 pyflakes 未定义名守卫在此报
     # F821(引号前向引用指向一个模块级不存在的名字)。
     from .gimbal_server_session import ServerSessionPool
 
 
 # ─── shutdown 状态 + 队列 worker 桥（C11）───────────────────────
 # 进程内注册表（_in_flight/_cancel_requested/_tasks_by_execution/全局
-# launch 信号量）已退役：执行任务进 execution_jobs 表，worker 循环
+# 执行任务进 execution_jobs 表，worker 循环
 # （services/execution_queue.py）认领驱动；取消走 DB 位。
 _shutting_down: bool = False
 
@@ -160,7 +160,7 @@ def reset_cancel_state() -> None:
     _eq0._cancel_hint.clear()
 
 
-# C6（P3-04）：execution_id → 调试执行上下文（ServerSession 由本模块
+# execution_id → 调试执行上下文（ServerSession 由本模块
 # 持有；命令/输出端点经此代理——前端不接触执行器 token）。
 debug_sessions: dict[int, dict] = {}
 
@@ -184,7 +184,7 @@ class RowState:
     # 交叉定位(spec v3 §4):注入条目 id + 数据集行两字段首次同时有值;
     # 纯基线行/纯数据集的另一侧为 None。
     injection_id: str | None = None
-    # P2-01/P2-04:单元级台账面(从执行器事件投影;旧引擎/无事件路径
+    # 单元级台账面(从执行器事件投影;无事件路径
     # unit_id=""、attempts=1 —— 与 0008 存量行兼容)
     unit_id: str = ""
     branch: str = "main"
@@ -211,8 +211,8 @@ _row_states: dict[int, list[RowState]] = {}   # 活跃执行;finalize 后 pop
 def execution_rows(execution_id: int) -> list[dict]:
     """行级状态读侧(内存段):活跃执行读内存 registry。
 
-    历史执行走 :func:`execution_rows_page`(M6 起 DB 行是持久层,
-    JSONL 回放只兜 M6 之前的存量单)。"""
+    历史执行走 :func:`execution_rows_page`(DB 行是持久层,
+    JSONL 回放只兜存量单)。"""
     live = _row_states.get(execution_id)
     if live is not None:
         return [asdict(r) for r in live]
@@ -222,12 +222,11 @@ def execution_rows(execution_id: int) -> list[dict]:
 async def execution_rows_page(
     db: Any, execution_id: int, *, page: int = 1, page_size: int = 200,
 ) -> tuple[list[dict], int]:
-    """历史执行行级分页(M6,债 5):DB 行 LIMIT/OFFSET + total。
+    """历史执行行级分页:DB 行 LIMIT/OFFSET + total。
 
     活跃执行(内存 registry 在场)整段返回后 Python 切片 —— 活跃行的
-    权威在内存,分页只是展示层。M6 前 JSONL 归档回放分支已随存量单
-    清除下线(2026-11-22 复核收口:开发期数据直接改造,不为旧形态
-    保兼容 —— pre-M6 执行已清,全量执行均有 DB 行)。
+    权威在内存,分页只是展示层;JSONL 归档回放仅兜存量单
+    (全量执行均有 DB 行)。
     """
     live = _row_states.get(execution_id)
     if live is not None:
@@ -289,7 +288,7 @@ def _iso_to_dt(ts: str | None):
 
 
 def _dt_to_iso(dt) -> str | None:
-    """DB datetime → UTC ISO 串(Z 后缀;时区对齐 2026-11-15:API 时间
+    """DB datetime → UTC ISO 串(Z 后缀;时区对齐:API 时间
     一律带明确时区标记,前端 new Date 按本地渲染 —— naive 无 offset
     会被浏览器当本地时区解析,+8 主机显示慢 8h)。"""
     from ..core.timeutil import iso_utc_z
@@ -298,7 +297,7 @@ def _dt_to_iso(dt) -> str | None:
 
 
 class _EventIngester:
-    """P2-02/C2:执行器事件/日志流式入库缓冲(launcher 回调 → execution_events)。
+    """执行器事件/日志流式入库缓冲(launcher 回调 → execution_events)。
 
     回调在 launch 的读协程内同步触发 —— 只入内存缓冲;达到阈值经
     ``asyncio.create_task`` 异步批量落库(新会话,不与行持久化抢会话)。
@@ -321,7 +320,7 @@ class _EventIngester:
         self._ticker: "asyncio.Task | None" = None
         self._stopped = False
         # 结构化日志设计 AD2/AD5:_flush 全路径 single-flight 锁 ——
-        # 阈值 task 与 ticker 直调曾可并发开两个事务,PG 按 INSERT 时刻
+        # 阈值 task 与 ticker 直调可并发开两个事务,PG 按 INSERT 时刻
         # 分 id、按提交时刻可见,先分 id 后提交的批次会落在已推进的
         # id cursor 之下(SSE 日志流 tail 漏行的 id 版)。锁内串行 =
         # 「执行内 id 按提交序单调」成为机制保证(tail 游标的地基)。
@@ -518,7 +517,7 @@ _ROW_UPSERT_COLS = ("unit_id", "branch", "attempts", "dataset_id",
 async def _upsert_execution_rows(db: Any, rows: list[dict]) -> None:
     """ExecutionRow 同键 (execution_id, seq) upsert **单源**。
 
-    2026-11-22 收口:此前三处手写 insert→IntegrityError→update 拷贝
+    三处手写 insert→IntegrityError→update 拷贝曾互有列漂移,收编
     互有列漂移(恢复分支漏 unit_id/branch/attempts 等、graph 批漏
     branch/case_dir/started_at —— 撞约束后窄列回填,字段错位残留旧
     值)。on_conflict 全列覆盖(_ROW_UPSERT_COLS),形状结构上不可能
@@ -545,7 +544,7 @@ async def _upsert_execution_rows(db: Any, rows: list[dict]) -> None:
 
 async def _persist_row_terminal(db_factory: Any, execution_id: int,
                                 state: "RowState") -> None:
-    """行终态即落库(M6 转正):崩溃窗口不丢已终态行。
+    """行终态即落库:崩溃窗口不丢已终态行。
 
     best-effort —— 失败只记日志:活跃读侧的权威仍在内存 registry,
     DB 是持久层跟进(§2.2);计数器审计面另由 JSONL 生命周期行承担。
@@ -579,9 +578,9 @@ async def reconcile_stale_executions(
     db_factory: Any, *, periodic: bool = False,
 ) -> int:
     """reconcile 僵尸执行(C11 起 jobs 感知;N2 起走唯一终态迁移;
-    P0-3.2/3.3 起支持周期模式与 canceled 口径,webhook 设计 v3)。
+    支持周期模式与 canceled 口径(webhook 设计 v3)。
 
-    * executions stuck queued/running **且无 job 行**（0009 前遗留/
+    * executions stuck queued/running **且无 job 行**(迁移期残留/
       建行后入队前崩溃）→ failed + ``config_json.reconciled``（原口径）;
     * job ``failed``/``canceled`` 终态而 execution 仍 queued/running
       （worker 收口前崩溃）→ job failed → failed 收口;job canceled →
@@ -600,7 +599,7 @@ async def reconcile_stale_executions(
     N2 变化:①收口改经 :func:`transition_execution`(原子守卫,重启
     竞态下已终态的不覆写);②整单未分发(passed=failed=0)按 failed=total
     计(与 if_stuck 同款 2-3 口径,消除"状态 failed 而计数 0"的矛盾);
-    ③started_at 从 created_at 回填;④failed 终态发完成通知(N2-2:启动
+    ③started_at 从 created_at 回填;④failed 终态发完成通知(启动
     对账不再静默)。返回**实际发生迁移**的行数。
     """
     from sqlalchemy import select as _select
@@ -619,7 +618,7 @@ async def reconcile_stale_executions(
         if job_status in ("queued", "running"):
             continue   # worker 域:待认领或由租约回收
         if job_status == "canceled":
-            # D7(P0-3.3):job 已取消 → 执行记 canceled;取消不是失败,
+            # job 已取消 → 执行记 canceled;取消不是失败,
             # 不做零计数兜底、不发通知(canceled 站内通知本就不发),
             # 回调面(P2)按 MOVED 正常发 status=canceled。
             moved = await transition_with_retry(
@@ -644,7 +643,7 @@ async def reconcile_stale_executions(
 
 
 async def periodic_reconcile_once() -> int:
-    """周期对账入口(background_tasks 注册,P0-3.2/设计 v3 P0-5)。
+    """周期对账入口(background_tasks 注册,webhook 设计 v3)。
 
     卡住的执行最迟「宽限 10 分钟 + 周期 5 分钟」内被收口 —— 回调上线
     后这是「收不到回调」兜底的书面承诺(集成指南按 executionId 轮询)。"""
@@ -727,7 +726,7 @@ async def compute_run_fanout(
         # Release v4.4 §6.3：正式执行悬空注入条目 → 失败（非静默跳过）。
         # 预览判定 = 版本模型 §6（A-2/W5）：任一受管系统 working（含未钉
         # 修订）即预览；调试执行保持宽容（探索性质，悬空面在
-        # /run/precheck 与告警可见）。旧口径 is_preview=bool(req.debug) 废。
+        # /run/precheck 与告警可见）。
         from .run_semantics import working_preview
         if working_preview(raw_payload) or req.debug:
             logger.warning(
@@ -777,7 +776,7 @@ async def compute_run_fanout(
 
 
 def fanout_total(fanout_datasets: list[dict], injections: list) -> int:
-    """R × E 的单元口径计数(P2-05:nRuns 乘法下沉执行器,不展开进
+    """R × E 的单元口径计数(nRuns 乘法下沉执行器,不展开进
     total_runs;P7 闸同口径)。"""
     return sum(len(d["rows"]) for d in fanout_datasets) * len(injections)
 
@@ -914,7 +913,7 @@ async def dispatch_target(
     and returns the runId so the user can still see the run in
     ``/executions`` (per the agreed run-failure semantics).
 
-    执行链恒 server(B6③ 退役 legacy 链后,2026-11-23);C13 台账
+    执行链恒 server;台账
     ``chain`` 键照记 ``"server"``,存量行的 ``legacy`` 值仅历史可读。
 
     令牌调用面(webhook v4 §3.1):``token`` 来自 ``principal_or_user``
@@ -932,7 +931,7 @@ async def dispatch_target(
     # (旧 env 校验块已随 D2 执行环境退役 — 旧客户端多发的 env 键由
     # pydantic extra=ignore 静默忽略。)
     steps = steps_from_payload(scenario_payload)
-    _reject_unsupported_run_options(req)   # W19:未接面显式拒绝
+    _reject_unsupported_run_options(req)   # 未接面显式拒绝
     _validate_step_to(req, steps)
 
     # 执行配置分层②(§5)与 ④ 重跑快照 → _resolve_dispatch_exec_cfg
@@ -1004,7 +1003,7 @@ async def dispatch_target(
         db, user_id, fanout_datasets, req,
         circled=_circled, token=token, cred_project_id=cred_project_id)
 
-    # B6③(2026-11-23):legacy 链退役,执行链恒 server(EXEC_CHAIN 键已删)。
+    # 执行链恒 server(EXEC_CHAIN 键不存在;legacy 链退场见 ADR-0003 #23)。
     chain = "server"
     _validate_debug_request(req, total_runs=total_runs)
 
@@ -1027,7 +1026,7 @@ async def dispatch_target(
             params_mode=_params_mode, skip_carry=_skip_carry,
             chain=chain, trace=trace))
 
-    # C11（P3-01）：不再 spawn 进程内 fanout —— 执行配方入队，worker 认领驱动。
+    # 执行配方入队,worker 认领驱动(spawn 进程内 fanout 不是执行路径)。
     # 配方是 dispatch 校验后的完整快照（worker 不回查请求上下文）；
     # chain（C13 台账）恒记 "server"（B6③ 后单链;键保留 = 存量行
     # legacy 值与新行同形可读,worker 不再消费该键）。配方装配 →
@@ -1055,7 +1054,7 @@ async def dispatch_target(
 # ─── C1 切片2:dispatch_target 取用/门禁辅助(抽缝不改语义)─────────
 
 def _reject_unsupported_run_options(req: RunRequest) -> None:
-    """RunOptions 未接面显式拒绝(W19):step_from 需要被跳过上游的输出
+    """RunOptions 未接面显式拒绝:step_from 需要被跳过上游的输出
     由外部提供(同 GraphControlSpec 不开放 fromNode 的理由);subscribe
     平台无消费面。生成物形状收下了这两个键,但派发链静默丢弃它们
     会制造"看似生效"的假象 —— 409 说清楚,不兼容不吞。
@@ -1154,21 +1153,21 @@ async def _resolve_execution_env(
     scenario_payload: dict, steps: list, bindings: dict, exec_cfg,
     exec_replay: dict | None, env_replay: dict | None,
 ):
-    """§8.2 标签解析链(2026-11-17 环境降级轮):**有效调用身份标签 >
+    """§8.2 标签解析链:**有效调用身份标签 >
     项目默认 > 平台默认**。显式注入(RunRequest/graph 的
     environmentId)与方案/执行配置/偏好链位全部退役;多身份标签
     不一致 → env_mixed 硬拦截(无逃生口)。三路分流:
-    * rerun(``env_replay``)按首发快照回放,不重解析(P1-3 修复:
+    * rerun(``env_replay``)按首发快照回放,不重解析(重解析会让
       旧通道经 RunRequest.environmentId 传键,字段退役后被 pydantic
       静默丢弃,「按快照回放」实际从未生效);
     * graph 单元自治:顶层不解析(快照记空),逐单元在
-      materialize_graph 内按各自身份集合解析(P1-2 修复:此前顶层
+      materialize_graph 内按各自身份集合解析(顶层
       无条件解析,宿主标签恒非空,被 graph_dispatch 当重放快照钉
       整图,逐单元解析不可达);
     * scenario/adhoc 现解析:有效身份 = 绑定 + 执行配置换用(slot_map)
       后的取用集合;adhoc 无项目归属,身份自 payload 定义扫描
-      (call.user = 条目名,与 prepare_adhoc 校验链同口径 —— P1-1
-      修复:此前派发侧不填身份名,执行标签恒为平台默认,校验过的
+      (call.user = 条目名,与 prepare_adhoc 校验链同口径 —— 派发侧
+      填身份名,否则执行标签恒为平台默认,校验过的
       地址/版本线与实际执行可能不是同一套)。
 
     返回 (env_choice, env_warnings, project_id);project_id 供下游
@@ -1223,7 +1222,7 @@ async def _resolve_dispatch_fanout(
 ):
     """fanout 计算(权限域二期 P1 抽出为 compute_run_fanout:suite 总量
     预检与本处共用同一份实现,算法不得漂移)。
-    入站参数(设计 2026-11-13 决策 5):params 已在路由入口五道闸校验,
+    入站参数(设计 决策 5):params 已在路由入口五道闸校验,
     此处合成为**单虚行**走数据集行既有通路,跳过 compute_run_fanout
     —— 互斥族已拒 params+dataSets/injection 组合;方案配方带入的
     数据集行不消费(评审 ①「砍掉比缝合便宜」)。datasetId=None 与
@@ -1340,7 +1339,7 @@ async def _resolve_auth_aliases(db: AsyncSession, user_id: int,
 
     编排缺槽按**全图**凭证清单判(与物化同源),不是锚点场景的
     清单 —— 否则单元缺槽要到执行期才步骤级报错。TOK-02
-    (2026-11-20 审计):此前仅项目凭证池有闸,个人池缺身份会
+    个人池与项目凭证池同闸 —— 个人池缺身份
     静默漏到引擎层匿名调用 —— 双池统一 fail-fast。
     """
     auth_aliases = await service_aliases.exec_auth_aliases_of_definition(
@@ -1355,7 +1354,7 @@ async def _resolve_auth_aliases(db: AsyncSession, user_id: int,
     except _gd.GraphDispatchError as e:
         raise Conflict("graph_invalid", str(e)) from None
     if _g_ambig:
-        # D3 收口(2026-11-22):歧义独立报(此前误标「未登记」)
+        # 歧义独立报(不误标「未登记」)
         raise Conflict(
             "auth_aliases_ambiguous",
             "以下身份条目命中多个候选账户(同引用多行且无同标签唯一"
@@ -1384,7 +1383,7 @@ async def _resolve_auth_aliases(db: AsyncSession, user_id: int,
 async def _resolve_slot_and_circled(db: AsyncSession, *, steps: list,
                                     bindings: dict, exec_cfg,
                                     exec_replay: dict | None):
-    """S5 失败即中止:注入清单在执行人池解不到账户 → 整单拒发(此前
+    """S5 失败即中止:注入清单在执行人池解不到账户 → 整单拒发(否则
     告警继续、执行期步骤级报错;预检口径与执行对齐)。取用裁决与
     注入/预览同一份(pick_bindings)。分层②:显式选定配置的绑定把
     取用条目换掉(注入标签不变;仅显式选定参与,默认行不自动换用)。
@@ -1415,7 +1414,7 @@ async def _dispatch_precheck_gate(
     bindings: dict, auth_aliases: list, slot_map: dict,
     cred_project_id: int | None, env, circled,
 ) -> None:
-    """M3 §8.5 预检硬门(2026-11-17):三路径统一 —— UI/JWT、access
+    """M3 §8.5 预检硬门:三路径统一 —— UI/JWT、access
     token 都经本漏斗;判定与 /run/precheck 共用一套分类(run_precheck
     私有函数,「不开第二份」)。webhook 定时路径在 integration_runner
     装载前接同一门。graph(逐单元物化)与 adhoc(check_addresses
@@ -1492,7 +1491,7 @@ async def _resolve_row_bindings(db: AsyncSession, user_id: int,
     if token is not None:
         from . import access_token as _at
         _scope_aliases, _scope_auths = await _at.load_scope(db, token.id)
-        # P1-1(review 2026-11-20):PickedIdentity 无 .id(slots),
+        # PickedIdentity 无 .id(slots),
         # 绑定标识 = account_id —— 与十行下方的留档路径同款
         _out = sorted({a for (s, a), b in _hit.items()
                        if b.account_id not in _scope_auths})
@@ -1512,7 +1511,7 @@ async def _resolve_row_bindings(db: AsyncSession, user_id: int,
 
 async def _dup_client_ref_id(db: AsyncSession, client_ref: str, *,
                              token_id: int | None, user_id: int) -> int | None:
-    """clientRef 幂等查重(设计 2026-11-13 决策 8):外部投递天然
+    """clientRef 幂等查重(设计 决策 8):外部投递天然
     at-least-once,重复 clientRef = 重复业务订单。身份维度与 0056 部分
     唯一索引同拍:令牌 = (token_id, client_ref);JWT = (owner_id,
     client_ref) ∧ token_id IS NULL。预查与 IntegrityError 兜底回查共用。
@@ -1545,7 +1544,7 @@ async def _persist_dispatch_execution(
     scen_project_id: int | None, token: object | None,
     trace: dict | None, config_json: dict,
 ) -> Execution:
-    """建执行行(整单落库的单写点)+ clientRef 幂等(设计 2026-11-13
+    """建执行行(整单落库的单写点)+ clientRef 幂等(设计
     决策 8):预查 → 插入;并发竞态由 0056 部分唯一索引兜底(撞
     IntegrityError 回查映射同 409)。回查也落空 = 违规来自别的约束
     (与本索引无关)→ 原样上抛,不编造 duplicate_client_ref。
@@ -1638,7 +1637,7 @@ def _dispatch_config_json(
         **({"rowBindings": row_bindings_cfg} if row_bindings_cfg else {}),
         # 服务键 → {alias}(S6;重跑按此回放)
         "serviceBindings": bindings,
-        # 执行指令快照(W19):RunOptions 生成物 dump(snake_case 内层,
+        # 执行指令快照:RunOptions 生成物 dump(snake_case 内层,
         # 与 RunScheme.options 同形)。旧平铺键 stepTo/nRuns/parallel
         # 不再写;读侧(rerun/列表投影)带旧行回退映射。
         "runOptions": (req.run_options.model_dump(mode="json",
@@ -1685,7 +1684,7 @@ def _dispatch_config_json(
         # 键缺席 = 本次执行没有「降级 + 跳过」同时发生,不是「零跳过」。
         **({"judgeDegraded": True, "entriesSkippedWhileDegraded": skipped_while_degraded}
            if skipped_while_degraded else {}),
-        # ── 入站执行参数快照(设计 2026-11-13 §5)────────────────
+        # ── 入站执行参数快照(设计 §5)──────────────────────
         # rerun 回放 params/schemeId("raw" 原样);clientRef 不回放
         # (与 batchId 同口径:重跑是新的一次独立发起)。carryPolicy
         # "off" 仅 raw(决策 3);paramsStrict = 场景契约快照。
@@ -1755,7 +1754,7 @@ def _dispatch_job_payload(
             # 语义与方案引用同款,配置后改不影响已派发执行)
             "slot_map": slot_map,
             "exec_carry_overrides": exec_carry,
-            # 入站参数(设计 2026-11-13 决策 3):raw 保留字 →
+            # 入站参数(设计 决策 3):raw 保留字 →
             # prepare_exec 跳过 carry 上下文构建。升级前入队的旧
             # 配方缺键 = False(缺省不跳),回放语义不受影响。
             "skip_carry": skip_carry,
@@ -1806,8 +1805,8 @@ async def finalize_canceled_before_start(job: dict) -> None:
 async def finalize_execution_if_stuck(execution_id: int, error: str) -> None:
     """任务体异常的兜底终态化(N2:走唯一迁移;幂等 = 终态不再改)。
 
-    N2-2 拍板:failed 兜底也发完成通知 —— 任务体崩溃是调用方无从得知
-    的静默失败,此前零通知。
+    failed 兜底也发完成通知 —— 任务体崩溃是调用方无从得知的静默失败,
+    零通知会漏报。
     """
     await transition_with_retry(
         _session_factory, execution_id, STATUS_FAILED,
@@ -1886,12 +1885,11 @@ async def _fanout_graph(
     env_snapshot: dict | None = None,
     cred_project_id: int | None = None,
 ) -> None:
-    """C5(P3-05):graph 编排执行链 —— 物化 SuiteGraph → 单 spawn →
+    """graph 编排执行链 —— 物化 SuiteGraph → 单 spawn →
     事件投影台账(与单场景链同读面;乘法/并发/横切面在执行器)。
     C12/C13：chain=server 时 spawn 走执行器 server 实例。
 
-    取消(graph 单元级取消方案 2026-11-02 P2 + §6「可」项/legacy 通道
-    2026-11-03):取消轮询器置位后 ——
+    取消(graph 单元级取消方案 §6「可」项):取消轮询器置位后 ——
     ① 物化完成、下发执行器之前命中 → 不下发,canceled 零计数收口;
     ② 在飞 → 按链下发单元级取消:server 链向执行器 ``cancel(scope="unit")``
     (runId 返回前每 0.5s 重试);legacy 链写 ``--cancel-file`` 信号文件
@@ -1901,8 +1899,8 @@ async def _fanout_graph(
     能力门禁:spawn 期探测并落 ``job payload["unit_cancel"]`` —— server 链
     读 healthz cancel_scopes(旧执行器空能力,不下发,读侧 409);legacy 链
     读本地 gimbal FEATURES(GIMBAL_BIN 外部安装保守 False)。取消落在执行器
-    启动窗口时总是先创建下发任务,session 就绪后按能力位决定发或停(评审
-    2026-11-03 §3.1)—— 旧执行器停发并留痕 cancelIgnored=executor_no_unit_cancel。
+    启动窗口时总是先创建下发任务,session 就绪后按能力位决定发或停(§3.1)
+    —— 停发并留痕 cancelIgnored=executor_no_unit_cancel。
     """
     from . import execution_queue as _eq
     from . import graph_dispatch
@@ -1968,7 +1966,7 @@ async def _fanout_graph(
             _row_states.pop(execution_id, None)
             return
         await _mark_running(db_factory, execution_id)
-        # B-1 台账三件套(pins/baseline/m2_hash,判定失败不阻断)→
+        # 台账三件套(pins/baseline/m2_hash,判定失败不阻断)→
         # _persist_graph_semantics
         await _persist_graph_semantics(db_factory, execution_id, graph_sem)
 
@@ -2036,7 +2034,7 @@ async def _fanout_graph(
     await _finalize_execution(db_factory, execution_id, status=final_status)
 
 
-# ── graph 编排执行体辅助(C1 切片 3,2026-11-23)──────────────────────
+# ── graph 编排执行体辅助 ──────────────────────────────────────────
 
 async def _graph_prior_event_count(db_factory: Any, execution_id: int) -> int:
     """graph 恢复预检:执行已有事件数(存在即「已开跑」)。查询失败按
@@ -2057,7 +2055,7 @@ async def _graph_prior_event_count(db_factory: Any, execution_id: int) -> int:
 async def _graph_recover_failed(db_factory: Any, execution_id: int,
                                 prior: int) -> None:
     """恢复重跑收口(整图 at-most-once):seq=0 图行留档 + N2 唯一终态迁移
-    (原子守卫 + failed 通知 —— 此前静默,N2-2 拍板补发;P0-3.2 带重试版)。
+    (原子守卫 + failed 通知兜底;P0-3.2 带重试版)。
     行留档失败仅告警(行台账缺失,终态不受影响)。
     """
     finished_ts = _utcnow().isoformat() + "Z"
@@ -2089,15 +2087,14 @@ async def _graph_recover_failed(db_factory: Any, execution_id: int,
 
 
 class _GraphCancelCtl:
-    """graph 单元级取消装置(取消方案 2026-11-02 P2 + §6「可」项):
+    """graph 单元级取消装置(取消方案 §6「可」项):
     取消轮询器置位后 —— ① 物化完成、下发执行器之前命中 → 不下发,
     canceled 零计数收口(调用方处理);② 在飞 → 向执行器
     ``cancel(scope="unit")``(runId 返回前每 0.5s 重试)。
     能力门禁:session 就绪时按 healthz cancel_scopes 落 job payload
     (旧执行器空能力 → 不下发,读侧按能力位 409)。B6③ 后单链,legacy
     --cancel-file 信号文件通道已随链退役。取消落在执行器启动窗口时总是
-    先创建下发任务,session 就绪后按能力位决定发或停(评审 2026-11-03
-    §3.1)—— 旧执行器停发并留痕 cancelIgnored=executor_no_unit_cancel。
+    先创建下发任务,session 就绪后按能力位决定发或停(§3.1)—— 旧执行器停发并留痕 cancelIgnored=executor_no_unit_cancel。
     """
 
     def __init__(self, db_factory: Any, execution_id: int) -> None:
@@ -2143,7 +2140,7 @@ class _GraphCancelCtl:
             await asyncio.sleep(0.5)
 
     def on_cancel_set(self) -> None:
-        # 总是创建下发任务(评审 2026-11-03 §3.1):取消可能落在执行器
+        # 总是创建下发任务(§3.1):取消可能落在执行器
         # 启动窗口(ss.start 轮询 healthz 期间,on_session 未回调、能力位
         # 未落定),此时若按能力位拦截,轮询器命中一次即 return,能力位
         # 后来转 True 也无人再触发下发 —— 取消被接受却静默跑完。
@@ -2176,7 +2173,7 @@ class _GraphCancelCtl:
 
 async def _persist_graph_semantics(db_factory: Any, execution_id: int,
                                   graph_sem: dict) -> None:
-    """B-1(2026-10-13):suite 执行接入版本模型 —— 台账三件套与单场景
+    """suite 执行接入版本模型 —— 台账三件套与单场景
     dispatcher 同点写(pins 来自成员声明合并[R25 已统一到交集生效修订],
     baseline 判定输入同口径;m2_hash 取 /convert 附带身份,随台账一次写)。
     台账性质:判定/写库失败不阻断执行。
@@ -2379,7 +2376,7 @@ async def _persist_graph_rows(db_factory: Any, execution_id: int,
                          skipped=max(len(ordered_units) - n_pass - n_fail, 0))
 
 
-# ── 执行前置共用段(C1 切片 1,2026-11-23)────────────────────────
+# ── 执行前置共用段 ────────────────────────────────────────────
 # _fanout 前置的命名缝:鉴权预检 / 台账写 / 会话池脚手架 / §7 收口序。
 # 新执行面特性只接这些缝,不再平铺进 _fanout 主体。
 
@@ -2504,7 +2501,7 @@ async def _fanout(
     C12:执行器 server 实例池(POST /runs + SSE 消费;单 run 设计,
     多行 × parallel>1 每槽位一实例),取消走 cancel 端点,结束
     terminate 进程树。``debug`` 单 case,会话注册进 ``debug_sessions``
-    供平台调试台代理。B6③:legacy 子进程链已退役(2026-11-23)。
+    供平台调试台代理。
 
     C11 取消：DB 位（execution_jobs.cancel_requested）→ 本函数的取消
     轮询器写入局部标志 → 行边界消费（未跑行记 canceled 不进计数器）。
@@ -2540,7 +2537,7 @@ async def _fanout(
     # 构建;单行/调试退化为单实例语义)。
     server_pool = _fanout_pool_scaffold(
         datasets, injections, parallel=parallel, debug=debug)
-    # P2-02/C2:执行器事件/日志流式入库(launcher on_event/on_log →
+    # 执行器事件/日志流式入库(launcher on_event/on_log →
     # 缓冲 → 批量 execution_events;读侧 SSE/日志分析页共用)
     ingester = _EventIngester(db_factory, execution_id)
     await ingester.seed_from_db()   # P3.5-2：恢复重跑事件 seq 续接
@@ -2605,7 +2602,7 @@ async def _fanout(
     # ORM 行),同一行 n_runs 次重复的 convert 输入完全一致, memo 键才能命中。
     scenario_payload = copy.deepcopy(scenario_payload)
 
-    # N1(2026-11-01):装载准备归一 —— 别名 base_url 预解析(F4 方案 B,
+    # 装载准备归一 —— 别名 base_url 预解析(F4 方案 B,
     # 查表失败降级空表)、RS3 生效修订解析(plate_client.resolve +
     # merge_resolve_effective;plate_rejected/plate_unavailable 异常
     # 拓扑不变)、内置 users 基座、carry 预解析(M4:field_states 增量在
@@ -2625,7 +2622,7 @@ async def _fanout(
                   for k, b in (service_bindings or {}).items()},
         # 分层②:显式选定配置的条目覆盖与 carry 覆盖(纯值随配方)
         slot_overrides=None, exec_carry_overrides=exec_carry_overrides,
-        # 入站参数(设计 2026-11-13 决策 3):raw 保留字 → 跳过 carry
+        # 入站参数(设计 决策 3):raw 保留字 → 跳过 carry
         skip_carry=skip_carry)
 
     # A-3/W7 + RS3 台账写(C1 切片 1 起抽至 _persist_run_telemetry):
@@ -2667,7 +2664,7 @@ async def _fanout(
             # 不重跑、不重计数
             state.status = _prev
             return
-        # P2-04:本行事件投影器(所有路径可安全读;无事件路径恒空)
+        # 本行事件投影器(所有路径可安全读;无事件路径恒空)
         proj = {"unit": None, "status": None, "attempts": 0}
         result = None   # launch 产物(plate 异常路径无 launch → None)
         injection_id = (injection or {}).get("id")
@@ -2681,7 +2678,7 @@ async def _fanout(
             # 未启动的直接记 canceled,不进计数器。
             if cancel_local["set"] or execution_id in _eq._cancel_hint:
                 # (hint = 路由同进程写入的取消快速通道;轮询器 0.5s 节拍
-                # 之内也能即刻收敛)M6:行终态(canceled 含)即落库;行级
+                # 之内也能即刻收敛)行终态(canceled 含)即落库;行级
                 # JSONL 停写(运行级生命周期行保留为运维审计面)。
                 state.status = "canceled"
                 state.finished_at = _utcnow().isoformat() + "Z"
@@ -2726,7 +2723,7 @@ async def _fanout(
                     converted = convert_data.get("converted") or {}
                     # M2 §5.1:/convert 响应附带的构建身份 → 转交执行器（代际门）
                     m2_info = convert_data.get("m2") or None
-                    # W21/挂账二.1:m2_hash 派发回填(首行一次)→
+                    # m2_hash 派发回填(首行一次)→
                     # _record_m2_hash_once
                     await _record_m2_hash_once(
                         db_factory, execution_id, m2_info, plate_state)
@@ -2742,7 +2739,7 @@ async def _fanout(
                     )
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)
-                    # P2-04 行事件投影器 → _row_event_projection。
+                    # 行事件投影器 → _row_event_projection。
                     # (C11:P7 全局 launch 闸退役 —— 并发由 worker 数与
                     # 行级 sem 界定)
                     on_event = _row_event_projection(proj, seq, ingester)
@@ -2818,11 +2815,11 @@ async def _fanout(
                   for seq, (ds, i, row, inj, r) in enumerate(entries))
             )
         except BaseException:
-            # gather 异常兜底(2026-10-13 复审):_row 全路径吞 Exception,
+            # gather 异常兜底:_row 全路径吞 Exception,
             # 走到这里的是防御面之外的问题(取消/意外)。不变量在异常
             # 路径同样成立 —— 关池排空泵 → finalize 冲刷已入缓冲的事件/
             # 日志,再放行异常(终态由 worker 的 finalize_execution_if_stuck
-            # 兜,取消路径由租约回收重跑)。此前只走 _teardown:缓冲静默
+            # 兜,取消路径由租约回收重跑)。只走 _teardown 会让缓冲静默
             # 丢失、ticker 任务泄漏。best-effort,收尾失败不吞原始异常。
             try:
                 if server_pool is not None:
@@ -2836,7 +2833,7 @@ async def _fanout(
                     "run_dispatcher: fanout exception-path finalize failed "
                     "for {}", execution_id)
             raise
-        # 尾部日志阻断修复(2026-10-13):server 链进程不随 run 结束退出,
+        # 尾部日志不阻断:server 链进程不随 run 结束退出,
         # stderr 泵在 run_case 返回后仍会读到滞留管道的行(最后一步
         # WARNING / uvicorn 收尾)。finalize 之后的 on_log 只进**已停止**
         # ingester 的缓冲,永远不落库,却已计入 logs_ingested —— S9 对账
@@ -2860,7 +2857,7 @@ async def _fanout(
         await _teardown()
 
 
-# ── 行执行体辅助(C1 切片 4,2026-11-23)────────────────────────────
+# ── 行执行体辅助 ─────────────────────────────────────────────────
 # _fanout._row 闭包的具名缝:派发头 / convert memo / m2 回填 / 事件投影
 # / 终态推导 / registry 收口 / 计数+outputs。行任务体只保留编排序。
 
@@ -3122,7 +3119,7 @@ async def _mark_running(db_factory: Any, execution_id: int) -> None:
     """queued → running + started_at(原子条件 update,只动 queued 行)。
 
     fanout 在认证解析通过、行分发开始前调用 —— UI 由此区分"排队中"
-    与"在跑"(此前 queued 直接到终态,长时间执行无法观测进度感)。
+    与"在跑"(queued 直接到终态会让长时间执行无法观测进度)。
     条件更新天然幂等:终态/已 running 的行不被覆写;行被并发删除时
     where 不命中,静默跳过即可(fanout 稍后自然 no-op 收尾)。
     """
@@ -3314,7 +3311,7 @@ async def _bump_counters(
 class TransitionResult(enum.Enum):
     """终态迁移三态返回(P0-3.2,webhook 设计 v3)。
 
-    此前 bool 把「已终态」(幂等跳过,正常)与「写库失败」(异常,静默
+    bool 返回值若混判,会把「已终态」(幂等跳过,正常)与「写库失败」(异常,静默
     等下次启动对账)混为同一个 False —— 回调上线后写失败的执行既无
     终态也无回调,调用方无从分辨。三态拆开:只有 ``FAILED`` 需要调用方
     重试(:func:`transition_with_retry`),``MOVED`` 是回调/计数的唯一
@@ -3353,7 +3350,7 @@ async def transition_execution(
       * counterDrift 校账(仅非 canceled);
       * 完成通知(独立会话 + 自吞异常):done/failed 且有 owner 才发 ——
         N2-2 拍板:stuck 兜底/启动对账/graph 恢复收口三个异常路径也发
-        (此前静默),canceled 不发(用户自发的取消)。
+        (静默会漏报),canceled 不发(用户自发的取消)。
     """
     try:
         async with db_factory() as session:
@@ -3448,7 +3445,7 @@ async def _finalize_execution(
     :func:`transition_execution` 按 ``failed > 0 → failed`` 原子推导。
     计数器由上方增量维护;校账(counterDrift)、started_at 回填、通知
     全部在迁移函数内,只在真实迁移时发生(重复收口 = 无效迁移,
-    不再覆写、不重复通知 —— 修复此前无守卫直接覆写的漂移面)。
+    不覆写、不重复通知 —— 无守卫直接覆写是漂移面)。
     """
     try:
         await transition_with_retry(
@@ -3764,7 +3761,7 @@ def _new_run_id() -> str:
 def _convert_cache_key(payload: dict) -> str:
     """convert memo 键:合成场景的规范化 JSON 摘要。
 
-    同一行 n_runs 次重复输入完全一致(P6:此前重复打 plate)。
+    同一行 n_runs 次重复输入完全一致(P6:memo 防重复打 plate)。
     """
     return hashlib.sha1(
         json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
@@ -3772,7 +3769,7 @@ def _convert_cache_key(payload: dict) -> str:
     ).hexdigest()
 
 
-# (N1 迁移勘误:_jsonl_lock 随 _append_jsonl 原本同居一块,块搬移时
+# (_jsonl_lock 与 _append_jsonl 同居一块,搬移时
 # 失联 —— 与函数一并回插。)
 _jsonl_lock = threading.Lock()
 
@@ -3790,7 +3787,7 @@ def _append_jsonl(path: Path, payload: dict) -> None:
 
 
 # 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
-# (N1 迁移勘误:这组底部导入曾位于已迁走的 _coerce_row_value 与
+# (这组底部导入服务于已迁走的 _coerce_row_value 与
 # _find_dataset_by_id 之间,随块搬移而失联 —— 回插于此。)
 from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason, ref_category
 from .scenario_store import get_row, steps_from_payload, definition_from_payload
@@ -3885,9 +3882,9 @@ def sweep_stale_run_journals() -> int:
 
 
 async def run_retention_maintenance() -> dict[str, int]:
-    """保留期维护(后台周期任务;整体评审 2026-10-15 #2/#3)。
+    """保留期维护(后台周期任务)。
 
-    三项清扫此前要么零调用点(事件面),要么只在启动期跑一次(case
+    三项清扫要么零调用点(事件面),要么只在启动期跑一次(case
     案卷,含明文凭证)——长期不重启的服务上保留期形同虚设。各项互相
     隔离:一项失败不影响其余,失败计 -1 并记日志。
     """

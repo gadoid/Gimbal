@@ -1,4 +1,4 @@
-"""services/run_prepare.py — 执行装载准备(N1 归一,2026-11-01 清单)。
+"""services/run_prepare.py — 执行装载准备(五执行链归一单源)。
 
 「把平台场景变成可执行 case」的**准备段唯一实现**:凭证清单、凭证
 解析、别名地址、carry 上下文、内置 users 基座、生效修订解析、
@@ -16,19 +16,13 @@ compose(数据行合入)。五个入口全部消费本模块:
                                              同源)+ suites validate
                                              (graph_auth_aliases 清单同源)
 
-整改背景:此前五份平行实现 —— graph 链凭证清单缺模板扫描与别名默认
-两层(方案级 authAlias 甚至不进清单)、Suite 无 carry(显式 None 是
-防崩权宜)、导出缺别名默认层、预检地址链漏第③层。归一后差异只允许
-以参数表达(auth_policy / resolve_mode),凭证清单算法、地址链、
-carry 不允许任何调用方自选。评审(2026-11-01 §3.1A)收口:集成与
-导出亦改调 prepare_exec,不再各自手写编排(只调子函数的「半归一」
-留有编排顺序/降级口径各自漂移的口子)。
+归一不变式:五个入口的差异只允许以参数表达(auth_policy /
+resolve_mode),凭证清单算法、地址链、carry 不允许任何调用方自选
+—— 各链自写编排会重开清单口径/降级语义漂移的口子,集成与导出链
+也必须走 prepare_exec 全量编排,不得只调子函数「半归一」。
 
-迁入符号自 run_dispatcher(原 _compose_scenario/_resolve_exec_auths/
-_built_in_users/_find_dataset_by_id/_AuthResolveError):已有四个跨模块
-消费方 + 一处因私有名可达性写错的导入路径(suites.py from .
-run_dispatcher → ModuleNotFoundError)—— 分层错位已造成真实 bug,
-故搬迁而非原地公开。
+模块符号的分层位置:装载准备属 services 层单源(run_dispatcher/
+suites 等消费方跨模块引用,私有名可达性曾致真实导入错误)。
 
 签名约定:凭证解析只收**会话工厂**(独立短会话快照语义,与执行期
 隔离);纯读助手(find_dataset_by_id)收活会话。resolve_mode="none"
@@ -68,8 +62,8 @@ __all__ = [
 ]
 
 
-# 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
-# 下游 materialize_run_copy(_apply_users)仍消费 username/password/url/token_type/
+# ResolvedAuth = 平台侧轻量值对象,内部委托标准 AuthSession。下游
+# materialize_run_copy(_apply_users)消费 username/password/url/token_type/
 # expires_in 这几个字段,与标准 AuthSession 完全对齐(后者字段更多但不影响注入
 # 逻辑)。保留 ResolvedAuth 作为兼容 shim,免改下游的字段引用。
 @dataclass(frozen=True, slots=True)
@@ -79,7 +73,7 @@ class ResolvedAuth:
     明文凭证只存在于该对象的生命周期内,不落在 AuthSession ORM 行
     上 — 避免任何意外 commit 把明文写回数据库。
 
-    内部委托给标准 RuntimeAuthSession(物理迁移自 gimbal),字段对齐下游消费者。
+    内部委托给标准 RuntimeAuthSession,字段对齐下游消费者。
     """
 
     alias: str
@@ -129,7 +123,7 @@ def _pool_clause(owner_id: int | None, cred_project_id: int | None):
     if cred_project_id is not None:
         return DBAuthAccount.project_id == cred_project_id
     if owner_id is None:
-        # 潜伏 fail-open 守卫(2026-11-22 复核收口):owner_id IS NULL
+        # 潜伏 fail-open 守卫:owner_id IS NULL
         # 会匹配**全部项目池行**(归属恰一 CHECK:owner NULL ⇔ project
         # 非空)—— 双 None 即「无主读全项目池」。现四调用面均不可达
         # 双 None,此处显式拒绝而非渲染恒真谓词,防止未来调用点静默
@@ -144,10 +138,9 @@ def _pick_account_deterministic(
         cands: list[DBAuthAccount], tag: int) -> DBAuthAccount | None:
     """同标签优先 → 唯一命中;多行歧义由调用方归类(§8.3)。
 
-    取用面**唯一实现**(原 ``_resolve_identities`` 内联闭包,2026-11-22
-    提升至模块级):token 范围复核(access_token.check_scope)同走本函数
-    对齐执行口径 —— 候选集任一命中放行的旧口径在同引用多候选时可选
-    中范围外账户(D1 越权窗口),已废。"""
+    取用面**唯一实现**:token 范围复核(access_token.check_scope)同走本函数
+    对齐执行口径 —— 候选集任一命中放行会在同引用多候选时可选
+    中范围外账户(D1 越权窗口),禁用。"""
     same = [a for a in cands if a.env_id == tag]
     if len(same) == 1:
         return same[0]
@@ -168,8 +161,7 @@ class PickedIdentity:
     base_service: str
     # 条目标签(执行标签链 identity 位的取值依据;§8.2)
     identity_env_id: int
-    # 命中账户是否默认位(预览 bindingId/isDefault 消费;P1 缺陷修复
-    # 补齐 —— 预览块曾读不存在的 r.id/r.is_default,该路径从未被执行)
+    # 命中账户是否默认位(预览 bindingId/isDefault 消费)
     is_default: bool = False
 
 
@@ -283,7 +275,7 @@ async def pick_bindings_full(
     *, cred_project_id: int | None = None,
 ) -> "tuple[list[PickedIdentity], list[str], list[str]]":
     """同 :func:`pick_bindings`,带回 ``(picked, missing, ambiguous)``
-    分类(D3 收口 2026-11-22:fail-fast 差集把歧义条目统一报「未登记」
+    分类(fail-fast 差集把歧义条目统一报「未登记」
     误导排障 —— 消费方按类分道,歧义给 409/独立码)。同一单源
     ``_resolve_identities``,取用口径与 pick_bindings 结构上一致。"""
     picked, missing, ambiguous = await _resolve_identities(
@@ -292,7 +284,7 @@ async def pick_bindings_full(
             sorted(missing), sorted(ambiguous))
 
 
-# ── M2b Q3 数据集按账号驱动:行级账号列 ``@slot.<槽名>`` = 绑定名 ─────
+# ── 数据集按账号驱动:行级账号列 ``@slot.<槽名>`` = 绑定名 ─────
 ROW_BINDING_PREFIX = "@slot."
 
 
@@ -320,7 +312,7 @@ async def lookup_row_bindings(
            list[tuple[str, str]]]:
     """(引用位, 绑定名) → 池内取用结果(不解密)。返回 (命中, 缺失,
     歧义);绑定名 = 身份条目名。行级覆盖语义 = 该行把引用位换成
-    指定身份(条目模型无槽,不再做同名性校验 —— 跨身份覆盖是行级
+    指定身份(条目模型无槽,不做同名性校验 —— 跨身份覆盖是行级
     数据的本意);引用不校验标签(§8.3),歧义 = 同 system 多行候选
     且无同标签唯一命中。"""
     if not pairs:
@@ -413,8 +405,8 @@ def apply_row_bindings(
     """按行覆盖执行级凭证组:行账号列命中的槽换成该行的绑定,其余不变。
 
     注入键保持**引用位标签**不变(场景步骤 ``call.user``/``${auth.*}``/
-    ``${slot.*}`` 引用的是声明位;P1 缺陷修复 —— 此前未覆写 alias,
-    users/fields_by_slot 按绑定名落键,模板引用全部落空)。"""
+    ``${slot.*}`` 引用的是声明位;注入键必须覆写为 alias,
+    users/fields_by_slot 才能按条目名落键、模板引用才可命中)。"""
     import dataclasses as _dc
 
     refs = row_binding_refs(row)
@@ -473,7 +465,7 @@ async def resolve_exec_auths(
       ``${auth.*}`` 时步骤级报错;歧义在预检/派发期硬拦截)。
     * 明文只存在于返回的值对象上 — 绝不写回 ORM 行。
 
-    **只收会话工厂**(N1-6):内部开独立短会话做快照读,与调用方的
+    **只收会话工厂**:内部开独立短会话做快照读,与调用方的
     长事务隔离。
     """
     if not aliases:
@@ -517,10 +509,9 @@ def built_in_user_aliases(scenario_payload: dict | None) -> list[str]:
 
 
 def zone_allows_direct(project_id: int | None) -> bool:
-    """原 5(authz M2a S6):场景内置凭证(``config.users``)只在**私有区**
+    """场景内置凭证(``config.users``)只在**私有区**
     生效;项目区 / 公共区(场景 ``project_id`` 非空)一律不生效 —— 凭证
-    只来自执行人的账户装载。直连地址(``config.services``)随架构终态
-    (2026-11-21 ② 层退役)不再有区规则 —— 地址恒来自环境部署表,
+    只来自执行人的账户装载。地址无区规则(恒来自环境部署表),
     本判定只剩内置凭证语义。"""
     return project_id is None
 
@@ -534,14 +525,15 @@ def built_in_users(
     """场景 definition.config.users —— 仅当执行人 == 场景属主、且场景在
     私有区时返回。
 
-    authz W6 主规则(评审 R3):其余(订阅执行 / 非属主导出 /
-    suite 跑他人成员;引用执行已随 S7.4 share_refs 退役)一律当空。**fail-closed**:两参必填,
-    任一为 None(属主已删的孤儿场景、调用方漏传)同样当空 —— 此前 None
-    = 不判直接放行。作者即席提供 payload 的路径(草稿预览、临时调用)
+    authz 主规则:其余(订阅执行 / 非属主导出 /
+    suite 跑他人成员;引用执行面已退场,ADR-0003 #20)一律当空。
+    **fail-closed**:两参必填,任一为 None(属主已删的孤儿场景、
+    调用方漏传)同样当空 —— None = 无主数据,不判直接放行会形成
+    越权窗口。作者即席提供 payload 的路径(草稿预览、临时调用)
     由调用方显式传 ``scenario_owner_id = executor_id``。只要名字的展示面
     用 :func:`built_in_user_aliases`。
 
-    ``project_id``(必填,原 5):项目 / 公共区场景当空(属主本人执行
+    ``project_id``(必填):项目 / 公共区场景当空(属主本人执行
     同样当空 —— 区规则不看人)。
     """
     if not zone_allows_direct(project_id):
@@ -564,7 +556,7 @@ def coerce_row_value(base_val: Any, row_val: Any) -> Any:
 
     转置表格/CSV 导入统一 ``String(v)`` 落库,直接合入会把整型基线
     覆盖成字符串,破坏 ``Assertion{expected: 0}`` 这类强类型断言
-    (旧链路"int 还是 int"的语义)。规则:
+    ("int 还是 int"的类型强制语义)。规则:
 
     * 基线是 bool  → ``"true"/"false"``(大小写不敏感)还原,其余原样;
     * 基线是 int   → ``int(row_val)`` 可解析则还原(int("2.0") 会抛
@@ -608,8 +600,8 @@ def compose_scenario(
     * ``scenario_payload`` 是持久化的 ``ComposerScenario.payload``。
       容器化重构后为 ``{definition, orchestration}``;plate 只吃
       ``definition``(orchestration 是平台侧投影,绝不外发)。
-    * M2 步骤 4(Q18):定义即纯 M2,Meta 只 name 必填(M6),不再补
-      plate 默认值 —— fill_plate_defaults 已删除。
+    * 定义即纯 M2,Meta 只 name 必填,不补 plate 默认值(缺省语义
+      在引擎侧,ADR-0003 #15)。
     """
     raw = scenario_payload or {}
     # Unwrap the container: plate must never see orchestration.
@@ -649,7 +641,7 @@ class ExecPrep:
     meta_plate: dict[str, str] = field(default_factory=dict)  # 生效修订(已写回 definition)
     plate_pins: dict[str, str] = field(default_factory=dict)
     # 台账输入(resolve_mode="single" 时随修订解析一并产出,供执行侧
-    # A-3/W7 入库标准判定与 pins 落库 —— 不属装载,但同源免二次遍历):
+    # 入库标准判定与 pins 落库 —— 不属装载,但同源免二次遍历):
     endpoints_used: dict[str, set[str]] = field(default_factory=dict)
     unanchored_services: list[str] = field(default_factory=list)
 
@@ -683,7 +675,7 @@ async def prepare_exec(
       分层②:``slot_overrides``({别名全名: 条目名},显式选定配置的
       绑定)→ ``slot_lookup_overrides`` 换池取用,注入标签不变;
     * 别名地址:``base_urls_for``(③层数据源;查表失败降级空表);
-      ``environment``(S2.1,``env_chain.EnvChoice``)= 派发时已解析的
+      ``environment``(``env_chain.EnvChoice``)= 派发时已解析的
       环境选择,并入部署表地址(缺省 = 旧 ③ 行为);
     * carry:``build_carry_context``(独立短会话;任何故障降级 None,
       carry 是增强不是前置条件);分层②:``exec_carry_overrides``
@@ -695,7 +687,7 @@ async def prepare_exec(
       plate_rejected/plate_unavailable);
       ``none`` = 原样透传(集成/导出链,见模块 docstring 的定案理由)。
 
-    **副作用**(评审 §3.1 附注):``resolve_mode="single"`` 时**原地
+    **副作用**(§3.1 附注):``resolve_mode="single"`` 时**原地
     修订**入参 payload 的 ``definition.meta.plate``(merge_resolve_
     effective 的生效修订回写 —— compose/convert 的输入依赖该回写才能
     拿到生效修订;`_fanout` 在调用前 deepcopy 正是为了承接它)。调用
@@ -706,8 +698,8 @@ async def prepare_exec(
 
     definition = definition_from_payload(scenario_payload)
     steps = definition.get("steps") or []
-    # authz W6 主规则:executor(owner_id = 凭证池归属,即执行人)≠
-    # 场景属主 ⇒ 内置 users 基座当空(R3)
+    # authz 主规则:executor(owner_id = 凭证池归属,即执行人)≠
+    # 场景属主 ⇒ 内置 users 基座当空
     prep = ExecPrep(
         built_in_users=built_in_users(
             scenario_payload, executor_id=owner_id,
@@ -776,8 +768,8 @@ async def prepare_exec(
                     {sys_: sorted(ids)
                      for sys_, ids in prep.endpoints_used.items()})
             except plate_client.PlateRejectedError as exc:
-                # ⑥(2026-10-13):plate 的 4xx 是对**声明**的裁决(修订不存在/
-                # 线不存在等)—— 归 plate_rejected,不再冒充 plate_unavailable
+                # plate 的 4xx 是对**声明**的裁决(修订不存在/
+                # 线不存在等)—— 归 plate_rejected,不冒充 plate_unavailable
                 # 把运维引去查一个并不存在的目录故障。
                 raise RuntimeError(
                     f'plate_rejected: 生效修订解析被拒: {exc}') from exc
@@ -792,7 +784,7 @@ async def prepare_exec(
 
     # ⑤ carry(独立短会话;故障降级 None)
     if skip_carry:
-        # 入站参数设计 2026-11-13 决策 3:raw 保留字虚拟裸方案 → carry
+        # 入站参数设计(决策 3):raw 保留字虚拟裸方案 → carry
         # 关闭。materialize 的 None 分支既有(异常降级同款),零新机制。
         prep.carry_ctx = None
     else:
@@ -906,7 +898,7 @@ async def resolve_effective_config(
 
     # carry:tier 序逐层归并,逐 path 标注来源(作用域:键层级);
     # 分层②:执行配置覆盖层压在层序之上(场景显式在 carry_face 已先行);
-    # 分层⑥:个人层已收编为默认执行配置(决策 8),user_id 不再构成 tier。
+    # 分层:个人层已收编为默认执行配置,user_id 不构成 tier。
     # §8.9 实例档:键序 条目 > 实例(system, 执行标签 env) > 服务 >
     # 层默认 —— 与执行链**同一函数**(carry_injection.merge_carry_tiers,
     # 单源不漂移);来源标注:`...:instance:{envId}` / `exec_config`

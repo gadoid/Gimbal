@@ -1,15 +1,15 @@
 """Executions API — 读侧 + 删除(V3)。
 
-V1 子进程创建链路(POST /executions 与 rerun,经 executor.py 的
-gimbal CLI 子进程)已退役;V3 场景执行的创建入口是 ``POST /api/runs``
-(run_dispatcher → gimbal_server_session 执行器 server 实例)。
+V3 场景执行的创建入口是 ``POST /api/runs``
+(run_dispatcher → gimbal_server_session 执行器 server 实例);
+V1 链路(POST /executions / rerun / exec_runs 表)退场记录见
+ADR-0003 #14。
 
-exec_runs 表(V1 每-run 明细/报告/日志/SSE)已随存量数据清理一并
-退役:V3 运行的可观测面是 Execution 计数器 + ``data/runs/*.jsonl``
+V3 运行的可观测面是 Execution 计数器 + ``data/runs/*.jsonl``
 调度日志(无 API 消费,运维直读文件)。
 
-执行设计(2026-09)增补:列表加 status/发起时间/批次筛选、``GET
-/summary`` KPI 带、``POST /{id}/rerun`` 按 config_json 重建配方。
+列表含 status/发起时间/批次筛选、``GET /summary`` KPI 带、
+``POST /{id}/rerun`` 按 config_json 重建配方。
 **路由顺序**:``/summary`` 必须声明在 ``/{execution_id}`` 之前 —
 后者带 ``Path(ge=1)`` 的 int 转换,字面量 ``summary`` 会被它吃掉并 422。
 """
@@ -92,10 +92,10 @@ async def executions_summary(
     窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。
     行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。
 
-    ``projectId``(项目详情 A 级批次,2026-11-18)= 项目维度聚合:
+    ``projectId`` = 项目维度聚合:
     行集 = executions.project_id 快照列(全员发起,跨 owner);门 =
     项目成员 ∨ 公共项目 ∨ Admin+(公共项目例外与 get_project/facets
-    同口径 —— 项目详情页头卡对普通访客可见;2026-11-19 复核补),
+    同口径 —— 项目详情页头卡对普通访客可见),
     非成员 404(不泄露存在性)。"""
     if project_id is not None:
         from ..models.project import Project, ProjectMember
@@ -149,7 +149,7 @@ async def executions_summary(
             )
         )
     ).scalar_one()
-    # 今日执行次数(stitch 0-2 批次 2026-11-23):活动量口径 —— 自然日
+    # 今日执行次数:活动量口径 —— 自然日
     # 锚 created_at,服务器时区零点起算(astimezone 把 naive 本地时刻
     # 携带上时区,与 timestamptz 列可比较),含进行中单,不受窗约束。
     today_start = datetime.now().astimezone().replace(
@@ -201,7 +201,7 @@ async def executions_summary(
 
 
 # ── list ────────────────────────────────────────────────────────
-# ── B5 批次汇总(2026-11-06 日志报告整理)───────────────────────
+# ── 批次汇总 ────────────────────────────────────────────────────
 # 必须声明在 /{execution_id} 之前(否则路径参数先匹配)。新接口按 v4
 # §2.2「新增接口默认不接令牌」只认 JWT。
 @router.get("/batch-summary")
@@ -241,7 +241,7 @@ async def list_executions(
                                             max_length=128)] = None,
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> ExecutionListOut:
-    """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
+    """分页列表(默认 200,防无界全量)。与前端现状兼容。
 
     M1(§4.1):``page``/``page_size`` 是 Page 信封的正参(limit/offset
     保留为旧调用兼容;两者并传时 page 优先),信封补齐 page/pageSize。
@@ -288,7 +288,7 @@ async def list_executions(
             Execution.project_id.in_(
                 _sel(ProjectMember.project_id).where(
                     ProjectMember.user_id == user.id))))
-    # 项目过滤(A 级批次,2026-11-18):叠加在可见性之上 —— 可见性含
+    # 项目过滤:叠加在可见性之上 —— 可见性含
     # 「我所在项目」口径,显式 projectId 只是把集合收敛到单项目(JWT 面
     # 消费;令牌/ tokenId 面照旧个人口径,忽略该参数)。
     project_scoped = (
@@ -334,7 +334,7 @@ async def list_executions(
     if batch_id:
         base = base.where(Execution.batch_id == batch_id)
     if client_ref:
-        # clientRef 对账过滤(入站执行参数设计 2026-11-13 决策 8):
+        # clientRef 对账过滤(入站执行参数设计 决策 8):
         # 可见性口径内按幂等键查执行(调用方对账「这笔业务单据跑了没」)。
         base = base.where(Execution.client_ref == client_ref)
     # M2 timestamptz:查询串解析出的 naive 时间一律按 UTC 补 aware
@@ -347,7 +347,7 @@ async def list_executions(
         await session.execute(select(func.count()).select_from(base.subquery()))
     ).scalar_one()
     # 失败单数(与 total 同筛选口径):筛选行「共 N · 失败 M」要全口径,
-    # 客户端只数得出当前页(2026-10-21 修复)。status 已筛时按筛后集合计。
+    # 客户端只数得出当前页。status 已筛时按筛后集合计。
     failed_total = (
         await session.execute(
             select(func.count()).select_from(
@@ -370,7 +370,7 @@ async def list_executions(
         owner_id=None if project_scoped else user.id,
         project_id=project_id if project_scoped else None,
     )
-    # 快照存在性一次批量查(M2 拆表:不再随行加载大 JSON 列)
+    # 快照存在性一次批量查(拆表设计:大 JSON 列不随行加载)
     with_snap = await execution_store.snapshot_ids(session, [e.id for e in rows])
     # G1:展示名一次批量查(可读活名;否则回落行上快照)
     disp = await execution_store.scenario_display_map(
@@ -425,7 +425,7 @@ async def get_execution(
         job_form=forms.get(ex.id, "cases"),
         **execution_store.display_kwargs(ex, disp),
     )
-    # W21 修订台账:重跑将使用哪套修订 = 场景**当前**声明的 meta.plate
+    # 修订台账:重跑将使用哪套修订 = 场景**当前**声明的 meta.plate
     # (rerun 按现库场景重建配方);场景已删/不可读 → None(前端只显
     # 当时修订)。读失败不阻塞详情(台账性质)。
     try:
@@ -440,7 +440,7 @@ async def get_execution(
     return out
 
 
-# ── B4 执行报告(2026-11-06 日志报告整理)────────────────────────
+# ── 执行报告 ────────────────────────────────────────────────────
 @router.get("/{execution_id}/report")
 async def get_execution_report(
     execution_id: Annotated[int, Path(ge=1)],
@@ -469,8 +469,8 @@ async def get_execution_rows(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> ExecutionRowsOut:
-    """行级状态(M6 转正,债 5 消除):活跃执行读 dispatcher 内存
-    registry;历史执行读 execution_rows DB 分页;M6 前的存量单回放
+    """行级状态:活跃执行读 dispatcher 内存
+    registry;历史执行读 execution_rows DB 分页;存量单回放
     JSONL(只读归档)兜底。信封 {items,total,page,pageSize}。"""
     user = principal.user
     items, total = await run_dispatcher.execution_rows_page(
@@ -513,13 +513,13 @@ _CASE_STEM_RE = re.compile(r"[A-Za-z0-9._-]+")
 _ARTIFACTS = {"engine-log": "engine.log", "result": "result.json"}
 
 
-# ── P2-06/C9:事件流 SSE + P2-07/C10:事件/日志查询 ──────────────
+# ── 事件流 SSE + 事件/日志查询 ──────────────────────────────────
 
 def _event_sse_line(ev) -> str:
     """ExecutionEvent → SSE 帧(id=seq 续传锚;data=行投影)。
 
-    帧分隔符是真换行(AD6;历史缺陷:曾用字面量 ``\\n`` 两字符 —— 前端按
-    真 ``\\n\\n`` 切帧永远失败,SSE 帧路径静默失效,页面更新全靠兜底轮询)。
+    帧分隔符必须是真换行(AD6):写成字面量 ``\\n`` 两字符会让前端按
+    真 ``\\n\\n`` 切帧永远失败,SSE 帧路径静默失效,页面更新全靠兜底轮询。
     """
     import json as _json
     payload = {
@@ -540,7 +540,7 @@ async def stream_execution_events(
     request: Request,
     last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
 ) -> StreamingResponse:
-    """SSE 推送已入库事件(P2-06/C9;替代执行页 1s 轮询)。
+    """SSE 推送已入库事件(替代执行页轮询)。
 
     * ``Last-Event-ID`` 请求头续传(断线重连不重复不丢失);
     * 事件到达即推;无事件时 ~15s 心跳注释帧保活;
@@ -570,9 +570,8 @@ async def stream_execution_events(
             if await request.is_disconnected():
                 return
             async with db_module.SessionLocal() as session:
-                # AD5:显式 kind=event —— 此前无 kind 过滤,日志(负数 seq)
-                # 只是恰好被 after_seq 恒正滤掉;显式化后语义不再依赖巧合,
-                # 日志走 /logs/stream(批 2)
+                # 显式 kind=event —— 语义不依赖 after_seq 恒正的巧合过滤,
+                # 日志走 /logs/stream
                 events = await execution_store.query_events(
                     session, execution_id, kind="event",
                     after_seq=cursor, limit=500)
@@ -746,7 +745,7 @@ async def get_execution_events(
     n_after: Annotated[int, Query(ge=1, le=500)] = 50,
     limit: Annotated[int, Query(ge=1, le=2000)] = 500,
 ) -> dict:
-    """事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。
+    """事件/日志组合筛选查询(日志分析页的读面)。
 
     ``after_ts``+``after_id``:静态时间轴翻页锚(严格大于该 (ts,id));
     ``after_seq``:事件轴续传锚(seq > ?);``around_ts``+``around_id``:
@@ -804,7 +803,7 @@ async def get_execution_events(
 
 @router.get("/{execution_id}/events/counts")
 async def get_execution_event_counts(ex: OwnedExecution, session: DbSession) -> dict:
-    """按 category 聚合计数(P2-07 验收:能展示按 category 聚合的计数)。"""
+    """按 category 聚合计数(日志分析页按类别分道的展示面)。"""
     from ..services import execution_store
 
     return {"byCategory": await execution_store.event_counts_by_category(session, ex.id)}
@@ -843,10 +842,10 @@ async def get_case_artifact(
     path = rdir / case / name
     if not path.is_file() and file == "engine-log":
         # R11:server 链各槽位写 run 级 server-engine-N.log(槽位 0 沿用
-        # 无序号名)。B6(2026-11-06):执行行记录了槽位号 → 按槽位精确
+        # 无序号名)。执行行记录了槽位号 → 按槽位精确
         # 路由。槽位日志是该槽位上所有 case 的合并日志(引擎侧按 case
         # 拆分留待后续),但至少是**本 case 所在 worker** 的那一份。
-        # 无槽位记录的存量行沿用旧口径:仅单 worker 日志时回落,多 worker → 404。
+        # 无槽位记录的存量行:仅单 worker 日志时回落,多 worker → 404。
         from ..models.execution import ExecutionRow
         slot = (await session.execute(
             select(ExecutionRow.server_slot).where(
@@ -919,8 +918,8 @@ async def rerun_execution(
     混入),也不带 judgeDegraded 等上次运行的审计标记(那些描述上一次,
     不描述这一次)。注入条目 id 随配方一并重放(dispatch 侧悬空 skip 兜
     底 — 上次以后条目被删的重跑会少注入,JSONL/告警可见)。"""
-    # 重构方案:不挂真实场景的执行不按 config 重放(现在会只重跑第一个
-    # 场景)。N3 拆判定(评审 §3.2):守卫问「是否挂在真实场景上」
+    # 重构方案:不挂真实场景的执行不按 config 重放(否则会只重跑第一个
+    # 场景)。判定拆两问(§3.2):守卫问「是否挂在真实场景上」
     # (is_scenario_backed);409 的错误码与 Suite 链接是 suite_graph
     # 专属 —— 后续新形态(如 adhoc 临时调用)入 NON_SCENARIO_KINDS
     # 后走通用错误码,不吃 Suite 链接(带 suiteId: null 的链接是错页)。

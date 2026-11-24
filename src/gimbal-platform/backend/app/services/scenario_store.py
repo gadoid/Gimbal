@@ -41,7 +41,7 @@ from . import scheme_store
 
 
 # ─── write side ───────────────────────────────────────────────────
-# A-1 根因收口(2026-10-14):plate ConfigView 的 users 附带视图专有键
+# plate ConfigView 的 users 附带视图专有键
 # (is_authenticated/remaining_seconds — 认证状态投影,非 M2
 # UserCredential 字段)。UI 预填(useSystemPrefill)已剥,此处是保存闸
 # 的第二道:手写载荷/API 直写路径同样不得把视图键落库 —— 落库即
@@ -72,12 +72,12 @@ def _strip_user_view_keys(definition: dict) -> dict:
 async def gates_for_mutation(
     definition: dict, *, prev_payload: "dict | None" = None,
 ) -> None:
-    """定义写面共用闸单源(2026-11-22 收口):
+    """定义写面共用闸单源:
 
     * 版本声明闸 ``enforce_meta_plate``(prev = 存量行 plate —— 声明
-      未变跳过引用校验的防抖语义,适配直存此前整体漏);
-    * 明文凭证拒收(§3.5 拍板 2026-11-20:旧行 users 空 + 本次带明文
-      → 422)—— 适配直存此前整体漏(op 改写理论上不产明文,但该闸
+      未变跳过引用校验的防抖语义,适配直存同样走本闸);
+    * 明文凭证拒收(§3.5:旧行 users 空 + 本次带明文
+      → 422)—— 适配直存同样受闸(op 改写理论上不产明文,但该闸
       是写面不变量,不该靠「理论」)。
 
     消费面 = store.update / 适配直存(adaptation_service.submit)。
@@ -102,7 +102,7 @@ async def gates_for_mutation(
 async def post_save_chain(db: AsyncSession, row: "ComposerScenario") -> None:
     """保存后链单源:已验证修订 → 生效修订 best-effort(M1 版本模型
     4.1;plate 不可达保持原值,绝不阻塞保存主链)。store.update 与
-    适配直存同走 —— 适配直存此前漏,适配保存后 verified 不升 effective。"""
+    适配直存同走(升档覆盖适配保存路径)。"""
     try:
         await _bump_verified_to_effective(db, row)
     except Exception as e:  # noqa: BLE001 — best-effort 升档,不阻塞保存主链
@@ -113,11 +113,11 @@ async def post_save_chain(db: AsyncSession, row: "ComposerScenario") -> None:
 
 async def enforce_meta_plate(definition: dict,
                              prev_meta_plate: dict | None = None) -> None:
-    """版本声明闸(⑥下沉,2026-10-13;create/update/导入/适配提交共用)。
+    """版本声明闸(create/update/导入/适配提交共用)。
 
     * 锚定系统(endpoint 首段)必须声明 —— 未声明
-      = 绕开 plate 按陈旧存储 binding 执行的过渡形态(C-2),唯一写入口
-      收口后由本闸关闭;
+      = 绕开 plate 按陈旧存储 binding 执行的过渡形态(C-2),唯一
+      写入口由本闸拦下;
     * 声明引用须有效(线/修订存在;working 豁免);
     * ``prev_meta_plate`` 提供且声明未变 → 跳过引用校验(防抖自动保存
       不放大 plate 调用);
@@ -153,10 +153,10 @@ async def enforce_meta_plate(definition: dict,
 
 
 def _integrity_conflict_code(e: IntegrityError) -> str:
-    """IntegrityError → 冲突码(并发冲突码精确化,评审 P2 2026-11-20)。
+    """IntegrityError → 冲突码(冲突码精确化)。
 
     调用身份草稿与场景行同事务后,create/update 提交点的完整性冲突
-    不再只有场景 PK 一个来源 —— 条目名唯一(service_identities)按
+    不止场景 PK 一个来源 —— 条目名唯一(service_identities)按
     约束名分派回 auth_draft 家族码(路由侧既有 409 映射,「同名直接
     引用」语义一致),其余保守回落 scenario_id_exists(旧行为;FK
     竞态等罕见面宁 409 不 500)。
@@ -201,10 +201,10 @@ async def create_in_transaction(
     """
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
-    await enforce_meta_plate(draft.definition)      # ⑥:唯一写入口收口
-    # 凭证治理 §3.5(拍板 2026-11-20):新场景不再接受明文凭证快照 ——
+    await enforce_meta_plate(draft.definition)      # 唯一写入口
+    # 凭证治理 §3.5:新场景不接受明文凭证快照 ——
     # config.users 非空 → ValueError("plaintext_users_rejected",调用方
-    # 映 422)。唯一写入口收口 = 全部新建路径统一生效;副本/导入链在
+    # 映 422)。唯一写入口 = 全部新建路径统一生效;副本/导入链在
     # 上游已清空(§4.4-2 拍板:副本 = 新建),恒过此闸,直写 API 是唯一
     # 暴露面。选 422 而非 strip:静默丢弃用户输入是假空态反模式。
     _plain_users = ((draft.definition.get("config") or {}).get("users"))
@@ -225,11 +225,11 @@ async def create_in_transaction(
         from .auth_drafts import materialize
         await materialize(db, draft.auth_drafts, owner_id=owner_id,
                           project_id=project_id)
-    # 入站参数契约写时校验(设计 2026-11-13 §2.1):槽位 ⊆ vars 标量键
+    # 入站参数契约写时校验(设计 §2.1):槽位 ⊆ vars 标量键
     run_params.validate_param_slots(
         draft.definition,
         [s.model_dump(by_alias=True) for s in draft.param_slots])
-    # 断言注册表写侧形状闸(I-01,2026-11-24 裁定「隔离区+后端闸」):
+    # 断言注册表写侧形状闸(裁定「隔离区+后端闸」):
     # entries 逐元素 dict;前端隔离区 unrecognized 原样放行。与
     # param_slots 同层同形(同层平台侧字段,create/PUT 双跑)。
     run_injection.validate_registry_shape(draft.assertion_registry)
@@ -238,7 +238,7 @@ async def create_in_transaction(
         "scenarioId": scenario_id,
         "owner": owner or def_meta.get("owner", ""),
     })
-    # M4/Q18（M2 §3）：存储的定义即纯 M2 实例 —— meta.scenarioId /
+    #（M2 §3）存储的定义即纯 M2 实例 —— meta.scenarioId /
     # updateTime / owner 等平台元数据只在行的列上，不写进定义；
     # 顶层 scenarioId（M2 必填身份字段）由行写入。读侧 _meta_from_row
     # 从行的列组装展示 meta（createTime/updateTime/scenarioId/owner）。
@@ -254,7 +254,7 @@ async def create_in_transaction(
         # 注册表随容器重铸透传(spec v2 §3)— 不传则回落 default {}
         # 丢条目(copy 路径经 model_validate 后同样走到这里)。
         assertion_registry=draft.assertion_registry,
-        # 入站参数契约随容器透传(设计 2026-11-13 §4:契约随场景
+        # 入站参数契约随容器透传(设计 §4:契约随场景
         # payload 走,复制/转让/fork 自动携带)
         param_slots=draft.param_slots,
         params_strict=draft.params_strict,
@@ -296,11 +296,11 @@ async def create(
     caller cannot spoof the owner field by sending a different value in
     the request body.  ``owner_id`` 同理由路由层传入(int user.id,
     P1 起为归属判断主键);缺省 None = 归属未知(与 ETL 把历史 0 行
-    映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,M2 起不再落 0)。
-    区归属由 ``project_id`` 决定(缺省 None = 私有区;S1.9 起
-    visibility 列已删,响应由 project 派生)。
+    映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,不落 0)。
+    区归属由 ``project_id`` 决定(缺省 None = 私有区;
+    响应由 project 派生)。
 
-    提交包装器(W2/T1):常规创建/copy/fork/迁移脚本等既有调用方行为
+    提交包装器:常规创建/copy/fork/迁移脚本等既有调用方行为
     零变化;导入流水线走 :func:`create_in_transaction` 自管事务
     (别名/carry/场景单事务,场景导入 v2.3 方案 §6)。
     """
@@ -349,10 +349,10 @@ async def update(
     re-assign the scenario to a different user mid-edit.
     """
     row = await _get_row(db, scenario_id)
-    # F3:旧名快照(提交后判 rename/edit;在 payload 覆盖前取)
+    # 旧名快照(提交后判 rename/edit;在 payload 覆盖前取)
     old_name = (((row.payload or {}).get("definition") or {})
                 .get("meta") or {}).get("name")
-    # 写面闸单源(2026-11-22 收口):版本声明(prev 防抖)+ 明文凭证
+    # 写面闸单源:版本声明(prev 防抖)+ 明文凭证
     # 拒收 —— 与适配直存(adaptation_service.submit)同走本函数。
     await gates_for_mutation(
         draft.definition, prev_payload=row.payload)
@@ -367,7 +367,7 @@ async def update(
         from .auth_drafts import materialize
         await materialize(db, draft.auth_drafts, owner_id=user_id,
                           project_id=row.project_id)
-    # 入站参数契约缺键保留(设计 2026-11-13 挂账:前端契约编辑面本期
+    # 入站参数契约缺键保留(设计挂账:前端契约编辑面
     # 不接线):**逐键**判定 —— 请求未携带该键而存量行有值则保留存量
     # (防前端整包保存/适配操作把 API 侧维护的契约抹掉);显式携带
     # (含空槽清空)走整包替换。model_fields_set 精确区分「缺键」与
@@ -396,15 +396,15 @@ async def update(
     req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     if req_sid != scenario_id:
         raise ValueError("scenario_id_changed: cannot rename scenarioId")
-    # A-1(2026-10-12):删「module 空写 default / system 空写 ["default"]」
-    # 修复兜底 —— "default" 伪系统与 M11(meta.system 每系统须有 plate
-    # 声明)冲突,ScenarioMeta 已对齐 M2 空值语义('' / []),存量空值
+    # module 空值不写 default / system 空值不写 ["default"]:
+    # "default" 伪系统与 meta.system 每系统须有 plate 声明冲突,
+    # ScenarioMeta 按 M2 空值语义('' / [])接受,存量空值
     # 原样入校验、原样存储。
     effective_owner = new_owner or def_meta.get("owner") or row.owner_name
     server_owned = ScenarioMeta.model_validate({
         **def_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
-    # M4/Q18：同 create —— 平台元数据出定义，定义即纯 M2 实例。
+    # 同 create —— 平台元数据出定义，定义即纯 M2 实例。
     # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
     stored_definition = _strip_user_view_keys(strip_binding_fields({
         **draft.definition,
@@ -421,7 +421,7 @@ async def update(
         # 注册表编辑器整包替换语义(spec v2 §3):PUT 带就存、不带(旧
         # 客户端)回落空 dict — 键归编排器。
         assertion_registry=draft.assertion_registry,
-        # 入站参数契约随容器透传(设计 2026-11-13):PUT 整包替换语义
+        # 入站参数契约随容器透传:PUT 整包替换语义
         # 与 assertion_registry 同款;旧客户端缺键回落缺省([]/false)
         param_slots=draft.param_slots,
         params_strict=draft.params_strict,
@@ -432,16 +432,16 @@ async def update(
     try:
         await db.commit()
     except IntegrityError as e:
-        # 手配落池并发唯一冲突(update 同族:create 的 blanket 误报修复,
-        # 评审 P2 2026-11-20)—— 场景行 PK 不变无撞号面,冲突源只有
-        # drafts 家族;此前裸 IntegrityError = 500。
+        # 手配落池并发唯一冲突(update 同族:冲突码精确化)—— 场景行
+        # PK 不变无撞号面,冲突源只有 drafts 家族;
+        # 裸 IntegrityError 对外 = 500。
         await db.rollback()
         raise ValueError(_integrity_message(
             _integrity_conflict_code(e), scenario_id)) from e
     await db.refresh(row)
     # 版本模型 4.1(M1):普通保存后已验证修订 best-effort 升级(后链单源)
     await post_save_chain(db, row)
-    # F3 事件落账(业务提交后):name 变化 → rename,否则 edit;
+    # 事件落账(业务提交后):name 变化 → rename,否则 edit;
     # edit 走短窗合并吸收 autosave(2.5s 防抖全量 PUT)。
     if old_name and server_owned.name and old_name != server_owned.name:
         await activity.record(
@@ -494,7 +494,7 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
             ComposerRunScheme.scenario_id == scenario_id
         )
     )
-    # user_stars 随场景 CASCADE(M6-2)。PG 上 DB 级 CASCADE 已处理,
+    # user_stars 随场景 CASCADE。PG 上 DB 级 CASCADE 已处理,
     # 这里是 SQLite 兜底(该方言默认不强制 FK,CASCADE 不触发)——
     # 单条机械 DELETE,非逐用户簿记。
     from ..models.permission import UserStar
@@ -513,7 +513,7 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
 
 
 
-# ── authz W6:明文凭证不随公开/拷贝扩散(方案 9.1 附加清理 / 10.6)────
+# ── authz:明文凭证不随公开/拷贝扩散(方案 §9.1/§10.6)────
 # 原件不动(作者自己照常用内置凭证与敏感列,下架无损);凡交到**非属主**
 # 手里的形态一律脱敏:读(详情/draft/数据集)、跨属主拷贝、执行(属主
 # 规则 run_prepare.built_in_users + 非属主数据集剥敏感列)。
@@ -530,7 +530,7 @@ def strip_builtin_credentials(payload: dict) -> dict:
 
     调用面:跨属主拷贝(copy_scenario 单点)、导入、非属主读形态
     (:func:`payload_for_viewer`)、非属主执行的快照/任务参数。原件
-    永不经过这里(发布不再剥离 —— 订阅执行由属主规则兜底)。
+    永不经过这里(发布不剥离 —— 订阅执行由属主规则兜底)。
     """
     definition = payload.get("definition")
     if isinstance(definition, dict):
@@ -645,7 +645,7 @@ async def resolve_name_conflict(
 ) -> tuple[str, bool]:
     """该 owner 名下已有同名场景 → 返回 (计数后缀名, True);否则原样。
 
-    F1 分发(静默后缀)与 F2 另存为(前端确认后缀)共用 —— 重名判定
+    分发(静默后缀)与另存为(前端确认后缀)共用 —— 重名判定
     的唯一实现,不各写一份。name 上限 64(ScenarioMeta.name
     max_length),拼后缀前先截断基名。基名本身也在入口钳一次:源场景
     name 为空时调用方用 scenario_id 兜底(最长 128),不撞名也得截断 ——
@@ -773,7 +773,7 @@ async def copy_scenario(
     # 显式复制(新 scheme_id,仿上方 data_sets 循环)。
     await scheme_store.copy_schemes(db, scenario_id, new_sid)
     await db.commit()
-    # F3 事件落账(业务提交后):副本的创建事件归新属主的时间线。
+    # 事件落账(业务提交后):副本的创建事件归新属主的时间线。
     await activity.record(
         db,
         actor_id=new_owner_id,

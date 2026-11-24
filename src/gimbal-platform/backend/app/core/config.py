@@ -15,7 +15,7 @@ def _generate_fernet_key() -> str:
 
 # 后端根(app/ 的上一级 = backend/):所有相对资源锚定于此,而非进程 CWD。
 # 从仓库根误启动会在根部 mkdir 空 data/ + 新建空库,服务"静默失忆"
-# (2026-09-02 实录:根部冒出第二个空 app.db,登录全 401)。
+# (登录全 401 的排障陷阱)。
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -34,21 +34,20 @@ class Settings(BaseSettings):
 
     # ── Fernet ────────────────────────────────────────────
     FERNET_KEY: str = ""
-    # 密钥缺失时是否允许以临时随机密钥启动(整体评审 2026-10-15 #4):
+    # 密钥缺失时是否允许以临时随机密钥启动:
     # 默认 False = 服务启动 fail-fast(重启即丢全部会话与 Fernet 密文,
     # 与 DATABASE_URL 必填同级);仅测试/一次性本地环境显式置 1。
     ALLOW_EPHEMERAL_SECRETS: bool = False
 
-    # ── 注册(整体评审 2026-10-15 #5;默认改开 2026-10-15)────
+    # ── 注册 ──────────────────────────────────────────────
     # True(默认):开放自助注册(新号 role=user)。False:仅「库内尚无
     # 真人用户」时放行注册(引导首个 admin),其后由 admin 在用户管理
     # 开号 —— 对外/生产部署应显式置 false。
     REGISTRATION_OPEN: bool = True
 
-    # ── Auth 限流(known-issue auth/login-rate-limit-gap 落地步,────
-    # 2026-11-24)login/refresh/register 三端点进程内滑动窗(双键 =
-    # IP + 账号,任一面耗尽即 429 数值码 4291);nginx 为唯一入口,
-    # X-Real-IP 为 IP 键源(取值口径见 core/rate_limit.py)。
+    # ── Auth 限流(login/refresh/register 三端点进程内滑动窗,──────
+    # 双键 = IP + 账号,任一面耗尽即 429 数值码 4291);nginx 为唯一
+    # 入口,X-Real-IP 为 IP 键源(取值口径见 core/rate_limit.py)。
     AUTH_RATE_LIMIT_ENABLED: bool = True
     # login:账号面防爆破(错密重试),IP 面防密码喷洒(多账号轮询)。
     AUTH_LOGIN_ACCT_MAX: int = 6
@@ -67,9 +66,9 @@ class Settings(BaseSettings):
 
     # ── DB ────────────────────────────────────────────────
     # 锚定 backend/(见 _BACKEND_ROOT):误启动目录不再另起炉灶。
-    # SQLite 已退役(2026-10-14):不再有本地默认回退 URL —— 空值/
-    # sqlite:// 一律 fail-fast(core/db.py 引擎构造即拒),环境必须
-    # 显式给 postgresql+asyncpg://...(pytest 侧同口径,conftest 要求
+    # PG-only,无本地默认回退 URL —— 空值/sqlite:// 一律 fail-fast
+    # (core/db.py 引擎构造即拒),环境必须显式给
+    # postgresql+asyncpg://...(pytest 侧同口径,conftest 要求
     # TEST_DATABASE_URL)。历史切换/回滚纪律见 runbook-pg.md。
     DATABASE_URL: str = ""
 
@@ -80,33 +79,29 @@ class Settings(BaseSettings):
     # case 案卷(result.json/case.json,含注入后明文凭证)保留天数;
     # 启动期 + 后台保留期维护任务周期清扫超期目录。0 = 禁用清扫。
     CASE_RETENTION_DAYS: int = 14
-    # P2-02/C2:execution_events 事件/日志保留天数(0 = 永久);
-    # 由后台保留期维护任务分批清扫(整体评审 2026-10-15 #2)。
+    # execution_events 事件/日志保留天数(0 = 永久);由后台保留期
+    # 维护任务分批清扫。
     EXEC_EVENTS_RETENTION_DAYS: int = 14
     # 按日 JSONL 运维索引(runs/YYYY-MM-DD.jsonl)保留天数(0 = 永久)。
-    # M6 前存量单的行级只读归档在此,故默认长于 case 案卷。
+    # 存量单的行级只读归档在此,故默认长于 case 案卷。
     RUNS_JSONL_RETENTION_DAYS: int = 90
     # 保留期维护任务周期(秒);启动后首拍在一个周期后执行(启动期的
     # case 清扫仍由 startup_recovery 即时完成)。
     RETENTION_MAINTENANCE_INTERVAL_S: int = 6 * 3600
 
-    # ── Gimbal 执行链(V3.2 ``gimbal run launch`` 子进程) ──
+    # ── Gimbal 执行器进程(server 链经 gimbal_launcher 拉起)──
     # GIMBAL_BIN: gimbal 可执行文件(如 D:\Gimbal\Scripts\gimbal.exe);
     # 空值回退同解释器 ``python -m gimbal``(同 venv 部署最稳)。
     GIMBAL_BIN: str = ""
-    # 单次 launch 子进程超时(秒)。
+    # 单次引擎会话执行超时(秒)。
     GIMBAL_TIMEOUT_SEC: float = 300.0
-    # (B6③ 清尾/C8 2026-11-23)GIMBAL_CANCEL_GRACE_SEC 已删 —— legacy
-    # --cancel-file 取消通道随 B6③ 退役后全仓零消费;server 链取消走
-    # cancel 端点 + run_case 内部收口。
-    # P7 资源闸:单次执行总行数上限(行数 × nRuns,409 拒单)与
-    # 进程内 launch 子进程同时在飞上限(跨 execution 合并生效)。
+    # 资源闸:单次执行总行数上限(行数 × nRuns,409 拒单)。
     MAX_RUNS_PER_EXECUTION: int = 200
-    # ── C11(P3-01)执行队列 ──────────────────────────────────
+    # ── 执行队列 ─────────────────────────────────────────────
     # worker 数(每 worker 同时只跑一个 execution_jobs 任务;多 backend
     # 进程部署时 SKIP LOCKED 天然分单)
     EXEC_WORKERS: int = 1
-    # server 链实例池全局上限(P3 收尾):parallel 可到 MAX_RUNS_PER_EXECUTION,
+    # server 链实例池全局上限:parallel 可到 MAX_RUNS_PER_EXECUTION,
     # 槽位池 = min(parallel, 行数) 再被此上限钳制 —— 防一次执行冷启动
     # 上百个引擎进程
     EXEC_MAX_SERVER_INSTANCES: int = 8
@@ -114,11 +109,11 @@ class Settings(BaseSettings):
     EXEC_JOB_LEASE_SEC: float = 120.0
     # 认领次数上限(含首次):孤儿回收超过即失败收口(执行不可假设幂等)
     EXEC_JOB_MAX_ATTEMPTS: int = 2
-    # ── 权限域二期 P1:suite 聚合模式运行(§6.3/§6.6)──────────
+    # ── suite 聚合模式运行(§6.3/§6.6)───────────────────────
     # 每人 suite 数 / 每个 suite 成员数(防 sprawl,超出 409)
     SUITE_CAP: int = 50
     SUITE_MEMBER_CAP: int = 100
-    # 草稿单独上限(重构方案 D 轮拍板):草稿不计入 SUITE_CAP,但 30 天
+    # 草稿单独上限:草稿不计入 SUITE_CAP,但 30 天
     # 清理只清空草稿,非空草稿的积累由本上限兜住
     SUITE_DRAFT_CAP: int = 20
     # 单次 suite 运行的总 runs 上限:分发前预检(复用 dispatch 的
@@ -130,12 +125,11 @@ class Settings(BaseSettings):
     # 50 成员 × MAX_RUNS_PER_EXECUTION=200 的极端量级可能真跑超 24h,
     # 超窗再发起属可接受降级(旧批仍在跑、新批排队,不损正确性)。
     SUITE_RUN_STALE_HOURS: int = 24
-    # ── C12/C13(P3-02/03)执行链 ─────────────────────────────
-    # B6③(2026-11-23):EXEC_CHAIN 键删除 —— 平台执行恒 server 链
-    # (gimbal run server + POST /runs + SSE;槽位池见
-    # EXEC_MAX_SERVER_INSTANCES)。legacy ``run launch`` 子进程回滚链
-    # 已服役期满删除(登记册 B6/C3;台账 chain 键存量 legacy 值仅历史
-    # 可读,.env 残键由 extra=ignore 静默忽略)。
+    # ── 执行链 ───────────────────────────────────────────────
+    # 平台执行恒 server 链(gimbal run server + POST /runs + SSE;槽位
+    # 池见 EXEC_MAX_SERVER_INSTANCES)。台账 chain 键的存量 legacy 值
+    # 仅历史可读,.env 残键由 extra=ignore 静默忽略(legacy 链退场见
+    # ADR-0003 #23 与登记册 B6/C3)。
     # ── 决策 1「引用即登记」保存/导入闸(identity-registry §2)─────
     # 场景保存/更新/导入的身份引用存在性闸三态:
     #   off     = 现状,不校验(阶段 0 落地时的缺省);
@@ -146,15 +140,14 @@ class Settings(BaseSettings):
     #              完成(合并路线阶段 3;时点由阶段 0 审计数字定)。
     # 运行方案保存的登记闸 = validate_binding_aliases 既有覆盖(绑定值
     # 存在 + 同基础服务),无定义侧引用面,不重复挂。
-    # C8 审计(2026-11-23):Literal 化 —— 拼错取值直接启动期 ValidationError
-    # 拒绝(此前消费侧仅 warning 后按 off,生产以为开了 enforce 实则全放行)。
-    # 消费面(service_aliases._registry_flags)的未知取值告警分支自此为
-    # 不可达防御,保留自证。
+    # Literal 化 —— 拼错取值直接启动期 ValidationError 拒绝(宽松读法
+    # 会让生产以为开了 enforce 实则全放行)。消费面
+    # (service_aliases._registry_flags)的未知取值告警分支为不可达
+    # 防御,保留自证。
     REGISTRY_ONLY_IDENTITIES: Literal["off", "audit", "enforce"] = "off"
-    # ── 服务引用注册化(架构终态;2026-11-21)─────────────────────
+    # ── 服务引用注册化(架构终态)─────────────────────────────
     # 场景 = 纯引用容器:步骤服务键须落注册域(主档 services ∪ 身份
-    # 条目表),authored URL(config.services 第 ② 层)整体退役 ——
-    # 地址事实只在部署表(③ 层,按执行标签解析)。三态与身份闸同款:
+    # 条目表),地址事实只在部署表(按执行标签解析)。三态与身份闸同款:
     #   off    = 不校验(缺省);
     #   audit  = 保存放行 + X-Service-Warnings 头(unregistered /
     #            declaredUrls 两组,前端黄条);
@@ -162,7 +155,7 @@ class Settings(BaseSettings):
     #            硬拦。切换前置 = 存量清账完成
     #            (scripts/cleanup_authored_services.py)。
     REGISTRY_ONLY_SERVICES: Literal["off", "audit", "enforce"] = "off"
-    # ── 周期对账(P0-3.2,webhook 设计 v3)───────────────────────
+    # ── 周期对账(webhook 设计 v3)─────────────────────────────
     # 僵尸执行(job 已终态/不存在而执行仍 queued/running)的周期收口:
     # 间隔 5 分钟一拍;宽限 10 分钟内的单不动(可能与正在收尾的执行抢
     # 终态)。卡住的执行最迟「宽限+间隔」≈15 分钟被收口 —— 回调上线后
@@ -176,13 +169,13 @@ class Settings(BaseSettings):
     # RFC1918)—— 按具体回调主机配置。空 = 不允许任何回调地址(令牌
     # 仍可轮询使用)。
     CALLBACK_HOST_ALLOWLIST: str = ""
-    # ── 回调投递(webhook 设计 v3 P2 §5.2)──────────────────────
+    # ── 回调投递(webhook 设计 v3 §5.2)────────────────────────
     # 单行投递总尝试上限(含首次),用尽置 failed 等保留期清扫
     WEBHOOK_MAX_ATTEMPTS: int = 5
     # 失败退避序列(秒,逗号分隔;尝试 n 失败后退 backoff[min(n-1, len-1)])
     WEBHOOK_BACKOFF_SECONDS: str = "30,120,480,1800"
     WEBHOOK_TIMEOUT_SECONDS: float = 10.0
-    # 并发投递上限(S2):同时发送的别名组数;同一别名组内仍串行(按 id),
+    # 并发投递上限:同时发送的别名组数;同一别名组内仍串行(按 id),
     # 一个慢接收端只拖住自己的序列。领取时把 next_retry_at 后推
     # WEBHOOK_TIMEOUT_SECONDS+30 = 投递租约(进程退出后到期重领)。
     WEBHOOK_CONCURRENCY: int = 5
@@ -194,10 +187,8 @@ class Settings(BaseSettings):
     # (server-engine.log 文件不受影响,全量保留);DEBUG 排障走文件。
     # 级别序:TRACE<DEBUG<INFO<SUCCESS<WARNING<ERROR<CRITICAL。
     EXEC_INGEST_LOG_LEVEL: str = "INFO"
-    # (C8 审计 2026-11-23)GIMBAL_PLUGINS_DIR / GIMBAL_PLUGINS /
-    # GIMBAL_PLUGIN_CONFIGS 平台侧 Settings 字段已删 —— 全仓零消费
-    # (引擎侧同名 env 是引擎自己的进程环境契约,由部署层直传,
-    # 见 src/gimbal/config/loader.py,不经平台 Settings)。
+    # 引擎侧 GIMBAL_PLUGINS_* env 是引擎自己的进程环境契约,由部署层
+    # 直传(见 src/gimbal/config/loader.py),不经平台 Settings。
 
     # ── CORS ──────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
@@ -214,7 +205,7 @@ class Settings(BaseSettings):
     # 声明面取数缓存 TTL(秒),spec v3.1 §3:dispatch 悬空判定用的
     # 「契约声明 path 全集」进程缓存有效期。后端进程可能长期存活,
     # 而 plate 发版是运维事件 —— TTL 给快照过期兜一个上界。
-    # 2026-09-12 取数合并后,同一份缓存也承载 carry 面的**原始声明列表**
+    # 同一份缓存也承载 carry 面的**原始声明列表**
     # (endpoint_declarations.declarations_of),故本值同时是 carry 契约面
     # 的更新上界:plate 会话中途发版时,carry 面最多滞后本值才更新。
     # **正常路径**成立;plate 故障期见 DECLARED_PATHS_STALE_WINDOW_SEC。
@@ -284,8 +275,8 @@ class Settings(BaseSettings):
         # may hand us back a relative ``./data``; normalize again here so
         # every downstream consumer (JSONL run logs, DB paths, UI preview)
         # sees e.g. ``D:\Gimbal\Gimbal\gimbal-platform\data\...``.
-        # (tmp/ and reports/ were the retired V1 executor's paths — V3
-        # only writes data/runs/<date>.jsonl, created on demand.)
+        # (only data/runs/<date>.jsonl is written under it, created on
+        # demand.)
         self.DATA_DIR = self.DATA_DIR.resolve()
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -14643,7 +14643,7 @@
     },
     "/api/executions": {
       "get": {
-        "description": "分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。\n\nM1(§4.1):``page``/``page_size`` 是 Page 信封的正参(limit/offset\n保留为旧调用兼容;两者并传时 page 优先),信封补齐 page/pageSize。\n列表行形态去 ``config``(凭证引用面不随行下发,详情页保留),\n只带窄投影 ``configSummary``。\n\n``scenario_id`` 叠加在 owner 过滤之上(前端「上次运行」数据源)。\n执行设计 §3.4 增补:``status`` / 发起时间范围(锚 ``created_at``,\nqueued 单 started_at 可空不作锚)/ ``batch_id``(队列归并视图)筛选。\nM4(§6.3):``q`` 下推(scenario_name ILIKE / id 前缀)——列表页\n检索框不再拉全量在客户端过滤。\n\n令牌(webhook v4 §2.2):过滤面从「owner 本人」换成「token_id\n等于当前令牌」—— 只看本令牌发起的执行;JWT 调用行为不变。\n\n``tokenId``(JWT 面,§2.2):令牌属主按令牌列出经它发起的执行;\n平台令牌 member+ 可查;无权 404。令牌路径忽略该参数(恒按本令牌)。",
+        "description": "分页列表(默认 200,防无界全量)。与前端现状兼容。\n\nM1(§4.1):``page``/``page_size`` 是 Page 信封的正参(limit/offset\n保留为旧调用兼容;两者并传时 page 优先),信封补齐 page/pageSize。\n列表行形态去 ``config``(凭证引用面不随行下发,详情页保留),\n只带窄投影 ``configSummary``。\n\n``scenario_id`` 叠加在 owner 过滤之上(前端「上次运行」数据源)。\n执行设计 §3.4 增补:``status`` / 发起时间范围(锚 ``created_at``,\nqueued 单 started_at 可空不作锚)/ ``batch_id``(队列归并视图)筛选。\nM4(§6.3):``q`` 下推(scenario_name ILIKE / id 前缀)——列表页\n检索框不再拉全量在客户端过滤。\n\n令牌(webhook v4 §2.2):过滤面从「owner 本人」换成「token_id\n等于当前令牌」—— 只看本令牌发起的执行;JWT 调用行为不变。\n\n``tokenId``(JWT 面,§2.2):令牌属主按令牌列出经它发起的执行;\n平台令牌 member+ 可查;无权 404。令牌路径忽略该参数(恒按本令牌)。",
         "operationId": "list_executions_api_executions_get",
         "parameters": [
           {
@@ -14940,7 +14940,7 @@
     },
     "/api/executions/summary": {
       "get": {
-        "description": "顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。\n\n口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);\n窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。\n行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。\n\n``projectId``(项目详情 A 级批次,2026-11-18)= 项目维度聚合:\n行集 = executions.project_id 快照列(全员发起,跨 owner);门 =\n项目成员 ∨ 公共项目 ∨ Admin+(公共项目例外与 get_project/facets\n同口径 —— 项目详情页头卡对普通访客可见;2026-11-19 复核补),\n非成员 404(不泄露存在性)。",
+        "description": "顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。\n\n口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);\n窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。\n行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。\n\n``projectId`` = 项目维度聚合:\n行集 = executions.project_id 快照列(全员发起,跨 owner);门 =\n项目成员 ∨ 公共项目 ∨ Admin+(公共项目例外与 get_project/facets\n同口径 —— 项目详情页头卡对普通访客可见),\n非成员 404(不泄露存在性)。",
         "operationId": "executions_summary_api_executions_summary_get",
         "parameters": [
           {
@@ -15364,7 +15364,7 @@
     },
     "/api/executions/{execution_id}/events": {
       "get": {
-        "description": "事件/日志组合筛选查询(P2-07/C10 日志分析页的读面)。\n\n``after_ts``+``after_id``:静态时间轴翻页锚(严格大于该 (ts,id));\n``after_seq``:事件轴续传锚(seq > ?);``around_ts``+``around_id``:\nS2 失败上下文窗口(锚行 + 前后各 N 行,混合时间轴)。",
+        "description": "事件/日志组合筛选查询(日志分析页的读面)。\n\n``after_ts``+``after_id``:静态时间轴翻页锚(严格大于该 (ts,id));\n``after_seq``:事件轴续传锚(seq > ?);``around_ts``+``around_id``:\nS2 失败上下文窗口(锚行 + 前后各 N 行,混合时间轴)。",
         "operationId": "get_execution_events_api_executions__execution_id__events_get",
         "parameters": [
           {
@@ -15700,7 +15700,7 @@
     },
     "/api/executions/{execution_id}/events/counts": {
       "get": {
-        "description": "按 category 聚合计数(P2-07 验收:能展示按 category 聚合的计数)。",
+        "description": "按 category 聚合计数(日志分析页按类别分道的展示面)。",
         "operationId": "get_execution_event_counts_api_executions__execution_id__events_counts_get",
         "parameters": [
           {
@@ -15751,7 +15751,7 @@
     },
     "/api/executions/{execution_id}/events/stream": {
       "get": {
-        "description": "SSE 推送已入库事件(P2-06/C9;替代执行页 1s 轮询)。\n\n* ``Last-Event-ID`` 请求头续传(断线重连不重复不丢失);\n* 事件到达即推;无事件时 ~15s 心跳注释帧保活;\n* 终态 + run.finished 已推(或终态但本就无事件流的存量执行)\n  → 发 ``event: done`` 后关流;客户端断开即停。",
+        "description": "SSE 推送已入库事件(替代执行页轮询)。\n\n* ``Last-Event-ID`` 请求头续传(断线重连不重复不丢失);\n* 事件到达即推;无事件时 ~15s 心跳注释帧保活;\n* 终态 + run.finished 已推(或终态但本就无事件流的存量执行)\n  → 发 ``event: done`` 后关流;客户端断开即停。",
         "operationId": "stream_execution_events_api_executions__execution_id__events_stream_get",
         "parameters": [
           {
@@ -16120,7 +16120,7 @@
     },
     "/api/executions/{execution_id}/rows": {
       "get": {
-        "description": "行级状态(M6 转正,债 5 消除):活跃执行读 dispatcher 内存\nregistry;历史执行读 execution_rows DB 分页;M6 前的存量单回放\nJSONL(只读归档)兜底。信封 {items,total,page,pageSize}。",
+        "description": "行级状态:活跃执行读 dispatcher 内存\nregistry;历史执行读 execution_rows DB 分页;存量单回放\nJSONL(只读归档)兜底。信封 {items,total,page,pageSize}。",
         "operationId": "get_execution_rows_api_executions__execution_id__rows_get",
         "parameters": [
           {

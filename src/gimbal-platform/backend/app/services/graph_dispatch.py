@@ -45,8 +45,8 @@ async def resolve_graph_units(
 
     重构方案约束 5(单行内联):``schemeId``(空 = 默认方案)+ ``row``
     {datasetId, rowIndex}(空 = 裸基线)选定该单元唯一运行的一行;
-    方案的服务绑定随行合入(单元级覆盖同名)。此前固定
-    ``compose_scenario(payload, {})`` 只跑裸基线(run_prepare)。
+    方案的服务绑定随行合入(单元级覆盖同名);row 为空 =
+    ``compose_scenario(payload, {})`` 裸基线(run_prepare)。
     """
     from .run_prepare import compose_scenario, find_dataset_by_id
     from . import scheme_store
@@ -129,8 +129,7 @@ async def resolve_graph_units(
             "unit": unit,
             "scenario_row": scen,
             "composed": composed,
-            # (方案环境链位已随 §8.2 退役 —— 此前的 scheme_env 只写
-            # 不读,2026-11-20 审计 CFG-03 清除)
+            # 方案不携带环境链位(§8.2):环境解析走标签链单源
         })
     return resolved
 
@@ -161,9 +160,8 @@ async def missing_auth_aliases(
          for r in resolved])
     if not aliases:
         return [], []
-    # §8.3:取用不校验标签 —— 无环境位(旧链曾漏传 env 导致编排预检
-    # 恒拒发;链位退役后该缺陷类不复存在)
-    # D3 收口(2026-11-22):带回 (missing, ambiguous) 分类,消费方按
+    # §8.3:取用不校验标签 —— 无环境位(取用解析按池资格,不按环境)
+    # D3:带回 (missing, ambiguous) 分类,消费方按
     # 类分道报错(歧义 ≠ 未登记)。missing/ambiguous 恒为请求槽位
     # 子集,直接回传。
     _picked, missing, ambiguous = await run_prepare.pick_bindings_full(
@@ -192,10 +190,10 @@ async def materialize_graph(
     graph_req:{mode, units:[{ref,scenarioId,...}], before?, after?,
     parallel?, gates?, checks?, nRuns?}。
 
-    ``full=True``(B-1,2026-10-13)返回台账 bundle:
+    ``full=True`` 返回台账 bundle:
     ``{graph, m2_info, meta_plate, endpoints_used, unanchored_services}``
     —— 版本模型三件套(plate_pins/baseline_*/m2_hash)对 suite 执行
-    与单场景同口径;此前 graph 分支完全不记台账、不传 m2 代际门。
+    与单场景同口径。
     """
 
     mode = graph_req.get("mode") or "aggregate"
@@ -213,10 +211,9 @@ async def materialize_graph(
     # 可用集合交集的最新修订;不一致/无交集 → 拒绝(错误码随
     # GraphDispatchError 面 4xx)。plate 不可用时跳过检查(resolve 内
     # 部已按成员降级,与单场景执行同口径)。
-    # B-1(2026-10-13 勘误):r["composed"] 是 compose_scenario 的产物
-    # —— 已解包的 definition 本体,不再是容器;此前此处按容器调
-    # definition_from_payload 恒得 {},R25 版本统一(含 check_and_
-    # resolve_suite_versions 调用)在真实 graph 路径从未生效(死代码)。
+    # r["composed"] 是 compose_scenario 的产物 —— 已解包的 definition
+    # 本体,不是容器;check_and_resolve_suite_versions 按容器形状读
+    # definition.meta,调用侧须包一层 {"definition": composed}。
     from .suite_version import (
         check_and_resolve_suite_versions,)
     suite_pins: dict[str, str] = {}
@@ -237,12 +234,12 @@ async def materialize_graph(
                 if sys_ in meta_plate:
                     meta_plate[sys_] = eff
 
-    # 认证与绑定物化(graph 级一次)。N1-2:凭证清单与单场景链/预检
+    # 认证与绑定物化(graph 级一次):凭证清单与单场景链/预检
     # 同源 —— run_prepare.graph_auth_aliases **逐单元**走
-    # exec_auth_aliases(模板扫描 ${auth.*} ∪ 步骤服务条目(S6:图级
+    # exec_auth_aliases(模板扫描 ${auth.*} ∪ 步骤服务条目(图级
     # +单元+方案合并后的绑定选别名即换槽))再并集。逐单元而非按服务
-    # 压平:两个单元给同一服务选不同别名时压平会后写覆盖先写(评审
-    # 2026-11-01 §2 回归)。选的别名须存在且同基础服务(S6)。
+    # 压平:两个单元给同一服务选不同别名时压平会后写覆盖先写。
+    # 选的别名须存在且同基础服务。
     for r in resolved:
         try:
             await service_aliases.validate_binding_aliases(
@@ -254,9 +251,9 @@ async def materialize_graph(
         db_module.SessionLocal,
         [(r["composed"], unit_merged_bindings(graph_req, r["unit"]))
          for r in resolved])
-    # §8.2 标签解析逐单元(2026-11-17 环境降级轮):每单元按**自身
-    # 有效身份集合**解析标签(身份 > 该单元场景项目默认 > 平台默认);
-    # 图级 environmentId 显式位退役。重放快照(``env`` 非空)仍整图
+    # §8.2 标签解析逐单元:每单元按**自身
+    # 有效身份集合**解析标签(身份 > 该单元场景项目默认 > 平台默认)。
+    # 重放快照(``env`` 非空)仍整图
     # 生效 —— 快照就是当次执行的事实。混拼在单元内抛 EnvMixed →
     # GraphDispatchError(派发前拒);查表失败该单元地址降级空表。
     from .env_chain import EnvChoice, EnvMixed, resolve_execution_tag
@@ -280,26 +277,24 @@ async def materialize_graph(
         except EnvMixed as e:
             raise GraphDispatchError(
                 f"单元 {ref} {e}") from None
-        except Exception:  # noqa: BLE001 — CFG-03:降级必须可见(此前静默
-            # None/{},与 prepare_exec 同位置已有 warning 的口径对齐)
+        except Exception:  # noqa: BLE001 — 降级必须可见(与 prepare_exec
+            # 同位置 warning 口径对齐)
             logger.opt(exception=True).warning(
                 "graph_dispatch: 单元 {} 标签/地址解析失败 → "
                 "env=None + 空地址表(该单元执行将缺地址)", ref)
             unit_envs[ref] = None
             unit_urls[ref] = {}
-    # §8.3:取用不校验标签 —— 无环境位(此前曾漏传 env 导致编排链
-    # users 恒空;链位退役后该缺陷类不复存在)
+    # §8.3:取用不校验标签 —— 无环境位(取用解析按池资格,不按环境)
     exec_auths = (await run_prepare.resolve_exec_auths(
         db_module.SessionLocal, owner_id, auth_aliases,
         cred_project_id=cred_project_id)
         if auth_aliases else [])
 
-    # N1-2:carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
-    # 单元共用);单单元失败降 None 不阻塞。此前显式 None 是绕开空 dict
-    # 炸 _apply_carry 的权宜 —— Suite 无 carry 的功能缺口由归一补齐。
-    # S4:逐单元 carry 作用域(单元场景项目;私有区单元 → 执行人个人层)
+    # carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
+    # 单元共用);单单元失败降 None 不阻塞。
+    # 逐单元 carry 作用域(单元场景项目;私有区单元 → 执行人个人层)
     # §8.9 实例档:逐单元执行标签(env_mixed 已派发前拦,单值)下传
-    # 作实例键坐标;S6:绑定选别名 → carry 别名键随之切换
+    # 作实例键坐标;绑定选别名 → carry 别名键随之切换
     carry_ctxs = await run_prepare.unit_carry_contexts(
         db_module.SessionLocal, [r["composed"] for r in resolved],
         [{"project_id": r["scenario_row"].project_id,
@@ -324,11 +319,10 @@ async def materialize_graph(
         materialized = materialize_run_copy(
             converted,
             resolved_auths=exec_auths,
-            # authz W6 主规则:executor(dispatch 的 owner_id)≠ 单元
-            # 属主 ⇒ 内置 users 当空(引用执行不带走作者凭证,R3)。
+            # authz 主规则:executor(dispatch 的 owner_id)≠ 单元
+            # 属主 ⇒ 内置 users 当空(引用执行不带走作者凭证)。
             # 源取落库容器 payload(与其余执行链同源)—— composed 是
-            # 合成后的场景形状,definition_from_payload 解不出 users,
-            # 此前属主凭证全靠 converted 漏过来
+            # 合成后的场景形状,definition_from_payload 解不出 users
             built_in_users=run_prepare.built_in_users(
                 r["scenario_row"].payload, executor_id=owner_id,
                 scenario_owner_id=r["scenario_row"].owner_id,
@@ -435,9 +429,8 @@ async def materialize_graph(
 
 
 def _all_referenced_services(resolved: list[dict]) -> list[str]:
-    # r["composed"] 是 compose_scenario 产物 = 已解包的 definition 本体
-    # (B-1 勘误);此前按容器调 steps_from_payload 恒得 [] —— 单元 ③ 层
-    # 地址从未生效,被绑定 url 层掩盖(authz M2a S6 退役绑定 url 后暴露)
+    # r["composed"] 是 compose_scenario 产物 = 已解包的 definition 本体,
+    # 直接读 steps,勿再过 definition_from_payload(按容器调恒得 [])
     out: set[str] = set()
     for r in resolved:
         steps = (r["composed"] or {}).get("steps") or []
@@ -455,13 +448,11 @@ async def execute_graph(
     on_session=None,
 ) -> dict:
     """物化好的 SuiteGraph → 落盘 case.json → 执行器 server 实例单跑;
-    返回 LaunchResult(行状态由事件投影 —— 与 _fanout 的 P2-04 同语义)。
+    返回 LaunchResult(行状态由事件投影 —— 与 _fanout 同语义)。
 
-    C12/C13:执行器 server 实例(POST /runs + SSE 消费);legacy run
-    launch 子进程链已随 B6③ 退役(2026-11-23,--cancel-file 信号文件
-    通道同退)。``on_session``(graph 单元级取消 P2):启动后把
-    ServerSession 交给调用方,供其在取消位置位时下发
-    ``cancel(scope="unit")``。
+    执行器 server 实例(POST /runs + SSE 消费)。``on_session``
+    (graph 单元级取消):启动后把 ServerSession 交给调用方,供其在
+    取消位置位时下发 ``cancel(scope="unit")``。
     """
     case_dir = run_dir / "case-graph"
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -470,9 +461,9 @@ async def execute_graph(
     n_runs = 1    # graph 内单元已带 policy_kwargs;spawn 级乘法不叠
     from .gimbal_server_session import ServerSession
     ss = ServerSession()
-    # 日志入库接线(与 cases 链同面):server 分支此前漏传 on_log/
-    # log_counters,graph 执行的引擎日志只落 engine.log 文件、不入
-    # execution_events。顺序安全:ss.close() 在本函数 finally 收口
+    # 日志入库接线(与 cases 链同面):on_log/log_counters 下传后,
+    # graph 执行的引擎日志随 execution_events 入库(engine.log 文件
+    # 照落)。顺序安全:ss.close() 在本函数 finally 收口
     # (泵排空后才返回),调用方 _fanout_graph 随后 finalize。
     await ss.start(engine_log_path=case_dir / "engine.log", cwd=run_dir,
                    on_log=on_log, log_counters=log_counters)
