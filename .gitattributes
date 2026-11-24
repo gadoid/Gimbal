@@ -16,9 +16,30 @@ systems/**/*.md text eol=lf
 *.md text eol=lf
 *.ps1 text eol=crlf
 *.bat text eol=crlf
+# C5(2026-11-24):D5 清单外的文本扩展名补钉 LF。两个 .sh 曾以 CRLF 入库
+# (CI/Linux bash 遇 \r 翻车);sql 实为文本(pg-init 容器脚本 + 迁移快照
+# fixture),从 -text 转正统一 LF。dotfile 用全名匹配。
+*.sh text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.php text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.ini text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+*.in text eol=lf
+*.lock text eol=lf
+*.example text eol=lf
+*.npmrc text eol=lf
+*.sql text eol=lf
+.gitignore text eol=lf
+.zcodeignore text eol=lf
+.python-version text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
 # 非源码资产不归一化(备份/数据/二进制)
 *.bak -text
-*.sql -text
 *.png -text
 *.jpg -text
 *.zip -text

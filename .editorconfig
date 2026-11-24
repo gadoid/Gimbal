@@ -1,0 +1,18 @@
+# C5(2026-11-24):编辑器层行尾/结尾兜底 —— 与 .gitattributes 同口径。
+# 仓内提交规范由 .gitattributes + pre-commit(trailing-whitespace /
+# end-of-file-fixer)承担,本文件只管编辑器本地行为,未列项跟 Git。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{ps1,bat}]
+end_of_line = crlf
+
+# md 尾随空格可能是硬换行语义;方言 md 受规范形守门
+# (test_canonical_tree,render(parse(x))==x)字节级约束,编辑器不得动。
+[*.md]
+trim_trailing_whitespace = false

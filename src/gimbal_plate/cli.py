@@ -336,7 +336,9 @@ def cmd_reload(args: argparse.Namespace) -> int:
     """重载 working 快照(生产由 CI 触发;本地显式)。"""
     from gimbal_plate.loader import load_registry
 
-    reg = load_registry([_REPO / "systems"])
+    # B2-④(路径可配置收尾):不再写死仓库根 systems/——无参装载与 HTTP
+    # lifespan 同走 systems_roots()(PLATE_SYSTEMS_PATH 覆盖一切)。
+    reg = load_registry()
     n = len(list(reg.list_endpoints()))
     print(f"reloaded working snapshot: {n} endpoints, "
           f"systems={reg.list_systems()}")
