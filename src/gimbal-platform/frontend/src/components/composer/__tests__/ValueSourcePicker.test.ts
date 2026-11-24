@@ -54,7 +54,7 @@ describe('ValueSourcePicker(spec §7.3/§7.5)', () => {
   })
 
   it('sut_auth_expired → 认证页直达链接', () => {
-    const w = mountPicker({ error: { code: 'sut_auth_expired', message: 'x' } })
+    const w = mountPicker({ error: { code: 'sut_auth_expired', message: 'x', authExpired: true } })
     expect(w.find('a[href="/auths"]').exists()).toBe(true)
   })
 

@@ -24,11 +24,23 @@ import type {
   ExecutionsSummary,
 } from '@/api/executions'
 import type {
+  SuiteDetail,
+  SuiteLookupItem,
+  SuiteMemberItem,
+  SuitePage,
+  SuiteSummary,
+} from '@/api/suites'
+import type {
   ExecutionListItemOut,
   ExecutionListOut,
   ExecutionOut,
   ExecutionRowOut,
   ExecutionSummaryOut,
+  SuiteDetailOut,
+  SuiteLookupItem as SuiteLookupItemOut,
+  SuiteMemberOut,
+  SuitePageOut,
+  SuiteSummaryOut,
 } from './openapi'
 
 // ── executions 域 ──────────────────────────────────────────────
@@ -47,6 +59,27 @@ const _g4: ExecutionRowOut = _row
 declare const _summary: ExecutionsSummary
 const _g5: ExecutionSummaryOut = _summary
 
+// ── suites 域(切片 2)───────────────────────────────────────────
+// 契约面只有这 5 个 response schema(SuiteRunItem/ValidateOut/RevConflict
+// 等是前端投影/内联形状,无契约 schema,不适用本断言方向)。
+// latestRun 字段 = 后端 Any → Record<string,unknown>,手写 SuiteLatestRun
+// 接口无索引签名 —— 对该字段以 Omit 摘除后钉其余字段(known Any 面;
+// items 元素经 _s1 覆盖,信封其余分页字段照钉)。
+declare const _suiteSummary: SuiteSummary
+const _s1: Omit<SuiteSummaryOut, 'latestRun'> = _suiteSummary
+
+declare const _suitePage: SuitePage
+const _s2: Omit<SuitePageOut, 'items'> = _suitePage
+
+declare const _suiteDetail: SuiteDetail
+const _s3: Omit<SuiteDetailOut, 'latestRun'> = _suiteDetail
+
+declare const _suiteMember: SuiteMemberItem
+const _s4: SuiteMemberOut = _suiteMember
+
+declare const _suiteLookup: SuiteLookupItem
+const _s5: SuiteLookupItemOut = _suiteLookup
+
 // 编译期防未使用告警(guards 是纯类型层,无运行时产物)
-export const CONTRACT_GUARD_DOMAINS = ['executions'] as const
-void [_g1, _g2, _g3, _g4, _g5]
+export const CONTRACT_GUARD_DOMAINS = ['executions', 'suites'] as const
+void [_g1, _g2, _g3, _g4, _g5, _s1, _s2, _s3, _s4, _s5]

@@ -312,6 +312,7 @@ import { seedScenarioName } from '@/composables/useScenarioName'
 import { confirmAction, promptAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
+import { ApiError } from '@/api/http'
 import type {
   DataSetSelection, SchemeV2, SaveScenarioResult,
 } from '@/api/scenario-composer'
@@ -1033,14 +1034,15 @@ async function saveAs() {
     try {
       saved = await api.copyScenario(id, name || undefined)
     } catch (e) {
-      const suggestion = (e as { status?: number; code?: string | number; detail?: Record<string, unknown> })
-      if (suggestion.status === 409 && suggestion.code === 'name_taken'
-          && typeof suggestion.detail?.suggestion === 'string') {
+      if (e instanceof ApiError && e.status === 409
+          && e.hasCode('name_taken')
+          && typeof (e.detail ?? {})?.suggestion === 'string') {
+        const suggestion = (e.detail?.suggestion ?? '') as string
         const ok = await confirmAction(
-          `已有同名场景。使用「${suggestion.detail.suggestion}」创建副本?`,
+          `已有同名场景。使用「${suggestion}」创建副本?`,
           '重名确认', { type: 'info', confirmButtonText: '使用后缀名' })
         if (!ok) return false
-        saved = await api.copyScenario(id, suggestion.detail.suggestion)
+        saved = await api.copyScenario(id, suggestion)
       } else {
         throw e
       }

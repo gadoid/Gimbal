@@ -3,7 +3,7 @@
  * 第 2 步:composition 整体保存 / 模式分流运行 / 运行记录 / 重跑失败
  * 单元 / 公共复制 / 最近运行摘要)。
  */
-import http from '@/api/http'
+import http, { ApiError } from '@/api/http'
 
 export type SuiteMode = 'aggregate' | 'chain' | 'fanout' | 'compose'
 export type MemberRole = 'main' | 'before' | 'after'
@@ -315,10 +315,20 @@ export async function deleteSuitePublish(
   return data
 }
 
-/** 从 axios 错误里取 409 detail(冲突/在途/上限/发布确认的机器面)。 */
+/** 从错误对象取 409/422 detail(冲突/上限/跨区的机器面)。
+ *
+ * 真实链路:响应拦截器已把 axios 错误统一换成 ``ApiError``,原始
+ * ``err.response`` 不再外泄 —— detail 从 ``e.detail`` 读(http.ts
+ * normalizeError 对 dict detail 全量透传)。手搓
+ * ``{response:{data}}``(单测/非拦截器来源)保持兼容。 */
 export function suiteErrDetail(e: unknown): {
   code?: string; message?: string; [k: string]: unknown
 } | null {
+  if (e instanceof ApiError) {
+    return (e.detail ?? null) as {
+      code?: string; message?: string; [k: string]: unknown
+    } | null
+  }
   const resp = (e as { response?: { status?: number; data?: unknown } })
     ?.response
   if (resp && typeof resp.data === 'object' && resp.data !== null) {

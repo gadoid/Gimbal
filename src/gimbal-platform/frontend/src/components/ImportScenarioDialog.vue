@@ -221,6 +221,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
+import { ApiError } from '@/api/http'
 import {
   importPrecheck, importScenario,
   type ImportPrecheck, type ImportServiceRow, type ImportMapping,
@@ -391,10 +392,8 @@ async function onConfirm(): Promise<void> {
     toast.success(`已导入 ${res.scenarioId} —— 建议先跑一次执行预检`)
     emit('imported', res.scenarioId)
   } catch (e) {
-    const code = (e as { response?: { data?: { detail?: { code?: string } } } })
-      ?.response?.data?.detail?.code
-    if (code === 'scenario_id_exists' || code === 'alias_name_taken'
-        || code === 'mapping_stale') {
+    if (e instanceof ApiError && (e.hasCode('scenario_id_exists')
+        || e.hasCode('alias_name_taken') || e.hasCode('mapping_stale'))) {
       // 409 自愈:自动重新预检刷新建议(方案 §3.2)
       toast.info('配置有变化,已重新预检 — 请再确认一次')
       reprechecking.value = true
@@ -402,8 +401,9 @@ async function onConfirm(): Promise<void> {
       reprechecking.value = false
       return
     }
-    const detail = (e as { response?: { data?: { detail?: { message?: string } } } })
-      ?.response?.data?.detail
+    const detail = (e instanceof ApiError ? e.detail : null)
+      ?? (e as { response?: { data?: { detail?: { message?: string } } } })
+        ?.response?.data?.detail
     toast.error(`导入失败: ${detail?.message || (e as Error).message}`)
   } finally {
     importing.value = false

@@ -279,6 +279,13 @@
       ],
       "statuses": []
     },
+    "alias_name_taken": {
+      "sites": [
+        "app/services/scenario_import.py:697",
+        "app/services/scenario_import.py:866"
+      ],
+      "statuses": []
+    },
     "alias_unavailable": {
       "sites": [
         "app/routers/integration.py:895",
@@ -531,7 +538,8 @@
       "sites": [
         "app/core/deps.py:137",
         "app/core/deps.py:169",
-        "app/routers/access_tokens.py:210"
+        "app/routers/access_tokens.py:210",
+        "app/services/scenario_import.py:631"
       ],
       "statuses": [
         403
@@ -550,6 +558,12 @@
       "statuses": [
         403
       ]
+    },
+    "carry_binding_conflict": {
+      "sites": [
+        "app/services/scenario_import.py:863"
+      ],
+      "statuses": []
     },
     "carry_system_key_retired": {
       "shapes": [
@@ -579,6 +593,12 @@
         422
       ]
     },
+    "circuit_open": {
+      "sites": [
+        "app/services/query_view_runner.py:414"
+      ],
+      "statuses": []
+    },
     "consent_stale": {
       "sites": [
         "app/routers/integration.py:945"
@@ -600,6 +620,13 @@
       "statuses": [
         409
       ]
+    },
+    "convert_rejected": {
+      "sites": [
+        "app/services/scenario_import.py:640",
+        "app/services/scenario_import.py:818"
+      ],
+      "statuses": []
     },
     "credential_source_invalid": {
       "shapes": [
@@ -1031,7 +1058,8 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:368"
+        "app/routers/scenarios.py:368",
+        "app/services/scenario_import.py:905"
       ],
       "statuses": [
         422
@@ -1060,7 +1088,8 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:353"
+        "app/routers/scenarios.py:353",
+        "app/services/scenario_import.py:900"
       ],
       "statuses": [
         422
@@ -1138,6 +1167,12 @@
         409
       ]
     },
+    "internal_error": {
+      "sites": [
+        "app/services/scenario_import.py:419"
+      ],
+      "statuses": []
+    },
     "invalid_action": {
       "sites": [
         "app/services/adaptation_service.py:108",
@@ -1149,6 +1184,17 @@
         "app/services/plate_client.py:823",
         "app/services/plate_client.py:860",
         "app/services/plate_client.py:932"
+      ],
+      "statuses": []
+    },
+    "invalid_file": {
+      "sites": [
+        "app/services/scenario_import.py:93",
+        "app/services/scenario_import.py:97",
+        "app/services/scenario_import.py:106",
+        "app/services/scenario_import.py:109",
+        "app/services/scenario_import.py:620",
+        "app/services/scenario_import.py:682"
       ],
       "statuses": []
     },
@@ -1212,6 +1258,13 @@
         422
       ]
     },
+    "mapping_stale": {
+      "sites": [
+        "app/services/scenario_import.py:700",
+        "app/services/scenario_import.py:706"
+      ],
+      "statuses": []
+    },
     "member_exists": {
       "shapes": [
         [
@@ -1266,6 +1319,26 @@
       ],
       "sites": [
         "app/routers/suites.py:566"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "meta_plate_invalid_ref": {
+      "sites": [
+        "app/services/scenario_import.py:651"
+      ],
+      "statuses": []
+    },
+    "meta_plate_required": {
+      "sites": [
+        "app/services/scenario_import.py:438"
+      ],
+      "statuses": []
+    },
+    "missing_required_params": {
+      "sites": [
+        "app/services/query_view_runner.py:378"
       ],
       "statuses": [
         422
@@ -1340,6 +1413,12 @@
       "statuses": [
         409
       ]
+    },
+    "no_environment": {
+      "sites": [
+        "app/services/scenario_import.py:849"
+      ],
+      "statuses": []
     },
     "no_failed_units": {
       "shapes": [
@@ -1631,6 +1710,13 @@
         422
       ]
     },
+    "payload_too_large": {
+      "sites": [
+        "app/services/scenario_import.py:83",
+        "app/services/scenario_import.py:88"
+      ],
+      "statuses": []
+    },
     "plate_invalid_envelope": {
       "shapes": [
         [
@@ -1707,7 +1793,15 @@
         "app/routers/runs.py:265",
         "app/routers/scenarios.py:285",
         "app/routers/scenarios.py:1449",
-        "app/routers/strategy_catalog.py:60"
+        "app/routers/strategy_catalog.py:60",
+        "app/services/query_view_runner.py:107",
+        "app/services/query_view_runner.py:116",
+        "app/services/scenario_import.py:451",
+        "app/services/scenario_import.py:463",
+        "app/services/scenario_import.py:476",
+        "app/services/scenario_import.py:643",
+        "app/services/scenario_import.py:666",
+        "app/services/scenario_import.py:822"
       ],
       "statuses": [
         502,
@@ -1950,6 +2044,24 @@
         422
       ]
     },
+    "query_credential_required": {
+      "sites": [
+        "app/services/query_view_runner.py:230",
+        "app/services/query_view_runner.py:240",
+        "app/services/query_view_runner.py:258"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "query_not_safe": {
+      "sites": [
+        "app/services/query_view_runner.py:381"
+      ],
+      "statuses": [
+        422
+      ]
+    },
     "regenerate_required": {
       "sites": [
         "app/routers/access_tokens.py:531"
@@ -2129,6 +2241,13 @@
         409
       ]
     },
+    "scenario_id_exists": {
+      "sites": [
+        "app/services/scenario_import.py:689",
+        "app/services/scenario_import.py:958"
+      ],
+      "statuses": []
+    },
     "scenario_id_required": {
       "shapes": [
         [
@@ -2276,6 +2395,14 @@
         409
       ]
     },
+    "service_mismatch": {
+      "sites": [
+        "app/services/query_view_runner.py:365"
+      ],
+      "statuses": [
+        422
+      ]
+    },
     "service_not_found": {
       "shapes": [
         [
@@ -2299,7 +2426,8 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:391"
+        "app/routers/scenarios.py:391",
+        "app/services/scenario_import.py:925"
       ],
       "statuses": [
         422
@@ -2334,7 +2462,8 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:397"
+        "app/routers/scenarios.py:397",
+        "app/services/scenario_import.py:931"
       ],
       "statuses": [
         422
@@ -2343,6 +2472,22 @@
     "service_url_invalid": {
       "sites": [
         "app/services/query_context.py:108"
+      ],
+      "statuses": []
+    },
+    "service_url_required": {
+      "sites": [
+        "app/services/query_view_runner.py:385"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "shape_drift": {
+      "sites": [
+        "app/services/query_view_runner.py:130",
+        "app/services/query_view_runner.py:135",
+        "app/services/query_view_runner.py:321"
       ],
       "statuses": []
     },
@@ -2596,6 +2741,30 @@
         409
       ]
     },
+    "sut_auth_expired": {
+      "sites": [
+        "app/services/query_view_runner.py:236",
+        "app/services/query_view_runner.py:245",
+        "app/services/query_view_runner.py:268",
+        "app/services/query_view_runner.py:273",
+        "app/services/query_view_runner.py:313",
+        "app/services/query_view_runner.py:335"
+      ],
+      "statuses": []
+    },
+    "sut_error": {
+      "sites": [
+        "app/services/query_view_runner.py:316",
+        "app/services/query_view_runner.py:338"
+      ],
+      "statuses": []
+    },
+    "sut_unreachable": {
+      "sites": [
+        "app/services/query_view_runner.py:310"
+      ],
+      "statuses": []
+    },
     "system_user_protected": {
       "shapes": [
         [
@@ -2837,6 +3006,14 @@
         422
       ]
     },
+    "unknown_view": {
+      "sites": [
+        "app/services/query_view_runner.py:358"
+      ],
+      "statuses": [
+        404
+      ]
+    },
     "visibility_invalid": {
       "sites": [
         "app/routers/integration.py:336"
@@ -2895,7 +3072,9 @@
     "app/services/plate_client.py:694": "resp.json().get('error', {}).get('code', 'plate_error')",
     "app/services/run_dispatcher.py:1146": "e.code",
     "app/services/run_dispatcher.py:1437": "e.code",
-    "app/services/run_dispatcher.py:1475": "code"
+    "app/services/run_dispatcher.py:1475": "code",
+    "app/services/scenario_import.py:892": "code",
+    "app/services/scenario_import.py:962": "code"
   },
   "meta": {
     "coded_exception_classes": [
@@ -2906,9 +3085,11 @@
       "app/services/plate_client.py:60 PlateRejectedError",
       "app/services/project_promotion.py:33 PromotionError",
       "app/services/query_context.py:33 QueryContextError",
+      "app/services/query_view_runner.py:46 QueryViewError",
       "app/services/run_dispatcher.py:4012 NotFound",
       "app/services/run_dispatcher.py:4019 Conflict",
       "app/services/run_params.py:43 ParamsError",
+      "app/services/scenario_import.py:55 ImportRejected",
       "app/services/service_aliases.py:315 BindingAliasInvalid",
       "app/services/service_scope.py:27 ServiceScopeError",
       "app/services/suite_version.py:20 SuiteVersionError",

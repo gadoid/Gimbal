@@ -249,6 +249,7 @@ import {
   suiteErrDetail, validateSuite,
   type MemberRole, type SuiteModeConfig, type SuiteUnitConfig,
 } from '@/api/suites'
+import { ApiError } from '@/api/http'
 import { executionsBatchUrl } from '@/utils/links'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
@@ -550,8 +551,8 @@ async function save(): Promise<boolean> {
     saveState.value = 'clean'
     return true
   } catch (e) {
-    const det = suiteErrDetail(e)
-    if (det?.code === 'suite_rev_conflict') {
+    const det = suiteErrDetail(e) ?? {}
+    if (e instanceof ApiError && e.hasCode('suite_rev_conflict')) {
       toast.error('Suite 已被修改,已拉取最新编排(你的未保存改动被放弃)')
       applyDetail((det.latest ?? {}) as Parameters<typeof applyDetail>[0])
       saveState.value = 'clean'

@@ -29,7 +29,7 @@
           <p class="vsp-error-msg">
             <code class="mono">{{ error.code }}</code> {{ error.message }}
           </p>
-          <router-link v-if="error.code === 'sut_auth_expired'" to="/auths" class="vsp-auth-link">
+          <router-link v-if="error.authExpired" to="/auths" class="vsp-auth-link">
             到认证页刷新凭证
           </router-link>
           <button v-if="paramFields?.length" type="button"
@@ -119,7 +119,7 @@ const props = defineProps<{
   fetchedAt: string
   stale: boolean
   loading: boolean
-  error: { code: string; message: string } | null
+  error: { code: string; message: string; authExpired?: boolean } | null
   /** §13.5 点击期参数名列表;空 = 无参直行集(现状) */
   paramFields?: string[]
   /** 预填值(Canvas 同名约定求值后传入;选择器保持零 IO) */

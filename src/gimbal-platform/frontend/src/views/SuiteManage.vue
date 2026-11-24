@@ -196,6 +196,7 @@ import {
   type MemberRole, type SuiteDetail, type SuiteMode, type SuiteModeConfig,
   type SuiteUnitConfig,
 } from '@/api/suites'
+import { ApiError } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { promptAction, confirmAction } from '@/utils/confirmAction'
 import { executionsBatchUrl } from '@/utils/links'
@@ -321,29 +322,20 @@ async function save(publishUnpublished = false): Promise<void> {
     saveState.value = 'clean'
     conflictFlag.value = false
   } catch (e) {
-    const det = suiteErrDetail(e)
-    if (det?.code === 'suite_rev_conflict') {
+    const det = suiteErrDetail(e) ?? {}
+    if (e instanceof ApiError && e.hasCode('suite_rev_conflict')) {
       conflictFlag.value = true
       toast.error('Suite 已被修改,已拉取最新编排(你的未保存改动被放弃)')
       if (det.latest) applyDetail(det.latest as SuiteDetail)
       else void load()
       return
     }
-    if (det?.code === 'suite_member_publish_required') {
-      const pending = (det.pendingPublish as string[]) ?? []
-      const ok = await confirmAction(
-        `这是公共 Suite:加入的私有成员及其数据集将一并公开(${pending.join('、')})。确认公开并加入?`,
-        '发布确认',
-        { type: 'warning', confirmButtonText: '公开并加入', cancelButtonText: '不加入' },
-      )
-      if (ok) {
-        saveState.value = 'dirty'
-        await save(true)
-      } else {
-        // 不公开 → 回滚本次成员改动到服务端现状
-        await load()
-        toast.info('已取消:未加入该成员')
-      }
+    if (e instanceof ApiError && e.hasCode('suite_member_not_public')) {
+      // 不再级联代发布:私有成员须先各自发布(pendingMembers 列表透出)
+      const pending = (det.pendingMembers as string[]) ?? []
+      saveState.value = 'dirty'
+      toast.error(
+        `成员场景尚未发布到公共项目,请先发布:${pending.join('、') || '（见后端消息）'}`)
       return
     }
     saveState.value = 'dirty'

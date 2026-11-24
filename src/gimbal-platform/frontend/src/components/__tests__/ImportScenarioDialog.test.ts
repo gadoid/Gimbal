@@ -6,6 +6,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ImportScenarioDialog from '@/components/ImportScenarioDialog.vue'
 import { useAuthStore } from '@/stores/auth'
+import { ApiError } from '@/api/http'
 
 const importPrecheck = vi.fn()
 const importScenario = vi.fn()
@@ -205,9 +206,9 @@ describe('ImportScenarioDialog 状态机', () => {
 
   it('409 自愈:scenario_id_exists → 自动重新预检', async () => {
     importPrecheck.mockResolvedValue(pre())
-    importScenario.mockRejectedValueOnce({
-      response: { data: { detail: { code: 'scenario_id_exists' } } },
-    })
+    // 真实链路:拦截器把 axios 错误换成 ApiError(response 不外泄)
+    importScenario.mockRejectedValueOnce(
+      new ApiError(409, 'scenario_id_exists', '场景 ID 已存在'))
     const w = mountDialog('alias.write')
     await flushPromises()
     await w.find('[data-testid="import-confirm"]').trigger('click')

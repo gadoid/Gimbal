@@ -1307,7 +1307,7 @@ interface VsPickerState {
   fetchedAt: string
   stale: boolean
   loading: boolean
-  error: { code: string; message: string } | null
+  error: { code: string; message: string; authExpired?: boolean } | null
   /** §13.5 参数面:stage params→rows;params = 最近一次携参(refresh 复用) */
   stage: 'params' | 'rows'
   paramFields: string[]
@@ -1524,7 +1524,8 @@ async function vsLoad(g: ValueSourceGroup, refresh: boolean, params: Record<stri
     vsPicker.stale = res.stale
   } catch (e) {
     vsPicker.error = e instanceof ApiError
-      ? { code: String(e.code ?? ''), message: e.message }
+      ? { code: String(e.code ?? ''), message: e.message,
+          authExpired: e.hasCode('sut_auth_expired') }
       : { code: '', message: e instanceof Error ? e.message : String(e) }
   } finally {
     vsPicker.loading = false

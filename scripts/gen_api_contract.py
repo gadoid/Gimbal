@@ -166,19 +166,36 @@ def _module_constants(trees: dict[str, ast.Module]) -> dict[str, dict[str, str]]
 
 
 def _discover_coded_exceptions(trees: dict[str, ast.Module]) -> dict[str, _CodedExc]:
-    """``self.code = code`` 的异常类:名字独特的类按裸名/属名匹配 raise。"""
+    """``self.code = code`` 的异常类:名字独特的类按裸名/属名匹配 raise。
+
+    两形态:单赋值 ``self.code = code``;元组赋值 ``self.code, ... =
+    code, ...``(同位对齐,如 QueryViewError / ImportRejected —— 后者
+    的 scenario_id_exists 族码此前漏登记,批 D 补扫)。"""
     found: dict[str, _CodedExc] = {}
     for rel, tree in trees.items():
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
             for item in ast.walk(node):
-                if (isinstance(item, ast.Assign) and len(item.targets) == 1
-                        and isinstance(item.targets[0], ast.Attribute)
-                        and item.targets[0].attr == "code"
-                        and isinstance(item.targets[0].value, ast.Name)
-                        and item.targets[0].value.id == "self"
-                        and isinstance(item.value, ast.Name) and item.value.id == "code"):
+                if not isinstance(item, ast.Assign) or len(item.targets) != 1:
+                    continue
+                hit = False
+                tgt, val = item.targets[0], item.value
+                if (isinstance(tgt, ast.Attribute) and tgt.attr == "code"
+                        and isinstance(tgt.value, ast.Name)
+                        and tgt.value.id == "self"
+                        and isinstance(val, ast.Name) and val.id == "code"):
+                    hit = True
+                elif (isinstance(tgt, ast.Tuple) and isinstance(val, ast.Tuple)
+                        and len(tgt.elts) == len(val.elts)):
+                    for t, v in zip(tgt.elts, val.elts):
+                        if (isinstance(t, ast.Attribute) and t.attr == "code"
+                                and isinstance(t.value, ast.Name)
+                                and t.value.id == "self"
+                                and isinstance(v, ast.Name) and v.id == "code"):
+                            hit = True
+                            break
+                if hit:
                     for fn in ast.walk(node):
                         if isinstance(fn, ast.FunctionDef) and fn.name == "__init__":
                             params = [a.arg for a in
