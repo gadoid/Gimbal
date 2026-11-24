@@ -32,6 +32,8 @@ _ERROR_CODES_FROZEN = {
     "release_corrupt", "release_m2_incompatible", "invalid_ref",
     "version_undeclared", "endpoint_not_in_release", "header_conflicts_binding",
     "binding_field_in_storage", "ref_required", "m2_not_found",
+    # B2-②(2026-11-24):working 快照显式重载端点的失败码
+    "reload_failed",
 }
 
 

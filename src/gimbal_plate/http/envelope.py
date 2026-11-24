@@ -24,6 +24,7 @@ class ErrorCode(str, Enum):
     REGISTRY_UNAVAILABLE = "registry_unavailable"
     INTERNAL_ERROR = "internal_error"
     ADMIN_NOT_IMPLEMENTED = "admin_not_implemented"
+    RELOAD_FAILED = "reload_failed"
     REDACTED_SENSITIVE = "redacted_sensitive"
     INVALID_QUERY_PARAM = "invalid_query_param"
     # ── 版本模型读取侧（Release v4.4 §4；T1.7）──

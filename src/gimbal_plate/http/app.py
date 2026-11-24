@@ -18,6 +18,81 @@ from gimbal_plate.http.routes_grammar import router as grammar_router
 from gimbal_plate.registry import PlateRegistry, registry as default_registry
 
 
+def _read_git_head(repo_root: Path) -> str | None:
+    """读 ``<repo>/.git`` 文件而非子进程 git(批4 活体:服务环境子进程
+    恒 null)。HEAD → ref → packed-refs 兜底;无 .git → None。"""
+    dot = repo_root / ".git"
+    try:
+        if not dot.is_dir():
+            return None
+        head_txt = (dot / "HEAD").read_text(encoding="utf-8").strip()
+        if not head_txt.startswith("ref: "):
+            return head_txt or None
+        ref = head_txt[5:].strip()
+        ref_file = dot / ref
+        if ref_file.is_file():
+            return ref_file.read_text(encoding="utf-8").strip() or None
+        for line in (dot / "packed-refs").read_text(
+                encoding="utf-8").splitlines():
+            if line.endswith(" " + ref):
+                return line.split(" ", 1)[0] or None
+        return None
+    except Exception:
+        return None
+
+
+def _working_commit_label() -> str:
+    """working 快照标识(G5):``working@<短sha>`` 取 systems 所在仓 HEAD;
+    非仓/无 git 一律回退裸 ``working`` —— 标识是诊断面,不构成执行前置。"""
+    from gimbal_plate.loader import systems_roots
+
+    for root in systems_roots():
+        if root.is_dir():
+            sha = _read_git_head(root.parent)
+            if sha:
+                return f"working@{sha[:7]}"
+            break
+    return "working"
+
+
+def _reload_working(app: FastAPI) -> dict:
+    """B2-②:working 快照重建 + 整体换入(原子语义)。
+
+    新 registry 独立构建(装载失败即抛,旧快照原样服务);**构建成功才
+    换** ``app.state.registry`` —— 路由按请求读该属性,换入即全局生效,
+    半加载态不存在。仅 owned 模式可 reload(嵌入模式 caller 控制自身
+    状态,由调用方 409 拒)。
+    """
+    from gimbal_plate.dialect.canonical import integration_system_hash
+    from gimbal_plate.loader import load_registry
+    from gimbal_plate.release.release import ensure_m2_pooled
+
+    fresh = PlateRegistry()
+    load_registry(reg=fresh)          # 失败在此抛出,旧 registry 不动
+
+    # ── 构建成功,整体换入 ──────────────────────────────────────
+    app.state.registry = fresh
+    defs: dict[str, str] = {}
+    for system in fresh.list_systems():
+        eps = list(fresh.iter_endpoints_for_system(system))
+        kinds = {
+            sd.kind for sd in fresh.iter_services_for_system(system)
+        }
+        if kinds == {"integration"}:
+            defs[system] = integration_system_hash(eps)
+    app.state.integration_definitions = defs
+    app.state.m2_pool = ensure_m2_pooled()
+    app.state.snapshot_label = _working_commit_label()
+    app.state.snapshot_generation = (
+        getattr(app.state, "snapshot_generation", 0) + 1)
+    return {
+        "generation": app.state.snapshot_generation,
+        "snapshot": app.state.snapshot_label,
+        "systems": fresh.list_systems(),
+        "endpoints": sum(1 for _ in fresh.iter_endpoints_global()),
+    }
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Ensure the systems tree + all dims are loaded on startup（A2 统一加载器）.
@@ -38,8 +113,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # reset 防陈旧单例,加载失败(fenced 块坏了)启动即炸,不静默少半。
         default_registry.reset()
         load_registry(reg=default_registry)
-        # 快照标识(G5/7.1):working 阶段无 release,标 @working
-        app.state.snapshot_label = "working"
+        # 快照标识(G5/7.1):working 阶段标 @working(有 git 时附短 sha)
+        app.state.snapshot_label = _working_commit_label()
+        app.state.snapshot_generation = 0
         # A-5(2026-10-12):启动即把当前 M2 信封写进构件池(幂等;构件根
         # 未配置 → 跳过+计数,healthz 暴露)。外注入 registry 的嵌入模式
         # 不做——caller 控制自身状态。
@@ -161,31 +237,32 @@ def create_app(
         defs = getattr(app.state, "integration_definitions", None)
         if defs is not None:
             out["integration_definitions"] = defs
-        out["git_head"] = _load_git_head()
+        out["git_head"] = _read_git_head(
+            Path(__file__).resolve().parents[3])
         return out
 
-    def _load_git_head() -> str | None:
-        """读 .git 文件而非子进程 git(批4 活体:子进程在服务环境恒
-        null)。HEAD → ref → refs/packed-refs 兜底;无 .git → null。"""
-        root = Path(__file__).resolve().parents[3]
-        dot = root / ".git"
+    # ── B2-②:working 快照显式重载(plate-design §S1.5:CLI/内部接口
+    # 显式触发,S1 不做文件监听)。构建-成功才换,失败旧快照继续服务。──
+    @app.post("/api/admin/reload", include_in_schema=False)
+    async def _reload_endpoint(request: Request) -> JSONResponse:
+        if not getattr(request.app.state, "registry_owned", True):
+            body, status = err_response(
+                code=ErrorCode.INVALID_ACTION,
+                message="嵌入模式(registry 注入)不支持 reload —— "
+                        "caller 控制自身 registry 状态",
+                http_status=409,
+            )
+            return JSONResponse(status_code=status, content=body)
         try:
-            if not dot.is_dir():
-                return None
-            head_txt = (dot / "HEAD").read_text(encoding="utf-8").strip()
-            if not head_txt.startswith("ref: "):
-                return head_txt or None
-            ref = head_txt[5:].strip()
-            ref_file = dot / ref
-            if ref_file.is_file():
-                return ref_file.read_text(encoding="utf-8").strip() or None
-            for line in (dot / "packed-refs").read_text(
-                    encoding="utf-8").splitlines():
-                if line.endswith(" " + ref):
-                    return line.split(" ", 1)[0] or None
-            return None
-        except Exception:
-            return None
+            out = _reload_working(app)
+        except Exception as e:  # noqa: BLE001 — 旧快照继续服务,失败可见
+            body, status = err_response(
+                code=ErrorCode.RELOAD_FAILED,
+                message=f"working 快照重建失败,旧快照继续服务: {e}",
+                http_status=503,
+            )
+            return JSONResponse(status_code=status, content=body)
+        return JSONResponse(status_code=200, content={"ok": True, "data": out})
 
     app.include_router(grammar_router)
 
