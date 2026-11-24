@@ -2700,6 +2700,20 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
 - **P1-7**:核实为已失效项(gen_m2 _run 早已显式 encoding="utf-8",
   评估基点 c9d4ce27 就已带),README 开发节补一行 Windows 提示即可。
 
+#### 追记(vue-tsc 3 落地,同日晚)
+
+「vue-tsc 3 被上游回归阻塞」初判勘误:最小复现二分后真因 =
+language-tools #6322/#6352(模板静态属性值含 `//` 破坏 codegen,
+PR #6241 未合入无发行版),31 处误报全部由 7 个含 `//` 的
+placeholder 引爆,与 reactive v-model/条件块收窄无关。处置:
+vue-tsc 2.2.12→**3.3.13(exact 钉**,3.3.14 不可用**) + 全仓
+7 处静态属性 `//` 改脚本常量绑定(文案原样);vue-tsc 链 2 个
+moderate 清零(剩 4 个全为 editorconfig 链无修复版本)。
+WorkbenchView 满载偶发超时一并根治:预热异步卡 loader 模块缓存
+(曾 1s/3s/10s 三档 waitFor 均偶发,预热后 4 连全绿)。
+验证:typecheck 0 错 / vitest 174 文件 4 连 1542 过+1 跳 /
+build 绿;dist 已随同源重建换入。
+
 ## 5. 已知风险与待决
 
 | 项 | 说明 | 建议 |

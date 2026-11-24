@@ -66,7 +66,7 @@
         </label>
         <label class="flex flex-col gap-1.5">
           <span class="text-caption font-medium text-signal-ink/60">回调地址（可选）</span>
-          <Input v-model="form.callbackUrl" placeholder="https://agent.internal/gimbal/callback" />
+          <Input v-model="form.callbackUrl" :placeholder="PH_CB_URL" />
         </label>
       </div>
 
@@ -336,7 +336,7 @@
         </DialogHeader>
         <label class="flex flex-col gap-1.5">
           <span class="text-caption font-medium text-signal-ink/60">回调地址</span>
-          <Input v-model="callbackUrl" placeholder="https://agent.internal/gimbal/callback" data-testid="token-callback-url" />
+          <Input v-model="callbackUrl" :placeholder="PH_CB_URL" data-testid="token-callback-url" />
         </label>
         <div
           v-if="callbackEditing && detailOf(callbackEditing)?.callbackUrl"
@@ -618,6 +618,8 @@ async function rotateSecret(t: AccessTokenListItem) {
 // ── 后配/修改回调(§8 第四场景:后配回调自动发密钥,一次性展示) ──
 const callbackEditing = ref<AccessTokenListItem | null>(null)
 const callbackUrl = ref('')
+// vue-tsc 3(language-core #6322):静态属性值含 // 破坏 codegen → 常量绑定
+const PH_CB_URL = 'https://agent.internal/gimbal/callback'
 
 function askCallback(t: AccessTokenListItem) {
   callbackEditing.value = t

@@ -153,9 +153,9 @@ jobs:
           node-version: 22
       - name: 供应链审计门 — npm audit(critical/high 即红)
         # 评估清单 P0-3:审计不再只在安装时打印告警。门槛 = critical/high
-        # (moderate 尾巴见 known-issues/platform/frontend/audit-moderate-tail.md;
-        # 其中 vue-tsc 2.x 链与 editorconfig 链均无修复版本,vue-tsc 3 升级被
-        # 上游回归阻塞 —— 详见该记录)。新 critical/high advisory 落地即红。
+        # (moderate 尾巴见 known-issues/platform/frontend/audit-moderate-tail.md:
+        # 剩 4 个全为 editorconfig 链无修复版本;vue-tsc 已进 3.3.13 exact 钉,
+        # 静态属性 // 规避约束见该记录 §1.5)。新 critical/high 落地即红。
         working-directory: src/gimbal-platform/frontend
         run: npm audit --audit-level=high
       - name: vitest

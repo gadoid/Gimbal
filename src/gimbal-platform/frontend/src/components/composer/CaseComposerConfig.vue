@@ -370,12 +370,12 @@
             <div class="svc-form-row">
               <span class="c-inline-label">API 地址</span>
               <Input v-model="createForm.baseUrl" class="h-8" data-testid="cfg-svc-create-baseurl"
-                placeholder="https://..." />
+                :placeholder="PH_URL" />
             </div>
             <div class="svc-form-row">
               <span class="c-inline-label">登录口</span>
               <Input v-model="createForm.loginUrl" class="h-8" data-testid="cfg-svc-create-login"
-                placeholder="https://login...(系统×环境共享,可空)" />
+                :placeholder="PH_LOGIN_URL" />
             </div>
             <div class="svc-form-row">
               <span class="c-inline-label">版本线</span>
@@ -902,6 +902,9 @@ interface CreateForm {
 const createOpen = ref(false)
 const createSaving = ref(false)
 const createError = ref('')
+// vue-tsc 3(language-core #6322):静态属性值含 // 破坏 codegen → 常量绑定
+const PH_URL = 'https://...'
+const PH_LOGIN_URL = 'https://login...(系统×环境共享,可空)'
 const createForm = reactive<CreateForm>({
   service: '', envMode: 'existing', envId: null, envTag: '',
   baseUrl: '', loginUrl: '', line: '', note: '',

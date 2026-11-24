@@ -634,7 +634,7 @@
           <template v-if="depOf(drawer.svc.name, drawer.envId)">
             <template v-if="urlMode === 'edit'">
               <div class="line-row">
-                <Input v-model="urlDraft" class="flex-1 mono" placeholder="https://…"
+                <Input v-model="urlDraft" class="flex-1 mono" :placeholder="PH_URL"
                        :data-testid="`mx-url-${drawer.svc.name}-${drawer.envId}`" />
                 <button type="button" class="svc-link"
                         :data-testid="`mx-save-${drawer.svc.name}-${drawer.envId}`"
@@ -659,7 +659,7 @@
           <template v-else>
             <p class="recon-note">该环境还没有 API 地址 —— 在此登记。</p>
             <div class="line-row">
-              <Input v-model="urlDraft" class="flex-1 mono" placeholder="https://…"
+              <Input v-model="urlDraft" class="flex-1 mono" :placeholder="PH_URL"
                      :data-testid="`mx-new-url-${drawer.svc.name}-${drawer.envId}`" />
               <button type="button" class="svc-link"
                       :data-testid="`mx-register-${drawer.svc.name}-${drawer.envId}`"
@@ -864,7 +864,7 @@
             <label class="field flex-1">
               <span class="field-label">登录地址(login URL)</span>
               <input v-model="instForm.loginUrl" class="field-input mono"
-                data-testid="inst-form-url" placeholder="https://target/auth/login" />
+                data-testid="inst-form-url" :placeholder="PH_LOGIN_URL" />
               <span class="field-hint">拨测把账户凭据发往该地址;缺席时拨测明确报错</span>
             </label>
             <label class="field" style="width:12rem">
@@ -1588,6 +1588,10 @@ const drawerAliases = computed(() =>
 
 const urlMode = ref<'view' | 'edit' | 'new'>('view')
 const urlDraft = ref('')
+// vue-tsc 3(language-core #6322/#6352):静态属性值含 // 会破坏模板 codegen
+// —— 示例文案移到脚本常量再绑定,原提示文案不变。
+const PH_URL = 'https://…'
+const PH_LOGIN_URL = 'https://target/auth/login'
 const savingDrawer = ref(false)
 
 const pingRunning = ref(false)

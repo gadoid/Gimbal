@@ -39,7 +39,13 @@ function mountPage() {
 }
 
 describe('WorkbenchView — /home(registry 宿主)', () => {
-  beforeEach(() => setActivePinia(createPinia()))
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    // 预热异步卡 loader:满载 fork 下动态 import 的取模块往返偶发超过
+    // vi.waitFor 窗口(曾 1s/3s/10s 三档实测均偶发);同 fork 模块缓存
+    // 命中后挂载即时,断言不再依赖网络往返运气。
+    await import('@/components/workbench/RecentExecutionsCard.vue')
+  })
 
   it('快捷入口固定区已撤:标题不在、链接卡不在,主区只剩卡片网格', async () => {
     const w = mountPage()
@@ -55,10 +61,11 @@ describe('WorkbenchView — /home(registry 宿主)', () => {
 
   it('撤区后执行历史仍有路可达 ——「最近执行」卡卡头深链', async () => {
     const w = mountPage()
-    // vitest 5 forks 池在全量并发下本用例的挂载偶发超 1s 默认窗 —— 宽限到 3s
+    // vitest 5 forks 池在全量并发下异步卡挂载偶发超默认窗 —— 宽限到 10s
+    // (vi.waitFor 命中即提前返回,绿时宽限不付代价;3s 实测仍偶发不够)。
     await vi.waitFor(
       () => expect(w.find('[data-testid="wb-card-recent-executions"]').exists()).toBe(true),
-      { timeout: 3000 },
+      { timeout: 10000 },
     )
     expect(w.find('[data-testid="wb-card-recent-executions"] .manage-link').attributes('href'))
       .toBe('/executions')

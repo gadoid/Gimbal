@@ -107,7 +107,7 @@
             </div>
             <label class="field">
               <span class="field-label">回调地址(可空)</span>
-              <input v-model="form.callbackUrl" class="field-input" placeholder="https://…" data-testid="prj-tok-callback" />
+              <input v-model="form.callbackUrl" class="field-input" :placeholder="PH_URL" data-testid="prj-tok-callback" />
             </label>
           </template>
           <fieldset class="scope">
@@ -211,6 +211,8 @@ const cand = ref<ProjectScopeCandidates>({ aliases: [], auths: [] })
 const formMode = ref<'create' | 'scope' | null>(null)
 const editing = ref<ProjectTokenItem | null>(null)
 const form = ref({ name: '', ttlDays: 90, holderId: 0, callbackUrl: '' })
+// vue-tsc 3(language-core #6322):静态属性值含 // 破坏 codegen → 常量绑定
+const PH_URL = 'https://…'
 const selAliases = ref(new Set<string>())
 const selAuths = ref(new Set<number>())
 const saving = ref(false)
