@@ -52,6 +52,23 @@
     <!-- 草稿到位前不渲染列表/详情:加载中不是「没有」,先闪一句
          「还没有条目」是假话;聚焦态还会先闪一下列表再收起 -->
     <template v-if="draft">
+    <!-- 隔离区(I-01,2026-11-24 裁定「隔离区+后端闸」):水化时无法
+         识别的非对象条目原样保留在此 —— 不渲染、不执行、不删除,
+         保存随容器写回服务端。读侧容忍与写侧保真分家。 -->
+    <div
+      v-if="!focusMode && unrecognizedCount"
+      class="are-quarantine"
+      data-testid="are-quarantine"
+    >
+      <span class="are-quarantine-badge">隔离 {{ unrecognizedCount }}</span>
+      <span>条无法识别的条目已原样保留(不参与渲染与执行,保存时写回):</span>
+      <code
+        v-for="(u, i) in registry.unrecognized"
+        :key="`uq:${i}`"
+        class="are-quarantine-item"
+        :title="quarantinePreview(u)"
+      >{{ quarantinePreview(u) }}</code>
+    </div>
     <!-- 手工新建:步骤 + jsonpath(path 即注入地址);聚焦态收起 -->
     <div v-if="!focusMode" class="are-new-bar">
       <Select
@@ -484,6 +501,14 @@ const targetCandidates = computed<string[]>(() => {
 
 const saving = ref(false)
 
+/** 隔离区条数(0 = 不渲染条;I-01 见 normalizeRegistry) */
+const unrecognizedCount = computed(() => registry.value.unrecognized?.length ?? 0)
+/** 隔离条目预览:统一 stringify + 截断(只展示,不参与编辑) */
+function quarantinePreview(u: unknown): string {
+  const s = JSON.stringify(u) ?? String(u)
+  return s.length > 120 ? `${s.slice(0, 117)}…` : s
+}
+
 onMounted(async () => {
   try {
     draft.value = await getScenarioDraft(scenarioId)
@@ -723,4 +748,18 @@ async function save() {
 .are-mode { font-size: 0.625rem; font-weight: 700; border-radius: 0.1875rem; padding: 0.0625rem 0.3125rem; }
 .are-mode.m-override { color: var(--sl-warn); background: #fef3c7; }
 .are-mode.m-append { color: #065f46; background: #d1fae5; }
+
+/* 隔离区条(I-01):原样保留的无法识别条目 —— 只展示,不可编辑 */
+.are-quarantine {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem;
+  margin: 0.5rem 0; padding: 0.5rem 0.625rem;
+  border: 1px dashed var(--color-border-tertiary); border-radius: 0.5rem;
+  font-size: 0.75rem;
+}
+.are-quarantine-badge { font-weight: 700; }
+.are-quarantine-item {
+  max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: rgba(127, 127, 127, 0.12);
+  border-radius: 0.25rem; padding: 0.0625rem 0.375rem;
+}
 </style>

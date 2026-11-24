@@ -126,17 +126,25 @@ export function registryIssues(
  *  在 `registry.entries.length` 崩渲染。所有水化入口统一走这里。
  *
  *  逐条形状修复(与后端 run_injection.entry_issues 的容忍面看齐):
- *  * 非对象条目(标量 / 数组 / null)→ 丢弃:模板渲染 `e.id` 先于任何
- *    判定就 TypeError;后端对这些条目本就 500(entry.get),不可用;
+ *  * 非对象条目(标量 / 数组 / null)→ **搬入 `unrecognized` 隔离区**
+ *    (I-01,2026-11-24 裁定「隔离区+后端闸」;原实现就地丢弃 + 保存
+ *    写回 = 服务端条目被静默删除,P0 候选):渲染仍只消费 entries
+ *    (模板渲染 `e.id` 对非对象先于任何判定就 TypeError),但数据
+ *    原样保留、保存写回 —— 读侧容忍与写侧保真分家;
  *  * `asserts` 缺键或非数组 → 补 `[]`(后端 `entry.get("asserts") or []`):
  *    否则编辑器详情 `selected.asserts.length` / `v-for` 崩渲染。
- *  path 形状不在此处改(判据归 isLegacyEntry,与后端同构)。 */
+ *  path 形状不在此处改(判据归 isLegacyEntry,与后端同构)。
+ *  隔离区为空时不落键(payload 与旧形状逐字节兼容)。 */
 export function normalizeRegistry(raw: unknown): AssertionRegistry {
   const rawEntries = (raw as { entries?: unknown } | undefined | null)?.entries
   if (!Array.isArray(rawEntries)) return { entries: [] }
   const entries: Array<AssertionEntry | LegacyAssertionEntry> = []
+  const unrecognized: unknown[] = []
   for (const e of rawEntries) {
-    if (typeof e !== 'object' || e === null || Array.isArray(e)) continue
+    if (typeof e !== 'object' || e === null || Array.isArray(e)) {
+      unrecognized.push(e)                       // I-01:隔离,不删
+      continue
+    }
     const entry = e as AssertionEntry | LegacyAssertionEntry
     entries.push(
       Array.isArray((entry as { asserts?: unknown }).asserts)
@@ -145,7 +153,7 @@ export function normalizeRegistry(raw: unknown): AssertionRegistry {
             AssertionEntry | LegacyAssertionEntry),
     )
   }
-  return { entries }
+  return unrecognized.length ? { entries, unrecognized } : { entries }
 }
 
 /** 条目 id:inj-<6位base36时间戳><3位随机>(genScenarioId 同款纪律,无依赖) */

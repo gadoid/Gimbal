@@ -1,9 +1,9 @@
 # 阶段二待修：`normalizeRegistry` 把「读侧容忍」写回了服务端（E）
 
-> **模块**：`gimbal-platform/frontend`（断言注册表水化与保存）
-> **状态**：已知未修复（**待裁定**，见 §3）
+> **模块**：`gimbal-platform/frontend`（断言注册表水化与保存）＋ `gimbal-platform/backend`（写侧形状闸）
+> **状态**：**已裁定并落盘**（2026-11-24：隔离区+后端闸；见 §3 顶部裁定行与文末[修复记录](#修复记录)）
 > **来源**：`docs/implemented/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（E）
-> **适用范围**：`assertion_registry` 场景级节的四个水化入口 → 任意保存路径。
+> **适用范围**：`assertion_registry` 场景级节的水化入口 → 任意保存路径（入口清单实况勘误见修复记录）。
 
 ---
 
@@ -74,6 +74,8 @@ entries.push(Array.isArray(entry.asserts) ? entry
 
 ## 3. 待裁定
 
+> **裁定已作（2026-11-24，用户拍板）**：结论 = **「隔离键」+ 服务端防线（下方选项 1 的第三分支 + 选项 3），两者都做**——①前端 `normalizeRegistry` 不再丢弃：非对象条目搬显式隔离键 `unrecognized`（不渲染、不执行、保存原样写回），隔离条在断言管理编辑器可见；②后端写侧形状闸 `run_injection.validate_registry_shape`（scenario_store create/PUT 双跑接线，抄 param_slots 同层先例）：`entries` 逐元素 dict 硬闸、`unrecognized` 须数组（元素自由），违约 422 `assertion_registry_invalid`；③告知用户 = 隔离区条（「N 条无法识别的条目已原样保留」），不做保存弹窗。运行面存量行由 dispatch/graph 的 isinstance 过滤兜底（graph 过滤为本批补齐），不回写存量。下方决策清单保留为裁定前的历史；实装见文末[修复记录](#修复记录)。
+
 > 原文见 spec §7：**E `normalizeRegistry` 职责拆分** —— *读侧容忍（渲染防御）与写侧保真（不得静默删用户数据）如何分家。*
 
 留给维护者的决策（**本记录不下结论**）：
@@ -95,3 +97,25 @@ entries.push(Array.isArray(entry.asserts) ? entry
 2. **出现非 UI 写入方**：任何脚本 / 导入 / 迁移工具开始写 `assertion_registry`；
 3. **H 落点裁定**（spec §7）：判定面收为单一定义那一轮，注册表的读/写职责必须一并定清；
 4. **断言注册表加新字段**：新增字段时归一函数与写侧的耦合面会扩大（今仅 `entries` / `asserts` 两处）。
+
+---
+
+## 修复记录
+
+**2026-11-24 — 裁定落盘（隔离区 + 后端闸；数据零丢失）**
+
+前端（隔离区）：
+
+- `utils/assertion-registry.ts` `normalizeRegistry`：非对象条目不再 `continue` 丢弃 → 搬 `unrecognized` 隔离键（原始值原样保留）；隔离区为空不落键（payload 与旧形状逐字节兼容）。`AssertionRegistry` 类型增 `unrecognized?: unknown[]`。
+- 保存路径**零改动**即获得写侧保真：三个保存位（ARE `save()` / `CaseComposer` 两处）本就把 `registry.value` 整体写回，隔离键随容器写回。水化重试合并路径（`CaseComposer` hydrate-retry）显式保留两侧 `unrecognized`（该路径原先全新构造会丢）。
+- 断言管理编辑器新增隔离区条（`data-testid="are-quarantine"`）：「隔离 N 条无法识别的条目已原样保留（不参与渲染与执行，保存时写回）」+ 截断 JSON 预览；测试 ARE-8 断言更新、新增 ARE-20（roundtrip：含 junk 打开→保存→junk 仍在 PUT payload）/ ARE-21（无隔离条不渲染、payload 无键）。
+
+后端（写侧闸 + 运行面兜底）：
+
+- `run_injection.validate_registry_shape`：registry 须 dict；`entries` 带键须 list 且逐元素 dict；`unrecognized` 须 list（元素自由）；`entries` 缺键放行（旧客户端回落语义不变）。违约 `ValueError("assertion_registry_invalid: …")`。
+- `scenario_store` create/PUT 双跑接线（紧挨 `validate_param_slots`，同层平台侧字段同形）；`routers/scenarios.py` 两处 `value_error_http` 码表 +`"assertion_registry_invalid": 422`（契约快照已收编新码）。
+- 运行面存量兜底：`graph_dispatch` 注入条目查找补 `isinstance(e, dict)` 过滤（此前 junk 条目 `e.get` → AttributeError 掀掉编排物化；run_dispatcher 选中段与 runs.py 凭证扫描面原本已有过滤）。存量行不做回写（启动只校验不迁移的同款纪律）；正常 UI 写不出 junk entries，触发面本就极窄。
+
+**入口清单实况勘误**（§1 表 vs 2026-11-24 检出）：`RunPanelHost.vue` 已不存在（重构进 `useRunAssembly.ts:122`）；`CaseDataSetsList.vue` 已不存在；现行四个水化入口 = `useRunAssembly.ts:122`、`AssertionRegistryEditor.vue`（hydrate）、`CaseComposer.vue`（加载 + 水化重试两处）。保存路径现行 = ARE `save()` + `CaseComposer` 两处（本就把 `registry.value` 整体写回）。
+
+重开条件不变（§4）。

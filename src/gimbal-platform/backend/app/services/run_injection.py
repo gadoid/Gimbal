@@ -311,6 +311,52 @@ def as_step_index(x: Any) -> int | None:
     return None
 
 
+def validate_registry_shape(registry: Any) -> None:
+    """assertion_registry **写侧形状闸**(I-01,2026-11-24 裁定「隔离区 +
+    后端闸」):落库前校验,拦**非前端写入方**(直连 API / 脚本 / 旧
+    客户端)。与 param_slots 同层同形(同层平台侧字段,写时校验,
+    scenario_store create/PUT 双跑接线)。
+
+    规则:
+      * registry 须为 dict;
+      * ``entries`` 缺键 → 放行(旧客户端回落 pydantic default,键归
+        编排器 —— scenario_store 既有语义);带键则须为 list 且
+        **逐元素为 dict** —— 非对象条目(标量 / 数组 / null)正是
+        「归一丢弃 + 保存写回 = 静默丢数据」的根源形状;
+      * 可选 ``unrecognized``(**前端隔离区**,I-01):须为 list,元素
+        自由 —— 不渲染、不执行、仅存档,原样写回。
+
+    违约 ``ValueError("assertion_registry_invalid: …")`` → 路由层
+    ``value_error_http`` 码表 422(契约快照自动收编新码)。
+
+    运行面兼容(存量行):写闸只管新写入,存量 junk entries 由
+    dispatch 侧 isinstance 过滤兜底(run_dispatcher 选中段既有;
+    graph_dispatch 本批补齐),不回写存量 —— 启动只校验不迁移的
+    同款纪律。"""
+    if not isinstance(registry, dict):
+        raise ValueError(
+            "assertion_registry_invalid: assertion_registry 须为对象,得到 "
+            f"{type(registry).__name__}")
+    entries = registry.get("entries")
+    if entries is None:
+        return
+    if not isinstance(entries, list):
+        raise ValueError(
+            "assertion_registry_invalid: entries 须为数组,得到 "
+            f"{type(entries).__name__}")
+    for i, e in enumerate(entries):
+        if not isinstance(e, dict):
+            raise ValueError(
+                f"assertion_registry_invalid: entries[{i}] 须为对象,得到 "
+                f"{type(e).__name__} —— 无法识别的条目请放 unrecognized "
+                "隔离键(原样保留,不渲染不执行)")
+    unrec = registry.get("unrecognized")
+    if unrec is not None and not isinstance(unrec, list):
+        raise ValueError(
+            "assertion_registry_invalid: unrecognized(隔离区)须为数组,得到 "
+            f"{type(unrec).__name__}")
+
+
 def entry_issues(
     entry: dict[str, Any],
     step_count: int,

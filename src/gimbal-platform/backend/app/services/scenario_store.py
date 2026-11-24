@@ -33,6 +33,7 @@ from ..schemas.scenario_composer import (
     ScenarioMeta,
 )
 from . import endpoint_ref_index
+from . import run_injection
 from . import run_params
 from . import scheme_store
 
@@ -224,6 +225,10 @@ async def create_in_transaction(
     run_params.validate_param_slots(
         draft.definition,
         [s.model_dump(by_alias=True) for s in draft.param_slots])
+    # 断言注册表写侧形状闸(I-01,2026-11-24 裁定「隔离区+后端闸」):
+    # entries 逐元素 dict;前端隔离区 unrecognized 原样放行。与
+    # param_slots 同层同形(同层平台侧字段,create/PUT 双跑)。
+    run_injection.validate_registry_shape(draft.assertion_registry)
     server_owned = ScenarioMeta.model_validate({
         **def_meta,
         "scenarioId": scenario_id,
@@ -381,6 +386,8 @@ async def update(
     run_params.validate_param_slots(
         draft.definition,
         [s.model_dump(by_alias=True) for s in draft.param_slots])
+    # 断言注册表写侧形状闸(I-01):PUT 同闸重验(整包替换语义,键归编排器)
+    run_injection.validate_registry_shape(draft.assertion_registry)
     def_meta = draft.definition.get("meta") or {}
     req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     if req_sid != scenario_id:

@@ -44,9 +44,18 @@ export interface LegacyAssertionEntry {
   asserts?: AssertPatch[]
 }
 
-/** 注册表容器:v3 条目与旧条目共存于同一 entries 数组(spec v3 §8) */
+/** 注册表容器:v3 条目与旧条目共存于同一 entries 数组(spec v3 §8)。
+ *
+ *  `unrecognized` = 隔离区(I-01,2026-11-24 裁定「隔离区+后端闸」):
+ *  水化时无法识别的**非对象条目**(null / 标量 / 数组)原样搬入 ——
+ *  不渲染、不执行、**不删除**;保存随容器写回服务端。读侧容忍(渲染
+ *  防御)与写侧保真(不静默丢用户数据)由此分家
+ *  (known-issue normalize-registry-writeback)。缺省/空 = 无隔离条目,
+ *  后端写侧闸对 `entries` 逐元素 dict 硬闸、对 `unrecognized` 只要求
+ *  数组(元素自由,仅存档)。 */
 export interface AssertionRegistry {
   entries: Array<AssertionEntry | LegacyAssertionEntry>
+  unrecognized?: unknown[]
 }
 
 /** 编排器标记载荷(Canvas → CaseComposer)。字段路径的**落点分侧**:

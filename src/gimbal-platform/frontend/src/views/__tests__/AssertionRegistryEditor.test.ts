@@ -222,7 +222,9 @@ it('ARE-8: path:null / 缺 asserts / 串 stepIndex / 标量条目 — 页面照�
     ] },
   })
   const rows = w.findAll('.are-row')
-  expect(rows.length).toBe(3)                       // 标量条目被归一丢弃,渲染面为零
+  expect(rows.length).toBe(3)                       // 标量条目不进渲染面(渲染只认对象条目)
+  // 标量条目 → 隔离区原样保留(I-01 裁定,不再静默丢弃)
+  expect(w.find('[data-testid="are-quarantine"]').text()).toContain('隔离 1')
   // path:null → 旧形状分支(灰显不可选),不解引用 path.stepIndex
   expect(rows[0].classes()).toContain('are-legacy')
   await rows[0].trigger('click')
@@ -236,6 +238,41 @@ it('ARE-8: path:null / 缺 asserts / 串 stepIndex / 标量条目 — 页面照�
   // 串 stepIndex → 悬空(不再当活条目宣称一次永不触发的注入)
   expect(rows[2].classes()).toContain('are-dead')
   expect(rows[2].text()).toContain('悬空')
+  w.unmount()
+})
+
+it('ARE-20: 隔离区(I-01)—— 非对象条目原样保留显示,保存写回零丢失', async () => {
+  const junk = [7, null, 'x', [1]]
+  const w = await mountEditor({
+    definition: DEF,
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [...junk, ...JSON.parse(JSON.stringify(REG.entries))] },
+  })
+  // 隔离条可见:计数 + 截断预览(只展示,不参与编辑)
+  const strip = w.find('[data-testid="are-quarantine"]')
+  expect(strip.exists()).toBe(true)
+  expect(strip.text()).toContain('隔离 4')
+  expect(strip.text()).toContain('[1]')
+  // 渲染面只认 entries:行数 = 对象条目数,隔离条不进列表
+  expect(w.findAll('.are-row').length).toBe(REG.entries.length)
+  // 保存写回:PUT payload 的 unrecognized 原样带回(写侧保真)——
+  // 服务端对应条目不再被静默删除(P0 候选 I-01 的收口断言)。
+  await w.find('[data-testid="are-save"]').trigger('click')
+  await flushPromises()
+  const put = vi.mocked(api.updateScenario).mock.calls[0][1] as any
+  expect(put.assertion_registry.unrecognized).toEqual(junk)
+  expect(put.assertion_registry.entries.map((e: { id: string }) => e.id))
+    .toEqual(REG.entries.map((e) => e.id))
+  w.unmount()
+})
+
+it('ARE-21: 隔离区为空 → 不渲染隔离条(payload 无 unrecognized 键,与旧形状兼容)', async () => {
+  const w = await mountEditor()
+  expect(w.find('[data-testid="are-quarantine"]').exists()).toBe(false)
+  await w.find('[data-testid="are-save"]').trigger('click')
+  await flushPromises()
+  const put = vi.mocked(api.updateScenario).mock.calls[0][1] as any
+  expect(put.assertion_registry.unrecognized).toBeUndefined()
   w.unmount()
 })
 

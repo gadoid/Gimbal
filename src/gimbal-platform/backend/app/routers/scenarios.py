@@ -462,6 +462,8 @@ async def create_scenario(
         # Pydantic validation errors already translated to 422 by FastAPI.
         raise value_error_http(e, {
             "scenario_id_exists": 409,
+            # 断言注册表写侧形状闸(I-01):非对象 entries 直写 → 422
+            "assertion_registry_invalid": 422,
             # ⑥:store 级版本声明闸的两种裁定 → 422(输入被拒)
             "meta_plate_missing_system": 422,
             "meta_plate_invalid_ref": 422,
@@ -1318,6 +1320,8 @@ async def put_scenario(
     except ValueError as e:
         raise value_error_http(e, {
             "scenario_id_changed": 409,
+            # 断言注册表写侧形状闸(I-01):PUT 同闸(整包替换语义)
+            "assertion_registry_invalid": 422,
             "meta_plate_missing_system": 422,
             "meta_plate_invalid_ref": 422,
             # 凭证治理 §3.5:旧行无明文而本次带 → 422(存量照旧放行)

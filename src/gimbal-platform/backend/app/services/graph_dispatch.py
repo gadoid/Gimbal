@@ -109,7 +109,13 @@ async def resolve_graph_units(
             registry = (composed.get("assertion_registry") or {}).get(
                 "entries") or []
             for eid in entries:
-                entry = next((e for e in registry if e.get("id") == eid), None)
+                # isinstance 守卫(I-01 存量兜底):非对象条目(junk)在此
+                # 会 e.get AttributeError → 500 掀掉整个编排物化。写侧闸
+                # (validate_registry_shape)只管新写入;存量行由本过滤
+                # 跳过(run_dispatcher 选中段同款)。
+                entry = next(
+                    (e for e in registry
+                     if isinstance(e, dict) and e.get("id") == eid), None)
                 if entry is not None:
                     composed = compose_injection_scenario(composed, entry)
         unit = u

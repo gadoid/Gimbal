@@ -1094,11 +1094,17 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
         (await api.getScenarioDraft(sid)).assertion_registry,
       )
       const localIds = new Set(registry.value.entries.map((e) => e.id))
+      // 隔离区(I-01)随合并保留:两侧的 unrecognized 都不丢(原样写回)。
+      const mergedUnrecognized = [
+        ...(fetched.unrecognized ?? []),
+        ...(registry.value.unrecognized ?? []),
+      ]
       registry.value = {
         entries: [
           ...fetched.entries.filter((e) => !localIds.has(e.id)),
           ...registry.value.entries,
         ],
+        ...(mergedUnrecognized.length ? { unrecognized: mergedUnrecognized } : {}),
       }
       registryHydrated = true
     } catch (e) {
