@@ -175,6 +175,10 @@ mypy src/gimbal
 gimbal self-check
 ```
 
+> Windows 开发提示：仓库脚本对子进程已显式 `encoding="utf-8"`
+> （`scripts/gen_m2.py:138` 等），正常无需额外环境变量；个别工具链仍以
+> 本地代码页输出时，设 `PYTHONUTF8=1` 再跑即可（CI Linux 环境不受影响）。
+
 ## License
 
 TBD
