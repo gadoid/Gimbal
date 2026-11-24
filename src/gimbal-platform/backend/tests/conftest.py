@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import (
 # CASCADE —— 语义贴近原「每测试一个临时 SQLite 库」,不碰被测代码的
 # 事务/commit 语义(事务回滚路线与 run_dispatcher 后台线程的独立
 # session 相冲,未选)。
-# SQLite 已退役(2026-10-14):不再有 sqlite 回退方言 —— 未提供
+# PG-only(ADR-0003 #18):无 sqlite 回退方言 —— 未提供
 # TEST_DATABASE_URL(postgresql+asyncpg://...)即中止整个会话,与
 # core/db.py 的运行时口径一致。**必须在任何 app 导入之前执行**:
 # app.core.db 在 import 期校验 DATABASE_URL(空/非 PG 即 RuntimeError),
@@ -368,7 +368,7 @@ def real_engine_session(monkeypatch):
 async def fresh_db(monkeypatch) -> AsyncGenerator[None, None]:
     """Swap the global DB engine onto the process's pooled schema(每测行级白纸).
 
-    PG-only(SQLite 已退役):连进来的会话 search_path 钉在池 schema
+    PG-only(ADR-0003 #18):连进来的会话 search_path 钉在池 schema
     上;TEST_DATABASE_URL 缺失在 conftest 导入期即中止会话。
     """
     # B6③(2026-11-23):legacy 链退役,EXEC_CHAIN 键已删 —— 生产恒

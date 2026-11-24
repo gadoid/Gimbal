@@ -34,6 +34,7 @@ _ERROR_CODES_FROZEN = {
     "binding_field_in_storage", "ref_required", "m2_not_found",
     # B2-②(2026-11-24):working 快照显式重载端点的失败码
     "reload_failed",
+    "reload_disabled",
 }
 
 

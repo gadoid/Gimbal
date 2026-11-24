@@ -6,12 +6,12 @@ M2(PG迁移方案 §2.2 / 权限方案 §1.2):
 * ``display_name`` 补 partial unique(``<> ''`` —— 列默认空串,普通唯一
   索引会让两个未设昵称的用户相撞);应用层 ``_name_checks`` 的
   username↔display_name 双向查重不能撤(DB 表达不了跨列双向唯一);
-* ``users.role``(M2.5 权威翻转后进 models):取值
-  ``user | member | admin``,**权威**(三级更名:原
-  ``member``→``user``、原 ``operator``→``member``,权限边界不变);
-  ``is_admin`` 保留一个过渡版本
-  (应用写侧镜像 = role=='admin',M6 删列)。取值域见权限方案 §1;
-  role 不进 JWT —— 每请求查库,升降级即时生效。
+* ``users.role``:取值 ``user | admin | super_admin``,**权威**
+  (迁移 0036 更名:原 ``member``→``admin``、原 ``admin``→
+  ``super_admin``,权限边界不变;``is_admin`` 过渡镜像列已随 M6-3
+  删除,API 字面由 UserPublic 派生)。取值约束在应用层
+  (UserPatchIn Literal + ``_ownership.ROLES``);role 不进 JWT ——
+  每请求查库,升降级即时生效。
 """
 from __future__ import annotations
 

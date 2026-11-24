@@ -19,7 +19,8 @@ from .config import settings  # noqa: E402
 
 if not settings.DATABASE_URL.startswith(("postgresql://", "postgresql+")):
     raise RuntimeError(
-        "DATABASE_URL 未配置或不是 PostgreSQL(SQLite 已退役 2026-10-14)。"
+        "DATABASE_URL 未配置或不是 PostgreSQL(平台为 PG-only,"
+        "SQLite 不受支持,退场记录见 ADR-0003 #18)。"
         "复制 backend/.env.example 为 .env 并设置 "
         "DATABASE_URL=postgresql+asyncpg://...;测试侧设 TEST_DATABASE_URL"
         "(conftest 同口径 fail-fast)。")

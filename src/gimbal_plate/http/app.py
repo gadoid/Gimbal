@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hmac
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -245,6 +247,25 @@ def create_app(
     # 显式触发,S1 不做文件监听)。构建-成功才换,失败旧快照继续服务。──
     @app.post("/api/admin/reload", include_in_schema=False)
     async def _reload_endpoint(request: Request) -> JSONResponse:
+        # ── admin token 门(fail-closed):``PLATE_ADMIN_TOKEN`` 未配置
+        # 即禁用 reload;配置后要求 ``X-Admin-Token`` 常量时比对。
+        # 服务无鉴权面的既有内网姿态不因此放宽 —— 显式配置才开闸。──
+        expected = os.environ.get("PLATE_ADMIN_TOKEN")
+        if not expected:
+            body, status = err_response(
+                code=ErrorCode.RELOAD_DISABLED,
+                message="未配置 PLATE_ADMIN_TOKEN —— admin/reload 不可用",
+                http_status=403,
+            )
+            return JSONResponse(status_code=status, content=body)
+        supplied = request.headers.get("X-Admin-Token", "")
+        if not hmac.compare_digest(supplied.encode(), expected.encode()):
+            body, status = err_response(
+                code=ErrorCode.RELOAD_DISABLED,
+                message="X-Admin-Token 缺失或不匹配",
+                http_status=403,
+            )
+            return JSONResponse(status_code=status, content=body)
         if not getattr(request.app.state, "registry_owned", True):
             body, status = err_response(
                 code=ErrorCode.INVALID_ACTION,
