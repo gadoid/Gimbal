@@ -36,7 +36,7 @@ class EnvironmentCreate(BaseModel):
 
 
 class EnvironmentUpdate(BaseModel):
-    # 环境降级为轻量标签后,name 只是展示标签(2026-11-18):允许改名,
+    # 环境降级为轻量标签后,name 只是展示标签:允许改名,
     # 唯一性由本路由校验(重名 409);id 引用面(实例/部署/账户/条目)
     # 全部按 id 挂靠,改名不触碰任何外键。
     name: str | None = Field(default=None, min_length=1, max_length=64)
@@ -45,7 +45,7 @@ class EnvironmentUpdate(BaseModel):
 
 
 class EnvironmentResolveIn(BaseModel):
-    """标签 → 环境定义(2026-11-18「标签即环境」)。"""
+    """标签 → 环境定义(「标签即环境」)。"""
 
     name: str = Field(..., min_length=1, max_length=64)
 
@@ -163,7 +163,7 @@ async def resolve_environment(
     body: EnvironmentResolveIn,
     user: MemberUser, db: DbSession,
 ) -> Any:
-    """标签 → 环境定义:按名精确查找,不存在则登记并返回(2026-11-18)。
+    """标签 → 环境定义:按名精确查找,不存在则登记并返回(幂等登记)。
 
     实例标签/改标签等写面用它把用户自由填写的标签落成环境字典行;
     已存在即返回同一行(幂等,不重名不报错)。写门与其它环境写面同门

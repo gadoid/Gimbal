@@ -1,6 +1,6 @@
-"""user_stars 收藏入库(M6-2,权限方案 §4/PG迁移方案 §7 M6)。
+"""user_stars 收藏入库(权限方案 §4/PG迁移方案 §7)。
 
-UserStar 表(M2 建)吸收 data/stars.json(marks_store 退役):star 端点
+UserStar 表吸收 data/stars.json(ADR-0003 #22):star 端点
 形状不变、``starred`` 仍为读时投影 —— 替换对前端透明。收藏上限 20
 服务端 409 兜底(客户端先拦不变)。
 """

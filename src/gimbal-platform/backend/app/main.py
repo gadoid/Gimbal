@@ -58,7 +58,7 @@ from .routers.report_definitions import router as report_definitions_router  # n
 
 
 def check_crypto_secrets() -> None:
-    """持久化密钥前置校验(整体评审 2026-10-15 #4,与 DATABASE_URL 必填同级)。
+    """持久化密钥前置校验(与 DATABASE_URL 必填同级)。
 
     JWT_SECRET / FERNET_KEY 未配置时 settings 会生成**仅本进程有效**的
     随机密钥 —— 重启即使全部会话失效、全部 Fernet 密文(凭证池/平台凭
@@ -83,17 +83,16 @@ def check_crypto_secrets() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: run schema policy (M2: alembic 启动分叉,create_all 退役)
+    """Startup: run schema policy (alembic 启动分叉,create_all 退役)
     and warn on ephemeral crypto secrets.
     Shutdown: drain in-flight dispatches and close the shared Plate /
     Gimbal httpx clients."""
-    # 密钥前置(整体评审 2026-10-15 #4):放在建库/迁移之前,缺密钥的
-    # 进程不触碰库。
+    # 密钥前置:放在建库/迁移之前,缺密钥的进程不触碰库。
     check_crypto_secrets()
     from .core.migrations import ensure_schema
     from .core import db as db_module
     await ensure_schema(db_module.engine.url.render_as_string(hide_password=False))
-    # M6-2:user_stars 吸收 data/stars.json(一次性,幂等:吸收后改名)
+    # user_stars 吸收 data/stars.json(一次性,幂等:吸收后改名)
     try:
         from .services.user_stars import absorb_legacy_stars
 
@@ -113,17 +112,17 @@ async def lifespan(app: FastAPI):
     # Same-process app reuse (tests) needs the shutdown flag cleared,
     # or dispatches silently skip their fan-out.
     reset_shutdown_state()
-    # DB 门在 core/db.py import 期(SQLite 已退役 2026-10-14):非
+    # DB 门在 core/db.py import 期(PG-only,ADR-0003 #18):非
     # postgresql URL/空值在引擎构造即 RuntimeError 指路 .env ——
     # 到达 lifespan 的进程必然已持 PG 引擎,此处不再重复检查。
-    # P3:重启后把丢失 _fanout 的 queued 僵尸单收敛为 failed。
+    # 重启后把丢失 _fanout 的 queued 僵尸单收敛为 failed。
     try:
         n_stale, _swept = await startup_recovery()
         if n_stale:
             logger.warning("lifespan: reconciled {} stale execution(s)", n_stale)
     except Exception as e:  # noqa: BLE001
         logger.error("lifespan: startup recovery failed: {}", e)
-    # C11(P3-01):启动执行队列 worker(POST /api/runs 只入队;worker
+    # 启动执行队列 worker(POST /api/runs 只入队;worker
     # 经 FOR UPDATE SKIP LOCKED 认领驱动执行——重启后 queued 任务继续跑)。
     try:
         from .services import execution_queue
@@ -131,12 +130,12 @@ async def lifespan(app: FastAPI):
         execution_queue.start_workers()
     except Exception as e:  # noqa: BLE001
         logger.error("lifespan: execution queue workers failed to start: {}", e)
-    # 外部系统集成 P1:后台任务注册表(评审 E8,草稿巡检并入)+ 集成
+    # 外部系统集成:后台任务注册表(草稿巡检并入)+ 集成
     # 调度循环 + 保留期维护 —— 注册集中在 register_background_tasks
     from .services import background_tasks
     register_background_tasks()
     background_tasks.start_all()
-    # P2-3(webhook 设计 v3 §5.2):回调投递循环 —— 独立任务而非注册表
+    # 回调投递循环(webhook 设计 v3 §5.2)—— 独立任务而非注册表
     # (10s 周期 + 写行提交后的事件立即唤醒;注册表的 sleep 间隔切不开)。
     from .services import webhook_outbox
     webhook_outbox.start_worker()
@@ -145,7 +144,7 @@ async def lifespan(app: FastAPI):
     finally:
         webhook_outbox.stop_worker()
         background_tasks.stop_all()
-        # C11:优雅停止 worker(当前任务回队;等收口后清 plate 客户端)。
+        # 优雅停止 worker(当前任务回队;等收口后清 plate 客户端)。
         n_dispatched = await drain_in_flight_dispatches()
         if n_dispatched:
             logger.info("lifespan: drained {} in-flight dispatcher(s)", n_dispatched)
@@ -179,13 +178,13 @@ def register_background_tasks() -> None:
     background_tasks.register("draft-sweeper", 3600, _draft_sweep_once)
     # 集成调度循环(15s:半常驻通道收口 → 僵尸回收 → 短持锁认领到期实例)
     background_tasks.register("integration-scheduler", 15, scheduler_tick)
-    # 保留期维护(整体评审 2026-10-15 #2/#3):事件面分批清扫 + case 案卷
+    # 保留期维护:事件面分批清扫 + case 案卷
     # (含明文凭证)+ 按日 JSONL —— 此前事件面零调用点、case 仅启动期一次
     background_tasks.register(
         "retention-maintenance",
         max(60, settings.RETENTION_MAINTENANCE_INTERVAL_S),
         run_retention_maintenance)
-    # 周期对账(P0-3.2,webhook 设计 v3):僵尸执行(job 已终态/不存在
+    # 周期对账(webhook 设计 v3):僵尸执行(job 已终态/不存在
     # 而执行仍 queued/running)每 5 分钟收口一次,宽限 10 分钟内的单
     # 不动 —— 启动期对账不再是唯一兜底,卡住的执行最迟 ≈15 分钟有终态
     background_tasks.register(
@@ -228,7 +227,7 @@ def create_app() -> FastAPI:
     # data_sets module; register BEFORE scenarios' /{scenario_id}
     # catch-all.
     app.include_router(data_sets.create_router, prefix="/api")
-    # 权限域二期 P1:suite 成员层(lookup_router 挂 /scenarios/{id}/suites,
+    # 权限域:suite 成员层(lookup_router 挂 /scenarios/{id}/suites,
     # 必须先于 scenarios 的 /{scenario_id} catch-all 注册)
     app.include_router(suites.router, prefix="/api")
     app.include_router(suites.lookup_router, prefix="/api")
@@ -237,16 +236,16 @@ def create_app() -> FastAPI:
     app.include_router(strategy_catalog.router, prefix="/api")
     app.include_router(constants.router, prefix="/api")
     app.include_router(projects.router, prefix="/api")
-    # M2a S7.2:提升流程(加入项目 / 加入申请)
+    # 提升流程(加入项目 / 加入申请)
     app.include_router(project_promotions.router, prefix="/api")
     # M2a S8:项目凭证(项目管理员维护,成员选用不见明文)
     app.include_router(project_credentials.router, prefix="/api")
     app.include_router(project_tokens.router, prefix="/api")
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
-    # 通知中心(P1b/M2.5):三接口 + 偏好 + 公告
+    # 通知中心:三接口 + 偏好 + 公告
     app.include_router(notifications.router, prefix="/api")
-    # 外部系统集成 P1:功能(模板/实例)+ 批量卡片 + 平台凭证
+    # 外部系统集成:功能(模板/实例)+ 批量卡片 + 平台凭证
     app.include_router(integration.router, prefix="/api")
     # 用户偏好通用读写(工作台布局/常驻席/时间线配色 → user_prefs)
     app.include_router(user_preferences.router, prefix="/api")
@@ -255,7 +254,7 @@ def create_app() -> FastAPI:
     # 序(scenarios prefix 是 /scenarios,与 /query-views 无实际路由
     # 冲突)。
     app.include_router(query_views.router, prefix="/api")
-    # 服务画像 P1(热力网格 + 线索板 + 自建卡):纯读派生层 + 作者权限的卡片写面
+    # 服务画像(热力网格 + 线索板 + 自建卡):纯读派生层 + 作者权限的卡片写面
     app.include_router(service_profile.router, prefix="/api")
     app.include_router(service_profile.board_router, prefix="/api")
     app.include_router(service_profile.cards_router, prefix="/api")
@@ -263,7 +262,7 @@ def create_app() -> FastAPI:
     app.include_router(service_aliases.router, prefix="/api")
     # 服务级元数据(服务注册页「说明」列):读全员 / 写 Admin+(ops.write)
     app.include_router(services.router, prefix="/api")
-    # P2-6(webhook 设计 v3):回调投递排查面
+    # 回调投递排查面(webhook 设计 v3)
     app.include_router(webhook_deliveries.router, prefix="/api")
     # 访问令牌(webhook v4 §5.1)
     from .routers import access_tokens
@@ -273,13 +272,13 @@ def create_app() -> FastAPI:
     app.include_router(environments.router, prefix="/api")
     # 执行配置(执行配置分层①:个人面,user scope 行)
     app.include_router(exec_configs.router, prefix="/api")
-    # authz M2a S2.2:部署表((基础服务, 环境) → 地址)
+    # 部署表((基础服务, 环境) → 地址)
     app.include_router(deployments.router, prefix="/api")
-    # 服务目录聚合(M5,债 11):plate 目录代理 + 30s TTL,前端三处收编
+    # 服务目录聚合:plate 目录代理 + 30s TTL,前端三处收编
     app.include_router(catalog.router, prefix="/api")
-    # 活动时间线服务端合流(M5-3):三源一次请求
+    # 活动时间线服务端合流:三源一次请求
     app.include_router(activity.router, prefix="/api")
-    # 审计日志查询(P2-3,admin only)
+    # 审计日志查询(admin only)
     app.include_router(admin.router, prefix="/api")
     # run-schemes CRUD lives on scenario-nested paths; register BEFORE
     # scenarios' /{scenario_id} catch-all.

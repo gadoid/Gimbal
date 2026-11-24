@@ -1,5 +1,5 @@
 <!-- ProjectConfigPanel.vue — M2a S7.3 项目详情「配置」页签。
-     2026-11-18(晚)配置页逻辑调整(用户决策):一条配置 = 默认环境
+     配置页逻辑(用户决策):一条配置 = 默认环境
      标签;标签圈定注册簿「服务实例」,凭证按 (system, env) 与实例匹配
      —— 新增「服务实例 × 凭证匹配」分区(InstanceCredentialMatchPanel,
      现成端点拼装)。**手写配置空间退场**:carry 默认值改只读视图、
@@ -65,7 +65,7 @@
         <p v-if="envError" class="err" data-testid="prj-config-env-err">{{ envError }}</p>
       </section>
 
-      <!-- ② 服务实例 × 凭证匹配(2026-11-18 调整:一条配置圈定实例,
+      <!-- ② 服务实例 × 凭证匹配(调整:一条配置圈定实例,
            凭证按 (system, env) 匹配;数据 = 注册簿实例 + 部署地址 +
            项目/个人凭证池,全现成端点) -->
       <section v-if="!isPublic" id="prj-cfg-instances" class="cfg-section" data-testid="prj-inst-section">
@@ -219,7 +219,7 @@
 
 <script setup lang="ts">
 /**
- * ProjectConfigPanel —— S7.3 项目配置页签(2026-11-18 逻辑调整后)。
+ * ProjectConfigPanel —— 项目配置页签。
  * 数据面:patchProject(defaultEnvironmentId)/ getDefaults(只读)/
  * getSlotStatus / listScenarios(projectId);实例×凭证匹配与漂移各自
  * 组件内取数。写面守门:canManage(后端 _require_manage 同口径)。

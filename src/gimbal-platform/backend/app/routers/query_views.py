@@ -1,13 +1,13 @@
-"""query-views rows 路由 —— 组合期取数解释器入口(2026-09-07 spec §4.1)。
+"""query-views rows 路由 —— 组合期取数解释器入口(spec §4.1)。
 
 CurrentUser 鉴权(查询身份是场景执行账号,不是平台用户自己)。
 
-地址来源(01-04 修复批,2026-11-24)双通道二选一:
+地址来源双通道二选一:
 * **上下文通道**(推荐,前端默认):``scenarioId + stepIndex`` →
   ``query_context.resolve_query_context`` 服务端按执行链同款解析
-  (步骤服务 → 生效身份 → 标签链 → 部署表);旧前提「service_url 由
-  前端按 authored config.services 求值传入」随 D2 环境退役失效
-  (新场景 config.services 恒空 ⇒ 恒 service_url_required);
+  (步骤服务 → 生效身份 → 标签链 → 部署表);前提「service_url 由
+  前端按 authored config.services 求值传入」已不成立(ADR-0003
+  #13;新场景 config.services 恒空 ⇒ 恒 service_url_required);
 * **显式覆盖通道**:`service_url` 直传保留(调试/私有 SUT 直连),
   给定时跳过上下文解析。两通道都缺 → ``query_context_required``。
 """

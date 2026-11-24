@@ -472,7 +472,7 @@ function onReran(r: { executionId: number }): void {
   void router.push(`/executions/${r.executionId}`)
 }
 
-// ── 公共横幅与首改提示(§7.11;S7.4 引用横幅随 share_refs 退役)──
+// ── 公共横幅与首改提示(§7.11;引用横幅不复存在,ADR-0003 #20)──
 let sessionConfirmed = false
 
 const liveBanner = computed<string | null>(() => {

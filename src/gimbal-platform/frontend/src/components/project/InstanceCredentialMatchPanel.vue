@@ -1,8 +1,8 @@
 <!-- InstanceCredentialMatchPanel.vue — 项目配置「服务实例 × 凭证匹配」
-     (2026-11-18 配置页逻辑调整:一条配置 = 默认环境标签,标签圈定
+     (配置页逻辑:一条配置 = 默认环境标签,标签圈定
      注册簿实例,凭证按 (system, env) 与实例匹配)。
 
-     A 级批次(2026-11-18)起数据面改走聚合端点(原 5 路前端拼装下沉):
+     数据面改走聚合端点(原 5 路前端拼装下沉):
      GET /projects/{id}/instance-credential-matches?envId=
      = 环境下实例行 × 部署地址(经服务主档归系统)× 项目池凭证(成员
      视图 username 脱敏)× 个人池计数,一次拉齐。
@@ -120,7 +120,7 @@ async function load(): Promise<void> {
 }
 
 /** 行状态:登录口 / 地址 / 任一凭证池,三者齐 = 就绪。
- *  FE-08k(2026-11-20 审计):「有凭证」是**计数口径**(池内存在该
+ *  「有凭证」是**计数口径**(池内存在该
  *  (system, env) 的凭证),粗于执行链的 ref 解析(refMode/refUsername/
  *  默认位)——标签措辞与 title 说明以预检解析为准,避免读成必可用。 */
 function rowOk(r: MatchRow): boolean {

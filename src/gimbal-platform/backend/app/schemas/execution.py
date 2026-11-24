@@ -1,4 +1,4 @@
-"""Schemas for executions (V3 — 每-run 明细已随 exec_runs 表退役)。"""
+"""Schemas for executions (V3 — exec_runs 每-run 明细已退场,ADR-0003 #14)。"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -50,11 +50,11 @@ class ExecutionOut(BaseModel):
     baseline_eligible: bool = False
     baseline_block: str | None = None
     baseline_evidence: dict | None = None
-    # B-3(2026-10-14):失败原因提到顶层 —— 此前只藏在 config.dispatcherError,
+    # 失败原因提到顶层 —— 此前只藏在 config.dispatcherError,
     # 详情页首屏看不到。终态失败单 = dispatcherError;reconcile 收敛单
     # 由 config.reconciled 表达(前端已有专项提示);成功/运行中为 None。
     error: str | None = None
-    # 全量评估 2026-11-02 #1 / graph 单元级取消方案 P3-P4:可取消标志由服务端给
+    # graph 单元级取消方案:可取消标志由服务端给
     # (前端不再按 status 自推)。False 的情形:已请求取消(取消中)、legacy 链
     # graph 已认领(无单元级信号,cancel 端点 409)、终态。server 链 graph 可
     # 取消 —— 执行器跑完在飞单元后停,期间 cancel_requested=True 表示「取消中
@@ -121,7 +121,7 @@ class ExecutionListItemOut(BaseModel):
 class ExecutionListOut(BaseModel):
     """Page 信封(§4.1):既有 {items,total} 补齐 page/pageSize 即向后兼容。
 
-    ``failedTotal``(2026-10-21):与 ``total`` 同筛选口径的失败单数 —— 前端
+    ``failedTotal``:与 ``total`` 同筛选口径的失败单数 —— 前端
     筛选行的「共 N 条 · 失败 M 条」原先 N 是全量、M 却只数当前页,分页后
     口径打架;由服务端一次 count 给全口径值。"""
 
@@ -157,7 +157,7 @@ class ExecutionSummaryOut(BaseModel):
     repeat_failure_scenarios: int = Field(default=0, alias="repeatFailureScenarios")
     # 进行中(queued/running)— 不受窗约束,发起中的单必须可见
     active_executions: int = Field(default=0, alias="activeExecutions")
-    # 今日执行次数(stitch 0-2 批次 2026-11-23):活动量口径 —— 自然日
+    # 今日执行次数:活动量口径 —— 自然日
     # 锚 created_at(服务器时区零点),含进行中单,与 windowDays 的
     # 「已完成统计窗」相互独立。
     today_executions: int = Field(default=0, alias="todayExecutions")

@@ -12,7 +12,7 @@ sweep_stale 回收（attempts 未超上限 → 回队重跑；超上限 → 失�
 执行链不可假设幂等——重复下单面）。优雅关闭时 worker 释放当前任务
 （回队、attempts 不变）。
 
-取消：``cancel_requested`` DB 位（进程内 _cancel_requested 集合退役）；
+取消：``cancel_requested`` DB 位（ADR-0003 #23,无进程内集合）；
 worker 在行边界/任务起点查询并收敛为 canceled 终态。
 
 ExecutionJob.status 写入点全量(本模块内,别处零写入;新增写入点须回此

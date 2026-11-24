@@ -1,9 +1,8 @@
-"""integration_runner — 集成任务执行器(外部系统集成 P1)。
+"""integration_runner — 集成任务执行器(外部系统集成)。
 
-《GIMBAL-外部系统集成架构设计》§5 + 评审(2026-10-09)定稿口径:
+《GIMBAL-外部系统集成架构设计》§5 定稿口径:
 - **不写任何执行记录**(决策 3):行台账/事件/case.json 案卷全不落,
-  状态只回写 integration_tasks 实例行(评审 E3:P1 无 outputs 消费,
-  G2 随 P2/task 3c);
+  状态只回写 integration_tasks 实例行(无 outputs 消费面);
 - **复用执行链既有零件**:compose → plate convert → materialize →
   gimbal server 通道,装载准备统一经 run_prepare.prepare_exec
   (strict/none;N1 归一 + 评审 §3.1A:凭证清单/严格解析/别名地址/
@@ -58,7 +57,7 @@ RUN_LEASE_SECONDS = 15 * 60
 CHANNEL_IDLE_SECONDS = 5 * 60
 MANUAL_COOLDOWN_SECONDS = 60
 FAIL_STREAK_NOTIFY = 3
-# W4(2026-10-20):连续失败自动暂停阈值 —— run≠ok 累计到该值即退回
+# 连续失败自动暂停阈值 —— run≠ok 累计到该值即退回
 # paused/fail_streak,不再按周期无限重试(auth/缺凭证已各自即停,
 # 不占此路径)。3 次先告警、5 次暂停 = 告警在前;持有人「启动」
 # 恢复并清零计数。
@@ -76,8 +75,8 @@ def _json_of(value: Any) -> str:
                       default=str)
 
 
-# D3(2026-10-13):跨次游标键豁免(与引擎 Engine._CURSOR_KEYS 同表)——
-# nextToken/pageToken 命中 "token" 子串会被脱敏,Y4 state_mapping 跨次
+# 跨次游标键豁免(与引擎 Engine._CURSOR_KEYS 同表)——
+# nextToken/pageToken 命中 "token" 子串会被脱敏,state_mapping 跨次
 # 注入的即 ***redacted***,游标失效。仅精确键名豁免。
 _CURSOR_KEYS = frozenset({"nexttoken", "pagetoken", "cursor", "next_cursor"})
 
@@ -130,11 +129,11 @@ async def _anchored_call_shape(
     endpoint = str(step.get("endpoint") or "") if isinstance(step, dict) else ""
     if method or not endpoint:
         return method, call.get("path"), False
-    # b2-11(归一 v1.0 §2.1/C5):ext: DB 分支删除 —— 存量 ext: 步骤
+    # (归一 v1.0 §2.1)ext: DB 分支已删 —— 存量 ext: 步骤
     # 必带内联 method,落入 plate 分支取不到定义即 fail-closed
-    # (过渡期行为见 §3.5;ext: 整体退役在批3/C12)。
+    # (过渡期行为见 §3.5)。
     ref = meta_plate.get(endpoint.split(".")[0])
-    if ref_category(ref) == PIN:  # b2-3:读取按类别
+    if ref_category(ref) == PIN:  # 读取按类别
         item = await plate_client.get_endpoint_full_at(endpoint, ref)
     else:
         item = (await plate_client.get_endpoint_full(endpoint)).item
@@ -284,7 +283,7 @@ class _ChannelSlot:
     def __init__(self) -> None:
         self.session: object | None = None
         self.last_used: datetime | None = None
-        # 忙闲标记(整体评审 2026-10-15 #1):「有会话」≠「忙」—— 半常驻
+        # 忙闲标记:「有会话」≠「忙」—— 半常驻
         # 通道跑完保留会话,旧实现按 session is None 选槽,两槽预热后恒
         # 回落 slots[0],并发两次挤同一单 run server(409)并在异常分支
         # 关掉另一次正在用的会话。busy 只在借出期间为 True。
@@ -502,8 +501,8 @@ async def _load_exec_shape(
 async def _template_env(db, scen: ComposerScenario,
                         scheme_payload: dict | None,
                         identity_names: "list[str] | None" = None):
-    """模板执行标签(§8.2,2026-11-17 环境降级轮):**有效身份标签 >
-    场景项目默认 > 平台默认**。方案环境链位退役;``identity_names`` =
+    """模板执行标签(§8.2,ADR-0003 #21):**有效身份标签 >
+    场景项目默认 > 平台默认**。方案不携带环境链位;``identity_names`` =
     模板定义的有效身份集(调用方给;缺省现场解析)。
 
     仍不吃任何个人维度:订阅实例的知情同意按模板内容算,「同一模板
@@ -729,8 +728,8 @@ async def _record_activity(db, inst: IntegrationTask, tpl: IntegrationTask,
     check_flipped/run_flipped)。
 
     只落订阅实例(holder 是真实用户)。调用点全部在业务 commit 之后;
-    best-effort(activity.record 自兜底)。authz C1:平台实例随平台
-    模式退役,个人判定分支删除。"""
+    best-effort(activity.record 自兜底)。平台实例随平台
+    模式退役,个人判定分支。"""
     from . import activity
     if not inst.holder_id:
         return
@@ -988,7 +987,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
         # 非凭证类异常(数据库抖动、装载查询失败、plate 其它故障)裸抛
         # 会被 _spawn 吞成 warning,实例卡 running 到租约回收(≈15
         # 分钟),期间用户看不到任何原因 —— 统一 channel 收口,当轮
-        # 可见(评审 2026-11-01;与下方 convert/物化段兜底同一哲学)。
+        # 可见(与下方 convert/物化段兜底同一哲学)。
         try:
             scheme, scheme_payload, bindings, row_dict, _ds_name = \
                 await _load_exec_shape(db, tpl.scheme_id, scen)
@@ -1015,7 +1014,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             _token: AccessToken | None = (
                 await db.get(AccessToken, tpl.token_id)
                 if tpl.token_id is not None else None)
-            # authz C1:平台模式复核 #5(场景范围闸)随平台身份退役删除;
+            # 平台模式复核 #5(场景范围闸)随平台身份退役删除;
             # #1–#4/#6 只作用于令牌注册方自己的实例(holder = 模板属主)。
             if _token is not None and inst.holder_id == tpl.owner_id:
                 # #1 令牌已吊销
@@ -1103,7 +1102,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
 
             # S8:普通项目模板对仍是项目成员的持有人放行(「成员也可以
             # 订阅」);非成员(被移出项目)按转私有同口径暂停。
-            # 01-03 §4.1(2026-11-24):成员复核**不再豁免 owner** ——
+            # 成员复核**不豁免 owner** ——
             # 普通项目模板的属主被移出项目后,自有实例同样暂停(指纹闸
             # consent_gate 仍 owner 豁免:自有内容无需自我确认,但成员
             # 门按持有者判,属主身份不替代成员关系)。
@@ -1250,7 +1249,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                 prep.resolved_auths = apply_row_bindings(
                     prep.resolved_auths, row_dict, _over)
             row_dict = strip_row_binding_columns(row_dict)
-        except Exception as e:  # noqa: BLE001 — 基础设施兜底(评审 2026-11-01)
+        except Exception as e:  # noqa: BLE001 — 基础设施兜底
             # 异常可能来自主会话上的 SQL —— PG 已把该事务标记中止,
             # 同一会话再写必然二次失败(实测:手动触发 500、实例照旧
             # 卡 running 等租约回收,兜底形同虚设)。先 rollback 再开
@@ -1438,9 +1437,9 @@ async def _finish(
     # Y4/方案 §5:跨次状态回写 —— state_mapping {输出键 → 状态键},
     # 命中的输出复制进 state_vars(下次执行注入为变量,增量游标)。
     # 仅 run=ok 推进(失败跑的一半数据不前移游标);复制源 = **已脱敏
-    # 拷贝** new_outputs(复核收口 2026-11-22:原读未脱敏原件,密文经
-    # state_vars 落库;旧注释「已过脱敏」与实现相反);mapping 为空 =
-    # 不回写。
+    # 拷贝** new_outputs(原读未脱敏原件会让密文经
+    # state_vars 落库 —— 旧注释「已过脱敏」与实现相反的教训);
+    # mapping 为空 = 不回写。
     if (run_status == "ok" and isinstance(tpl.state_mapping, dict)
             and tpl.state_mapping and new_outputs):
         merged = dict(inst.state_vars or {})
@@ -1785,7 +1784,7 @@ async def ensure_instance(
 ) -> IntegrationTask | None:
     """模板的实例(幂等;订阅即创建,方案 §4)。
 
-    authz C1:平台模式退役,模板恒 personal —— ``holder_id`` 的订阅
+    平台模式退役,模板恒 personal —— ``holder_id`` 的订阅
     实例(不存在则建);缺 holder 返回 None。名从模板(NOT NULL;列表
     只取模板行)。
     """

@@ -264,7 +264,7 @@ async def _send_one(
     if not (job.url.startswith("http://")
             or job.url.startswith("https://")):
         return False, "bad url(回调仅允许 http/https)"
-    # D16(评审 2026-11-05 P1):保存与投递各校验一次 —— 运维从白名单
+    # 保存与投递各校验一次 —— 运维从白名单
     # 移除主机后,已保存该地址的令牌不得继续投递;不通过即终态失败
     # (``callback_host_not_allowed``,重试不会让白名单回来)。
     from .access_token import check_callback_url, host_is_private

@@ -1013,7 +1013,7 @@
         "type": "object"
       },
       "AuthDraftIn": {
-        "description": "调用身份草稿(保存期通道;架构一致性轮 2026-11-21 收窄)。\n\n只建 **username-ref 身份条目**,不创建账户、不碰密码 —— 凭证是\n独立资产,由 ``POST /auths`` 即时写入本人池/项目池;身份是全局\n声明,Admin 走 ``POST /service-aliases``,非 Admin 随场景保存\n同事务建 username-ref 条目(本通道)。\n\n``baseService`` 是服务实例的服务锚(不再是 ``system``)——\n同系统多服务时由用户选中的实例决定,不再取字典序第一个服务。\n账户校验覆盖本人池 + 场景项目池(``owner_id`` / ``project_id``),\nenv 只作执行偏好,不作账户门槛(§8.3)。",
+        "description": "调用身份草稿(保存期通道;架构一致性收窄)。\n\n只建 **username-ref 身份条目**,不创建账户、不碰密码 —— 凭证是\n独立资产,由 ``POST /auths`` 即时写入本人池/项目池;身份是全局\n声明,Admin 走 ``POST /service-aliases``,非 Admin 随场景保存\n同事务建 username-ref 条目(本通道)。\n\n``baseService`` 是服务实例的服务锚(不再是 ``system``)——\n同系统多服务时由用户选中的实例决定,不再取字典序第一个服务。\n账户校验覆盖本人池 + 场景项目池(``owner_id`` / ``project_id``),\nenv 只作执行偏好,不作账户门槛(§8.3)。",
         "properties": {
           "baseService": {
             "description": "服务实例的服务锚(须已在主档登记)",
@@ -2867,7 +2867,7 @@
         "type": "object"
       },
       "EnvironmentResolveIn": {
-        "description": "标签 → 环境定义(2026-11-18「标签即环境」)。",
+        "description": "标签 → 环境定义(「标签即环境」)。",
         "properties": {
           "name": {
             "maxLength": 64,
@@ -3344,7 +3344,7 @@
         "type": "object"
       },
       "ExecutionListOut": {
-        "description": "Page 信封(§4.1):既有 {items,total} 补齐 page/pageSize 即向后兼容。\n\n``failedTotal``(2026-10-21):与 ``total`` 同筛选口径的失败单数 —— 前端\n筛选行的「共 N 条 · 失败 M 条」原先 N 是全量、M 却只数当前页,分页后\n口径打架;由服务端一次 count 给全口径值。",
+        "description": "Page 信封(§4.1):既有 {items,total} 补齐 page/pageSize 即向后兼容。\n\n``failedTotal``:与 ``total`` 同筛选口径的失败单数 —— 前端\n筛选行的「共 N 条 · 失败 M 条」原先 N 是全量、M 却只数当前页,分页后\n口径打架;由服务端一次 count 给全口径值。",
         "properties": {
           "failedTotal": {
             "default": 0,
@@ -4358,7 +4358,7 @@
         "type": "object"
       },
       "HandoffUnreadItem": {
-        "description": "未读分享(悬浮标签数据源,2026-09-23 批次 F1)。\n\n前端以 Set<resourceId> 维护,列表行渲染 O(1) 查找;销账走\nPOST /read(按 id)。",
+        "description": "未读分享(悬浮标签数据源)。\n\n前端以 Set<resourceId> 维护,列表行渲染 O(1) 查找;销账走\nPOST /read(按 id)。",
         "properties": {
           "id": {
             "title": "Id",
@@ -4602,7 +4602,7 @@
       },
       "InstanceMove": {
         "additionalProperties": false,
-        "description": "实例改标签(2026-11-18 环境降级交互补齐;标签即环境)。\n\n目标环境二选一:``envId``(既有环境)或 ``envTag``(自由标签,不存在\n则自动登记为环境定义)。登录口/版本线/说明随行;API 地址\n(deployments)与身份条目按各自环境维护,不随搬移。",
+        "description": "实例改标签(环境降级交互;标签即环境)。\n\n目标环境二选一:``envId``(既有环境)或 ``envTag``(自由标签,不存在\n则自动登记为环境定义)。登录口/版本线/说明随行;API 地址\n(deployments)与身份条目按各自环境维护,不随搬移。",
         "properties": {
           "envId": {
             "anyOf": [
@@ -5430,7 +5430,7 @@
         "type": "string"
       },
       "PingOut": {
-        "description": "连通测速结果(服务配置管理抽屉;2026-11-17 M5)。\n\n``ok`` 只表示「拿到了 HTTP 响应」—— 401/404 也是可达,与拨测\n(auth_probe,验登录态)语义不同,别混用。",
+        "description": "连通测速结果(服务配置管理抽屉)。\n\n``ok`` 只表示「拿到了 HTTP 响应」—— 401/404 也是可达,与拨测\n(auth_probe,验登录态)语义不同,别混用。",
         "properties": {
           "latencyMs": {
             "anyOf": [
@@ -6904,7 +6904,7 @@
         "type": "object"
       },
       "ScenarioCopyIn": {
-        "description": "POST /scenarios/{id}/copy 可选请求体(2026-09-23 批次 F2 另存为)。\n\n缺省(无 body)= 旧「复制到我的」行为,副本名沿用 ``(副本)`` 后缀;\n带 ``name`` = 另存为,重名由端点 409 + suggestion 交前端确认\n(软校验口径见 scenario_store.resolve_name_conflict)。",
+        "description": "POST /scenarios/{id}/copy 可选请求体(另存为)。\n\n缺省(无 body)= 旧「复制到我的」行为,副本名沿用 ``(副本)`` 后缀;\n带 ``name`` = 另存为,重名由端点 409 + suggestion 交前端确认\n(软校验口径见 scenario_store.resolve_name_conflict)。",
         "properties": {
           "name": {
             "anyOf": [
@@ -7119,7 +7119,7 @@
       },
       "ScenarioMeta": {
         "additionalProperties": true,
-        "description": "Scenario metadata; one Scenario has exactly one Meta.\n\nM2 ``Meta`` 的**超集读投影**:声明的字段做校验与别名,其余字段\n(``requirementRef`` 及 M2 后续新增)经 ``extra=\"allow\"`` 原样透传。\n读侧由 ``_meta_from_row`` 从 payload.definition.meta 组装 —— 此前\n手写字段清单对未知键静默丢弃,requirementRef 读侧被剥、编排器水合\n再保存即丢字段(A-1,2026-10-12);M2 Meta 每加一个字段都会重演。\n``module``/``system`` 对齐 M2 空值语义('' / []):旧库存量空值\n原样保留,不再注入伪系统/模块 \"default\"(M11:meta.system 每个\n系统必须有 plate 声明,\"default\" 永远不合法)。",
+        "description": "Scenario metadata; one Scenario has exactly one Meta.\n\nM2 ``Meta`` 的**超集读投影**:声明的字段做校验与别名,其余字段\n(``requirementRef`` 及 M2 后续新增)经 ``extra=\"allow\"`` 原样透传。\n读侧由 ``_meta_from_row`` 从 payload.definition.meta 组装 —— 此前\n手写字段清单对未知键静默丢弃,requirementRef 读侧被剥、编排器水合\n再保存即丢字段;M2 Meta 每加一个字段都会重演。\n``module``/``system`` 对齐 M2 空值语义('' / []):旧库存量空值\n原样保留,不再注入伪系统/模块 \"default\"(M11:meta.system 每个\n系统必须有 plate 声明,\"default\" 永远不合法)。",
         "properties": {
           "author": {
             "default": "",
@@ -9283,7 +9283,7 @@
         "type": "object"
       },
       "UserListOut": {
-        "description": "M4 Page 信封(§6.3):用户列表分页(接口收紧已随 M2.5 落地)。",
+        "description": "Page 信封(§6.3):用户列表分页(接口收紧已随 M2.5 落地)。",
         "properties": {
           "items": {
             "items": {
@@ -9546,7 +9546,7 @@
   "paths": {
     "/api/access-tokens": {
       "get": {
-        "description": "令牌列表。``kind=personal``:本人;``all=1``(users.manage):\n全部,可按属主(id 或用户名/昵称模糊,2026-11-05 评审 P2-6:管理员\n通常不知道数字 id)与状态过滤。authz C1:kind=platform 面退役。\n不返回明文与密钥。",
+        "description": "令牌列表。``kind=personal``:本人;``all=1``(users.manage):\n全部,可按属主(id 或用户名/昵称模糊 —— 管理员\n通常不知道数字 id)与状态过滤。kind=platform 面随平台模式退役。\n不返回明文与密钥。",
         "operationId": "list_tokens_api_access_tokens_get",
         "parameters": [
           {
@@ -10206,7 +10206,7 @@
     },
     "/api/activity": {
       "get": {
-        "description": "本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次\n+ 我的 suite/集成事件(2026-10-20 起)+ 入站调用(2026-11-03 起),\n按 at 倒序合并。``limit`` = **每类上限**(不做全局截断,「全部」视图\n取混排最近 30 由前端负责 —— 见模块注释的容量语义改造说明)。",
+        "description": "本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次\n+ 我的 suite/集成事件 + 入站调用,\n按 at 倒序合并。``limit`` = **每类上限**(不做全局截断,「全部」视图\n取混排最近 30 由前端负责 —— 见模块注释的容量语义改造说明)。",
         "operationId": "get_activity_api_activity_get",
         "parameters": [
           {
@@ -10562,7 +10562,7 @@
     },
     "/api/adaptations/compare": {
       "get": {
-        "description": "RS4a 比较（§5.3）:场景起点修订 vs 目标修订的 plate 差异 + 三组影响。\n\nB4 收口(2026-11-22):场景读闸 —— 旧注释「R22:读面全员」与私有区\n教义(GET /scenarios/{id} 非可读 404 不泄露存在性)正面冲突,按\nGET 口径收窄:不可读 → 404 scenario_not_found。submit-suite 的\n逐成员内部 compare 不经此端点,其编辑权由 submit_adaptation\n逐成员闸(结果不回吐 compare 面)。",
+        "description": "RS4a 比较（§5.3）:场景起点修订 vs 目标修订的 plate 差异 + 三组影响。\n\n场景读闸 —— 「读面全员」旧口径与私有区\n教义(GET /scenarios/{id} 非可读 404 不泄露存在性)正面冲突,按\nGET 口径收窄:不可读 → 404 scenario_not_found。submit-suite 的\n逐成员内部 compare 不经此端点,其编辑权由 submit_adaptation\n逐成员闸(结果不回吐 compare 面)。",
         "operationId": "compare_revisions_api_adaptations_compare_get",
         "parameters": [
           {
@@ -10793,7 +10793,7 @@
     },
     "/api/adaptations/save-check": {
       "post": {
-        "description": "RS4a 保存检查:①目标修订试算（阻断）②引用检查 ③保存方式推荐。\n\nR14:review_items 非空时提示确认,未确认提交被拒。\nB4 收口(2026-11-22):场景读闸同 compare(404 不泄露存在性)。",
+        "description": "RS4a 保存检查:①目标修订试算（阻断）②引用检查 ③保存方式推荐。\n\nR14:review_items 非空时提示确认,未确认提交被拒。\n场景读闸同 compare(404 不泄露存在性)。",
         "operationId": "save_check_api_adaptations_save_check_post",
         "requestBody": {
           "content": {
@@ -10842,7 +10842,7 @@
     },
     "/api/adaptations/stale": {
       "get": {
-        "description": "RS4a 陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看\n自己;authz W3:super_admin 全量分支删除,所有角色同镜头(仅自己)——\n他人场景的适配状态由属主自见,排查走审计。",
+        "description": "陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看\n自己;super_admin 全量分支删除,所有角色同镜头(仅自己)——\n他人场景的适配状态由属主自见,排查走审计。",
         "operationId": "stale_scenarios_api_adaptations_stale_get",
         "parameters": [
           {
@@ -11046,7 +11046,7 @@
     },
     "/api/adaptations/unindexed-steps": {
       "get": {
-        "description": "C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。\n\nB3 收口(2026-11-22):补 Admin+ 能力门(ops.write,模块 admin-only\n约定同款,门在取数前)—— 此前 CurrentUser 裸门 + unindexed_steps\n全表扫无属主过滤,任何登录用户可枚举他人私有场景 id/步骤索引,\n违反「404 不泄露存在性」教义(模块 docstring 自称 admin-only,\n端点却无门)。",
+        "description": "C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。\n\nAdmin+ 能力门(ops.write,模块 admin-only\n约定同款,门在取数前)—— 此前 CurrentUser 裸门 + unindexed_steps\n全表扫无属主过滤,任何登录用户可枚举他人私有场景 id/步骤索引,\n违反「404 不泄露存在性」教义(模块 docstring 自称 admin-only,\n端点却无门)。",
         "operationId": "unindexed_steps_api_adaptations_unindexed_steps_get",
         "responses": {
           "200": {
@@ -11352,7 +11352,7 @@
     },
     "/api/auths": {
       "get": {
-        "description": "Page 信封 + 服务端过滤(M4,§6.3):``q``(username/system 子串;\nusername 账户化后为明文,可检索)、``token_type`` 精确。双计数 =\nref 条目数 + 条目聚合场景数(auth_references.account_ref_counts)。\n\n``q`` 第三命中面(2026-11-19):**身份条目名** —— 缺凭证角标\n(FunctionCard)与导入对话框的修复深链发的是条目名,账户化后\n条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。\n命中口径 = 条目名所在系统的全部本人账户(哪条装载由条目 ref\n决定,列表按系统呈现即修复引导)。\n\n双源检索(凭证治理 2c,2026-11-20 拍板 #10):``source`` 选池 —\n``personal``(默认,存量行为不变)/ ``project``(须 ``project_id``)/\n``all``(本人池 ∪ 该项目池,行带 ``source`` 徽标)。检索是独立\n口径,与执行链「单池互斥选一」(credential_source)无涉 —— 有序\n池回退不存在,合并去重也无从谈起(两池行本就是不同实体)。\n项目池行 **username 对成员可见**(按名引用必需;``_member_view``\n掩码只在 /projects/{id}/credentials 管理面保留)。门:非成员 404、\n公共项目 409 ``public_project_no_credentials``(与项目凭证面同源);\nAdmin+ 非成员不旁路。``env_id`` 精确过滤(执行标签同键域)。",
+        "description": "Page 信封 + 服务端过滤(§6.3):``q``(username/system 子串;\nusername 账户化后为明文,可检索)、``token_type`` 精确。双计数 =\nref 条目数 + 条目聚合场景数(auth_references.account_ref_counts)。\n\n``q`` 第三命中面:**身份条目名** —— 缺凭证角标\n(FunctionCard)与导入对话框的修复深链发的是条目名,账户化后\n条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。\n命中口径 = 条目名所在系统的全部本人账户(哪条装载由条目 ref\n决定,列表按系统呈现即修复引导)。\n\n双源检索:``source`` 选池 —\n``personal``(默认,存量行为不变)/ ``project``(须 ``project_id``)/\n``all``(本人池 ∪ 该项目池,行带 ``source`` 徽标)。检索是独立\n口径,与执行链「单池互斥选一」(credential_source)无涉 —— 有序\n池回退不存在,合并去重也无从谈起(两池行本就是不同实体)。\n项目池行 **username 对成员可见**(按名引用必需;``_member_view``\n掩码只在 /projects/{id}/credentials 管理面保留)。门:非成员 404、\n公共项目 409 ``public_project_no_credentials``(与项目凭证面同源);\nAdmin+ 非成员不旁路。``env_id`` 精确过滤(执行标签同键域)。",
         "operationId": "list_auths_api_auths_get",
         "parameters": [
           {
@@ -13013,7 +13013,7 @@
     },
     "/api/data-sets": {
       "get": {
-        "description": "List summaries scoped to the caller.\n\nData-set rows are business parameter matrices — listing every user's\ndata would be a cross-user disclosure, so callers only see data-sets\nwhose parent scenario they own, or that live in a project they are\na member of (r3二.1:项目区数据集 = 项目共享业务数据,同事的预览\n剥敏感列,与单读同口径). authz W3: super_admin 全量分支删除 ——\nadmin 与普通用户同镜头,排查走审计。",
+        "description": "List summaries scoped to the caller.\n\nData-set rows are business parameter matrices — listing every user's\ndata would be a cross-user disclosure, so callers only see data-sets\nwhose parent scenario they own, or that live in a project they are\na member of (项目区数据集 = 项目共享业务数据,同事的预览\n剥敏感列,与单读同口径). super_admin 全量分支删除 ——\nadmin 与普通用户同镜头,排查走审计。",
         "operationId": "list_data_sets_api_data_sets_get",
         "parameters": [
           {
@@ -13961,7 +13961,7 @@
     },
     "/api/environments/resolve": {
       "post": {
-        "description": "标签 → 环境定义:按名精确查找,不存在则登记并返回(2026-11-18)。\n\n实例标签/改标签等写面用它把用户自由填写的标签落成环境字典行;\n已存在即返回同一行(幂等,不重名不报错)。写门与其它环境写面同门\n(ops.write)。",
+        "description": "标签 → 环境定义:按名精确查找,不存在则登记并返回(幂等登记)。\n\n实例标签/改标签等写面用它把用户自由填写的标签落成环境字典行;\n已存在即返回同一行(幂等,不重名不报错)。写门与其它环境写面同门\n(ops.write)。",
         "operationId": "resolve_environment_api_environments_resolve_post",
         "requestBody": {
           "content": {
@@ -16549,7 +16549,7 @@
     },
     "/api/integration/tasks/{task_id}": {
       "delete": {
-        "description": "软删(评审 E7):卡片走「已移除」态,订阅者可见可自行删卡。\n令牌(§2.2):只能删本令牌注册的,否则 404。",
+        "description": "软删:卡片走「已移除」态,订阅者可见可自行删卡。\n令牌(§2.2):只能删本令牌注册的,否则 404。",
         "operationId": "delete_task_api_integration_tasks__task_id__delete",
         "parameters": [
           {
@@ -18561,7 +18561,7 @@
     },
     "/api/projects/{project_id}/promotions": {
       "get": {
-        "description": "项目管理员(∨ Admin+)见全部;成员见自己的申请。Admin+ 非成员\n亦可见全部(2026-11-19 复核补 —— 与下方 sees_all/裁决门\nrequire_project_admin 同口径;此前 require_member 对其 404,页面\n渲染了裁决按钮却拉不到列表)。",
+        "description": "项目管理员(∨ Admin+)见全部;成员见自己的申请。Admin+ 非成员\n亦可见全部(与下方 sees_all/裁决门\nrequire_project_admin 同口径;此前 require_member 对其 404,页面\n渲染了裁决按钮却拉不到列表)。",
         "operationId": "list_promotions_api_projects__project_id__promotions_get",
         "parameters": [
           {
@@ -20151,7 +20151,7 @@
     },
     "/api/runs/preview": {
       "post": {
-        "description": "S5 生效预览:本次执行将生效的 地址/条目装载/carry(逐值带来源,\n不含明文凭证)。读闸同预检(can_read_scenario_row)。\n\nbody:{scenarioId 必填, schemeId?/serviceBindings?/\ncredentialSource?(S8)/execConfigId?(分层②)}\n—— 标签链同执行(§8.2):**有效调用身份标签 > 项目默认 > 平台\n默认**(显式 environmentId/方案/执行配置/偏好链位已退役)。\n绑定形态同执行请求(服务键 → {alias};url/authAlias 422)。\n执行配置:显式选定才携带绑定与 carry 覆盖(项目区仅显式,决策 9)。",
+        "description": "S5 生效预览:本次执行将生效的 地址/条目装载/carry(逐值带来源,\n不含明文凭证)。读闸同预检(can_read_scenario_row)。\n\nbody:{scenarioId 必填, schemeId?/serviceBindings?/\ncredentialSource?/execConfigId?(分层②)}\n—— 标签链同执行(§8.2):**有效调用身份标签 > 项目默认 > 平台\n默认**(显式链位不承载,ADR-0003 #21)。\n绑定形态同执行请求(服务键 → {alias};url/authAlias 422)。\n执行配置:显式选定才携带绑定与 carry 覆盖(项目区仅显式,决策 9)。",
         "operationId": "preview_effective_config_api_runs_preview_post",
         "requestBody": {
           "content": {
@@ -21141,7 +21141,7 @@
     },
     "/api/scenarios/{scenario_id}/copy": {
       "post": {
-        "description": "深拷贝场景+用例+数据集;新属主 = 调用者,visibility=private。\n需要读权限(public 或自己的场景才可复制)。\n\n带 ``name``(另存为,2026-09-23 批次 F2):与本人已有场景重名 →\n409 ``name_taken``,detail 带 ``suggestion``(计数后缀名),前端\n确认后带 suggestion 重发;重名判定走 resolve_name_conflict 唯一实现。",
+        "description": "深拷贝场景+用例+数据集;新属主 = 调用者,visibility=private。\n需要读权限(public 或自己的场景才可复制)。\n\n带 ``name``(另存为):与本人已有场景重名 →\n409 ``name_taken``,detail 带 ``suggestion``(计数后缀名),前端\n确认后带 suggestion 重发;重名判定走 resolve_name_conflict 唯一实现。",
         "operationId": "copy_scenario_to_me_api_scenarios__scenario_id__copy_post",
         "parameters": [
           {
@@ -22866,7 +22866,7 @@
     },
     "/api/shares": {
       "post": {
-        "description": "副本分享(原 copy 分支原样;ref 模式已随 S7.4 退役)。",
+        "description": "副本分享(ref 模式已退场,ADR-0003 #20)。",
         "operationId": "create_share_api_shares_post",
         "requestBody": {
           "content": {

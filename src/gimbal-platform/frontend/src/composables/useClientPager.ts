@@ -1,5 +1,5 @@
 /**
- * useClientPager.ts — 客户端列表分页(2026-09-23 分页批次)。
+ * useClientPager.ts — 客户端列表分页。
  *
  * 服务端分页走 useServerList(Page 信封);这里给「一次性全量拉回、
  * 前端过滤/前端持有」的页面(ServiceAdmin 别名表 / 常量池 / 传递

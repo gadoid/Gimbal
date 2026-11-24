@@ -1,12 +1,12 @@
-"""S7.4 share_ref 退役:存量引用一次性转被分享人的私有副本。
+"""share_ref 退役(ADR-0003 #20):存量引用一次性转被分享人的私有副本。
 
-Q2 裁定(2026-11-09):上线即全部转副本,一次退役。转换在应用层实现
+上线即全部转副本,一次退役。转换在应用层实现
 (拷贝依赖 store 逻辑:scenario_store.copy_scenario / suite_copy.
 deep_copy_suite,与 POST /shares 的 copy 分支同一复制口径 —— 跨属主
 剥离内置凭证与数据集敏感列);随后的迁移 0049 只删表(表非空即拒绝,
 防漏跑本转换)。
 
-share_refs 模型已随退役删除;本模块经**裸 SQL**读写该表(转换先于
+share_refs 模型已删除(ADR-0003 #20);本模块经**裸 SQL**读写该表(转换先于
 迁移执行,表仍在)。幂等:转换成功即删行;crash 窗口(副本已 commit、
 行未删)由 ``forked_from_id`` 兜底 —— grantee 名下已有该源的 fork 时
 复用,不重拷。

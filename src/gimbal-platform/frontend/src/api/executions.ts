@@ -71,7 +71,7 @@ export interface Execution {
     reconciled?: { at: string; reason: string }
     /** 计数器漂移:passed+failed ≠ total_runs(P8 校账,真值以 JSONL 为准) */
     counterDrift?: boolean
-    // ── 2026-11-12 配方字段审计补记(run_dispatcher._create_execution
+    // ── 配方字段审计补记(run_dispatcher._create_execution
     //    实写键对账;去向:dl = 执行明细「执行信息」表)─────────────
     /** 数据集行级选择快照(请求回显,by_alias dump;空 = 全部行)→ dl「数据集选择」 */
     dataSetSelection?: Array<Record<string, unknown>>
@@ -117,7 +117,7 @@ export interface Execution {
   current_plate?: Record<string, string> | null
   /** B-3:失败原因(终态失败单 = dispatcherError;成功/运行中 null) */
   error?: string | null
-  /** 可取消标志(服务端给,前端不按 status 自推 —— 全量评估 2026-11-02 #1):
+  /** 可取消标志(服务端给,前端不按 status 自推):
    *  graph 链(Suite 编排 / POST /api/runs 带 graph)任务体一经认领即 false
    *  (不看执行状态,不消费取消位,cancel 端点同口径 409);其余 queued/
    *  running 为 true。 */
@@ -187,7 +187,7 @@ export interface ExecutionRow {
   runError?: string | null
 }
 
-// ── B4 执行报告(2026-11-06 日志报告整理)────────────────────────
+// ── 执行报告────────────────────────
 /** 一条断言的结果(引擎 step.end 投影;敏感目标已脱敏、超长值已截断)。 */
 export interface ReportAssertion {
   name: string
@@ -322,7 +322,7 @@ export function listExecutions(params?: {
   /** 按访问令牌列经它发起的执行(webhook v4)。authz W4:执行可见收敛为
    *  属主∨本令牌(admin 旁路已删)—— 后端只回调用方自己可见的行。 */
   tokenId?: number
-  /** 项目过滤(A 级批次 2026-11-18):项目详情头卡深链;JWT 面消费,
+  /** 项目过滤:项目详情头卡深链;JWT 面消费,
    *  令牌路径后端忽略。 */
   projectId?: number
 }) {
@@ -349,7 +349,7 @@ export function listExecutions(params?: {
 
 /** 顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。
  *  口径 = 查询者自己的执行(owner 隔离);行级分布不落库,不在响应里。
- *  projectId(A 级批次 2026-11-18)= 项目维度聚合(项目详情头卡)。 */
+ *  projectId= 项目维度聚合(项目详情头卡)。 */
 export interface ExecutionsSummary {
   windowDays: number
   totalExecutions: number
@@ -360,7 +360,7 @@ export interface ExecutionsSummary {
   avgDurationSec: number | null
   repeatFailureScenarios: number
   activeExecutions: number
-  /** 今日执行次数(stitch 0-2 批次 2026-11-23):自然日锚 created_at
+  /** 今日执行次数(自然日锚 created_at
    *  (服务器时区零点),含进行中单,与 windowDays 统计窗相互独立。 */
   todayExecutions: number
 }

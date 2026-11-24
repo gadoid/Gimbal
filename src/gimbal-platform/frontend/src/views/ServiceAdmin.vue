@@ -1,4 +1,4 @@
-<!-- ServiceAdmin.vue — 服务注册(2026-11-17 按 stitch 原型完整构建)。
+<!-- ServiceAdmin.vue — 服务注册(按 stitch 原型完整构建)。
      心智模型(§0 四层)不变:
        ① 服务主档 services —— 系统概念的唯一登记处(name/system/kind/abbr/
           说明);**不从 plate 目录镜像**,目录只用于对账(未登记候选/漂移)。
@@ -1023,7 +1023,7 @@ async function refreshAll(manual = false): Promise<void> {
 }
 
 // ── 条目缓存(按服务懒加载;卡头计数用它)────────────────────
-// 复核收口(2026-11-22):懒加载/缓存/错误态单源化到 useAliasCache
+// 懒加载/缓存/错误态单源化到 useAliasCache
 // (与 ExecConfigsView 共享同一镜像);本视图只保留投影与语义封装。
 const { entries: aliasEntries, ensure: _ensureAliasBase,
         invalidate: invalidateAlias } = useAliasCache()
@@ -1061,7 +1061,7 @@ function envAliases(svc: ServiceRow, envId: number): ServiceAliasRow[] {
 }
 /** 条目 → 本人池账户(前端单源 pickAccountLikeBackend,镜像后端
  *  run_prepare._pick_one;§8.3 引用不校验标签,默认账户跨标签共用
- *  正常 —— 2026-11-19 前两页各写一份且多绑 env 等式,系统性误报)。 */
+ *  正常 —— 此前两页各写一份且多绑 env 等式,系统性误报)。 */
 function accountOf(svc: ServiceRow, a: ServiceAliasRow): AuthSession | undefined {
   return pickAccountLikeBackend(accounts.value, svc.system, a)
 }
@@ -1382,7 +1382,7 @@ async function saveSvc(): Promise<void> {
   }
 }
 async function removeSvc(svc: ServiceRow): Promise<void> {
-  // FE-03(2026-11-20 审计):文案对齐后端实际行为 —— delete_service 只删
+  // 文案对齐后端实际行为 —— delete_service 只删
   // 服务主档登记行(挂靠 409 拦截),system 级共享实例行/部署/环境**不**
   // 随删;此前「所有环境下的实例将一并移除」属过度承诺。
   const ok = await confirmAction(
@@ -1463,7 +1463,7 @@ async function confirmAccess(): Promise<void> {
     // 多标签:先确保实例行存在,再整组挂标签(组内共享配置)
     const first = resolved[0]
     if (resolved.length > 1) {
-      // FE-08b(2026-11-20 审计):putInstanceTags 是整组替换 —— 首标签
+      // putInstanceTags 是整组替换 —— 首标签
       // 所在实例组若已有本次未选的标签,会被静默移除;先取当前组标签,
       // 有删除时确认点名(409 只挡「别的组」,挡不住同组静默覆写)。
       await putInstance(svc.system, first.id, {})
@@ -1493,7 +1493,7 @@ const envFormOpen = ref(false)
 const envForm = ref({ name: '', description: '' })
 const lineRows = ref<Array<{ sys: string; line: string }>>([])
 const envDelArmed = ref(false)
-// 表单/删除的目标环境 = **打开/装配时快照**(2026-11-19 复核修复):
+// 表单/删除的目标环境 = **打开/装配时快照**(复核修复):
 // 筛选矩阵的环境下拉在表单打开期间仍可操作,保存/确认若取「保存时
 // 聚焦」会把 A 的数据写到 B 上(改名/版本线覆写/删错环境)。
 const envEditId = ref<number | null>(null)
@@ -1503,7 +1503,7 @@ watch(focusedEnv, () => { envDelArmed.value = false })
 
 async function makeDefault(): Promise<void> {
   if (focusedEnv.value == null) return
-  // FE-08a(2026-11-20 审计):裸 await 失败 = 未处理 rejection,用户无
+  // 裸 await 失败 = 未处理 rejection,用户无
   // 反馈;补 catch + toast(与页内其余动作同口径)。
   try {
     await setDefaultEnvironment(focusedEnv.value)
@@ -1632,7 +1632,7 @@ function closeDrawer(): void {
   instDelArmed.value = false
 }
 
-// ── 实例标签(多枚;双击编辑) / 移除实例(2026-11-18)──────────────
+// ── 实例标签(多枚;双击编辑) / 移除实例──────────────
 const instDelArmed = ref(false)
 const instDeleting = ref(false)
 /** 当前实例的标签集(同组行聚合;抽屉双击编辑的数据源) */
@@ -1650,7 +1650,7 @@ async function saveDrawerTags(tags: string[]): Promise<void> {
   try {
     const moved = await putInstanceTags(d.svc.system, d.envId, next)
     // 当前标签可能被移除 → 抽屉跟到组内代表行;实例表单坐标同拍跟移
-    // 并按新行重定基线(2026-11-19 复核修复:instForm 若仍持旧 envId,
+    // 并按新行重定基线(复核:instForm 若仍持旧 envId,
     // 后续「保存实例配置」会在旧标签上 upsert 重建刚删的行,静默撤销
     // 搬移;旧坐标的未存草稿也不得写进新坐标)。
     drawer.value = { svc: d.svc, envId: moved.envId }

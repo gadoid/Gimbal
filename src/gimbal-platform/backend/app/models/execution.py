@@ -56,7 +56,7 @@ class Execution(Base):
     # 均为 owner 过滤 + id 倒序,前缀吃过滤、后缀吃倒序扫
     __table_args__ = (
         Index("ix_executions_owner_id", "owner_id", "id"),
-        # suite 归属查询索引:0014 迁移建,模型侧补声明(2026-10-13 A-1)
+        # suite 归属查询索引:0014 迁移建,模型侧补声明
         Index("ix_executions_suite", "suite_id"),
         # 入站调用排查面(webhook v4 §7.1):令牌按本列查「经由我令牌的
         # 执行」;JWT 发起的执行恒 NULL
@@ -80,7 +80,7 @@ class Execution(Base):
                   "token_id IS NULL AND client_ref IS NOT NULL")),
     )
 
-    # BIGINT(整体评审 2026-10-15 #10):执行面所有外键的根
+    # BIGINT:执行面所有外键的根
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     scenario_id: Mapped[str] = mapped_column(String(128), index=True)
     # 台账快照:场景删除后仍可读(空串 = 场景已删且名字不可考)
@@ -124,12 +124,12 @@ class Execution(Base):
     total_runs: Mapped[int] = mapped_column(Integer, default=0)
     passed: Mapped[int] = mapped_column(Integer, default=0)
     failed: Mapped[int] = mapped_column(Integer, default=0)
-    # S5(P0):run.finished 携带的 skipped 计数落库(此前只留在 result.json
+    # run.finished 携带的 skipped 计数落库(此前只留在 result.json
     # 工件,台账列缺失)。存量行 0 = 无跳过口径,不回填。
     skipped: Mapped[int] = mapped_column(Integer, default=0)
     # V3 dispatcher recipe: {runId, scenarioId, dataSetIds,
     # injectedAuths, serviceBindings, stepTo, nRuns, parallel}
-    # (D2 起执行环境键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
+    # (执行环境键不再写入,ADR-0003 #13;存量历史行仍含旧键,读侧按键驱动渲染)
     #
     # **outputs 是唯一例外键**(webhook 设计 v3 §5.5/D10):单 case 执行
     # (total_runs==1)在行完成处把脱敏后的提取产物写进
@@ -178,15 +178,15 @@ class ExecutionSnapshot(Base):
 
 
 class ExecutionRow(Base):
-    """单元级明细台账（M2 行级建表；P2-01/C8 单元化）。
+    """单元级明细台账（行级建表；单元化）。
 
-    P2-01 前 = 行级（dataset/injection × row_index × rep）；P2-01 起
+    此前 = 行级（dataset/injection × row_index × rep）；现
     ``unit_id``（别名+展开序号，与执行器事件标签一致）、``branch``
     （分支维度）、``attempts``（乘法执行次数）成为主键面，dataset/
     injection/row_index 保留为单元属性。写入点 = 每单元终态即 upsert
-    （P2-04 起由执行器事件投影，平台不再自行写行状态）。行级时代的
-    空.unit_id 存量行已随 pre-M6 执行清除下线（2026-11-22 复核收口：
-    开发期数据直接改造，不留读侧兼容）。
+    （由执行器事件投影，平台不自行写行状态）。行级时代的
+    空.unit_id 存量行已随 pre-M6 执行清除下线（开发期数据直接改造，
+    不留读侧兼容）。
     """
 
     __tablename__ = "execution_rows"
@@ -196,9 +196,9 @@ class ExecutionRow(Base):
         BigInteger, ForeignKey("executions.id", ondelete="CASCADE")
     )
     seq: Mapped[int] = mapped_column(Integer)
-    # P2-01:单元标识(与执行器 unit 标签一致;恒非空)
+    # 单元标识(与执行器 unit 标签一致;恒非空)
     unit_id: Mapped[str] = mapped_column(String(255), default="")
-    # P2-01:分支维度(graph 括号/主体;单场景恒 main)
+    # 分支维度(graph 括号/主体;单场景恒 main)
     branch: Mapped[str] = mapped_column(String(16), default="main")
     # P2-01:乘法执行次数(n_runs run 数 + 各 run 内重试数)
     attempts: Mapped[int] = mapped_column(Integer, default=1)
@@ -217,11 +217,11 @@ class ExecutionRow(Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True
     )
-    # B6(2026-11-06 日志报告整理,R11 轻量版):server 链执行本行的槽位号
+    # server 链执行本行的槽位号
     # ——对应 run 目录下 server-engine.log(槽位 0)/ server-engine-N.log。
     # launch 链与旧行为 None(引擎日志在 case 目录自带)。
     server_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # B3(登记册遗留工程项,2026-11-23):行级失败原因入库 —— 此前仅
+    # 行级失败原因入库 —— 此前仅
     # 存于工件(两击可达),顶层 error 只覆盖 dispatcher 级。两类来源:
     # 引擎结果错误(runError)与派发层异常(error,plate/熔断/未知)。
     # passed/canceled 行为 None;TEXT 不截断(写入口统一 [:2000] 防超长)。
@@ -235,7 +235,7 @@ class ExecutionRow(Base):
 
 
 class ExecutionStep(Base):
-    """步骤结果(B3,2026-11-06 日志报告整理):每个 ``step.end`` 一行。
+    """步骤结果:每个 ``step.end`` 一行。
 
     报告从本表渲染(不读文本日志);保留期随执行行——没有独立清扫,
     执行删除 CASCADE。事件 / 证据表 14 天清扫后,失败步骤的请求与
@@ -292,7 +292,7 @@ class ExecutionEvent(Base):
 
     __tablename__ = "execution_events"
 
-    # BIGINT(整体评审 2026-10-15 #10):每条事件/日志行消耗一个号,是
+    # BIGINT:每条事件/日志行消耗一个号,是
     # int4(约 21 亿)上限最先用尽的列;保留期清扫只删数据不回收号
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True,
                                     autoincrement=True)
@@ -342,13 +342,13 @@ class ExecutionEventEvidence(Base):
 
 
 class ExecutionJob(Base):
-    """C11（P3-01）：执行任务持久化队列。
+    """执行任务持久化队列。
 
     POST /api/runs 只入队（Execution 行 + 本表一行）；worker 经
     ``FOR UPDATE SKIP LOCKED`` 认领（PG；SQLite 测试链退化为普通子查询
     ——单连接测试无并发抢占面）。取消是 DB 位（``cancel_requested``），
-    worker 在行边界查询；进程内注册表（_in_flight/_cancel_requested/
-    信号量）随之退役。
+    worker 在行边界查询；取消不依赖进程内注册表/信号量
+    （ADR-0003 #23）。
 
     - attempts：认领次数。认领即 +1；超上限的僵尸回收直接失败收口
       （执行链不可假设幂等——重复下单面）。
@@ -389,9 +389,9 @@ class ExecutionJob(Base):
 
 # 不挂在真实场景上的执行形态集合(N3):scenario_id 写占位
 # <前缀>-<id>(见 Execution.kind 列注释)。suite_graph = Suite 编排;
-# adhoc = 临时调用(P3,2026-11-02 登记)。
+# adhoc = 临时调用。
 #
-# 语义边界(评审 2026-11-01 §3.2 拆判定):本集合只回答「执行是否
+# 语义边界(修复方案 2026-11-01 §3.2 拆判定):本集合只回答「执行是否
 # 挂在真实场景上」(可否按场景筛选/按配方重跑),**不回答**「是不是
 # Suite 编排」—— Suite 专属视图(routers/suites 的最近运行/混排/
 # rerun-failed、前端 SuiteRunsTab)只认 kind == "suite_graph" 直接

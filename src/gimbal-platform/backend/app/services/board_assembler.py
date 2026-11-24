@@ -5,7 +5,7 @@
 * 瓦片清单 — plate 轻量列表(EndpointView 自带 method/path/service,
   ``gimbal_plate/http/views.py:142``),网格不需要逐端点打 /full;
 * 槽② 用例覆盖 — 倒排索引 distinct scenario(**含锚点行**:零字段
-  锚点步同样算覆盖,2026-09-20 硬化);
+  锚点步同样算覆盖);
 * 槽③ 最近执行 — 引用场景的 executions,平台视角(**不做 owner 过滤**,
   与执行历史页的个人视图口径不同,方案 §2.4);终态规则「failed > 0 →
   failed」来自 dispatcher(`run_dispatcher.py:1157`),done 即全行通过;

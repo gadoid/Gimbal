@@ -22,7 +22,7 @@ def scan_auth_aliases(steps: list) -> list[str]:
 
 
 def step_auth_refs(step: dict) -> list[str]:
-    """单个步骤声明的身份引用(声明侧同 base 闸,2026-11-21):
+    """单个步骤声明的身份引用(声明侧同 base 闸):
 
     * 步骤字符串值里的 ``${auth.<alias>.*}`` 模板引用(headers/path/
       body/strategy 一网打尽,与 scan_auth_aliases 同正则);

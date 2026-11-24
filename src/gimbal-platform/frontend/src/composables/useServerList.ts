@@ -42,7 +42,7 @@ export interface UseServerListOptions<T, P extends ServerListParams> {
   debounceMs?: number
   /** q/page 写回 URL query(router.replace,不进历史)。默认 false。 */
   syncUrl?: boolean
-  /** 每页行数存用户偏好(pager.sizes 键,服务端+镜像;2026-09-23 批次)。 */
+  /** 每页行数存用户偏好(pager.sizes 键,服务端+镜像)。 */
   pagerKey?: string
   /** 初始页码(syncUrl 深链恢复;在 watch 注册前生效,不触发首拉)。 */
   initialPage?: number
@@ -66,7 +66,7 @@ function signature(p: ServerListParams): string {
 export function useServerList<T, P extends ServerListParams>(
   opts: UseServerListOptions<T, P>,
 ) {
-  // 2026-09-23 分页批次:pageSize 从定值改 ref,配合 Pagination 的每页行数
+  // pageSize 从定值改 ref,配合 Pagination 的每页行数
   // 选择器;改尺寸 → 回页 1 重拉(见 watch)。给了 pagerKey 则初始值/持久
   // 化交给用户偏好层(镜像管首帧,服务端管跨设备)。
   const pageSize = opts.pagerKey

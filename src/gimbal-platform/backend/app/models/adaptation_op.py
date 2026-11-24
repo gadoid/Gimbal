@@ -1,4 +1,4 @@
-"""适配 op 逐条状态(spec §3.4 / P3+P4 裁定,2026-08-21)。
+"""适配 op 逐条状态(spec §3.4 裁定)。
 
 ops 草案"逐条确认应用"要求每条 op 的状态跨会话持久化,batches 表无此
 结构。数据集类 op 亦填所属 scenario_id(回滚寻址);payload 存 op 参数
@@ -19,7 +19,7 @@ class AdaptationOp(Base):
     __tablename__ = "adaptation_ops"
     __table_args__ = (Index("ix_aop_batch", "batch_id"),)
 
-    # BIGINT(整体评审 2026-10-15 #10):事件型表与执行面同口径
+    # BIGINT:事件型表与执行面同口径
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     batch_id: Mapped[str] = mapped_column(String(64), nullable=False)
     # carry 值表类 op 无场景落点(spec §7/D1 红利)→ 可空

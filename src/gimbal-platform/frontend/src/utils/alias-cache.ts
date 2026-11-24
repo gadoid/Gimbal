@@ -1,5 +1,5 @@
 /**
- * alias-cache.ts — 服务条目懒加载**单源**(复核收口 2026-11-22)。
+ * alias-cache.ts — 服务条目懒加载**单源**。
  *
  * ServiceAdmin(矩阵网格)与 ExecConfigsView(换用槽位)此前各持一份
  * ensureAliases —— 缓存/加载态/错误态形状互异、互不可见,网络面却

@@ -55,7 +55,7 @@
               <div class="step-row"
                    :class="{ active: i === activeStepIdx, disabled: !orch.steps[i]?.enabled }"
                    @click="activeStepIdx = i">
-                <!-- 四区卡片(2026-09-08):左列全高拖拽把手(加大命中面积)+
+                <!-- 四区卡片:左列全高拖拽把手(加大命中面积)+
                      右侧内容列 — ①名称行(序号+名+开关) ②meta 行(method/
                      service/carry 同行定高) ③path 独占行 ④功能控制行(复制/删除) -->
                 <span class="step-handle" title="拖拽调整顺序">⠿</span>
@@ -72,7 +72,7 @@
                          无锚=外部别名·legacy(ext: 已退役)/未接入;见 stepVersionBadge) -->
                     <span v-if="stepVersionBadge(s)" class="ver-badge" :class="stepVersionBadge(s)!.cls">{{ stepVersionBadge(s)!.text }}</span>
                     <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认);
-                         与 method/service 同行定高(2026-09-08 免抖:预拉 /full 后点击不再补显) -->
+                         与 method/service 同行定高(免抖:预拉 /full 后点击不再补显) -->
                     <TooltipProvider :delay-duration="200">
                       <Tooltip v-if="carryInjectable(s).size">
                         <TooltipTrigger as-child>
@@ -304,7 +304,7 @@
               <p class="resp-spec-empty">正在从 plate 拉取接口字段契约…</p>
             </div>
             <div v-else-if="activeIoTab === 'request'" class="cf-item">
-              <!-- C 组(2026-10-14):GET/HEAD 的 body 引擎按 query 参数发,
+              <!-- C 组:GET/HEAD 的 body 引擎按 query 参数发,
                    标签随方法切换,不再让用户以为在写请求体 -->
               <!-- D9(登记册,2026-11-23):标签随 projMethod(契约投影优先,
                    步骤自带 method 兜底)响应 —— 契约加载后 GET 标签不再
@@ -461,7 +461,7 @@
             <h3>step 信息</h3>
           </div>
           <div v-if="currentStep" class="info-body">
-            <!-- C 组去重(2026-10-14):HTTP(method/path)与 service 已由
+            <!-- C 组去重:HTTP(method/path)与 service 已由
                  中栏步骤头承载,右栏复述只会两处不同步(锚点步骤 path 已
                  剥离,右栏显示"—"造成"中栏有右栏无"的矛盾)—— 删除。 -->
             <div class="info-block">
@@ -684,7 +684,7 @@ function _syncFs(): void {
   emit('update:fieldStates', { ...fsMap })
 }
 
-/** fsMap 整表替换 + 上抛(复核收口 2026-11-22:remove/copy/reorder 的
+/** fsMap 整表替换 + 上抛(remove/copy/reorder 的
  *  位置重映射与外部回流共用;reactive 对象不能整体换引用,原地清灌)。 */
 function _replaceFs(next: Record<string, Record<string, FieldState>>): void {
   for (const k of Object.keys(fsMap)) delete fsMap[k]
@@ -859,7 +859,7 @@ const justAddedStrategyIdx = ref(-1)
 // 切 step 时清"刚添加"标记(下标在新 step 语境无意义,防误展开);签页回 request
 watch(activeStepIdx, () => { justAddedStrategyIdx.value = -1; jumpTargetIdx.value = -1; activeIoTab.value = 'request' })
 
-/** 步骤流视口跟随(2026-09-08 6 卡滚动视口):选中/增删后选中卡滚入可视区
+/** 步骤流视口跟随(6 卡滚动视口):选中/增删后选中卡滚入可视区
  *  (nearest — 已可见则不动,新增末卡/删除收紧时兜住选中项)。
  *  jsdom 无 scrollIntoView → 可选调用,挂载级测试零桩也稳。 */
 const stepListRef = ref<HTMLElement | null>(null)
@@ -1331,8 +1331,8 @@ const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
 
 /**
  * 查询上下文(§7.2/§6.1;2c 换源;01-04 地址解析移交后端):
- * 地址不再走 authored config.services 内嵌声明(地址面已随 D2 环境
- * 退役,新场景恒空 ⇒ 修前恒 service_url_required)—— 已保存场景带
+ * 地址不走 authored config.services 内嵌声明(ADR-0003 #13:地址面退役,
+ * 新场景恒空 ⇒ 恒 service_url_required)—— 已保存场景带
  * scenarioId + stepIndex,由后端按执行链同款解析(步骤服务 → 生效
  * 身份 → 标签链 → 部署表);未保存草稿无稳定 scenarioId,不带上下文,
  * 后端 query_context_required 的文案即「先保存再查」提示。
@@ -1355,7 +1355,7 @@ function resolveQueryContext(step: StepView): {
   }
 }
 
-/** 查询别名·首选(§6.1 修订 11,2026-09-10 同域多用户裁定):当前 step
+/** 查询别名·首选(§6.1 修订 11,同域多用户裁定):当前 step
  *  headers 的 `${auth.<tag>.…}` 引用首命中 → 该 tag 即查询别名 —— headers
  *  引用就是该步执行身份的声明,查询视角 = 执行视角(构造消解恢复至每凭证
  *  粒度:为 B 的列查到的候选就是 B 能用的)。解析复用 utils/tpl-refs
@@ -1374,7 +1374,7 @@ function headerAuthTagOf(step: StepView): string | null {
  *  步骤服务本身是已登记条目时优先自身(执行视角 = 查询视角,修订 11
  *  延伸),否则同基条目(aliasCandidates 同口径)。「装载」判定 =
  *  pickAccountLikeBackend(镜像后端 run_prepare._pick_account_
- *  deterministic,2026-11-22 单源更名;§8.3 引用
+ *  deterministic 单源更名;§8.3 引用
  *  不校验标签)× 本人池 —— 与查询视图 loader「按 alias 从本人池取,
  *  不吃快照」同池同序,选中的候选执行时必查得到。无装载条目 → null
  *  诚实 422(不再回退 authored users 旧值:那是治理要清的陈旧凭证)。
@@ -1655,7 +1655,7 @@ const requestInjected = computed<Record<string, Array<{ source: string; target: 
   return out
 })
 
-/** 请求体字段提取态(域感知提取,2026-09-05):expression 命中
+/** 请求体字段提取态(域感知提取):expression 命中
  *  $.call.request.body<path> 的 extract → 携带 varName/expression 供提示
  *  悬停。提取运行时只读取不覆盖 — FieldForm 值控件保持可编辑,仅显
  *  「已提取」提示(与 assign 注入态的只读化分面,key 同为 path)。 */
@@ -1774,7 +1774,7 @@ const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 // (画布 / 断言管理编辑器共用一份),此处只消费。
 
 
-/** 当前 step 的 /full 拉取状态(scoped,2026-09-08):预拉让全部端点并发,
+/** 当前 step 的 /full 拉取状态(scoped):预拉让全部端点并发,
  *  全局单值会跨端点串台(另一步失败盖到当前步头);改按当前端点判 —
  *  失败记录 → failed(**优先**,即便缓存里还留着上一份面)/
  *  缓存命中 → '' / 其余(未回填)→ loading。 */
@@ -1805,7 +1805,7 @@ async function retryCurrentFull(): Promise<void> {
   try { await ensureEndpointFull(eid, { force: true, ref: refOfStep(currentStep.value) }) } finally { fullRetrying.value = false }
 }
 
-/** carry 免抖预拉(2026-09-08):进页即拉全部 step 的 /full — 徽标从进页起
+/** carry 免抖预拉:进页即拉全部 step 的 /full — 徽标从进页起
  *  即终值,点击卡片不再触发徽标补显(布局抖动根因)。同端点经会话缓存/
  *  in-flight 去重;这些请求原本在逐个点开时也要发,只是提前。 */
 const stepEndpointIds = computed(() =>
@@ -1932,7 +1932,7 @@ function ensureMyAccounts(): Promise<void> {
 // (模板引用写条目名,执行时按执行者本人池解析)。拉取失败静默 —
 // 预填只是辅助,不绑也能手工选。
 const aliasSlotMap = ref<Record<string, string>>({})
-/** F4(2026-09-23):注册表全量行 —— 下拉「已登记」来源 / headers 模板
+/** 注册表全量行 —— 下拉「已登记」来源 / headers 模板
  *  注入共用同一次拉取(前端只展示,不做任何派生;M2a S6 起别名不再带
  *  base_url,地址由执行环境的部署地址给出)。 */
 const registeredAliases = ref<ServiceAliasRow[]>([])
@@ -2300,7 +2300,7 @@ async function onAddEndpoint(ep: any) {
 }
 
 function removeStep(i: number) {
-  // fsMap 位置重映射(复核收口 2026-11-22):删除步后,其后步骤左移
+  // fsMap 位置重映射:删除步后,其后步骤左移
   // 一格 —— 不重映射会把字段状态串到错位的步骤;被删步的状态丢弃。
   const moved: Record<string, Record<string, FieldState>> = {}
   for (const [k, v] of Object.entries(fsMap)) {
@@ -2315,12 +2315,12 @@ function removeStep(i: number) {
 }
 
 /**
- * 控制行「复制」(2026-09-08):深拷贝 step + orch 元数据,插入紧随其后。
+ * 控制行「复制」:深拷贝 step + orch 元数据,插入紧随其后。
  * step 数据本体不可加字段(草稿原样进 /convert),JSON 深克隆即纯副本;
  * WeakMap 侧挂 key 对新对象按需分配,无需处理。
  */
 function copyStep(i: number) {
-  // fsMap 位置重映射(复核收口 2026-11-22):副本插入 i+1,其后步骤
+  // fsMap 位置重映射:副本插入 i+1,其后步骤
   // 右移一格;副本 = 全新步骤,**不继承**原步字段状态。
   const moved: Record<string, Record<string, FieldState>> = {}
   for (const [k, v] of Object.entries(fsMap)) {
@@ -2362,7 +2362,7 @@ function stepKey(s: object): number {
 function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   const { oldIndex, newIndex } = evt
   if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
-  // fsMap 位置重映射(复核收口 2026-11-22):拖拽重排后,被移动步与其
+  // fsMap 位置重映射:拖拽重排后,被移动步与其
   // 途经步骤的位置都变 —— 不重映射同样串数据。
   const moved: Record<string, Record<string, FieldState>> = {}
   for (const [k, v] of Object.entries(fsMap)) {
@@ -2472,7 +2472,7 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 }
 .add-step:hover { background: var(--accent-hover, var(--accent-hover)); }
 
-/* step list — 6 卡滚动视口(2026-09-08):>6 卡出滚动条,卡定高 90px;
+/* step list — 6 卡滚动视口:>6 卡出滚动条,卡定高 90px;
    细滚动条 6px 圆角(进度条观感) */
 .step-list {
   display: flex; flex-direction: column; gap: 0.375rem; flex: 1;
@@ -2488,7 +2488,7 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 .step-list::-webkit-scrollbar-thumb:hover { background: var(--c-text-tertiary); }
 /* draggable 容器接管行布局与行间距(行现在挂在这一层,不再直接挂 .step-list) */
 .step-drag-area { display: flex; flex-direction: column; gap: 0.375rem; }
-/* 拖拽手柄:左列全高把手条(2026-09-08 加大命中面积 — 整条左缘 24×74
+/* 拖拽手柄:左列全高把手条(加大命中面积 — 整条左缘 24×74
    皆可发起拖拽),grab 光标;仅手柄列可拖(handle 限定),
    行其余区域仍是点击选中 */
 .step-handle {
@@ -2517,7 +2517,7 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 .ver-badge.v-external { background: rgba(100, 116, 139, .14); color: var(--color-text-strong); }
 .ver-badge.v-unknown { background: rgba(220, 38, 38, .1); color: #b91c1c; }
 .step-row.sortable-ghost { opacity: 0.4; border-style: dashed; }
-/* 四区卡片(2026-09-08):左把手列 + 右内容列;定高 90px = 8pad + 名称行
+/* 四区卡片:左把手列 + 右内容列;定高 90px = 8pad + 名称行
    (flex≈20) + 3gap + meta 15 + 3gap + path 13 + 3gap + 控制行 17 + 8pad;
    定高同时是 6 卡视口计量基准与徽标补显免抖兜底 */
 .step-row {
@@ -2584,7 +2584,7 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   background: var(--soft-neutral-bg); color: var(--color-text-strong);
   max-width: 6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* ③ path 独占行(2026-09-08):不再与 meta 挤一行,尾部截断;
+/* ③ path 独占行:不再与 meta 挤一行,尾部截断;
    api-summary 里同名 span 沿用(行内 13px 定高不破坏其 flex 行) */
 .ep-path {
   flex: 0 1 auto; min-width: 0; height: 0.8125rem; line-height: 0.8125rem;

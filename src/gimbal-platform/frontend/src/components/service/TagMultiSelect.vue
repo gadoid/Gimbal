@@ -1,4 +1,4 @@
-<!-- TagMultiSelect.vue — 多标签选择器(2026-11-18 一实例多标签)。
+<!-- TagMultiSelect.vue — 多标签选择器(一实例多标签)。
 
      形制对齐页面既有原生 select(.field-input):同高/同边框/同圆角,
      右侧小 chevron;已选标签以芯片显示在框内。点开后面板 = 现有标签

@@ -1,4 +1,4 @@
-"""分享(副本)P2 请求/响应模型 —— S7.4 引用模式退役后仅剩 copy。"""
+"""分享(副本)请求/响应模型 —— 仅 copy 模式(引用模式退场,ADR-0003 #20)。"""
 from __future__ import annotations
 
 from typing import Literal
@@ -12,7 +12,7 @@ class ShareCreateIn(BaseModel):
     resourceType: Literal["scenario", "suite"]
     resourceId: str = Field(min_length=1, max_length=128)
     granteeUserId: int
-    # S7.4:ref 模式已退役;显式传 "ref" → 422(枚举收窄)
+    # ref 模式已退役(ADR-0003 #20);显式传 "ref" → 422(枚举收窄)
     mode: Literal["copy"] = "copy"
 
 

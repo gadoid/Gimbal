@@ -337,7 +337,7 @@ function anchorReasonLabel(r: ImportAnchorEntry['reason']): string {
     default: return '未知原因'
   }
 }
-// 计数按当前决策取(复盘 2026-10-15:切换决策接管面不同,确认内容必须
+// 计数按当前决策取(切换决策接管面不同,确认内容必须
 // 与实际执行一致);旧负载无 countsByDecision 时回落顶层建议计数
 function toAliasCount(row: ImportServiceRow): number {
   return row.countsByDecision?.[decision(row)]?.fieldsToAlias ?? row.fieldsToAlias

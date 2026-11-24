@@ -1,10 +1,10 @@
-"""外部系统集成 P1 路由:功能(模板)CRUD + 手动执行 + 批量卡片 +
+"""外部系统集成路由:功能(模板)CRUD + 手动执行 + 批量卡片 +
 令牌注册面。
 
-《GIMBAL-外部系统集成架构设计》§9 + webhook v4 §5.2:模板软删(评审
-E7);令牌注册的任务按 ``token_id`` 隔离(令牌只能管理本令牌注册的);
-JWT 管理者可解绑令牌(D26)。平台模板(属主 ``__platform__``)由 Admin+
-维护(``_can_manage``);平台凭证面随 authz C1 退役。
+《GIMBAL-外部系统集成架构设计》§9 + webhook v4 §5.2:模板软删;
+令牌注册的任务按 ``token_id`` 隔离(令牌只能管理本令牌注册的);
+JWT 管理者可解绑令牌。平台模板(属主 ``__platform__``)由 Admin+
+维护(``_can_manage``);平台凭证面随平台模式退役。
 """
 from __future__ import annotations
 
@@ -55,10 +55,10 @@ async def _can_manage(db, user, tpl: IntegrationTask) -> bool:
     """模板改动权(S1.7 收编 D10 显式标记):属主 ∨ 平台模板 ×
     ops.write —— 平台模板的写权 = 公共项目的项目管理员(Admin+)。
     判定不再比对 ``__platform__`` 属主:删用户软删模板挂靠到
-    ``__platform__`` 的行(D10 起直接删除)与真正的平台模板靠
+    ``__platform__`` 的行与真正的平台模板靠
     ``is_platform_template`` 区分,软删挂靠行不再被误判为可管理。
 
-    01-03 §4.1(2026-11-24):**普通项目模板的属主身份不再替代当前
+    **普通项目模板的属主身份不再替代当前
     成员关系** —— 被移出项目的创建者,模板已不可见(``_visible`` 前置
     → 404),亦不得凭已知 ID 修改/删除。私有模板(属主自留地)与
     公共项目模板(无成员概念)沿用属主直通。"""
@@ -121,9 +121,9 @@ async def _tpl_instance(db: AsyncSession, tpl_id: int,
 async def _managed_instance(
     db: AsyncSession, tpl: IntegrationTask,
 ) -> IntegrationTask | None:
-    """管理动作(解绑 D26 等)的目标实例 —— 注册方(属主)自己的实例
-    (评审 2026-11-05 P2:此前取「该模板 id 最小的实例」,只是靠创建
-    顺序碰巧正确 —— 订阅者实例先建时暂停会落到别人头上)。authz C1:
+    """管理动作(解绑等)的目标实例 —— 注册方(属主)自己的实例
+    (此前取「该模板 id 最小的实例」,只是靠创建顺序碰巧正确 ——
+    订阅者实例先建时暂停会落到别人头上的陷阱)。
     平台唯一实例分支随平台模式退役。"""
     holder = tpl.owner_id
     if holder is None:
@@ -199,9 +199,9 @@ async def _tpl_out_full(
     db: AsyncSession, tpl: IntegrationTask,
     inst: IntegrationTask | None, user: User,
 ) -> dict:
-    """W0b④ 消费面组装:authAliases / missingCredentials / subscribed。
+    """消费面组装:authAliases / missingCredentials / subscribed。
     missing 的持有人 = 当前查看者(「我缺什么」)。令牌面:tokenId/
-    tokenName 一并回显。authz C1:平台持有人口径退役。"""
+    tokenName 一并回显。平台持有人口径随平台模式退役。"""
     from ..models.access_token import AccessToken
     aliases = await integration_runner.auth_aliases_view(db, tpl)
     holder = user.id
@@ -530,11 +530,10 @@ async def patch_task(
                        "平台模板恒为公共,不能转私有(不再需要可删除)",
                        409)
         if "tokenId" in body.model_fields_set:
-            # D26 解绑:token_id 置空、停回调、按 §3.6 实例暂停规则处置
+            # 解绑:token_id 置空、停回调、按 §3.6 实例暂停规则处置
             # (钩子不再拉起,之后手动启动;平台任务仍受 #5 与只读闸)。
             # token_*/resource_not_allowed 暂停同样改 manual —— 否则
-            # 恢复接口 409 提示「先解绑」,解绑后仍 409,死循环
-            # (评审 2026-11-05 P0)。
+            # 恢复接口 409 提示「先解绑」,解绑后仍 409,死循环。
             if body.tokenId is not None:
                 raise _bad(
                     "token_rebind_not_allowed",
@@ -544,7 +543,7 @@ async def patch_task(
             unbind_token_id = tpl.token_id
             tpl.token_id = None
             tpl.callback_path_override = None
-            # 目标实例显式定位(评审 2026-11-05 P2):按身份模式取
+            # 目标实例显式定位:按身份模式取
             # 属主/平台实例,不再取「id 最小的实例」(靠创建顺序)。
             inst = await _managed_instance(db, tpl)
             if inst is not None:
@@ -651,7 +650,7 @@ async def patch_task(
 
 @router.delete("/tasks/{task_id}")
 async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
-    """软删(评审 E7):卡片走「已移除」态,订阅者可见可自行删卡。
+    """软删:卡片走「已移除」态,订阅者可见可自行删卡。
     令牌(§2.2):只能删本令牌注册的,否则 404。"""
     user = principal.user
     tpl = await db.get(IntegrationTask, task_id)
@@ -667,7 +666,7 @@ async def delete_task(task_id: int, principal: PrincipalIn, db: DbSession) -> di
         raise _bad("forbidden", "只有模板管理者能删除", 403)
     tpl.removed_at = datetime.now(timezone.utc)
     await db.commit()
-    # W2(G-E):模板删除通知持有人(卡片转「已移除」态,但按 cron 等
+    # 模板删除通知持有人(卡片转「已移除」态,但按 cron 等
     # 结果的用户只见「过期」—— 发一条人话通知)
     await integration_runner.notify_subscribers(
         tpl,
@@ -791,10 +790,9 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
         raise _bad(
             "subscription_required",
             "尚未订阅该任务,请先订阅确认后再执行", 409)
-    # 2-5(2026-10-13):naive utcnow() 与 PG 读回的 aware 时间相减必炸
-    # (SQLite 读回 naive 一直没暴露)。now 侧直接取 aware UTC。
+    # naive utcnow() 与 PG 读回的 aware 时间相减必炸 —— now 侧直接取 aware UTC。
     now = datetime.now(timezone.utc)
-    # C-4(2026-10-13):占用判定改条件更新(CAS)
+    # 占用判定改条件更新(CAS)
     if not integration_runner._inflight_ok(tpl, inst.holder_id):
         raise _bad("inflight_limit", "在飞实例数已达上限,稍后再试", 429)
     from sqlalchemy import update as sa_update
@@ -1056,7 +1054,7 @@ async def _resume_instance(db: AsyncSession, tpl: IntegrationTask,
 
 #: 「启动」放行的暂停原因(§3.3 恢复入口):manual/fail_streak 可直接
 #: 恢复;scope_denied(场景公开后)/ resource_not_allowed(缺项处置后)
-#: 条件由管理者满足后启动,下次运行再过复核闸。M3 §8.5(2026-11-17):
+#: 条件由管理者满足后启动,下次运行再过复核闸。§8.5:
 #: precheck_config = 定时路径预检硬门的标签/地址域暂停码 —— 修正
 #: 环境/地址/条目标签配置后人工恢复(凭证域命中沿用 missing_credential,
 #: 复活钩子自动恢复,不走本码)。token_* 三类各有专属路径,不由
@@ -1084,7 +1082,7 @@ async def pause_my_subscription(
         inst.paused_reason = "manual"
         # 清掉上一轮运行的失败说明:manual 横幅/快照的 lastError 面只该
         # 出解绑与处置写入的备注(remap_detach_pause),陈旧运行错误当
-        # 暂停说明展示会误导(评审 2026-11-05 收敛检查);与重新确认
+        # 暂停说明展示会误导;与重新确认
         # 解除暂停时的清空同口径。
         inst.last_error = ""
         await db.commit()

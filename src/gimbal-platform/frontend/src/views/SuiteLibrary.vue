@@ -1,5 +1,5 @@
 <!-- SuiteLibrary.vue — 场景集(原型 02,Suite 层重构第 2 步;2026-10-10
-     IA:独立成组;2026-11-10 IA:并入侧栏「我的」组,页面更名场景集)。
+     IA:独立成组;后并入侧栏「我的」组,页面更名场景集)。
      页头 + 搜索 / 模式筛选 + 表格
      (Suite · 模式 · 成员 · 最近运行 · 操作)。草稿带「草稿」标记;
      「共享给我的」独立分区(§7.11);「公共用例集」链接到独立公共页。
@@ -228,7 +228,7 @@ const modeFilters = [
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
-// 计数走 count 常驻;说明收进问号悬浮(2026-11-05 说明统一轮)。
+// 计数走 count 常驻;说明收进问号悬浮。
 // 「全员视角」镜头退役:本页恒 scope=private,所有角色同一句说明。
 const subtitle = '一组场景及其运行编排 · 你创建的(草稿也在这里,带「草稿」标记)'
 
@@ -343,7 +343,7 @@ async function copySuite(s: SuiteSummary): Promise<void> {
   }
 }
 
-/** ⋯ 发布(2026-10-10 补,对齐管理页口径):确认前按成员 visibility
+/** ⋯ 发布(对齐管理页口径):确认前按成员 visibility
  *  列出将被级联公开的成员(§7.9 不做静默级联),再调 publish。 */
 async function publishSuite(s: SuiteSummary): Promise<void> {
   try {

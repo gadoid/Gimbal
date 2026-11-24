@@ -3,7 +3,7 @@
  *
  * 此前 ExecutionsList.vue 与 Executions.vue 各自维护一份内容相同的
  * 映射；新增状态（如 cancelled）需要改两处。
- * （V3 起 run 级状态已随 exec_runs 退役，仅保留 Execution 状态；
+ * （V3 起 run 级状态随 exec_runs 退场(ADR-0003 #14),仅保留 Execution 状态;
  * running = 认证解析通过、行分发开始，终态由 dispatcher 覆写。）
  */
 export const EXECUTION_STATUS_LABELS: Record<string, string> = {
@@ -19,7 +19,7 @@ export function executionStatusText(s: string): string {
 }
 
 /**
- * 行级状态 → 人话(B-3,2026-10-14):内部码直接外露用户看不懂
+ * 行级状态 → 人话:内部码直接外露用户看不懂
  * (plate_rejected 什么意思?去哪修?)。映射只做「是什么 + 去哪看」,
  * 具体原因在 error 字段/行工件里。未收录码原样显示(不吞信息)。
  */

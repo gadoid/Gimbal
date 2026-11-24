@@ -1,4 +1,4 @@
-"""AuthAccount 唯一约束 IntegrityError 分派单源(复核收口 2026-11-22)。
+"""AuthAccount 唯一约束 IntegrityError 分派单源。
 
 auth_sessions(个人池 create/patch)与 project_credentials(项目池
 create/patch)四处此前 blanket 映射「同名账户已存在」—— 默认位部分

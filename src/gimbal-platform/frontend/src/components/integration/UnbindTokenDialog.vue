@@ -1,6 +1,6 @@
 <!-- UnbindTokenDialog.vue — 解绑令牌确认(D26:4 条说明,原型
      IntegrationDetail「解绑令牌 · 确认」)。集成中心与集成详情共用;
-     第 3 条按身份模式区分(评审 2026-11-05 P2:平台任务解绑后仍以
+     第 3 条按身份模式区分(平台任务解绑后仍以
      平台身份运行)。确认即 PATCH tokenId:null,完成后交由父级刷新。 -->
 <template>
   <Dialog :open="open && !!task" @update:open="(v) => !v && emit('close')">

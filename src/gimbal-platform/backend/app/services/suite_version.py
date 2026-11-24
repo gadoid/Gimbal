@@ -113,7 +113,7 @@ async def check_and_resolve_suite_versions(
                 # plate 不可用:上层统一处理(materialize 链转执行失败)
                 raise
             except Exception as exc:
-                # B-1(2026-10-13):成员声明了不存在的修订等 resolve 拒绝
+                # 成员声明了不存在的修订等 resolve 拒绝
                 # —— 此前 except Exception: continue 把该成员的约束静默
                 # 剔出交集,Suite 照常执行且台账无痕。必须显式报错。
                 raise SuiteVersionError(

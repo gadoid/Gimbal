@@ -80,9 +80,9 @@ export interface SuiteMemberItem {
 }
 
 export interface SuiteDetail extends SuiteSummary {
-  /** §4.2(2026-11-24):member = 普通项目非属主成员(access 按普通/公共
+  /** §4.2:member = 普通项目非属主成员(access 按普通/公共
    *  项目分权投影;canEdit/canRun 随表 B 真值,不再被误标公共只读)。 */
-  access: 'owner' | 'admin' | 'member' | 'public' | null  // S7.4:ref 随引用分享退役
+  access: 'owner' | 'admin' | 'member' | 'public' | null  // 引用分享退场(ADR-0003 #20),恒四值
   canEdit: boolean | null
   canRun: boolean | null
   canShare: boolean | null

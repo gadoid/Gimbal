@@ -202,8 +202,8 @@ async def list_tokens(
                                                max_length=16)] = None,
 ) -> dict:
     """令牌列表。``kind=personal``:本人;``all=1``(users.manage):
-    全部,可按属主(id 或用户名/昵称模糊,2026-11-05 评审 P2-6:管理员
-    通常不知道数字 id)与状态过滤。authz C1:kind=platform 面退役。
+    全部,可按属主(id 或用户名/昵称模糊 —— 管理员
+    通常不知道数字 id)与状态过滤。kind=platform 面随平台模式退役。
     不返回明文与密钥。"""
     if all_view:
         if not has_capability(user, "users.manage"):
@@ -326,7 +326,7 @@ async def create_token(
                 at.ERR_CALLBACK_HOST_NOT_ALLOWED,
                 "回调主机不在白名单内(联系管理员配置 CALLBACK_HOST_"
                 "ALLOWLIST;空白名单 = 不允许任何回调地址)")
-    # 与 PUT /scope 同款范围对象校验(评审 2026-11-05 P2:此前直写
+    # 与 PUT /scope 同款范围对象校验(此前直写
     # _write_scope,别名不存在触发外键 500、他人凭证 id 落脏数据)
     await _validate_scope_candidates(db, owner_id, body.scope)
 

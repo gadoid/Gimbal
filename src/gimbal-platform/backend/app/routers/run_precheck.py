@@ -43,7 +43,7 @@ PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 _MAX_BATCH = 20
 
-# ── M3 预检硬门(redesign §8.5,2026-11-17)────────────────────────
+# ── 预检硬门(redesign §8.5)────────────────────────
 # 三条派发路径(UI/JWT、access token、webhook 定时)统一硬拦截:把
 # 「告警不拦截」的缺项升级为派发前 409,错误时机从引擎步骤级报错前移。
 # 判定与 ``_precheck_one`` 共享一套分类私有函数(本文件);唯一实现,
@@ -116,7 +116,7 @@ class PrecheckResult(BaseModel):
     scope_missing: list[dict] = Field(default_factory=list, alias="scopeMissing")
     # S8 收口:身份条目在执行人**个人池**未装载(与派发 fail-fast 同源
     # pick_bindings 取用差集;空 = 全部可取用)。歧义单列(复核收口
-    # 2026-11-22:同引用多候选无同标签唯一命中,执行将 409
+    # 同引用多候选无同标签唯一命中,执行将 409
     # account_ambiguous —— 混标「缺失」误导排障)
     missing_auths: list[str] = Field(default_factory=list, alias="missingAuths")
     ambiguous_auths: list[str] = Field(default_factory=list, alias="ambiguousAuths")
@@ -350,7 +350,7 @@ async def _precheck_one(
         if _env is None or _env.env_id is None:
             result.env_unspecified = not _env_mixed
         # 取用按换用后条目判(与派发漏斗同折叠;报告键回声明名)。
-        # 复核收口(2026-11-22):missing/ambiguous 分类 —— 歧义条目
+        # missing/ambiguous 分类 —— 歧义条目
         # (同引用多候选,执行 409)不再混标「缺失」误导排障;闸面
         # 行为不变(两者均不可取用)。
         _picked, _pmiss, _pamb = await pick_bindings_full(
@@ -548,7 +548,7 @@ async def precheck_hard_gate(
     cls = await _gate_classify_identities(
         db, auth_aliases=auth_aliases, user_id=user_id,
         cred_project_id=cred_project_id, slot_map=slot_map,
-        # D2 收口(2026-11-22):setup/teardown 条目并入登录态面扫描 ——
+        # setup/teardown 条目并入登录态面扫描 ——
         # 其 params 可含 ${auth.*} 裸引(经 setup_teardown_nodes 进
         # auth_aliases,却漏在 steps-only 的 login_required 外),登录口
         # 缺失预检绿、运行期才暴露(引擎静态令牌降级步骤级 401)。

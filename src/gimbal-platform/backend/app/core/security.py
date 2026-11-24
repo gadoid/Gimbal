@@ -15,7 +15,7 @@ _fernet = Fernet(settings.FERNET_KEY.encode())
 
 
 # ─── Password ───────────────────────────────────────────────
-# 直接使用 bcrypt(整体评审 2026-10-15 #6:passlib 已停止维护,且迫使
+# 直接使用 bcrypt(passlib 已停止维护,且迫使
 # bcrypt 锁在 <4.1)。存量 passlib 产出的 $2b$ 哈希与 bcrypt 原生格式
 # 相同,可直接校验。passlib 对 >72 字节口令静默截断,bcrypt>=5 改为
 # 抛错 —— 这里按 passlib 同口径截断到 72 字节,存量长口令仍可登录。

@@ -17,13 +17,13 @@ from .board_card import BoardCard
 from .environment import Environment
 # 部署表(M2a S2:地址第 ③ 层按 (基础服务, 环境) 取址)
 from .deployment import Deployment
-# ⑤(2026-10-13)补注册:此前未进 __init__ —— 空库 baseline 的
-# create_all 看不到该表时由迁移用 sa.JSON 兜底建列,PG 上落下
-# json(模型口径 JsonVar=jsonb),SQLite 面看不出漂移。
+# 补注册:此前未进 __init__ —— 空库 baseline 的
+# create_all 看不到该表时由迁移用 sa.JSON 兜底建列,PG 上落成
+# json(模型口径 JsonVar=jsonb)。
 from .integration_task import IntegrationTask
-# 权限域新表(M2 = P1a:只建表不上码;接口代码随 M2.5/P2)
+# 权限域新表
 from .permission import AuditLog, Notification, UserPref, UserStar
-# 场景域事件日志(2026-09-23 批次 F3:时间线唯一数据源)
+# 场景域事件日志(时间线唯一数据源)
 from .activity_event import ActivityEvent
 # 访问令牌(webhook v4)+ 回调投递行
 from .access_token import AccessToken, AccessTokenScope

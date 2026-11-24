@@ -1,7 +1,7 @@
-"""权限域新表(PG迁移方案 §2.2 / 权限方案 §3.3/§6,M2 = P1a 只建表不上码)。
+"""权限域新表(PG迁移方案 §2.2 / 权限方案 §3.3/§6)。
 
-* ``UserStar`` — 收藏入库,吞掉 DB 外的 data/stars.json(marks_store
-  M6 退役);双 FK CASCADE(收藏随场景/用户机械消失,无业务处置语义 —
+* ``UserStar`` — 收藏入库(ADR-0003 #22;``data/stars.json`` 不再在
+  DB 外);双 FK CASCADE(收藏随场景/用户机械消失,无业务处置语义 —
   §2.1 FK 映射表:Python 删得到但**不该管**)。
 * ``Notification`` — 站内通知(权限方案 §3.3 DDL 照抄);批量 upsert
   的并发命中面 = partial unique (user_id, type, batch_id)。
@@ -32,8 +32,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..core.db import Base
 from ._types import JsonVar, UtcDateTime
 
-# SQLite 只对 INTEGER PRIMARY KEY 做 rowid 自增;BIGINT 主键在本地/测试
-BigIntPK = BigInteger()   # SQLite 方言退化已随其退役移除(2026-10-14)
+# PG-only(ADR-0003 #18):无 SQLite rowid 方言退化分支
+BigIntPK = BigInteger()
 
 
 class UserStar(Base):
@@ -79,7 +79,7 @@ class Notification(Base):
     link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 批量执行聚合通知的归并键(§3.2 批量合并)
     batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # 资源维度归位(2026-09-23 批次 F1 分发):悬浮标签按
+    # 资源维度归位:悬浮标签按
     # (user_id, type, resource_type) 查未读;payload 存发送方/原名等
     # 结构化数据。全可空 —— 仅 resource_handoff 类通知填写,存量行
     # 不回填(消费查询过滤新类型,无脏读面)。
@@ -115,7 +115,7 @@ class AuditLog(Base):
         Index("ix_audit_created", "created_at"),
         Index("ix_audit_action", "action", "created_at"),
         # 0033 建(令牌「最近调用」查询,v4 §7.2);此前漏声明,增量升级门
-        # compare_metadata 一直报 1 项库有模型无 —— 补齐即消(2026-11-06)
+        # compare_metadata 一直报 1 项库有模型无 —— 补齐即消
         Index("ix_audit_resource", "resource_type", "resource_id"),
     )
 

@@ -16,7 +16,7 @@
   子列表用就地展开(非 el-dropdown 嵌套子菜单 — 测试与 a11y 都更稳)。
   injected=true(字段已挂 assign)时 引用/设为变量/注入 三项禁用 —
   值写入必被运行时覆盖,防矛盾态;提取/断言不受影响。
-  容器区块头同样五项齐全(2026-09-05 恢复值写入项):整容器值替换为
+  容器区块头同样五项齐全(恢复值写入项):整容器值替换为
   ${var.x} 串后由 FieldForm 容器模板态渲染承载(单行模板输入替行组/
   KV 编辑,清空恢复结构编辑)— 与目录化前整容器叶子的能力对齐。
 -->
@@ -207,7 +207,7 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
   display: flex; align-items: center; justify-content: center;
 }
 .cand-btn:hover { background: var(--color-border-tertiary); color: var(--color-text-strong); }
-/* ☰ 外置侧钮(2026-09-14 改版):此前 absolute 叠在填写框内
+/* ☰ 外置侧钮:此前 absolute 叠在填写框内
    (right:0.25rem,与候选 ▾ 同位)— 改静态 flex 项放置到填写框旁边,
    增大加粗;样式对齐 FieldForm .var-btn 侧钮先例(30px/1.5px 边)。
    行排分支随输入框拉伸高度(align-items:stretch);col 分支

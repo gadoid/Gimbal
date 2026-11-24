@@ -320,7 +320,7 @@ async def _query_sut(
     except ValueError as e:   # 2xx 但非 JSON 体(网关 200 text/html / 截断)
         raise QueryViewError(
             "shape_drift", f"响应体非 JSON(SUT/网关拦截?): {e}") from e
-    # 业务码信封检测(§13.8 首连测实证,2026-09-10):fin SUT 的凭证失效在
+    # 业务码信封检测(§13.8 首连测实证):fin SUT 的凭证失效在
     # 业务码层应答(HTTP 200 + code=401/407 + 空 data;407 msg="登录已过期"
     # = 坏头/死 token 的统一应答)—— HTTP 层不可见,死凭证会被当"合法空行集"
     # 静默缓存/供数(§7.5 降级态不可达)。携 code 键且非成功码 → 错误处理
@@ -384,7 +384,7 @@ async def fetch_rows(
     if not service_url or not service_url.startswith(("http://", "https://")):
         raise QueryViewError("service_url_required",
                              "service_url 缺失(服务绑定未解析)", status=422)
-    # 修订 11(2026-09-10):L1/单飞键 = (view, 查询凭证)——同视图异凭证
+    # 修订 11:L1/单飞键 = (view, 查询凭证)——同视图异凭证
     # 各自缓存/单飞,权限视角不在缓存层串台(A 先查、B 不吃 A 的行集);
     # auth=none 视图无凭证分量(可见性与凭证无关,全局共享,§5.1)。
     cred_id: "tuple[int, str] | None" = (

@@ -49,7 +49,7 @@ def _to_payload(s: RunScheme) -> dict:
 
 async def _require_env(db, body: RunScheme) -> None:
     """写时校验:S6 绑定选的别名须存在且与服务键同基础服务。
-    (方案环境链位已随 §8.2 退役 —— environmentId 不再收不再校验。)"""
+    (方案不携带环境链位,ADR-0003 #21 —— environmentId 不再收不再校验。)"""
     from ..services.service_aliases import (BindingAliasInvalid,
                                             validate_binding_aliases)
     try:

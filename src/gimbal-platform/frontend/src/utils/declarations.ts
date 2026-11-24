@@ -331,7 +331,7 @@ export function cascadeIncrements(
         out[a.path] = 'collapse'
       }
     }
-    // 拉起共识默认 carry 的子孙(2026-09-14,sink 镜像):目录 carry 家族
+    // 拉起共识默认 carry 的子孙(sink 镜像):目录 carry 家族
     // 翻面后,子孙条目仍 carry 会被 buildTree 剪枝(不可见不可配)—
     // 共识默认跟家族走,整树拉起落 target。显式 carry 增量的子孙不动
     // (form 容器下的 carry 叶子是合法局部传递意图,后端 carry_face
@@ -710,7 +710,7 @@ function containerBinding(
 }
 
 /**
- * 树容器平摊(匹配面,2026-09-05 注入粒度 P6):object/array/dict 节点
+ * 树容器平摊(匹配面):object/array/dict 节点
  * → IOFieldBinding[](实例路径,行内嵌套容器如 $.container[0].box_no、
  * 无模板数组的合成字典行 $.misc[0] 亦收)。整容器 assign(target 命中
  * $.call.request.body<容器实例路径>)与叶子同式匹配 — P3 容器快捷策略的

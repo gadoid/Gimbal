@@ -46,7 +46,7 @@ class WLAuthenticator(Authenticator):
             token = None
 
         if not token:
-            # TOK-06(2026-11-20 审计):错误消息不带响应体(可能含敏感值,
+            # 错误消息不带响应体(可能含敏感值,
             # AuthError 会流进执行记录);只报键面。
             raise AuthError(
                 f"API 响应中未找到 token (keys: "

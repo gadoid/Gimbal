@@ -14,7 +14,7 @@ const dataSetsFallback = (to: { params: Record<string, string | string[]> }) =>
   `/scenarios/${encodeURIComponent(String(to.params.scenarioId))}/schemes`
 
 export const routes = [
-  // F-sitemap v2:登录后默认落地 = 用户工作台 /home(原为 /scenarios)
+  // 登录后默认落地 = 用户工作台 /home(原为 /scenarios)
   { path: '/', redirect: '/home' },
   { path: '/home', component: () => import('@/views/WorkbenchView.vue'), meta: { requiresAuth: true } },
   { path: '/login', component: () => import('@/views/Login.vue') },
@@ -22,7 +22,7 @@ export const routes = [
   // protected
   // ── 场景编排 V3 ────────────────────────────────────────────
   // 场景库拆三页(我的场景 / 公共场景 / 关注);/scenarios 旧入口重定向到
-  // 我的场景页(2026-11-10 IA:侧栏「我的 → 场景」)。
+  // 我的场景页(侧栏「我的 → 场景」)。
   { path: '/scenarios', redirect: '/scenarios/mine' },
   {
     path: '/scenarios/mine',
@@ -108,7 +108,7 @@ export const routes = [
     redirect: '/projects',
   },
   {
-    // 2026-11-13 深度合并:部署表((服务,环境)→地址)并入「服务注册」
+    // 深度合并:部署表((服务,环境)→地址)并入「服务注册」
     // (/service-admin,服务为锚:身份面 + 各环境地址一页治理)。沿革:
     // 部署地址 → 环境与地址 → 服务注册(独立页)→ 并入;旧深链兜底重定向。
     path: '/admin/deployments',
@@ -122,14 +122,14 @@ export const routes = [
     meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
-    // 通知页(F5,2026-09-23;侧边栏入口名「通知」):全员;审计 tab 仅
+    // 通知页(侧边栏入口名「通知」):全员;审计 tab 仅
     // admin(渲染层隐藏 + 后端 /admin/audit-logs 403 双层守卫,方案 §5.5 T5)
     path: '/notifications',
     component: () => import('@/views/NotificationsCenter.vue'),
     meta: { requiresAuth: true },
   },
   {
-    // 执行配置(执行配置分层①,2026-11-11):个人面·全员 —— 环境/条目
+    // 执行配置(执行配置分层①):个人面·全员 —— 环境/条目
     // 绑定/carry 覆盖的跨场景载体,唯一入口(决策 8 终局;「我的配置」
     // 页随批次⑥退役后由本页承接)
     path: '/exec-configs',
@@ -222,7 +222,7 @@ export const routes = [
   {
     // C6/P3-04:调试台(运行中调试执行的命令/输出/事件代理)。
     // 正则须写 \\d+(普通字符串里 \d 就是字母 d,路由永远匹配不上 —
-    // 2026-11-05 前端评审 P1-1 复现修复)
+    //)
     path: '/executions/:id(\\d+)/debug',
     component: () => import('@/views/DebugConsole.vue'),
     meta: { requiresAuth: true },
@@ -241,7 +241,7 @@ export const routes = [
   },
   {
     // Suite(Suite 层重构:成员层 + 编排层单实体)。/suites = 场景集
-    // (02 独立成组;2026-11-10 IA:并入侧栏「我的」组,页面更名场景集);
+    // (02 独立成组;后并入侧栏「我的」组,页面更名场景集);
     // /suites/:id = 管理页
     // (20 编排 / 21 运行记录,含只读态)。旧 /suites/composer 已随重构删除。
     path: '/suites',
@@ -317,7 +317,7 @@ export const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 服务注册(2026-11-13 深度合并):身份面注册表(原「服务配置」)+
+    // 服务注册(深度合并):身份面注册表(原「服务配置」)+
     // 环境定义与 (服务,环境)→地址矩阵(原独立部署页)一页治理,服务为锚
     path: '/service-admin',
     component: () => import('@/views/ServiceAdmin.vue'),
@@ -329,7 +329,7 @@ export const routes = [
     // 字段默认值 tab 在此编辑;?tab=credential 供凭证管理反查深链
     path: '/service-admin/:alias',
     component: () => import('@/views/ServiceAliasDetail.vue'),
-    // 全员可达(2026-11-13 兑现全量评估 #3 的放开):别名属主要在本页看
+    // 全员可达(全量评估 #3 的放开兑现):别名属主要在本页看
     // 绑定面,入站调用方(个人 gtk_ 令牌)经凭证管理「被引用」深链进来。
     // 读面全员(别名/环境/部署表读 API 均无能力门);写面仍由后端
     // (admin ∨ 属主)与子面板把关 —— 字段默认值 tab 的 fields 取数是

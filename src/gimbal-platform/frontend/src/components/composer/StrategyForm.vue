@@ -136,7 +136,7 @@ function onOrderChange(e: Event) {
   const raw = el.value.trim()
   if (raw === '') {
     // 清空 → 回缺省:删 key 让默认值生效,不写 0 进 payload
-    // (复核收口 2026-11-22:经 onUpdateBody 单点,不再直改 prop)
+    // (经 onUpdateBody 单点,不再直改 prop)
     const { order: _omit, ...rest } = props.strategy as any
     onUpdateBody(rest)
     return
@@ -168,7 +168,7 @@ const fieldBindings = computed<IOFieldBinding[]>(() =>
 function onUpdateBody(next: any) {
   // 直接变异 props.strategy 引用的对象(Canvas local reactive 数组的
   // 元素)—— 与 extract 行一致的既定模式;watch deep 会向上传播。
-  // 替换语义(复核收口 2026-11-22):先删 next 缺失的键 —— 清空
+  // 替换语义:先删 next 缺失的键 —— 清空
   // order 这类可选键才能真正回缺省,合并语义会残留旧值;既有唯一
   // 调用方(@update:body 整包)不受影响。
   for (const k of Object.keys(props.strategy as any)) {

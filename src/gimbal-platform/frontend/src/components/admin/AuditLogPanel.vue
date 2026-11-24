@@ -1,5 +1,5 @@
 <!--
-  AuditLogPanel.vue — 特权写审计面板(从 UsersAdmin 审计 tab 抽出,2026-09-22)。
+  AuditLogPanel.vue — 特权写审计面板(从 UsersAdmin 审计 tab 抽出)。
   抽组件顺带修两处:
   * 懒加载判据原来是「rows 为空才拉」— 首次落在空结果(无日志/筛选无
     命中)后切走再切回永不重拉;改为面板挂载即拉(reka TabsContent 非激
@@ -7,10 +7,10 @@
   * 时间列原用 toISOString(UTC),+8 时区早上会显示成前一天下午;
     统一走 mediumDateTime(本地时区)。
   对象列 = resourceType + resourceId(原来丢 resourceType,只剩裸 id)。
-  2026-10-14 可读性收口:动作/对象/详情三列人话化 —— 动作走
+  可读性收口:动作/对象/详情三列人话化 —— 动作走
   auditText 中文标签表;对象优先 resource_name 快照(无名称老记录回落
   type:id);详情按动作渲染中文模板,原始 JSON 收进 <details> 展开区。
-  2026-10-20 分页修复批次:
+  分页修复:
   * 分页失灵根因:page 只是 Pagination 的 v-model,没有任何 watcher →
     点页码只改本地状态不重拉。补 watch(page) → load,并加越界页回退
     (行数变更/记录被清后停在空页 → 回末页重取,与 NotificationsCenter

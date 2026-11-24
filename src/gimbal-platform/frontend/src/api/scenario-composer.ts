@@ -85,7 +85,7 @@ export async function fetchScenarioFacets(params: {
    *  列表的 private 口径,传 private 恒 422(facets-scope-mismatch 登记
    *  的坑面,类型面收窄到端点词表,防止再误用)。 */
   scope?: 'mine' | 'all'
-  /** 项目口径(A 级批次 2026-11-18):项目详情场景页签;给定时取代
+  /** 项目口径:项目详情场景页签;给定时取代
    *  visibility/scope 分桶。 */
   projectId?: number
 }): Promise<ScenarioFacets> {
@@ -303,7 +303,7 @@ export async function unpublishScenario(scenarioId: string): Promise<Scenario> {
 }
 
 /** 深拷贝场景+数据集到自己名下(新 id,恒 private)。
- * F2(2026-09-23)另存为:带 name = 自定义副本名,与本人已有场景重名 →
+ * 另存为:带 name = 自定义副本名,与本人已有场景重名 →
  * 409 code='name_taken',ApiError.detail.suggestion 为计数后缀建议;
  * 不传 name = 旧「(副本)」后缀行为。 */
 export async function copyScenario(
@@ -397,7 +397,7 @@ export interface RunRequest {
   /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
    *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */
   batchId?: string
-  /** §8.2(2026-11-17 环境降级轮):显式 environmentId 全链退役(发送
+  /** §8.2(ADR-0003 #21):显式 environmentId 全链不承载(发送
    *  被后端静默忽略)—— 执行标签按 身份 > 项目默认 > 平台默认 自动解析 */
   /** C5(P3-05):suite 编排执行 — 非空时走 graph 链(单元=平台场景);
    *  横切面 gates/checks(D-6 保留)与乘法在此声明 */
@@ -487,7 +487,7 @@ export interface SchemeV2 {
   injectionEntryIds: string[]
   serviceBindings: Record<string, ServiceBinding>
   options: RunOptions
-  /** §8.2:方案环境链位退役(存量 payload 键后端停读;读侧忽略) */
+  /** §8.2:方案不携带环境链位(ADR-0003 #21;存量 payload 键后端停读,读侧忽略) */
 }
 
 /** 方案 → 执行配方:把方案锁定的选择/绑定/执行指令物化成 RunRequest,
@@ -647,7 +647,7 @@ export interface PrecheckResult {
   builtinAuthShadowed?: string[]
   /** S8 收口:身份条目在我个人池未装载(派发 fail-fast 同源);空 = 齐备 */
   missingAuths?: string[]
-  /** 复核收口(2026-11-22):歧义单列 —— 同引用多候选无同标签唯一命中
+  /** 歧义单列 —— 同引用多候选无同标签唯一命中
    *  (执行将 409 account_ambiguous),不再混标「缺失」误导排障 */
   ambiguousAuths?: string[]
   /** 项目凭证池的缺槽清单(null = 不适用:非普通项目 / 非成员) */

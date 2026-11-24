@@ -266,7 +266,7 @@ onUnmounted(stop)            // 卸载即断流(§8 连接预算)
 .st-done { background: #e0e7ff; color: var(--accent); }
 .st-failed, .st-idle { background: #fee2e2; color: #b91c1c; }
 .logs-count { font-size: 0.6875rem; margin-left: auto; }
-/* 300px → 480px(2026-11-12 +60%):实时日志升默认 tab,加大可视窗口 */
+/* 300px → 480px(+60%):实时日志升默认 tab,加大可视窗口 */
 .logs-scroll { height: 30rem; overflow-y: auto; padding: 0.25rem 0; background: var(--c-surface); }
 .log-row {
   /* S7:行高恒定(窗口化渲染的前提)—— 改此值须同步 script 里 ROW_H */

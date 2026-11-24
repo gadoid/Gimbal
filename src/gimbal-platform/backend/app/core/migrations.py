@@ -1,5 +1,4 @@
-"""启动分叉的 schema 策略(M2,PG迁移方案 §2.1 第七轮;SQLite 退役
-2026-10-14 后 PG-only)。
+"""启动分叉的 schema 策略(PG迁移方案 §2.1;ADR-0003 #18 后 PG-only)。
 
 create_all 时代结束;本模块是 lifespan 唯一的 schema 入口:
 
@@ -39,7 +38,7 @@ def _alembic_config(sync_url: str) -> Config:
     cfg = Config(str(_BACKEND_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
     # configparser 插值语义:URL 里的 % 必须转义(带 query 参数的 URL
-    # 如 ?options=-csearch_path=... 含 %xx 编码,⑤ PG 面实测踩中)
+    # 如 ?options=-csearch_path=... 含 %xx 编码,PG 面实测踩中)
     cfg.set_main_option("sqlalchemy.url", sync_url.replace("%", "%%"))
     return cfg
 
@@ -80,7 +79,7 @@ def ensure_schema_sync(async_url: str) -> None:
                 str(_BACKEND_ROOT / "alembic")).get_current_head()
             if current == head:
                 return
-            # SQLite 已退役(2026-10-14):「本地自动 upgrade」分支随之删除,
+            # PG-only(ADR-0003 #18):无本地自动 upgrade,
             # 落后一律拒绝启动 —— DDL 永远由人在带备份的窗口里手动执行。
             raise RuntimeError(
                 f"pg_schema_behind: 库版本 {current} != head {head} —— "

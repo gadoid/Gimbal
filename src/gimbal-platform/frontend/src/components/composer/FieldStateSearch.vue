@@ -30,7 +30,7 @@
           <code class="fss-search-type">{{ row.type }}</code>
         </span>
         <!-- 描述入条目(与 name/path 同为搜索面):状态文本不单列,
-             由行尾 FieldStateSelect 选框自显 — 2026-09-14 字段管理改版 -->
+             由行尾 FieldStateSelect 选框自显 — 字段管理改版 -->
         <span v-if="row.description" class="fss-search-desc">{{ row.description }}</span>
         <FieldStateSelect
           :state="row.resolved"

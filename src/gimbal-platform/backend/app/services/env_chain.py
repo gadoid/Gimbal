@@ -1,4 +1,4 @@
-"""标签解析链 + 地址第 ③ 层(2026-11-17 环境降级轮重做,redesign §8.2)。
+"""标签解析链 + 地址第 ③ 层(redesign §8.2)。
 
 **标签**(= 轻量部署标签,``environments`` 表):解析链 =
 **有效调用身份标签 > 项目默认 > 平台默认**。
@@ -7,13 +7,15 @@
   行级 ``@slot`` 覆盖由调用方归并后传入);身份条目的 ``env_id``
   即其标签;
 * 多身份标签不一致 → :class:`EnvMixed`(混拼,dispatch 映射 409
-  ``env_mixed``,无逃生口 —— 显式 ``environmentId`` 注入通道已全链退役);
+  ``env_mixed``,无逃生口 —— 显式 ``environmentId`` 注入通道不复存在,
+  ADR-0003 #13/#21);
 * 无身份/身份无标签 → 项目默认(``projects.default_environment_id``)
   → 平台默认(``environments.is_default``);全空 → :data:`NO_ENV`
   (预检 ``env_unspecified`` 根因);
 * 旧链位(方案环境 / 执行配置环境 / 个人偏好 / 本次显式)与
-  :class:`EnvironmentNotFound` 已退役;``EnvChoice`` 形状不变,派发仍落
-  ``config_json``(重跑按快照回放,历史 source 原样透出)。
+  :class:`EnvironmentNotFound` 已退役(ADR-0003 #21);``EnvChoice``
+  形状不变,派发仍落 ``config_json``(重跑按快照回放,历史 source
+  原样透出)。
 
 **地址 ③**(数据源;优先级裁决仍在 ``run_materialize._apply_services``):
 服务键先映射到基础服务(条目表 ``base_service``,非条目名即自身),
@@ -112,8 +114,8 @@ async def resolve_execution_tag(
 
 
 async def instance_lines(db: AsyncSession, env_id: int | None) -> dict[str, str]:
-    """标签的版本线声明(重构 §1.2:迁 ``system_env_instances.line``,
-    原 ``environments.lines`` JSON 列退役;空 = 未声明)。"""
+    """标签的版本线声明(重构 §1.2:版本线在 ``system_env_instances.line``,
+    ADR-0003 #17;空 = 未声明)。"""
     if env_id is None:
         return {}
     from ..models.system_env_instance import SystemEnvInstance

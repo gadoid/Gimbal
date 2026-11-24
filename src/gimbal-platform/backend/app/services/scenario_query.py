@@ -54,7 +54,7 @@ def updated_cutoff(updated_within: str | None) -> datetime | None:
 
 
 def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all"):
-    """可见性谓词(authz W3 后):所有角色同口径 = public + 自己的 +
+    """可见性谓词:所有角色同口径 = public + 自己的 +
     被引用的(None = 全量,匿名统计面用)。admin 全量分支已随私有区
     收窄删除 —— 表 B scenario.read,越属主旁路不复存在。
 
@@ -68,8 +68,8 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
         # S7.0:「我的场景」= 我名下且未加入任何项目(私有)
         return (ComposerScenario.owner_id == user.id) & \
             ComposerScenario.project_id.is_(None)
-    # S1.2:三区谓词单点收敛到 zone_read_clause(场景/suite/报告定义
-    # 列表同款)。S7.4:引用分享退役,ref EXISTS 两支随之移除。
+    # 三区谓词单点收敛到 zone_read_clause(场景/suite/报告定义
+    # 列表同款)。引用分享退场(ADR-0003 #20),ref EXISTS 两支不复存在。
     from .zone import zone_read_clause
     viewer = user.id if user is not None else viewer_id
     return zone_read_clause(ComposerScenario, viewer)
@@ -144,7 +144,7 @@ def _filter_clauses(
             else sa_text("1 = 0")
         )
     if suite_member_ids is not None:
-        # 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):成员集下推 IN;
+        # 按所属 Suite 筛选:成员集下推 IN;
         # 空 suite/无成员 = 恒假(筛选语义,不 404 —— 不泄露存在性)
         clauses.append(
             ComposerScenario.scenario_id.in_(suite_member_ids)
@@ -234,7 +234,7 @@ async def facets(
     system/tags 是 JSONB 数组,用 ``jsonb_array_elements_text`` unnest
     后 GROUP BY(§2.2 方言段钦定的唯一一对 helper 之一)。
 
-    ``project_id``(A 级批次,2026-11-18)= 项目口径:行集收敛到
+    ``project_id`` = 项目口径:行集收敛到
     ``project_id`` 快照列,取代 scope/visibility 分桶(与 list_page 的
     project_id 先例同口径);调用方(路由层)自把项目读门。
     """

@@ -31,7 +31,7 @@ export interface ProjectMember {
   displayName: string
   role: string
   addedAt?: string | null
-  /** 成员在本项目的资产数(A 级批次 2026-11-18,owner 归属聚合);
+  /** 成员在本项目的资产数(owner 归属聚合);
    *  add/patch 单行返回不带(默认 0),仅列表口径消费 */
   scenarioCount?: number
   suiteCount?: number
@@ -128,7 +128,7 @@ export function platformizeTask(
     .then((r) => r.data)
 }
 
-// ── 实例 × 凭证匹配聚合(A 级批次 2026-11-18)────────────────────
+// ── 实例 × 凭证匹配聚合────────────────────
 // 配置页分区原由前端拼 5 路端点,此后一次拉齐;形状与面板 MatchRow 对齐。
 export interface MatchAddress {
   service: string

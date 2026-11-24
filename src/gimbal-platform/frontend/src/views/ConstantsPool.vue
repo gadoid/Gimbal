@@ -96,7 +96,7 @@
         </Table>
       </div>
 
-      <!-- 2026-09-23 分页批次:客户端切片(store 保持全量,编排页常量
+      <!-- 客户端切片(store 保持全量,编排页常量
            轨道等消费方不受影响);重名校验仍查全量 entries -->
       <div v-if="pageCount > 1 || constantsStore.entries.length > 0" class="mt-2 flex justify-end">
         <Pagination
@@ -286,7 +286,7 @@ import { Switch } from '@/components/ui/switch'
 
 const constantsStore = useConstantsStore()
 
-// 客户端分页(2026-09-23 批次):表格只渲染当前页切片;每页行数存用户偏好
+// 客户端分页(表格只渲染当前页切片;每页行数存用户偏好
 const { page, pageSize, paged, pageCount } = useClientPager(
   () => constantsStore.entries, 20, 'constants-pool',
 )

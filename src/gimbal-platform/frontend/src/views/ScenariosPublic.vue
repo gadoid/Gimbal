@@ -1,7 +1,7 @@
 <!-- ScenariosPublic.vue — 场景库 / 公共场景(统一模板库)。
      原 Scenarios.vue「公共编排」tab 拆出独立页:只读浏览 + 复用。
      无新建入口;操作合并为 ⋯(执行 / 复制到我的)。定义本身只读。
-     2026-11-18:embedded prop —— 项目详情页公共项目场景页签复用本页时
+     embedded prop —— 项目详情页公共项目场景页签复用本页时
      隐藏自身 PageHead(消除双页头),独立路由态不变。 -->
 <template>
   <section class="slib" :class="{ embedded }">

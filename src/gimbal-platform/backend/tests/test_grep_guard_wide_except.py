@@ -60,7 +60,7 @@ _ALLOWLIST: dict[str, int] = {
     #    落库,执行详情/卡片可见;基础兜底 = rollback 后新会话收口)──
     'services/integration_runner.py:except Exception as e:  # noqa: BLE001': 1,
     'services/integration_runner.py:except Exception as e:  # noqa: BLE001 — plate/通道任何故障 = 失败收口': 1,
-    'services/integration_runner.py:except Exception as e:  # noqa: BLE001 — 基础设施兜底(评审 2026-11-01)': 1,
+    'services/integration_runner.py:except Exception as e:  # noqa: BLE001 — 基础设施兜底': 1,
     # 会话层故障:收口本槽(三行外)后 re-raise,显式失败
     'services/integration_runner.py:except Exception:': 1,
     # ── 显式 raise 判例(suite_version:B-1 成员修订 resolve 拒绝 →

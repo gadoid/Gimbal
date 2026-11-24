@@ -176,7 +176,7 @@ async def put_defaults(
 
 async def plate_carry_faces(
 ) -> "tuple[dict[str, set[str]], set[str], bool]":
-    """plate 端点目录 → carry face 并集(**单源**,2026-11-22 收口)。
+    """plate 端点目录 → carry face 并集(**单源**)。
 
     此前三拷贝(carry_drift / exec_configs 面板 / carry 路由)各自实现
     「list 端点 → 逐个 /full → carry_face 并集」,且 exec_configs 把
@@ -255,7 +255,7 @@ async def carry_drift(db, scope: "tuple[str, int] | None" = None) -> dict:
             bound_by_service.setdefault(r.config_key, set()).add(r.field_path)
 
     # 面并集(按服务);plate_services = 目录服务全集(键归一的解析域)
-    # —— 聚合单源 plate_carry_faces(2026-11-22 收口,exec_configs 同源)
+    # —— 聚合单源 plate_carry_faces(exec_configs 同源)
     face_by_service, plate_services, reachable = await plate_carry_faces()
 
     out: list[dict] = []

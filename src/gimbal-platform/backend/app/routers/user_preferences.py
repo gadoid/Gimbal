@@ -10,7 +10,7 @@
 值本身是前端专有形态(卡片 id、色板 ``var(--avatar-N)`` 名),后端只校
 **形状与体积**:校字段就得把卡片注册表抄一份到后端,发版必漂。
 
-2026-11-05 前端评审 P1-2:所有白名单模型改 ``extra="forbid"`` —— 此前
+所有白名单模型改 ``extra="forbid"`` —— 此前
 便签条目以驼峰 ``createdAt``/``doneAt`` 提交,与字段名 ``created_at``
 不一致被**静默丢弃**(存成空串/None,前端的 7 天自动清理因此永不触发);
 拒收未知字段后,这类漂移会直接 422,不再无声吞数据。``NoteItem`` 同时
@@ -68,7 +68,7 @@ class TimelineColors(BaseModel):
 
 
 class PagerSizes(BaseModel):
-    """各列表页「每页行数」(2026-09-23 分页批次)。键 = 页面标识 slug
+    """各列表页「每页行数」。键 = 页面标识 slug
     (前端定,如 ``scenarios-mine``/``auths``),值 = 1..500;整值覆盖。"""
 
     model_config = ConfigDict(extra="forbid")
@@ -90,9 +90,9 @@ class IdentityCardPref(BaseModel):
 
 
 class NoteItem(BaseModel):
-    """便签条目(D18:便签是工作台注册卡,不进身份卡)。
+    """便签条目(便签是工作台注册卡,不进身份卡)。
 
-    前端用驼峰 ``createdAt``/``doneAt``(2026-11-05 评审 P1-2:此前无别名
+    前端用驼峰 ``createdAt``/``doneAt``(此前无别名
     也无 forbid,驼峰被静默丢弃 → 存量里 created_at 是空串、done_at 是
     None,「已完成 7 天清理」永不触发)。别名双向兼容:读旧存档仍认
     下划线,出入都以驼峰为准。"""
@@ -131,7 +131,7 @@ _MODELS: dict[str, type[BaseModel]] = {
     "pager.sizes": PagerSizes,
     "identity.card": IdentityCardPref,
     "notes": NotesPref,
-    # "run.environment" 已随 §8.2(2026-11-17 环境降级轮)退役:
+    # "run.environment" 不是白名单键(ADR-0003 #21,§8.2):
     # 个人偏好不再是标签链位;存量行不读不写(白名单外即拒)。
 }
 

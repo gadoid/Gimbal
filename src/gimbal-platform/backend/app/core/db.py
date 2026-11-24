@@ -1,7 +1,7 @@
-"""SQLAlchemy async engine + session factory(PG-only)。
+"""SQLAlchemy async engine + session factory(PG-only,ADR-0003 #18)。
 
-SQLite 已退役(2026-10-14):引擎构造即校验 URL 必须是 postgresql
-方言,空值/sqlite:// 直接 RuntimeError 指路 —— 不再造本地回退库。
+引擎构造即校验 URL 必须是 postgresql 方言,空值/sqlite:// 直接
+RuntimeError 指路 —— 不造本地回退库。
 """
 from __future__ import annotations
 

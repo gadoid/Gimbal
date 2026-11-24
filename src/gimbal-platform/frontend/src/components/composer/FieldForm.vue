@@ -11,7 +11,7 @@
       开放字典:object 无 children(additionalProperties)→ KV 编辑器
             (区块折叠同款;三类区块 collapse 态默认收起,点击展开,
              加行/添键自动展开 —— 嵌套过长目录盖 collapse 治噪)
-    三类容器区块头均带五项策略菜单(P3 起;2026-09-05 恢复值写入项):
+    三类容器区块头均带五项策略菜单(P3 起;恢复值写入项):
     提取/注入/断言作用于整容器值(目录化前整容器叶子的快捷入口);
     引用共享变量/设为变量把整容器值整串替换为 ${var.x} → 容器模板态
     (单行模板输入替行组/KV 编辑,清空恢复结构编辑)
@@ -1007,7 +1007,7 @@ const foldedOpen = ref(false)
 // ─── 区块折叠面板:开合状态(path 键控,跨 body 重算保持;────────────
 //     对象/数组/开放字典三类区块共用;未见过 = 目录解析态默认:
 //     collapse 收起,form 展开 —— 嵌套内容过长时目录盖 collapse,
-//     需要时点击展开(2026-09-05 注入粒度 P2))
+//     需要时点击展开(注入粒度))
 
 type SectionNode = FieldObjectNode | FieldArrayNode | FieldDictNode
 
@@ -1023,7 +1023,7 @@ function toggleSection(n: SectionNode) {
 /**
  * 容器区块头策略菜单的合成载体:目录条目 → IOFieldBinding(path 用
  * 实例路径,行内嵌套容器如 $.container[1].box_no 与叶子同源寻址;
- * 2026-09-05 注入粒度 P3 —— 恢复目录化前整容器叶子的快捷策略入口,
+ * 注入粒度 —— 恢复目录化前整容器叶子的快捷策略入口,
  * 提取/注入/断言作用于整个容器值)。
  */
 function nodeBinding(n: SectionNode): IOFieldBinding {
@@ -1042,7 +1042,7 @@ function nodeBinding(n: SectionNode): IOFieldBinding {
 }
 
 /**
- * 整容器注入态(2026-09-05 注入粒度 P6):assign target 命中容器实例
+ * 整容器注入态(注入粒度):assign target 命中容器实例
  * 路径(Canvas requestInjected 键,path 键控与叶子同源)— 头部徽标 +
  * 体锁定 + 菜单值写入项禁用,叶子行 I1 只读语义的容器面继任。
  */
@@ -1056,7 +1056,7 @@ function nodeExtracted(n: SectionNode): boolean {
   return isExtracted(nodeBinding(n))
 }
 
-/** 容器字符串态(2026-09-05 恢复值写入项):整容器值是非空字符串
+/** 容器字符串态(恢复值写入项):整容器值是非空字符串
  *  (引用共享变量/设为变量写入的 ${var.x},或手输的任意串)— 行组/KV
  *  编辑让位给单行输入(清空恢复结构编辑)。空串/缺省(getValue 的 ''
  *  兜底)不算 — 回落结构渲染,空容器照常见行组/加行。 */
@@ -1200,7 +1200,7 @@ function toggleMenu(f: IOFieldBinding) {
 }
 
 /**
- * 菜单"引用共享变量"插值(2026-09-05 语义修订):先清空再写入 —
+ * 菜单"引用共享变量"插值(语义修订):先清空再写入 —
  * 值整串替换为 ${var.<name>}。点选变量即明确指向该变量,追加旧值会
  * 拼出 '旧值${var.x}' 混串静默改变语义(要混排模板手编输入框即可);
  * 非字符串现值(number/boolean/整容器对象)同样整串替换。
@@ -1216,7 +1216,7 @@ function onMenuVarInsert(f: IOFieldBinding, name: string) {
  * 差别在 ① 变量名默认取字段名,同名(共享变量/extract 任一出身)自动
  * 加 _2/_3 后缀;② 原值随 varPromote 上抛,由 Canvas → CaseComposer
  * 登记进 definition.config.vars 作默认值(引用是挑既有变量,提升是
- * 建新变量并留存原值)。容器头同样可用(2026-09-05 恢复)。
+ * 建新变量并留存原值)。容器头同样可用(恢复)。
  */
 function onFieldPromote(f: IOFieldBinding) {
   const original = getValue(f)
@@ -1277,7 +1277,7 @@ function injectedTitle(f: IOFieldBinding): string {
     .join('\n')
 }
 
-/** 提取态(域感知提取,2026-09-05):该字段命中 extract(expression=
+/** 提取态(域感知提取):该字段命中 extract(expression=
  *  $.call.request.body<path>,Canvas requestExtracted 键)→ 值控件保持可编辑
  *  (提取只读取),提示行标"运行时读取此值"(与 assign 注入态只读化分面) */
 function isExtracted(f: IOFieldBinding): boolean {
@@ -1393,7 +1393,7 @@ function formatJson(v: unknown): string {
 .obj-toggle svg.open { transform: rotate(0deg); }
 .obj-toggle svg:not(.open) { transform: rotate(-90deg); }
 /* 容器级策略菜单锚点(P3):浮层 .fa-menu 需要 positioned 祖先;
-   ☰ 已改外置静态按钮(2026-09-14),锚内容自适应不再固定 22×20 */
+   ☰ 已改外置静态按钮),锚内容自适应不再固定 22×20 */
 .node-fa {
   position: relative; flex-shrink: 0;
   margin-left: 0.125rem;
@@ -1451,7 +1451,7 @@ function formatJson(v: unknown): string {
 
 /* 控件 + Ⓥ 按钮同排(text)/叠排(textarea/json)。
    relative:☰ 菜单浮层的锚点(enum/bool/textarea/json 分支没有
-   .ctl-cand-wrap,2026-09-14 ☰ 外置后统一在本层挂靠) */
+   .ctl-cand-wrap,☰ 外置后统一在本层挂靠) */
 .ctl-with-var { display: flex; gap: 0.375rem; align-items: stretch; position: relative; }
 .ctl-with-var .ctl { flex: 1; min-width: 0; }
 .ctl-with-var.col { flex-direction: column; align-items: flex-end; }
@@ -1598,7 +1598,7 @@ function formatJson(v: unknown): string {
   cursor: default; user-select: none; flex-shrink: 0;
 }
 .node-extracted svg { flex-shrink: 0; }
-/* 容器模板态(2026-09-05 恢复值写入项):整容器值 = ${var.x} 串 —
+/* 容器模板态(恢复值写入项):整容器值 = ${var.x} 串 —
    头部靛蓝徽标(收起态也可见)+ 单行模板输入替行组/KV 编辑 */
 .node-tpl-badge {
   display: inline-flex; align-items: center;

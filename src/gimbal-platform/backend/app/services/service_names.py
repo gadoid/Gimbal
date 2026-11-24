@@ -18,7 +18,7 @@ from sqlalchemy import select as sa_select
 def derive_base(key: str, catalog_names: set[str]) -> str | None:
     """key ∈ 目录 → key;否则最后 "-" 切分,base ∈ 目录 → base;否则 None。
 
-    前后端双头契约(2026-11-22):前端逐字镜像在
+    前后端双头契约:前端逐字镜像在
     ``frontend/src/utils/service-alias.ts deriveBase`` —— 两侧必须
     同步改动(见彼侧 docstring)。"""
     if not key:

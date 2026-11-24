@@ -30,7 +30,7 @@ AUDIT_ACTIONS = (
     # scenario.admin_delete / scenario.admin_publish / suite.admin_delete /
     # suite.admin_publish 随越属主旁路消亡,不再可写;历史行照常展示)
     "suite.admin_unpublish",  # admin 下架公共 suite 本体(§10;表 B steward)
-    # ── 横向件补全轮(2026-10-20)──────────────────────────────
+    # ── 横向件补全 ──────────────────────────────
     # admin-only 特权写:平台凭证直接决定全体平台模式集成任务的认证面
     "integration.credential.write",  # 平台凭证登记/删除(admin)
     # admin 越属主的可见性变更(表 B steward:下架公共对象)—— 属主
@@ -55,11 +55,11 @@ AUDIT_ACTIONS = (
     "webhook.redeliver",          # 人工补发回调(新建一行 pending)
     # ── authz M2a S8 项目凭证(项目管理员写;资源 = 项目)──────────
     "project.credential.write",   # 项目凭证建/改/换默认/删(detail.op)
-    "project.token.write",        # M2b Q2 项目令牌签发/生命周期/换绑(detail.op)
-    # ── TOK-05 护栏(2026-11-20 审计):明文回显是拍板保留的内网测试
+    "project.token.write",        # 项目令牌签发/生命周期/换绑(detail.op)
+    # ── 明文回显护栏:明文回显是拍板保留的内网测试
     # 策略,但每次明文读取必须留痕(读类先例 external_endpoint.query_safe)
     "auth.secret.read",           # GET /auths/{id}?include_secrets=true
-    # ── 项目加入审批(stitch 0-2 批次 2026-11-23):管理员裁决留痕;
+    # ── 项目加入审批:管理员裁决留痕;
     # 资源 = project_promotion / 申请 id。withdraw 是申请人自操作
     # (非特权写,不记);无冲突直通路径不记 —— C1 收口后溯源走
     # promotion 行自身(resolution.immediate + decidedBy)。

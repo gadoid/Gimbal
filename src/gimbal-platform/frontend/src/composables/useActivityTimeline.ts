@@ -35,7 +35,7 @@ export interface TimelineDay {
 /** 右栏常态只看最近 10 条;「查看更多」展开到合流后的池子上限。 */
 export const TIMELINE_PREVIEW = 10
 /**
- * 2026-11-03 容量语义改造:服务端每类各留 30 条(不再全局截断),
+ * 容量语义:服务端每类各留 30 条(不再全局截断),
  * 「全部」视图 = 混排取最近 TIMELINE_POOL(30)条;筛某一类时给该类
  * 全量(≤30)—— 单一类型刷屏不再把其余类型挤出轴。
  */
@@ -140,7 +140,7 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
     }
   }
   if (e.kind === 'scenario') {
-    // F3(2026-09-23):按 action 细分文案 —— 事件表取代 updated_at
+    // 按 action 细分文案 —— 事件表取代 updated_at
     // 反推后,时间线第一次能区分「改了什么」。旧事件无 action = edit。
     const d = (e.detail ?? {}) as Record<string, unknown>
     const name = e.name || e.scenarioId || ''
@@ -224,7 +224,7 @@ export function useActivityTimeline() {
 
   /** 颜色筛选:卡头圆点即「只看这一类」。null = 不筛,全给。
    * 「全部」= 混排取最近 TIMELINE_POOL(30)条;筛中某一类时给该类
-   * 全量(服务端每类各留 30,2026-11-03 容量语义)。 */
+   * 全量(服务端每类各留 30,容量语义)。 */
   const only = ref<TimelineKind | null>(null)
   const visible = computed<TimelineEvent[]>(() =>
     only.value

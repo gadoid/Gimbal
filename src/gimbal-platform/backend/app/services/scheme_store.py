@@ -42,7 +42,7 @@ def normalized(payload: dict | None) -> dict:
     # dataSetSelection(spec v3 §4 权威键;rowIndexes 空 = 整库)。
     # 合成必须放 update 之后 —— 路由层模型 dump 恒带显式空
     # dataSetSelection([]),先合成会被它盖回,经 /run-schemes 创建的
-    # 旧形状方案将静默丢数据集(2026-11-20 审计追修)。
+    # 旧形状方案将静默丢数据集(审计追修)。
     if not p.get("dataSetSelection") and p.get("dataSetIds"):
         out["dataSetSelection"] = [
             {"datasetId": d, "rowIndexes": []} for d in p["dataSetIds"]

@@ -2,7 +2,7 @@
      可观测面 = Execution 计数器 + 实时日志/报告/执行明细三 tab 域
      （执行明细 = 版本信息 + 执行信息；行级明细与原始工件已于
      2026-11-12 退役，由报告/日志分析/实时日志承接）。
-     V1 的每-run 报告/SSE 已退役。 -->
+     V1 的每-run 报告/SSE 已退场(ADR-0003 #14)。 -->
 <template>
   <HubDetailPage v-if="execStore.detail" :title="`执行 #${execStore.detail.id}`" icon="history">
     <template #meta>
@@ -18,7 +18,7 @@
       </p>
     </template>
 
-    <!-- 页头动作行(2026-11-12 对齐统一):返回链接 / 状态徽标 /
+    <!-- 页头动作行(对齐统一):返回链接 / 状态徽标 /
          链接动作同一居中基线 —— PageBack 全局形态带 padding-top
          (为其他非居中容器兜底),本行就地归零;状态徽标定高与链接
          动作同一视觉带;动作统一 variant=link + h-7 px-2 形制,
@@ -90,7 +90,7 @@
       <AlertTitle>{{ execStore.pollError }}</AlertTitle>
     </Alert>
 
-    <!-- B-3(2026-10-14):失败原因首屏化 —— 此前只藏在 config.dispatcherError,
+    <!-- 失败原因首屏化 —— 此前只藏在 config.dispatcherError,
          用户打开频率最高的页面第一屏只有"失败"两个字。结论先行;
          具体到步骤的原因在「报告」(失败聚焦 + 定位失败上下文深链)。 -->
     <Alert v-if="execStore.detail.status === 'failed'" variant="destructive" class="sys-alert" data-testid="exec-failure-reason">
@@ -110,7 +110,7 @@
       <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
     </Alert>
 
-    <!-- B4(2026-11-06 日志报告整理):原执行信息 / 版本信息(修订台账) /
+    <!-- 原执行信息 / 版本信息(修订台账) /
          行级明细(含原始 engine.log / result.json 工件)收进「执行明细」,
          内容与行为不变,保留排障用途 -->
     <!-- 实时日志为独立 tab 域(2026-11-12 二改:伪 tab/抽屉退役;三改:
@@ -257,7 +257,7 @@ const failureReason = computed(() => {
   return '未记录顶层原因 — 逐步失败定位见「报告」失败聚焦与「日志分析」'
 })
 
-// P4 协作式取消:按服务端 cancelable 标志(全量评估 2026-11-02 #1):queued
+// P4 协作式取消:按服务端 cancelable 标志):queued
 // 恒可取消;running 仅 cases 链可取消(行边界收敛),graph 链不消费取消位
 // → 按钮不显示;终态为 false。
 const canCancel = computed(() => !!execStore.detail?.cancelable)
@@ -309,7 +309,7 @@ const ledgerRows = computed(() => {
 // V3 dispatcher recipe (config_json) rendered as a definition list —
 // 系统键(reconciled/counterDrift)转上方 alert;stepTo 由 pill 表达,
 // 均不进 dl。
-// 2026-11-12 字段审计(全量 293 行 config_json 对账,来源=run_dispatcher
+// 字段审计(全量 293 行 config_json 对账,来源=run_dispatcher
 // 实写键):① 有用户决策含义的键全部给中文标签;② 机器面键(重跑回放
 // 快照 execSlotMap/execCarryOverrides/execConfigId、凭证溯源
 // credentialSource/credentialProjectId、rerun 重建用 injectionEntryIds、
@@ -327,7 +327,7 @@ const RECIPE_LABELS: Record<string, string> = {
   runId: '运行ID',
   scenarioId: '场景',
   dataSetIds: '数据集',
-  envId: '环境',               // D2 退役键,仅历史行有值
+  envId: '环境',               // 执行环境键不再写入(ADR-0003 #13),仅历史行有值
   // 合成行(多键并一行,见 recipeEntries):方案名/编号、环境/来源
   scheme: '执行方案',
   environment: '执行环境',
@@ -448,7 +448,7 @@ const hasOutOfScope = computed(() => {
 /** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景本体定义生效
  *  (仅覆盖语义的键会走到这里;快照键空值已被 SKIP_EMPTY 整行跳过)。
  *  布尔译是/否;对象/对象数组紧凑 JSON 保结构可读,不出现 [object Object]
- *  (dataSetSelection 等对象数组此前 join 成 [object Object],2026-11-12 修)。 */
+ *  (dataSetSelection 等对象数组此前 join 成 [object Object],已修)。 */
 function formatRecipeValue(v: unknown): string {
   if (typeof v === 'boolean') return v ? '是' : '否'
   if (Array.isArray(v)) {
@@ -473,7 +473,7 @@ function formatRecipeValue(v: unknown): string {
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
 
-// B4→2026-11-12 三改:默认落地 tab = 实时日志(打开详情页即打印);
+// 默认落地 tab = 实时日志(打开详情页即打印);
 // #report / #detail 深链覆盖默认;?rows=failed(列表失败数字入口)落
 // 「报告」—— 失败聚焦块即失败用例清单,替代原行级表直达。
 const detailTab = ref<'logs' | 'report' | 'detail'>(
@@ -615,7 +615,7 @@ onUnmounted(() => {
   vertical-align: middle;
 }
 
-/* ── 页头动作行(2026-11-12 对齐统一)────────────────────────
+/* ── 页头动作行(对齐统一)────────────────────────
    返回链接 / 状态徽标 / 链接动作同一居中基线;细项间距收口。
    HubDetailPage 的 #actions 容器已是 items-center,这里只管行内
    形态:徽标与动作同带高,PageBack 的全局 padding-top 归零。 */
@@ -634,7 +634,7 @@ onUnmounted(() => {
 /* PageBack 全局形态带 padding-top:0.25rem(为非居中容器兜底);
    本行 items-center 已居中,补丁在这里造成下坠 —— 就地归零。
    右距 10px:返回链接是导航,与「状态+动作」组拉开一档(实测
-   12px 时整行读成连串,2026-11-12 浏览器实测定值) */
+   12px 时整行读成连串,浏览器实测定值) */
 .exec-actions :deep(.pgback) {
   padding-top: 0;
   margin-right: 0.625rem;
@@ -738,7 +738,7 @@ onUnmounted(() => {
 .ex-table th {
   padding: 0.5rem 0.625rem;
   /* th 浏览器默认居中,与左对齐的行内容错位 —— 表头随行左对齐
-     (标题「系统」压住「fin/jira」列首,2026-11-12) */
+     (标题「系统」压住「fin/jira」列首) */
   text-align: left;
 }
 

@@ -1,5 +1,5 @@
 /**
- * 执行形态判定(N3 归一,评审 2026-11-01 §3.2 拆判定):与后端
+ * 执行形态判定(修复方案 2026-11-01 §3.2 拆判定):与后端
  * `app/models/execution.py` 的 `NON_SCENARIO_KINDS` / `is_scenario_backed`
  * 同口径,回答「执行是否挂在真实场景上」(按场景筛选 / 按配方重跑 /
  * 详情页链到场景)。临时调用(adhoc)等新形态落地时加进本集合 ——
@@ -12,7 +12,7 @@
  */
 
 /** 不挂在真实场景上的形态:scenario_id 是占位 `<前缀>-<id>`
- *  (suite_graph → `suite-<id>`;adhoc 临时调用 → `adhoc-<runId>`,P3 2026-11-02)。 */
+ *  (suite_graph → `suite-<id>`;adhoc 临时调用 → `adhoc-<runId>`)。 */
 export const NON_SCENARIO_KINDS = ['suite_graph', 'adhoc'] as const
 
 export type NonScenarioKind = (typeof NON_SCENARIO_KINDS)[number]

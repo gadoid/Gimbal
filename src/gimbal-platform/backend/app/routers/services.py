@@ -120,7 +120,7 @@ class InstancePut(BaseModel):
 
 
 class InstanceMove(BaseModel):
-    """实例改标签(2026-11-18 环境降级交互补齐;标签即环境)。
+    """实例改标签(环境降级交互;标签即环境)。
 
     目标环境二选一:``envId``(既有环境)或 ``envTag``(自由标签,不存在
     则自动登记为环境定义)。登录口/版本线/说明随行;API 地址
@@ -329,7 +329,7 @@ async def _sync_instance_fields(
 
 
 def _checked_login_url(value: str | None) -> str | None:
-    """loginUrl scheme 闸(口径与 baseUrl 一致,2026-11-21)。
+    """loginUrl scheme 闸(口径与 baseUrl 一致)。
 
     登录口由引擎登录流程直接当 URL 消费,任意串入库会在执行期被打
     出去 —— 非空必须以 http:// 或 https:// 开头;空串/None = 清空/
@@ -350,8 +350,8 @@ def _checked_login_url(value: str | None) -> str | None:
 def _instance_integrity_conflict(e: Exception) -> tuple[str, str]:
     """提交点 IntegrityError → (code, message),按约束名分派。
 
-    同 scenario_store._integrity_conflict_code 教训(评审 2026-11-20)
-    的复发修复:提交点冲突多源 —— 身份别名唯一 / 部署 (service, env)
+    同 scenario_store._integrity_conflict_code 的教训
+    复发修复:提交点冲突多源 —— 身份别名唯一 / 部署 (service, env)
     唯一 / 系统实例行唯一,一律映射「身份撞名」会把 deployment 竞态
     误报成调用身份名已登记。别名唯一 → service_instance_identity_taken;
     其余保守回落 service_instance_conflict(409 不 500,消息带约束名

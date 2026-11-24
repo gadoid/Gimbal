@@ -33,20 +33,20 @@ NOTIFICATION_TYPES = (
     "scenario_unpublished",
     "role_changed",
     "resource_transferred",
-    # 2026-09-23 批次 F1:分发接收提醒(悬浮标签数据源)。
+    # 分发接收提醒(悬浮标签数据源)。
     # resource_transferred(资源转让)语义是所有权转移,留给离职处置线,
     # 与本类型的「副本交接」互不复用。
     "resource_handoff",
     # RS4a（Release v4.4 §5.9）：直接保存影响他人引用时的版本变更通知。
     "scenario.version_change",
-    # ── 横向件补全轮(2026-10-20):以下类型此前已在发射但未登记词表,
+    # ── 横向件补全:以下类型此前已在发射但未登记词表,
     #    导致既进不了偏好开关、前端也没有可读标签 —— 三处清单失同步。
     # 集成任务全套(凭证失效/连续失败告警/自动暂停/待确认/恢复)。
     "integration",
-    # S7.4 引用分享退役:一次性转换命令发属主的转换回执(此后不再产新行;
-    # 历史 share_ref_* 通知行照常展示 —— 类型词表只管创建期)。
+    # 引用分享退场(ADR-0003 #20):一次性转换命令发属主的转换回执
+    # (不再产新行;历史 share_ref_* 通知行照常展示 —— 类型词表只管创建期)。
     "share_ref_converted",
-    # M2a S7.6:公共层 carry 改动被项目层覆盖遮住 → 项目管理员提醒。
+    # 公共层 carry 改动被项目层覆盖遮住 → 项目管理员提醒。
     "carry.shadowed",
     # M2b Q2:项目令牌负责人换绑(待确认 / 已变更 / 被拒)与失格提醒。
     "project_token",
@@ -112,7 +112,7 @@ async def upsert_execution_finished(
     """
     if await type_disabled(db, user_id, "execution_finished"):
         return
-    insert_ = pg_insert   # SQLite 退役后不再分派方言
+    insert_ = pg_insert   # PG-only(ADR-0003 #18),无方言分派
 
     # 聚合计数在 UPDATE 语句内现算(§3.3 第七轮:Python 先算后写会被
     # 并发终态用旧读数覆盖)。batch_id 是服务端值(非用户输入),内插
@@ -173,7 +173,7 @@ async def list_notifications(
     page: int = 1, page_size: int = 50,
 ) -> tuple[list[Notification], int, int]:
     """(当前页, 未读总数, 总条数);未读优先 + id 倒序,公告过期(expires_at)
-    查询侧过滤。2026-09-23 分页批次:limit → page/page_size + total(原
+    查询侧过滤。limit → page/page_size + total(原
     「最近 50 条」截断改为真分页)。
     """
     now = datetime.now(timezone.utc)

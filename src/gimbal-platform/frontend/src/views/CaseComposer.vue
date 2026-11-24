@@ -25,7 +25,7 @@
           </svg>
         </button>
         <div class="title-block">
-          <!-- C 组去重(2026-10-14):收拢模式下统一面包屑由 CollapsedTopbar
+          <!-- C 组去重:收拢模式下统一面包屑由 CollapsedTopbar
                承载,页面级 crumb 与之逐字重复 —— 收拢态隐藏,保留标题。 -->
           <div v-if="chromeMode !== 'collapsed'" class="crumb">
             <span @click="$router.push('/scenarios')">场景库</span>
@@ -101,7 +101,7 @@
       <span><strong>系统不匹配:</strong> {{ systemMismatch }}</span>
     </div>
 
-    <!-- 公共场景常驻横幅(S7.4:被引用分支随 share_refs 退役)。 -->
+    <!-- 公共场景常驻横幅(被引用分支不复存在,ADR-0003 #20)。 -->
     <div v-if="liveEditBanner" class="live-edit-banner" data-testid="scenario-live-banner">
       {{ liveEditBanner }}
     </div>
@@ -215,7 +215,7 @@
             <svg v-else class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
             保存草稿
           </button>
-          <!-- F2(2026-09-23):另存为 —— 先保存当前编辑再拷贝(副本 = 最新
+          <!-- 另存为 —— 先保存当前编辑再拷贝(副本 = 最新
                草稿),成功后跳转打开副本,原场景不动;重名 409 弹确认走
                suggestion。 -->
           <button
@@ -872,7 +872,7 @@ async function loadScenario() {
     // 读侧返回 {meta, steps(plate dict), ...};重建 definition(plate 结构)。
     // meta 先整份铺开再覆盖编排器管理的字段 —— 未知键(尤其 meta.plate
     // 版本声明)必须原样保留:丢了它,锚点步骤的 call(6.2 已剥离派生
-    // 字段)在 /convert 直通校验必炸(2026-10-12 自举场景导出失效根因),
+    // 字段)在 /convert 直通校验必炸(自举场景导出失效根因),
     // 保存还会把无版本声明的损坏写回库。scenarioId/updateTime/owner
     // 等平台键随铺开带回,保存侧 _strip_platform_meta 会剥掉,无碍。
     const prevConfig = definition.value.config
@@ -943,7 +943,7 @@ async function loadScenario() {
   }
 }
 
-// ── 公共场景的常驻横幅 + 首改提示(S7.4:被引用名单随 share_refs 退役;
+// ── 公共场景的常驻横幅 + 首改提示(被引用名单不复存在,ADR-0003 #20;
 // 公共提示保留 —— 改动立即对所有人可见的防误伤仍必要)。自动保存
 // 防误伤:首次改动落盘前弹一次(sessionSharePrompted 记会话内不再打断)。
 let sessionSharePrompted = false
@@ -1010,7 +1010,7 @@ function genScenarioId(name: string): string {
   return id.length > 128 ? id.slice(0, 128) : id
 }
 
-// ── F2(2026-09-23):另存为 ───────────────────────────────────────
+// ── 另存为 ───────────────────────────────────────
 const saveAsBusy = ref(false)
 
 /** 先保存当前编辑(副本 = 最新草稿,不吃旧快照)→ POST /copy {name};

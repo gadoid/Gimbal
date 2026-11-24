@@ -669,8 +669,8 @@ async def rollback_batch(db: AsyncSession, batch_id: str,
                               "entityId": snap.entity_id,
                               "note": "copy already deleted"})
             continue
-        # 2-5(2026-10-13)真缺陷:裸 db.delete(row) 撞 run_schemes/
-        # data_sets 外键(PG 强制;SQLite 默认不强制所以一直没暴露)。
+        # 真缺陷:裸 db.delete(row) 撞 run_schemes/
+        # data_sets 外键(PG 强制)。
         # 走 scenario_store.delete 的同款级联面(套引用清理 + 依赖表
         # 先删),复用单一删除语义。
         await scenario_store.delete(db, snap.entity_id)
@@ -732,8 +732,8 @@ async def rollback_batch(db: AsyncSession, batch_id: str,
     # S7.6:公共层值表被回滚恢复 → 同键遮蔽通知(值变更与通知同判)
     for change in carry_changes:
         await _notify_carry_shadow(db, batch, change)
-    # 响应状态镜像 batch 实收(复核收口 2026-11-22:旧硬编码
-    # "rolled_back" —— 全冲突零还原时 batch 未收口,响应误报已回滚)
+    # 响应状态镜像 batch 实收(旧硬编码
+    # "rolled_back" 的陷阱 —— 全冲突零还原时 batch 未收口,响应误报已回滚)
     return {
         "batchId": batch_id, "status": batch.status,
         "restored": restored, "conflicts": conflicts,
@@ -1746,7 +1746,7 @@ async def submit_adaptation(
                 "similar_applied": similar_applied}
 
     # ③ 直接保存:单事务(快照 → 方案态落库 → 引用索引)。写面闸单源
-    # (2026-11-22 收口:row.payload 直改此前绕过 store.update 提交链
+    # (row.payload 直改此前绕过 store.update 提交链
     # —— prev_meta_plate 防抖、§3.5 明文闸、verified→effective 后链
     # 三面皆漏;闸经 store.gates_for_mutation,后链经 post_save_chain,
     # 与 store.update 同源)。
@@ -1794,7 +1794,7 @@ async def submit_adaptation(
 async def stale_scenarios(
     db: AsyncSession, *, user_id: int | None = None,
 ) -> list[dict]:
-    """RS4a 陈旧清单（§2.3）:仍为预览 / 有新版本线 / 定义已修正 / 线已退役。"""
+    """陈旧清单（§2.3）:仍为预览 / 有新版本线 / 定义已修正 / 线已退役。"""
     stmt = select(ComposerScenario)
     if user_id is not None:
         stmt = stmt.where(ComposerScenario.owner_id == user_id)

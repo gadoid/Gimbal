@@ -1,7 +1,7 @@
 """Execution 读侧投影 + 删除(V3,自 executions 路由收敛)。
 
-exec_runs 子表已随存量数据清理退役(V1 兼容层),删除整单不再需要
-子行清理;单-run 删除的计数器回退(MAX(0, col-1))也随端点一并移除。
+exec_runs 子表已退场(ADR-0003 #14),删除整单不再需要
+子行清理;单-run 删除端点与计数器回退(MAX(0, col-1))一并移除。
 """
 from __future__ import annotations
 
@@ -93,20 +93,20 @@ async def snapshot_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
     return set(rows)
 
 
-# ── 可取消判定(全量评估 2026-11-02 #1;graph 单元级取消方案 P3/P4)──────
+# ── 可取消判定(graph 单元级取消方案)──────
 
 async def uncancelable_graph_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
     """已被 worker 认领(job running)且**不支持中途取消**的 graph 执行 id
     (一次 in 查询;列表/详情/cancel 共用)。
 
-    口径按单元级取消能力(方案 §6「可」项 + legacy 通道,2026-11-03 起):
+    口径按单元级取消能力(方案 §6「可」项 + legacy 通道):
     spawn 期探测并落 ``job payload["unit_cancel"]`` —— server 链读 healthz
     的 cancel_scopes(旧执行器空能力 → False,旧执行器会把 scope=unit 当
     step 处理且带 A0 缺陷);legacy 链读本地 gimbal 包 FEATURES(GIMBAL_BIN
     指向外部安装无法探测 → 保守 False)。能力位缺失 = 尚未探测(物化/执行
     器启动窗口):server 链取消可被接受 —— 启动前命中走「取消先于启动」收
-    口、启动期命中由下发任务等 session 就绪后按能力位决定(评审
-    2026-11-03 §3.1)→ 可取消;legacy 链按不可取消。graph 不能看 ``Execution.kind``:
+    口、启动期命中由下发任务等 session 就绪后按能力位决定(取消方案
+    2026-11-02 §3.1)→ 可取消;legacy 链按不可取消。graph 不能看 ``Execution.kind``:
     ``POST /api/runs`` 带 graph 的执行 kind 仍是 scenario,只有
     ``execution_jobs.kind`` / payload 如实记了任务体形态与链。按 job
     状态而非执行状态判断 —— 物化窗口里执行仍 queued。queued 的 graph
@@ -130,7 +130,7 @@ def _graph_unit_cancelable(payload: dict) -> bool:
     if flag is not None:
         return bool(flag)
     # 能力位未探测 = 物化/执行器启动窗口:server 链取消可被接受,下发任务
-    # 总是先建、session 就绪后按能力位决定发或停(评审 2026-11-03 §3.1)
+    # 总是先建、session 就绪后按能力位决定发或停(取消方案 2026-11-02 §3.1)
     # → 可取消;legacy 链 = 旧引擎/未探测,保守不可取消。
     return (payload.get("chain") or "legacy") == "server"
 
@@ -349,8 +349,8 @@ async def consecutive_failure_streaks(
 ) -> dict[int, int]:
     """execution id → 「连续第 N 次失败」(执行设计 §3.2 信号列)。
 
-    口径:``owner_id`` = 同 owner 同 scenario;``project_id``(A 级批次
-    2026-11-18)= 项目快照行集内同 scenario 跨 owner 连败(项目聚合面
+    口径:``owner_id`` = 同 owner 同 scenario;``project_id``
+    = 项目快照行集内同 scenario 跨 owner 连败(项目聚合面
     与行集同口径)。二者恰传其一。执行按 id 升序(= 时间序)连续计
     失败,失败单自身计入 N;成功/取消单断链。一次轻行扫描(只取三列,
     倒序取最近 _STREAK_SCAN_LIMIT 条)内存里转回时间正序走一遍:失败
@@ -403,7 +403,7 @@ async def delete_execution(session: AsyncSession, ex: Execution) -> None:
 # ── P2-02/C2:事件与日志落库(统一表)─────────────────────────────
 
 def _dialect_insert(db: AsyncSession):
-    """PG insert(SQLite 已退役 2026-10-14,双方言分派随之退役)。"""
+    """PG insert(ADR-0003 #18;无方言分派)。"""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     return pg_insert
 
@@ -499,7 +499,7 @@ async def insert_events(db: AsyncSession, execution_id: int,
         await _upsert_steps(db, steps)
 
 
-# ── B3(2026-11-06 日志报告整理):步骤结果行 ─────────────────────────
+# ── 步骤结果行(日志报告整理)─────────────────────────
 
 _STEP_UPDATE_COLS = (
     "event_seq", "step_name", "description", "call_summary", "status",
@@ -811,7 +811,7 @@ async def purge_expired_events(
     """超期执行的事件面清扫(保留 EXEC_EVENTS_RETENTION_DAYS 天;0=禁用)。
 
     由后台保留期维护任务周期调用(run_dispatcher.run_retention_maintenance;
-    整体评审 2026-10-15 #2:此前全仓零调用点,结构化日志入库后表只增
+    此前全仓零调用点,结构化日志入库后表只增
     不减)。执行主行与台账单元行不受影响(它们是审计面)。
 
     分批:每批最多 ``batch_executions`` 个仍有事件残留的超期执行,删完
@@ -853,7 +853,7 @@ async def purge_expired_events(
         await db.commit()
 
 
-# ── B4(2026-11-06 日志报告整理):执行报告(打开时从步骤表渲染)──────
+# ── 执行报告(打开时从步骤表渲染)──────
 
 _STEP_FAIL_STATES = ("failed", "error")
 
@@ -901,8 +901,8 @@ async def build_report(session: AsyncSession, ex: Execution) -> dict:
     groups: list[dict] = []
     by_seq: dict[int, dict] = {}
     for r in rows:
-        # 行投影单一形态 = execution_rows_page 的 camelCase 键(复核收口
-        # 2026-11-22:snake_case 双键回落随存量单清除删除)
+        # 行投影单一形态 = execution_rows_page 的 camelCase 键
+        # (snake_case 双键回落已随存量单清除删除)
         g = {
             "key": f"row-{_row_key(r)}", "rowSeq": _row_key(r),
             "unit": r.get("unitId") or "",

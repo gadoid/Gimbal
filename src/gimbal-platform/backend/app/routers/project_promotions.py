@@ -77,7 +77,7 @@ def _promo_out(promo: ProjectPromotion, *, changed: bool | None = None,
         "conflicts": promo.conflicts or [],
         "resolution": promo.resolution,
         "note": promo.note or "",
-        # 时区对齐 2026-11-15 B:isoformat()+"Z" 在 aware 列(PG 读回
+        # 时区对齐:isoformat()+"Z" 在 aware 列(PG 读回
         # +00:00)上产出双后缀,前端 Invalid Date —— 走 iso_utc_z 归一
         "createdAt": iso_utc_z(promo.created_at),
         "updatedAt": iso_utc_z(promo.updated_at),
@@ -126,8 +126,8 @@ async def create_promotion(
             "message": "存在阻断项(成员场景不在本项目且不能随行),先处理再发起",
             "blockers": analysis["blockers"]})
     if not analysis["conflicts"]:
-        # 直通路径:无冲突不落**申请**(pending)行,直接复制。C1 收口
-        # (2026-11-22):approved 行本身落库 —— 此前瞬态对象从不入
+        # 直通路径:无冲突不落**申请**(pending)行,直接复制。approved
+        # 行本身落库 —— 此前瞬态对象从不入
         # session,resolution(decidedBy/decidedAt)不持久化、
         # grants.source_promotion_id=NULL 与手工授权不可区分、
         # revoke_grants 按 promotion id 回收够不到这批 grant。
@@ -171,7 +171,7 @@ async def list_promotions(
                                               "withdrawn)$")] = None,
 ) -> dict:
     """项目管理员(∨ Admin+)见全部;成员见自己的申请。Admin+ 非成员
-    亦可见全部(2026-11-19 复核补 —— 与下方 sees_all/裁决门
+    亦可见全部(与下方 sees_all/裁决门
     require_project_admin 同口径;此前 require_member 对其 404,页面
     渲染了裁决按钮却拉不到列表)。"""
     from ._ownership import has_capability
@@ -224,7 +224,7 @@ async def approve_promotion(
     项目层(合并写)。decisions 须覆盖全部冲突路径。"""
     promo = await _load_promo(db, promo_id)
     await require_project_admin(db, promo.project_id, user)
-    # C9(2026-11-23 审计):行锁串行化裁决 —— 读-判-写在无锁下存在
+    # 行锁串行化裁决 —— 读-判-写在无锁下存在
     # TOCTOU(并发双批 → execute_promotion_copy 双份副本 + 双份 grants);
     # 同事务持锁至 commit,状态判定与复制原子化(先例 integration_runner
     # 实例行 with_for_update)。
@@ -263,7 +263,7 @@ async def approve_promotion(
         link=f"/projects/{promo.project_id}",
         payload={"promotionId": promo.id}, commit=False)
     await db.commit()
-    # 审批裁决入审计(0-2 批次 2026-11-23):best-effort,业务已提交;
+    # 审批裁决入审计:best-effort,业务已提交;
     # 裁决明细在 promotion.resolution,审计只记动作与对象坐标。
     await audit_svc.record(
         db, actor_id=user.id,
@@ -306,7 +306,7 @@ async def reject_promotion(
     from ..services.project_promotion import revoke_grants
     await revoke_grants(db, promo.id)
     await db.commit()
-    # 驳回入审计(0-2 批次 2026-11-23;同 approve 口径)
+    # 驳回入审计(同 approve 口径)
     await audit_svc.record(
         db, actor_id=user.id,
         actor_name=user.display_name or user.username,

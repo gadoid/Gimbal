@@ -1,6 +1,6 @@
 """AuthAccount model — 账户(重构 §1.4;替代 auth_sessions 的凭证行)。
 
-账户 = 登录信息实体(决策 5):密码只存一份,(pool, system, env,
+账户 = 登录信息实体:密码只存一份,(pool, system, env,
 username) 唯一 —— **一处改密处处生效**(领域不变式:同一账号在一个
 系统上的调用都用同一份登录信息)。身份条目(service_identities)按
 ref 引用本表;条目不再内嵌任何凭据。
@@ -16,7 +16,7 @@ ref 引用本表;条目不再内嵌任何凭据。
 * ``alias``/``slot`` 退役:引用键移居身份条目;
 * ``is_default`` = 每池每 (system, env) 至多一个默认账户
   (ref_mode=default 的取用位;部分唯一索引钉死);
-* 归属 xor(owner_id 个人池 / project_id 项目池,S8 口径不变;项目池
+* 归属 xor(owner_id 个人池 / project_id 项目池;项目池
   成员只见 username 不见明文,同旧语义)。
 
 环境删除策略:条目/部署行级联,账户**不级联**(密文资产)—— 路由
@@ -44,7 +44,7 @@ class AuthAccount(Base):
         UniqueConstraint("owner_id", "project_id", "system", "env_id",
                          "username", name="uq_account_pool_system_env_user",
                          postgresql_nulls_not_distinct=True),
-        # 每池每 system 至多一个默认账户(§8.3,2026-11-17 环境降级轮:
+        # 每池每 system 至多一个默认账户(§8.3:
         # default 引用取 system 唯一默认;迁移 0059 重建索引)
         Index("uq_account_default", "owner_id", "project_id", "system",
               unique=True, postgresql_where=text("is_default"),

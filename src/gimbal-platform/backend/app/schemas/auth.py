@@ -78,9 +78,9 @@ class UserPublic(BaseModel):
     id: int
     username: str
     display_name: str
-    # 三级角色(authz W1 2026-11-07 更名:user | admin | super_admin,
+    # 三级角色:user | admin | super_admin,
     # 原 member→admin、原 admin→super_admin,权限边界不变;更早的
-    # 2026-09-29 更名是原 member→user、operator→member)
+    # 更名先例是原 member→user、operator→member)
     role: Literal["user", "admin", "super_admin"] = "user"
     is_active: bool
     # D32:系统用户标记(用户管理行防御:停用/删除入口对其隐藏)

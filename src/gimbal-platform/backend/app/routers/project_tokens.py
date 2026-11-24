@@ -68,7 +68,7 @@ async def _load_normal_project(db: AsyncSession, project_id: int) -> Project:
 
 async def _manage_gate(db: AsyncSession, user, project_id: int) -> Project:
     # r5-2.2 同口径(S8 项目凭证 _manage_gate):管理门 = 项目管理员,
-    # Admin+ 不旁路 —— 令牌是项目的,不是平台的(2026-11-11 收口,此前
+    # Admin+ 不旁路 —— 令牌是项目的,不是平台的(此前
     # 走 _require_manage 的 Admin+ 旁路与凭证面自相矛盾);非成员 404,
     # 成员非管理员 403
     proj = await _load_normal_project(db, project_id)

@@ -64,7 +64,7 @@
             <li v-for="e in g.events" :key="e.key" class="tl-item" :data-testid="`wb-tl-${e.kind}`">
               <span class="tl-dot" :style="{ background: colorOf(e.kind) }" aria-hidden="true" />
               <router-link :to="e.to" class="tl-body">
-                <!-- 调用类(2026-11-04):对账明细(归属人 · clientRef)并入标题行,
+                <!-- 调用类:对账明细(归属人 · clientRef)并入标题行,
                      信息一行看完;徽章独占下一行 —— 形制与其余类完全一致 -->
                 <span class="tl-line">
                   <span class="tl-title">
@@ -340,7 +340,7 @@ onBeforeUnmount(() => { resize?.disconnect() })
   @apply flex items-center justify-between gap-2 border-t border-signal-line;
   padding-top: 0.75rem;   /* 间距由 .tl-main 的 gap 给,这里只留分隔线下的呼吸 */
 }
-/* 2026-10-21:五类事件后横向排不下 —— 改竖排:圆点在上、类型名在下,
+/* 五类事件后横向排不下 —— 改竖排:圆点在上、类型名在下,
    每类一列、列间自然铺开(justify-between),类型再增多也仍是这一行。 */
 .lg-items { @apply flex items-start justify-between flex-1; }
 .lg-item { @apply flex flex-col items-center gap-[0.1875rem] text-label text-signal-ink/70; font-weight: 500; transition: opacity 0.12s ease; }

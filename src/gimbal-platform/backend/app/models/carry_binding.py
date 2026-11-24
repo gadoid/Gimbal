@@ -5,7 +5,7 @@ null 语义(写死):行存在即声明注入,value=NULL 注入 JSON null(显式�
 注入时按契约 type 宽松转换。
 
 配置坐标 = (scope, config_key, field_path):
-* scope 分层(S4 沿用):公共项目层 < 项目层;``scope_id`` 多态指向
+* scope 分层:公共项目层 < 项目层;``scope_id`` 多态指向
   projects.id / users.id,应用层校验,不落 FK;
 * **环境维已退役(2026-11-17,redesign §8.4)**:环境只做轻量部署标签,
   不再承载 carry 配置层 —— 多服务共享一层配置时同名字段必然打架。

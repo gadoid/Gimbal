@@ -203,7 +203,7 @@ onMounted(async () => {
 }
 
 /* 常驻统计:≤ 2 项单列两块;3 项三列;4 项两列网格(原型口径)。
-   间距微调(2026-11-05):tile 内 label/value 留 3px、块间 10px ——
+   间距微调:tile 内 label/value 留 3px、块间 10px ——
    原 1px/8px 在 288px 预览宽下数字贴标签,读起来挤。 */
 .id-stats { @apply flex gap-2.5 m-0; padding: 0.875rem 1rem 0.75rem; }
 .id-stats.grid2 { @apply grid grid-cols-2; flex: none; }

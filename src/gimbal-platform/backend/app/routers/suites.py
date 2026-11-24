@@ -165,10 +165,10 @@ async def _access_and_caps(
 ) -> dict:
     """§7.6 判定投影(重构方案:前端不自己推导角色)。调用前读闸
     须已过;access 为 None 仅发生在私有非属主(项目成员经表 B member
-    在读闸放行,此处补投影)。W3 起 admin 与公共读者同权(Admin+ 仅
+    在读闸放行,此处补投影)。admin 与公共读者同权(Admin+ 仅
     剩下架公共对象,服务端 public_admin 判定,不进此投影)。
 
-    01-03 §4.2(2026-11-24):修前「project_id 非空即 public」是普通
+    修前「project_id 非空即 public」是普通
     项目概念诞生前的投影 —— 普通项目非属主成员被误标公共只读
     (canEdit/canRun 恒 False,而写闸走表 B contributor 放行),且前端
     按 access='public' 渲染的「复制到我的」在普通项目 fork 404
@@ -184,7 +184,7 @@ async def _access_and_caps(
                   if suite.project_id != await public_project_id(db)
                   else "public")
     else:
-        # S7.4:引用访问已退役;私有非属主无访问(项目成员经表 B member)
+        # 引用访问不复存在(ADR-0003 #20);私有非属主无访问(项目成员经表 B member)
         access = None
     if access is None:
         return {}
@@ -441,7 +441,7 @@ async def delete_suite(
     suite = await _load_suite(db, suite_id)
     await _require_write(db, user, suite, verb="delete")
     suite_name, suite_owner = suite.name, suite.owner_id
-    # S7.4:引用者通知随 share_refs 退役移除(存量已转私有副本)
+    # 引用者通知不复存在(ADR-0003 #20;存量已转私有副本)
     await db.delete(suite)  # 成员行随组合外键 CASCADE,场景不受影响
     await db.commit()
     # 时间线 + 审计:admin 越属主删除(属主自删只落时间线不入审计)
@@ -521,10 +521,10 @@ async def add_members(
                 "code": "suite_member_cap_exceeded",
                 "message": (f"suite member cap is "
                             f"{settings.SUITE_MEMBER_CAP}")})
-        # S1.5 同区约束(单点 zone.ensure_member_same_zone):成员与套件
+        # 同区约束(单点 zone.ensure_member_same_zone):成员与套件
         # 同 project_id;私有区同空时同属主 —— 项目套件可容纳其他成员
-        # 的场景,跨区/私有他人 → 422(旧「同属主一刀切 404」退役;
-        # 公共套件是副本,加成员走原件 + 重发布,S1.3 前置 422 兜住)
+        # 的场景,跨区/私有他人 → 422(ADR-0003 #19;
+        # 公共套件是副本,加成员走原件 + 重发布,前置 422 兜住)
         from ..services.zone import ensure_member_same_zone
 
         try:
@@ -866,7 +866,7 @@ async def _run_orchestration(
             raise HTTPException(status_code=409, detail={
                 "code": "graph_invalid", "message": str(e)}) from None
         if _ambig:
-            # D3 收口(2026-11-22):歧义独立报(此前误标「未登记」)
+            # 歧义独立报(此前误标「未登记」)
             raise HTTPException(status_code=409, detail={
                 "code": "auth_aliases_ambiguous",
                 "message": ("以下身份条目命中多个候选账户(同引用多行且"
@@ -893,7 +893,7 @@ async def _run_orchestration(
 
     from ..services import execution_queue as _eq
     from ..services.run_dispatcher import create_execution, new_run_id
-    # B6③(2026-11-23):legacy 链退役后执行链恒 server;C13 台账键照记
+    # 执行链恒 server(ADR-0003 #23,登记册 B6③);C13 台账键照记
     # (与 run_dispatcher.dispatch_run 同形,存量 legacy 值仅历史可读)。
     chain = "server"
     run_id = new_run_id()
@@ -1270,8 +1270,8 @@ async def validate_suite(
 
     in_flight_batch = await _in_flight_batch(db, user.id, suite_id)
 
-    # C2 收口(2026-11-22):预检对齐运行口径 —— credentialSource=project
-    # 门不过不再静默降级个人池(旧口径:预检绿、发起编排 409 / 聚合
+    # 预检对齐运行口径 —— credentialSource=project
+    # 门不过不静默降级个人池(旧口径陷阱:预检绿、发起编排 409 / 聚合
     # 成员全 skipped,契约失信)。error 级条目压 ok=False,与运行面
     # credential_source_invalid 同码。
     if credential_source == "project" and cred_project_id is None:
@@ -1437,8 +1437,8 @@ async def validate_suite(
                        gd.unit_merged_bindings(graph_spec, r["unit"]))
                       for r in resolved])
             if aliases:
-                # §8.3:取用不校验标签 —— 无环境位(旧链曾漏传 env_id
-                # 导致 validate 恒 warn;链位退役后该缺陷不复存在)
+                # §8.3:取用不校验标签 —— 无环境位(ADR-0003 #21:
+                # 链位已删,漏传 env_id 的 validate 恒 warn 缺陷不复存在)
                 got = await run_prepare.resolve_exec_auths(
                     _sf, user.id, aliases,
                     cred_project_id=cred_project_id)

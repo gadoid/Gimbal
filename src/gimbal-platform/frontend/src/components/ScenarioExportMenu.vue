@@ -33,7 +33,7 @@
       <DropdownMenuItem class="sl-menu-item" :disabled="exporting" @click="onCommand('json')">导出 JSON</DropdownMenuItem>
       <DropdownMenuItem class="sl-menu-item" :disabled="exporting" @click="onCommand('yaml')">导出 YAML</DropdownMenuItem>
       <DropdownMenuItem class="sl-menu-item" :disabled="exporting" @click="onCommand('copy')">复制 JSON</DropdownMenuItem>
-      <!-- 按方案导出(spec §8):方案的 serviceBindings 物化进导出(envId 已退役)。
+      <!-- 按方案导出(spec §8):方案的 serviceBindings 物化进导出(envId 不进导出,ADR-0003 #21)。
            形态与场景库行菜单同款(2026-09-22 重设计):方案平铺为子菜单项,
            闭包持方案对象(同名方案以身份区分不串台);加载中 / 无方案有
            置灰说明;Separator 与上方三动作分组。菜单面板走 sl-menu 体系。

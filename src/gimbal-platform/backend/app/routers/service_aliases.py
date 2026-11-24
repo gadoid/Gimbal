@@ -67,7 +67,7 @@ class AliasCreate(BaseModel):
 
     @model_validator(mode="after")
     def _username_ref_requires_name(self) -> "AliasCreate":
-        """FE-04(2026-11-20 审计):refMode=username 必须带 refUsername ——
+        """refMode=username 必须带 refUsername ——
         此前该组合可入库,后端执行回落默认账户、前端按空名过滤报缺,
         单源镜像在边缘值上分叉。写面拒绝,存量旧值仍按回落语义解析。"""
         if self.ref_mode == "username" and not self.ref_username.strip():

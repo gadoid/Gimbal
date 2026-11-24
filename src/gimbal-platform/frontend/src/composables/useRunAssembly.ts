@@ -150,7 +150,7 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
   }
 
   /** dispatch 段:confirm 载荷 → RunRequest(dataSetIds 派生 + dataSetSelection
-   * 权威键 + 溯源两键恒带;退役键 prefix/mergePolicy/auths/injectCredentials
+   * 权威键 + 溯源两键恒带;方案不携带 prefix/mergePolicy/auths/injectCredentials
    * 不出现)。网络/4xx 异常原样抛给调用方(各自的错误呈现不同)。 */
   async function dispatch(
     dataSetSelection: DataSetSelection[],

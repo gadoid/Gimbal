@@ -1,4 +1,4 @@
-<!-- ProjectDetailView.vue — 项目详情(/projects/:id),2026-11-18 按
+<!-- ProjectDetailView.vue — 项目详情(/projects/:id),按
      stitch 原型重建(claude/stitch_ux/stitch_/stitch_/_1.._6,全部为
      「公共 (Public Project)」项目页的 6 个页签)。
 
@@ -38,7 +38,7 @@
 <template>
   <section class="slib">
     <p v-if="notFound" class="empty">项目不存在或无权访问。<router-link to="/projects">返回项目列表</router-link></p>
-    <!-- FE-08j(2026-11-20 审计):加载失败与 404 分离 —— 此前网络失败/5xx
+    <!-- 加载失败与 404 分离 —— 此前网络失败/5xx
          也落到「项目不存在」,误导排障。 -->
     <p v-else-if="loadFailed" class="empty">项目加载失败(网络或服务异常),请稍后重试。<router-link to="/projects">返回项目列表</router-link></p>
     <template v-else-if="project">
@@ -52,7 +52,7 @@
               <i class="dot" />{{ isPublic ? '全员可见' : '成员可见' }}
             </span>
           </div>
-          <!-- 统计:场景 / 用例集 / 成员 / 运行成功率(A 级批次 2026-11-18
+          <!-- 统计:场景 / 用例集 / 成员 / 运行成功率(
                接回:项目维度聚合端点 ?projectId=;软失败显 —) -->
           <div class="prj-stats" data-testid="prj-stats">
             <div class="stat">
@@ -71,7 +71,7 @@
               <span class="k">运行成功率(7天)</span>
               <span class="v">{{ passRateText }}</span>
             </div>
-            <!-- 今日执行次数(stitch 0-2 批次 2026-11-23):同端点顺风车;
+            <!-- 今日执行次数(同端点顺风车;
                  软失败显 —(与成功率同口径)。 -->
             <div class="stat" data-testid="prj-stat-today">
               <span class="k">今日执行</span>
@@ -82,7 +82,7 @@
           <p v-if="metaText" class="prj-meta" data-testid="prj-meta">{{ metaText }}</p>
         </div>
         <div class="prj-head-actions">
-          <!-- A 级批次(2026-11-18):跳转带 projectId 过滤参 -->
+          <!-- 跳转带 projectId 过滤参 -->
           <Button variant="outline" size="sm" data-testid="prj-history"
                   @click="goExecutions">执行历史</Button>
           <Button size="sm" data-testid="prj-metrics"
@@ -126,7 +126,7 @@
       <SuitesPublic v-else-if="isPublic && tab === 'suites'" embedded />
 
       <!-- ══ 原型 _2 · 场景(用例)页签(普通项目)═══════════════ -->
-      <!-- A 级批次(2026-11-18)改用场景库共享骨架的 project 桶:
+      <!-- 改用场景库共享骨架的 project 桶:
            FilterPopover(facets 项目口径)+ 筛选分组(project 桶)+ 服务端分页 -->
       <ProjectScenariosTab
         v-else-if="tab === 'scenarios'"
@@ -439,12 +439,12 @@ async function removeProject(): Promise<void> {
 
 // ── 普通项目:场景页签(共享骨架 project 桶,委托 ProjectScenariosTab)─
 
-// ── 头卡运行成功率(A 级批次 2026-11-18)─────────────────────────
+// ── 头卡运行成功率─────────────────────────
 // 项目维度聚合(?projectId=);软失败显 —(无执行/端点不可达均非阻断)
 const passRate = ref<number | null>(null)
 const passRateText = computed(() =>
   passRate.value == null ? '—' : `${(passRate.value * 100).toFixed(1)}%`)
-// 今日执行次数(stitch 0-2 批次 2026-11-23):同一 summary 响应顺风车
+// 今日执行次数(同一 summary 响应顺风车
 const todayCount = ref<number | null>(null)
 const todayText = computed(() =>
   todayCount.value == null ? '—' : String(todayCount.value))
@@ -461,7 +461,7 @@ async function loadPassRate(): Promise<void> {
   }
 }
 
-// ── 头卡跳转(A 级批次:带 projectId 过滤参)──────────────────────
+// ── 头卡跳转(带 projectId 过滤参)──────────────────────
 function goExecutions(): void {
   void router.push({ path: '/executions', query: { projectId: String(project.value?.id) } })
 }
@@ -501,7 +501,7 @@ async function loadSuites(page = suitePage.value): Promise<void> {
     suiteTotal.value = env.total
     suiteLoaded.value = true
   } catch (e) {
-    // 复核收口(2026-11-22):防抖 watcher 以 void 调本函数 —— 无 catch
+    // 防抖 watcher 以 void 调本函数 —— 无 catch
     // = 未处理 rejection(UI 零提示且 suiteLoaded 不置位)。失败保留
     // 旧列表(FE-02:失败≠空态),toast 点名。
     toast.error(`用例集加载失败:${(e as Error).message}`)

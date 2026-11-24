@@ -5,7 +5,7 @@
  * 归属),所以换设备、清浏览器数据都还在。filters 字段对本模块是不透明
  * JSON,原样往返 —— 后端刻意不校验它的形态。
  *
- * project 桶(A 级批次 2026-11-18):项目详情场景页签的分组,按项目
+ * project 桶:项目详情场景页签的分组,按项目
  * id 隔离(后端 pref key = scenario_filter_groups.project.<id>);
  * 三函数的 projectId 仅 project 桶必传,其余桶忽略。
  */

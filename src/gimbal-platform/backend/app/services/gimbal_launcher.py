@@ -1,9 +1,9 @@
 """引擎子进程原语 + LaunchResult(server 链共用件)。
 
-legacy ``run launch`` 逐 case 子进程链已随 B6③ 退役(2026-11-23,
-登记册 B6/C3):平台执行恒走 server 链(gimbal_server_session,
-``gimbal run server`` + HTTP/SSE)。本模块只保留 server 会话与测试
-垫片仍消费的两件:
+平台执行恒走 server 链(gimbal_server_session,
+``gimbal run server`` + HTTP/SSE);legacy ``run launch`` 逐 case
+子进程链已退场(ADR-0003 #23,登记册 B6/C3)。本模块只保留
+server 会话与测试垫片仍消费的两件:
 
 * ``LaunchResult`` —— 执行结果值对象(server 链 SSE ``run.finished``
   的归一形态;行级判定在 run_dispatcher);
@@ -12,7 +12,7 @@ legacy ``run launch`` 逐 case 子进程链已随 B6③ 退役(2026-11-23,
 
 历史:执行调用曾是 CLI 子进程 ``gimbal run launch <case> -o json``
 (设计 docs/implemented/specs/2026-08-24-run-launch-subprocess-design.md),
-launch()/build_argv()/parse_run_result() 随双链退役删除,git 历史可溯。
+launch()/build_argv()/parse_run_result() 已删除(ADR-0003 #23),git 历史可溯。
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from typing import Any
 from ..core.config import settings
 
 
-# ─── 子进程泄漏防线(2026-11-03 复盘;launch 链事故实证,server 链同款)──
+# ─── 子进程泄漏防线(launch 链事故实证,server 链同款)──
 # 事故形态(实证):平台父进程被硬杀(SIGKILL/Bash 超时/带会话退出)后,
 # 子进程不会死 —— stdout 写断管道的 BrokenPipeError 被引擎事件
 # 总线 _safe_call 吞掉(只往同样已断的 stderr 记日志,loguru 再吞一层),
@@ -34,7 +34,7 @@ from ..core.config import settings
 # 上限随父进程失效。双守卫:
 #   - stdin=PIPE:父死→内核关写端→引擎 stdin EOF 守卫置协作取消,
 #     步骤边界收口后正常退出(引擎侧 core/proc_guard,Windows 唯一守卫);
-#   - PR_SET_PDEATHSIG=SIGINT(评审 3.1,2026-11-04):父死→内核递 SIGINT→
+#   - PR_SET_PDEATHSIG=SIGINT:父死→内核递 SIGINT→
 #     引擎的 SIGINT handler 置协作取消旗标(与手动 Ctrl-C 同一条路)
 #     ——在飞请求跑完、步骤边界停、teardown/after 括号必达、报告照写。
 #     不能用 SIGTERM:Python 默认处置=立即终止,等于内核级硬杀,清理括号
@@ -73,7 +73,7 @@ def _arm_pdeathsig() -> None:
 @dataclass(frozen=True, slots=True)
 class LaunchResult:
     """一次 case 执行的结果(server 链 = SSE ``run.finished`` 归一;
-    历史 launch 链 = 子进程 stdout JSON,已退役)。
+    launch 链的 stdout JSON 面已随链退场,ADR-0003 #23)。
 
     ``launch_status``:
 

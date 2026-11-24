@@ -4,17 +4,17 @@ precheck = 纯读析出分析(阻塞项/映射建议/认证引用);land = 一次
 (建别名 + 写 carry + 改写 definition + 建场景,单事务)。方案拍板在此
 实现的落点:
 
-* P5「有接管者才清除」—— 一致性判定先行(Codfish 规则 2026-10-15:
+* 「有接管者才清除」—— 一致性判定先行(Codfish 规则:
   同服务同路径各步骤取值不一致 → 不进 carry、不清除,保留各步字面
   值),清除计划粒度 = (step_index, path),只清该步骤自己 carry 面上
   的路径;body 字面值与 config.services URL 仅在本地有实际接管者时
   进清除集;
-* P7-② 敏感路径(命名启发)不写 carry、不进清除集,字面值保留;
-* P7-④ plate 调用(面/目录/convert)全部在事务外完成;
-* P7-⑤ 复用判定路径级:文件面字面值路径集 vs 三层链解析值逐条比,
+* 敏感路径(命名启发)不写 carry、不进清除集,字面值保留;
+* plate 调用(面/目录/convert)全部在事务外完成;
+* 复用判定路径级:文件面字面值路径集 vs 三层链解析值逐条比,
   本机缺值路径判"映射"并保留字面值;
-* P2 config.users 清空(明文凭证不落库);authz M2a S7.5(ref 重做,
-  P2-B.6):``call.user`` 标签按条目口径落地 —— 见 :func:`_auth_rewrites`,
+* config.users 清空(明文凭证不落库);ref 重做:
+  ``call.user`` 标签按条目口径落地 —— 见 :func:`_auth_rewrites`,
   落库结果回报「需要装载的身份条目 × 导入人装载状态」。
 """
 from __future__ import annotations
@@ -309,7 +309,7 @@ def _service_plan(ctx, raw_steps: list, svc: str, decision: str) -> dict:
     """单服务接管计划 —— 预检计数与落库清除/carry **共用的唯一计算函数**
     (合入评估 §1 修复:确认界面看到的必须就是落库要执行的)。
 
-    一致性判定先行(Codfish 规则 2026-10-15):同服务同路径,只要各步骤
+    一致性判定先行(Codfish 规则):同服务同路径,只要各步骤
     最终取值不一致就**不进 carry、不进清除集**,所有步骤保留各自的字
     面值 —— 只有各步取值一致的路径才可交给别名接管。参与观测的步骤 =
     ``call.service`` 命中且自身 carry 面(``step_fields[i]``,原始索引)
@@ -334,7 +334,7 @@ def _service_plan(ctx, raw_steps: list, svc: str, decision: str) -> dict:
         body = _step_body(step)
         for path in face:
             if body is None:
-                # 无请求体步骤按「未填」观测(复盘 2026-10-15):否则
+                # 无请求体步骤按「未填」观测:否则
                 # 其他步骤的一致字面值会被接管,carry 可能为它注入源
                 # 文件里没有的字段 —— 「最终取值不一致不接管」的口径
                 obs: Any = _Mark("<未填>")
@@ -463,9 +463,9 @@ async def precheck(db, *, definition: dict, user) -> dict:
         raise ImportRejected("plate_unavailable", 502, e.message) from e
 
     out["workingDeclarations"] = sorted(
-        s for s, ref in meta_plate.items() if ref_category(ref) == WORKING)  # b2-3:预览声明
+        s for s, ref in meta_plate.items() if ref_category(ref) == WORKING)  # 预览声明
 
-    # 重锚定(2026-10-15 #323):可执行形态的无锚点步骤回填 endpoint。
+    # 重锚定:可执行形态的无锚点步骤回填 endpoint。
     # 之后的析出分析(services/authRefs)与 land 落库同源 —— 都在锚定
     # 后的形态上算;报告随信封返回,unresolved 步骤落库后执行将走
     # carry 降级门控(该服务绑定全表注入),确认界面应予提示。
@@ -502,7 +502,7 @@ async def analyze_services(db, definition: dict,
     计数与落库共用 :func:`_service_plan`(§1 修复:预检看到的 = 落库
     要执行的)。顶层 ``fieldsToAlias``/``fieldsKeptLiteral`` 是**建议
     决策**下的计数;``countsByDecision`` 给出 create/map/reuse 三套
-    (复盘 2026-10-15:用户切换决策后接管面不同 —— 本机无值时 map 接
+    (用户切换决策后接管面不同 —— 本机无值时 map 接
     管 0 条、create 却会写 N 条 —— 确认界面按当前选择显示,确认的
     内容与实际执行保持一致)。``fieldsKeptLiteral`` 含两类:接管判定
     后保留的(敏感/本机缺值)+ 一致性判定不过的(各步取值不一致,
@@ -652,7 +652,7 @@ async def land(
     # 注:create_in_transaction 内的 enforce_meta_plate 会再验一次 refs
     # (与常规创建同路径,store 唯一写入口收口⑥ 的既有契约,幂等读)。
 
-    # 重锚定(2026-10-15 #323):无锚点可执行步骤按 (service, method,
+    # 重锚定:无锚点可执行步骤按 (service, method,
     # path) 反查回填 endpoint —— 不锚则 dispatch 的 carry 降级门控会把
     # 服务绑定全表灌进每个请求体。剥离 binding 派生字段由
     # create_in_transaction 的 strip_binding_fields 收口,此处只加锚;
@@ -828,9 +828,9 @@ async def land(
             if m["decision"] != "create":
                 continue
             name = eff_key[key]
-            # S6:别名团队共享(个人别名退役);registry:导入建的条目
+            # 别名团队共享(个人别名退役);registry:导入建的条目
             # ref=默认账户(env 落平台默认环境;账户装载关系在服务注册
-            # 页按 ref 配置,导入面不挂 —— P2-B.6)
+            # 页按 ref 配置,导入面不挂)
             await alias_svc.create_alias_in_transaction(
                 db, alias_name=name, catalog_names=catalog)
             alias_names.add(name)
@@ -851,9 +851,9 @@ async def land(
             "身份条目必须挂环境 —— 平台尚无默认环境,请管理员先在环境"
             "管理建环境并设默认,再导入(或改用「映射到已有服务」)") from e
     except IntegrityError as e:
-        # 预检后到落库前的建名竞态:按约束名分派(复核收口 2026-11-22:
-        # 本事务还写 carry 值表 —— blanket 把绑定并发冲突误报成「别名
-        # 被占用」);回滚保证部分写入的别名/carry 不残留
+        # 预检后到落库前的建名竞态:按约束名分派(本事务还写 carry 值表
+        # —— blanket 把绑定并发冲突误报成「别名被占用」);回滚保证
+        # 部分写入的别名/carry 不残留
         await db.rollback()
         _orig = getattr(e, "orig", None)
         _cname = str(getattr(_orig, "constraint_name", "")
@@ -890,7 +890,7 @@ async def land(
     except ValueError as e:
         code = str(e).split(":", 1)[0]
         raise ImportRejected(code, 422, str(e)) from e
-    # ── 注册化闸判定单源(2026-11-22 收口):身份三态 + 服务引用三态
+    # ── 注册化闸判定单源:身份三态 + 服务引用三态
     # 的解析与判定在 service_aliases.registry_gate_outcome(与保存面
     # _registry_gates 同源;此前本文件重实现判定分支且未知 mode 静默
     # 放行 —— 无告警)。本面只做 ImportRejected/响应 dict 载体映射。
@@ -949,7 +949,7 @@ async def land(
             owner_id=user.id)
         await db.commit()
     except IntegrityError as e:
-        # 按约束名分派(复核收口 2026-11-22):同事务还可能撞别名表
+        # 按约束名分派:同事务还可能撞别名表
         # 唯一(store._integrity_conflict_code 既有分派),blanket 把
         # 条目竞态误报成「场景 ID 已存在」
         await db.rollback()

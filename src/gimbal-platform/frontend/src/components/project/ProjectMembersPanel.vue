@@ -1,10 +1,10 @@
 <!-- ProjectMembersPanel.vue — 项目成员管理面板(从 ProjectsAdmin 抽出;
      项目管理员 ∨ Admin+ 用,canManage 由父级守门;末位项目管理员保护由
-     后端 409 兜底,错误内联展示)。2026-11-16 重塑:落 slib 表格 + 添加
+     后端 409 兜底,错误内联展示)。重塑:落 slib 表格 + 添加
      成员收进 Dialog(角色三选带说明);角色仍为行内原生 Select(高频
      快路径);移除走 confirmAction;新增「加入时间」列(addedAt 一直
      有数据未展示)。
-     2026-11-18 按 stitch 原型 _5 重排:顶部四张统计卡(总成员/管理员/
+     按 stitch 原型重排:顶部四张统计卡(总成员/管理员/
      开发者/只读 —— 成员列表客户端聚合)+ 角色筛选 Tab + 搜索(纯前端
      过滤);表格列面:成员(头像字 + 姓名 + 用户名)/ 角色徽章 / 加入
      时间 / 操作。原型的工号/部门/负责资产数量/最近活跃/CSV 导出/用户
@@ -55,7 +55,7 @@
         data-testid="prj-mem-q"
       />
       <span class="flex-1" />
-      <!-- A 级批次(2026-11-18):权限清单 CSV(全量成员,不受前端筛选影响;
+      <!-- 权限清单 CSV(全量成员,不受前端筛选影响;
            papaparse unparse + BOM,Excel 打开中文不乱码) -->
       <Button v-if="members.length" variant="outline" size="sm" data-testid="prj-mem-export"
               @click="exportCsv">导出 CSV</Button>
@@ -73,7 +73,7 @@
         <tr>
           <th>成员</th>
           <th style="width:9.375rem">项目角色</th>
-          <!-- 负责资产数(A 级批次 2026-11-18):owner 归属聚合 -->
+          <!-- 负责资产数:owner 归属聚合 -->
           <th style="width:5.625rem" class="c-center">场景数</th>
           <th style="width:5.625rem" class="c-center">用例集数</th>
           <th style="width:8.75rem">加入时间</th>
@@ -255,7 +255,7 @@ function csvSafe(v: string): string {
   return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
 }
 
-/** 权限清单 CSV(A 级批次 2026-11-18):导出全量成员(不受前端角色/
+/** 权限清单 CSV:导出全量成员(不受前端角色/
  *  搜索筛选影响 —— 筛选是浏览态,清单是台账);BOM 头保 Excel 中文。 */
 function exportCsv(): void {
   const rows = members.value.map((m) => ({

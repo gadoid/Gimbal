@@ -1,4 +1,4 @@
-"""分享(副本)— S7.4 引用分享退役后仅剩复制模式。
+"""分享(副本)— 仅复制模式(引用分享退场,ADR-0003 #20)。
 
 对象级权限(§9 沿用):
 - 发起分享 = **属主**(admin 不可代他人分享,§8.1);
@@ -6,7 +6,7 @@
   凭证与敏感列)、suite 走单事务深拷贝(成员逐个复制 + forked_from
   三件套,mode_config 重映射)。
 
-引用模式(share_refs)已随 authz M2a S7.4 退役:存量引用经
+引用模式(share_refs)退场(ADR-0003 #20):存量引用经
 scripts/retire_share_refs.py 一次性转为被分享人私有副本,迁移 0049
 删表。历史时间线事件(scenario/suite.share_ref* / share_fork)照常
 展示(useActivityTimeline 文案保留)。
@@ -58,7 +58,7 @@ async def _record_share_event(db, *, actor_id, kind, resource_type,
 async def create_share(
     user: CurrentUser, db: DbSession, body: ShareCreateIn,
 ) -> ShareCopyOut:
-    """副本分享(原 copy 分支原样;ref 模式已随 S7.4 退役)。"""
+    """副本分享(ref 模式已退场,ADR-0003 #20)。"""
     sharer_disp = user.display_name or user.username
 
     if body.resourceType == "scenario":

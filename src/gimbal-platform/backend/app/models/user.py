@@ -7,7 +7,7 @@ M2(PG迁移方案 §2.2 / 权限方案 §1.2):
   索引会让两个未设昵称的用户相撞);应用层 ``_name_checks`` 的
   username↔display_name 双向查重不能撤(DB 表达不了跨列双向唯一);
 * ``users.role``(M2.5 权威翻转后进 models):取值
-  ``user | member | admin``,**权威**(2026-09-29 三级更名:原
+  ``user | member | admin``,**权威**(三级更名:原
   ``member``→``user``、原 ``operator``→``member``,权限边界不变);
   ``is_admin`` 保留一个过渡版本
   (应用写侧镜像 = role=='admin',M6 删列)。取值域见权限方案 §1;
@@ -27,8 +27,8 @@ from ..core.db import Base
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
-        # role 索引:0002/baseline 直建,模型侧补声明(2026-10-13 A-1
-        # 空库门 compare_metadata 漂移收口)
+        # role 索引:0002/baseline 直建,模型侧补声明
+        # (空库门 compare_metadata 漂移收口)
         Index("ix_users_role", "role"),
         # 未设昵称(空串)不参与唯一 —— 与应用层查重跳过空值的语义一致
         Index(
@@ -43,15 +43,15 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(128), default="")
     password_hash: Mapped[str] = mapped_column(Text)
-    # 三级单角色(authz W1 2026-11-07 更名):user | admin | super_admin
+    # 三级单角色:user | admin | super_admin
     # —— 权威。原 member→admin、原 admin→super_admin,权限边界不变
-    # (2026-09-29 更名同款先例;迁移 0036)。取值约束在应用层
+    # (迁移 0036)。取值约束在应用层
     # (UserPatchIn 的 Literal),DB 不设 CHECK 以免预留值空间被方言
     # 差异锁死。
     # (is_admin 过渡镜像列已随 M6-3 删除;API 字面由 UserPublic 派生)
     role: Mapped[str] = mapped_column(String(16), default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # 外部系统集成 0015:平台系统用户标记 —— 登录拒绝、用户列表过滤;
+    # 平台系统用户标记(0015)—— 登录拒绝、用户列表过滤;
     # 它持有平台凭证池(auth_sessions.owner_id),不登录平台本身。
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     # 访问令牌 v4 §3.6:改密「退出其他会话」的版本号 —— access 与
@@ -60,7 +60,7 @@ class User(Base):
     # 裸 SQL 种子(__platform__)插入靠它兜 0(与 0033 迁移同口径)。
     token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0"))
-    # authz W6:管理员重置密码后置真;除改密与 auth 三件外一律 403
+    # 管理员重置密码后置真;除改密与 auth 三件外一律 403
     # password_change_required(列随迁移 0036 一并加)。
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"))

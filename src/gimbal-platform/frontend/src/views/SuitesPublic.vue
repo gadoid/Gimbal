@@ -1,18 +1,18 @@
-<!-- SuitesPublic.vue — 公共用例集页(2026-10-10 IA 调整;同日样式/功能
+<!-- SuitesPublic.vue — 公共用例集页(IA 调整;样式/功能
      适配轮对齐 SuiteLibrary 规范)。
      原 D-3「公共 Suite 与公共场景同页(ScenariosPublic 分区)」被
-     2026-10-10 信息架构调整推翻:侧栏「用例集」组下独立成页。
+     信息架构调整:侧栏「用例集」组下独立成页。
      数据源 GET /suites?visibility=public(出参含 ownerName = 发布者);
      公共读者不可运行(不变量 7:公共资源先复制再跑),行点击进管理页
      只读态,卡内「复制到我的」(fork 深拷贝含编排)跳副本管理页。
      搜索 / 模式筛选走服务端(分页前过滤);模式计数按当前搜索词逐模式
      取 total(5 个轻查询,模式切换不重复拉)。
-     2026-11-18 按 stitch 原型 _1 重排:公共用例集卡片流(模式徽章 /
+     按 stitch 原型重排:公共用例集卡片流(模式徽章 /
      草稿 chip / 描述 / 用例场景数 / 最近更新 / 发布者 / 复制·查看),
      保留表格为「列表视图」;原型的优先级徽章、收藏 ★、通过率、平均耗时
      后端无字段(通过率/耗时无历史台账),不渲染,排期见
      docs/project-detail-stitch-plan.md。
-     2026-11-18:embedded prop —— 项目详情页公共项目用例集页签复用
+     embedded prop —— 项目详情页公共项目用例集页签复用
      本页时隐藏自身 PageHead(消除双页头),独立路由态不变。 -->
 <template>
   <section class="slib" :class="{ embedded }">

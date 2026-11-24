@@ -1,7 +1,7 @@
 """访问令牌服务(webhook v4 §2–§6)— 认证、状态机、范围、回调白名单。
 
 单一令牌 ``gtk_``:``Authorization: Bearer gtk_…`` 绑定一个用户(个人
-令牌)。authz C1:平台令牌随平台模式退役,本模块只承载个人令牌。本模块承载:
+令牌)。平台令牌随平台模式退役,本模块只承载个人令牌。本模块承载:
 
 * :func:`authenticate` — §3.1 ①:hash 命中 → 状态机判定 → 个人令牌按
   属主当前角色与启用状态派生判定(不落库);
@@ -113,7 +113,7 @@ class Principal:
     项目令牌(M2b Q2):identity_mode=project;``user`` = 负责人(执行
     记录属主 / 审计 actor),``project_id`` = 区锁(只能引用本项目内容),
     凭证恒取项目池。
-    (authz C1:platform 取值随平台令牌退役;字段保留兼容入站协议。)
+    (platform 取值随平台令牌退役;字段保留兼容入站协议。)
     """
 
     user: User
@@ -211,7 +211,7 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
     校验链:hash 命中 → 未吊销(吊销与不存在同为 401 ``token_invalid``,
     防探测)→ 未失效 → 未到期 → 按属主**当前**启用状态派生判定
     (未启用 → 401)。成功即回写 ``last_used_at``(60s 节流;单次轻提交)。
-    authz C1:平台令牌的 ``__platform__`` 用户映射分支随平台模式退役。
+    平台令牌的 ``__platform__`` 用户映射分支随平台模式退役。
     """
     now = now_utc()
     tok = (await db.execute(select(AccessToken).where(
@@ -240,7 +240,7 @@ async def authenticate(db: AsyncSession, plaintext: str) -> Principal:
         await _commit_touch(db)
         return Principal(user=holder, identity_mode=PROJECT_KIND, token=tok)
     if tok.kind != PERSONAL_KIND:
-        # authz C1:kind 只剩 personal / project(0038 删尽平台令牌)
+        # kind 只剩 personal / project(0038 删尽平台令牌)
         raise TokenAuthError(401, ERR_TOKEN_INVALID,
                              "令牌类型已退役", token=tok)
     user = await db.get(User, tok.user_id)
@@ -369,7 +369,7 @@ async def check_scope(
 
     if used.auths:
         # used.auths 存身份条目名;范围存账户 id —— 按属主池把条目解析
-        # 到**确定性命中账户**比对(D1 收口 2026-11-22:对齐执行链
+        # 到**确定性命中账户**比对(对齐执行链
         # run_prepare._pick_account_deterministic 的同标签唯一优先口径
         # —— 此前按候选集任一命中放行,同引用多候选(唯一约束含 env_id
         # 允许并存)时执行可确定性选中范围外账户,构成越权窗口;旧注释
@@ -390,7 +390,7 @@ async def check_scope(
             select(AuthAccount).where(pool))).scalars().all()
         picked_id: dict[str, int | None] = {}
         for ident, sysname in idents:
-            # 候选收集与执行单源同形(复核收口 2026-11-22):username 支路
+            # 候选收集与执行单源同形:username 支路
             # 须带 ref_username 非空守卫 —— 空 ref_username 的 username
             # 条目按 default 口径解析(_resolve_identities 同款),否则该
             # 形态下候选恒空 → 鉴权比对被跳过,D1 窗口潜伏重开。
@@ -413,9 +413,9 @@ async def check_scope(
                 continue
             if acc_id in scope_auths:
                 continue
-            # 确定性命中账户不在范围 = 未授权(P1 缺陷修复:原码误引
-            # 未定义名 rid → 复核路径 NameError;auth 支路无「已删除」
-            # 分类 —— 账户删除即解析不出,走上句跳过)
+            # 确定性命中账户不在范围 = 未授权(原码误引
+            # 未定义名 rid → 复核路径 NameError 的缺陷已修;auth 支路无
+            # 「已删除」分类 —— 账户删除即解析不出,走上句跳过)
             missing.append(ScopeMissing("auth", alias, False))
     return missing or None
 
@@ -451,12 +451,12 @@ async def used_sets_for_definition(
     bindings = bindings or {}
     referenced = referenced_services(steps)
     # 架构终态(2026-11-21):② authored 直连层退役 —— 引用键一律按
-    # 「别名形态」进令牌范围(直连/范围外标记 D15 随层退役);③ 地址
+    # 「别名形态」进令牌范围(直连/范围外标记随层退役);③ 地址
     # 不影响集合归属(按环境的部署地址只决定 URL,不决定「是否别名
     # 形态引用」),故不查部署表。
     alias_set = set(referenced)
     aliases = sorted(alias_set)
-    # ② 直连层的范围外标记(D15)随层退役:out_targets 恒空。
+    # ② 直连层的范围外标记随层退役:out_targets 恒空。
     out_targets: list[dict] = []
     builtin = cfg.get("users") if isinstance(cfg.get("users"), dict) else {}
     auths = await service_aliases.exec_auth_aliases_of_definition(
@@ -507,9 +507,9 @@ async def used_sets_for_adhoc(db: AsyncSession, steps: list) -> ScopeSets:
 
 
 def can_manage(user: User, token: AccessToken) -> bool:
-    """写面管理权(authz W5,与路由 ``_require_manage`` 同口径):
+    """写面管理权(与路由 ``_require_manage`` 同口径):
     属主(任意角色)∨ users.manage(管理面)。消费面:run_precheck 的
-    tokenId 预检(user 属主自己的令牌可按其范围预检)。authz C1:
+    tokenId 预检(user 属主自己的令牌可按其范围预检)。
     平台令牌分支随平台模式退役。
     """
     from ..routers._ownership import has_capability
@@ -578,7 +578,7 @@ async def host_is_private(host: str) -> bool:
     """投递前地址检查(§6):解析结果落在 loopback / link-local /
     0.0.0.0 / ::1 即拒。解析失败同样拒(fail-closed)。
 
-    DNS 解析走事件循环的 ``getaddrinfo``(评审 2026-11-05 P2-6:调用方
+    DNS 解析走事件循环的 ``getaddrinfo``(调用方
     是异步投递循环,同步 ``socket.getaddrinfo`` 会阻塞整个循环)。"""
     import asyncio
 

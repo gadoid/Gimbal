@@ -29,7 +29,7 @@ const props = defineProps<{
   stepCount: number
   /** 平台编排态步骤名(orchestration.steps[].name;缺名时选项不带名) */
   stepNames?: string[]
-  /** 环境名映射源(§8.2 方案环境退役;仅供预览 envNames 透传) */
+  /** 环境名映射源(§8.2:方案不携带环境,ADR-0003 #21;仅供预览 envNames 透传) */
   environments?: { id: number; name: string; is_default: boolean }[]
   /** S7.3 生效预览:宿主透传场景/方案 id(缺省 = 宿主无预览上下文,不显入口) */
   scenarioId?: string

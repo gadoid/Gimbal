@@ -12,7 +12,7 @@
       <div class="flex flex-col gap-3.5">
         <div class="flex flex-col gap-1.5">
           <span class="text-label font-medium text-signal-ink">alias *</span>
-          <!-- 2026-09-22(任务6):native select → CredentialSelect 样式化
+          <!-- native select → CredentialSelect 样式化
                下拉(两行选项:alias+token_type / username·url)。原来选
                native 是为了 jsdom 可测,新组件同为自管面板,click 可驱
                动,测试契约不变。 -->

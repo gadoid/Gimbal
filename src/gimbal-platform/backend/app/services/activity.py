@@ -1,10 +1,10 @@
-"""activity_events 写入服务(2026-09-23 批次 F3,方案 §3.3)。
+"""activity_events 写入服务(方案 §3.3)。
 
 与 audit.record 同款口径:复用调用方 session、**独立 commit**、best-effort
 (失败只记日志不阻断业务)。调用时机约定:**业务事务提交之后** —— 自行
 commit 会把调用方未落的事务一并提交(audit.record 的既有形态,照抄)。
 
-autosave 防刷屏(2026-09-23 评审拍板):``scenario.edit`` 走短窗合并 ——
+autosave 防刷屏:``scenario.edit`` 走短窗合并 ——
 同 (actor, resource) 在 ``EDIT_COALESCE_SECONDS`` 内已有 edit 行 → 只刷新
 created_at 不插新行(编辑器 2.5s 防抖全量 PUT,不合并会刷屏);其余 kind
 恒插新行。时间比较统一 aware-UTC(SQLite 行 naive、PG 行 aware,混比会
@@ -32,7 +32,7 @@ EDIT_COALESCE_SECONDS = 300
 KIND_EDIT = "scenario.edit"
 KIND_RENAME = "scenario.rename"
 KIND_SAVE_AS = "scenario.save_as"
-# 入站调用(webhook/外部系统,2026-11-03):actor = 时间线归属人
+# 入站调用(webhook/外部系统):actor = 时间线归属人
 # (个人模式 = 个人令牌属主,使用了谁的凭证;平台模式 = __platform__),
 # detail 带别名/场景/执行/凭证归属与临时调用全量 steps。
 KIND_INBOUND_RUN = "inbound.run"
@@ -56,7 +56,7 @@ async def record(
     try:
         merge = kind == KIND_EDIT if coalesce is None else coalesce
         if merge:
-            # 2-5(2026-10-13):age 以**库时钟**为锚(now() 标量与
+            # age 以**库时钟**为锚(now() 标量与
             # created_at 同源同时区,Python 只做差)—— 此前 Python
             # utcnow() 与列的 server_default now() 混比,库时区非 UTC
             # 的 PG 上 age 恒负(本地 +8 → -8h),短窗合并永远不触发、

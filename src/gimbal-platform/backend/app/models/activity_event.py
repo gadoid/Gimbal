@@ -1,4 +1,4 @@
-"""ActivityEvent model — 场景域事件日志(2026-09-23 批次 F3)。
+"""ActivityEvent model — 场景域事件日志。
 
 与 ``audit_logs``/``notifications`` 同构的「写路径同步落一条」日志表:
 无订阅者、无分发器(方案 §3.2 否决 pub/sub)。三表职责互斥 ——
@@ -22,7 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..core.db import Base
 from ._types import JsonVar, UtcDateTime
 
-BigIntPK = BigInteger()   # SQLite 方言退化已随其退役移除(2026-10-14)
+BigIntPK = BigInteger()   # PG-only(ADR-0003 #18),无 SQLite 方言分支
 
 
 class ActivityEvent(Base):
@@ -30,7 +30,7 @@ class ActivityEvent(Base):
     __table_args__ = (
         # /api/activity 按 (actor, 时间倒序) 取近况
         Index("ix_activity_events_actor_created", "actor_id", "created_at"),
-        # 反查「该资源发生过什么」(F4 黄标/审计辅助)
+        # 反查「该资源发生过什么」(黄标/审计辅助)
         Index("ix_activity_events_resource", "resource_type", "resource_id"),
     )
 

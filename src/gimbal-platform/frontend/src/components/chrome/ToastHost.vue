@@ -1,6 +1,6 @@
 <!-- ToastHost.vue — toast.ts 的渲染端(App.vue 挂载的页面级单例)。
      Signal 样式:card 底 + line 描边 + sig-float 阴影,左侧状态点;
-     右下角堆叠(2026-10-14 C 组修复:top-14 右上堆叠仍压页头操作按钮
+     右下角堆叠(C 组修复:top-14 右上堆叠仍压页头操作按钮
      与对话框标题 —— 移右下,与页头/对话框/收拢顶条三者都不再重叠)。
      preflight 关闭环境下全部用显式 Tailwind utility,不依赖 reset。 -->
 <template>

@@ -8,7 +8,7 @@ export interface UserCreateIn {
   username: string
   password: string
   display_name?: string
-  /** authz W1 三级:user | admin | super_admin(后端权威;is_admin 已退役) */
+  /** 三级角色:user | admin | super_admin(后端权威;is_admin 已退役) */
   role?: 'user' | 'admin' | 'super_admin'
 }
 

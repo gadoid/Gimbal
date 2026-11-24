@@ -41,6 +41,7 @@
 | 22 | `marks_store`(收藏存储) | 2026-09-22 | 收藏读时投影 `UserStar`(单行详情一次聚合) | `08b9841e` |
 | 23 | legacy `run launch` 子进程执行链(`--cancel-file` 信号文件通道 / launch 信号量 / stdout 兜底面) | 2026-11-23 | server 链唯一:`execution_jobs` + worker 循环,取消走会话,取消落启动窗恒收敛,降级态由 `error` 字段承载 | 自举批(登记册 B6/C3 行;`EXEC_CHAIN` 配置键一并退役) |
 | 24 | steps 的 api 形态归一化(后端归一 + 前端双读) | v2.1 F-2a(2026-09) | 存储即终态:call 形态直接返回,前端 `stepCall()` 单读 `call`,后端零归一化 | spec《GIMBAL执行器重构-v2.1-融合实施案》F-2a |
+| 25 | 运行弹窗方案侧车的 prefix / mergePolicy / preset / auths 多选 chips | 2026-08-27 | 执行认证走条目引用链统一(注入清单 = 模板扫描 ∪ 绑定;认证选择器),方案不再携带凭证策略/前缀/预设与多选 chips(spec §10) | `770eea04` |
 
 ## 各条详情
 

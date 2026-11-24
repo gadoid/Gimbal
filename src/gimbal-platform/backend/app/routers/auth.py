@@ -39,7 +39,7 @@ from ._name_checks import assert_name_available
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-# ── auth 限流(known-issue auth/login-rate-limit-gap 落地步)──────
+# ── auth 限流 ──────
 def _enforce_rate_limit(
     action: str, request: Request, *, account: str | None = None,
 ) -> None:
@@ -107,10 +107,10 @@ async def register(
     request: Request,
 ) -> TokenOut:
     _enforce_rate_limit("register", request, account=payload.username)
-    # 首个真人用户判定 —— 只数 is_system=False(整体评审 2026-10-15:
-    # 0015 迁移为集成平台模式种了 ``__platform__`` 系统用户,空库建库后
-    # users 表恒有 1 行,此前 count()==0 永不成立 → 上线空库首个注册者
-    # 拿不到 admin,且全站无 admin 可开号)。
+    # 首个真人用户判定 —— 只数 is_system=False(0015 迁移为集成平台
+    # 模式种了 ``__platform__`` 系统用户,空库建库后 users 表恒有 1 行,
+    # count()==0 永不成立 → 空库首个注册者拿不到 admin,且全站无 admin
+    # 可开号的排障陷阱)。
     humans = (await db.execute(
         select(func.count()).select_from(User).where(
             User.is_system == False)  # noqa: E712
@@ -308,8 +308,8 @@ async def refresh(
 @router.get("/me", response_model=MeOut)
 async def me(user: CurrentUser,
              db: Annotated[AsyncSession, Depends(get_db)]) -> MeOut:
-    # authz W2:capabilities 按表 A 求值(前端 can() 的依据);
-    # S7.0:projects 与 GET /projects 同口径 —— 公共项目置顶(role=None:
+    # capabilities 按表 A 求值(前端 can() 的依据);
+    # projects 与 GET /projects 同口径 —— 公共项目置顶(role=None:
     # 公共项目无成员行,全员可读是表 B 派生)+ 我所在的普通项目;
     # Admin+ 全量。
     from sqlalchemy import or_, select

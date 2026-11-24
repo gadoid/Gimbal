@@ -13,7 +13,7 @@
 与 ``plate_client.get_endpoint_full`` 的整份契约 item。
 字段叫 ``rows`` 会让后两个消费者"名不副实";``truncated`` 不是缓存字段
 (known-issue truncated-dead-field 收口:此前挂 CacheEntry 上,声明面/
-契约 item 条目恒 False 无人读 —— 2026-11-24 移进行集载荷)。
+契约 item 条目恒 False 无人读 —— 已移进行集载荷)。
 """
 from __future__ import annotations
 

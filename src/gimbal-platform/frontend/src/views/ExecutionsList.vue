@@ -3,7 +3,7 @@
 
      原型落点:
      * KPI 带 = 一张白卡,指标间细竖线分隔;通过率带绿/红微条
-       (2026-09-22 改制:全局通过率无判断价值 — 通过率由当前筛选结果
+       (改制:全局通过率无判断价值 — 通过率由当前筛选结果
        客户端重算:搜执行号 = 该单用例口径,批次 = 批内全部执行,
        状态/时间 = 筛后执行集合;其余指标仍走服务端 summary)
      * 筛选行 = 搜索(场景/执行号)+ 状态 + 时间窗 + 批次 chip + 查询钮;
@@ -16,7 +16,7 @@
        行级数据在认证快速失败单上不存在;事实模式待前置①,不发明假入口)
      * 同配置重跑(POST /executions/{id}/rerun,按 config_json 重建配方)
      * 原型页尾图例(台账定位 + 信号口径)与 KPI 口径行已并入页头/KPI 带
-       的问号弹层(2026-11-05 逐页收纳批),页内不再常驻说明段 -->
+       的问号弹层(逐页收纳),页内不再常驻说明段 -->
 <template>
   <ListPage title="执行记录" icon="history" width="wide"
     :subtitle="pageTip">
@@ -57,7 +57,7 @@
     </div>
 
     <!-- ── 筛选(§3.4:搜索 + status / 时间范围 / 批次 + 查询钮)───────
-         2026-09-22 改制:筛选条件改动不再即时生效,统一点「查询」发起
+         改制:筛选条件改动不再即时生效,统一点「查询」发起
          (选中即查询会连打请求,且看不出哪个条件组合产出了当前列表);
          批次 chip 来自信号列点选,选 + 查一步到位,仍即时生效。 -->
     <div class="filter-row">
@@ -77,7 +77,7 @@
         批次 {{ filterBatch }}
         <button class="batch-clear" title="清除批次筛" @click="clearBatch">×</button>
       </span>
-      <!-- A 级批次(2026-11-18):项目详情头卡深链 ?projectId=,chip 可清除 -->
+      <!-- 项目详情头卡深链 ?projectId=,chip 可清除 -->
       <span v-if="filterProjectId" class="batch-chip" data-testid="exec-project-chip">
         项目 #{{ filterProjectId }}
         <button class="batch-clear" title="清除项目筛" data-testid="exec-project-clear" @click="clearProject">×</button>
@@ -89,7 +89,7 @@
       </span>
     </div>
 
-    <!-- B5(2026-11-06 日志报告整理):批次汇总横幅——批次筛生效时显示
+    <!-- 批次汇总横幅——批次筛生效时显示
          成员状态计数与时间跨度(只算本人可见的成员) -->
     <div v-if="appliedBatch && batchInfo" class="batch-banner mt-3.5" data-testid="exec-batch-banner">
       <span class="batch-banner-title">批次 {{ batchInfo.batchId }}</span>
@@ -263,7 +263,7 @@
       <Button variant="outline" size="sm" class="mt-2" @click="router.push(runnerUrl())">去执行器</Button>
     </div>
 
-    <!-- 2026-09-23 分页批次:原固定 limit 200 截断 → 服务端真分页 -->
+    <!-- 原固定 limit 200 截断 → 服务端真分页 -->
     <div v-if="pageCount > 1 || store.total > 0" class="exec-pager">
       <Pagination
         v-model:page="page"
@@ -378,7 +378,7 @@ const filterStatus = ref(
 const filterWindow = ref('')
 /** 批次归并视图:执行器队列发起后 ?batch_id= 深链到达;chip 可清除。 */
 const filterBatch = ref(typeof route.query.batch_id === 'string' ? route.query.batch_id : '')
-/** 项目过滤(A 级批次 2026-11-18):项目详情头卡深链 ?projectId= 到达;
+/** 项目过滤:项目详情头卡深链 ?projectId= 到达;
  *  chip 可清除 —— 列表与 KPI 带同口径(后端按 project_id 快照列收敛)。 */
 const filterProjectId = ref<number | null>(
   typeof route.query.projectId === 'string' && /^\d+$/.test(route.query.projectId)
@@ -390,7 +390,7 @@ const appliedStatus = ref(filterStatus.value)
 const appliedWindow = ref(filterWindow.value)
 const appliedBatch = ref(filterBatch.value)
 
-// ── 分页(2026-09-23 批次:固定 limit 200 截断 → 服务端真分页;
+// ── 分页(固定 limit 200 截断 → 服务端真分页;
 //    每页行数存用户偏好)───────────────────────────────────────────
 const page = ref(1)
 const { pageSize } = usePagerSize('executions', 10)
@@ -405,7 +405,7 @@ watch(pageSize, () => {
  * 子串 + 执行号前缀;列表取回后通过率等 KPI 随之重算。 */
 const filtered = computed(() => store.list)
 /** 失败单数 = 服务端全口径(与「共 N 条」同一筛选集合;客户端数当前页
- * 会在分页后与总数打架 —— 2026-10-21 修复)。 */
+ * 会在分页后与总数打架 — 已修)。 */
 const failedTotal = ref(0)
 
 function applyFilters(): void {

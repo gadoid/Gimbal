@@ -45,11 +45,11 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 PrincipalIn = Annotated[Principal, Depends(principal_or_user)]
 
 
-# M1(修复方案 2026-11-01 §1):入站调用**只能选择平台上已有的配方,
+# 修复方案 2026-11-01 §1:入站调用**只能选择平台上已有的配方,
 # 不能携带配方** —— 服务地址/凭证别名/数据集/注入条目一律由服务端按
 # 运行方案读取(方案由场景属主在平台维护,是可信来源)。否则
 # serviceBindings.url 可以改写被测地址、把注入的凭证发到任意主机。
-# v4 口径不变(§3.1 ②);graph 为 JWT 专属(D20)—— 令牌带 graph 由
+# v4 口径不变(§3.1 ②);graph 为 JWT 专属 —— 令牌带 graph 由
 # 本清单一并拒(422)。
 _INBOUND_FORBIDDEN_FIELDS = (
     ("service_bindings", "serviceBindings"),
@@ -340,9 +340,9 @@ async def preview_effective_config(
     不含明文凭证)。读闸同预检(can_read_scenario_row)。
 
     body:{scenarioId 必填, schemeId?/serviceBindings?/
-    credentialSource?(S8)/execConfigId?(分层②)}
+    credentialSource?/execConfigId?(分层②)}
     —— 标签链同执行(§8.2):**有效调用身份标签 > 项目默认 > 平台
-    默认**(显式 environmentId/方案/执行配置/偏好链位已退役)。
+    默认**(显式链位不承载,ADR-0003 #21)。
     绑定形态同执行请求(服务键 → {alias};url/authAlias 422)。
     执行配置:显式选定才携带绑定与 carry 覆盖(项目区仅显式,决策 9)。"""
     from pydantic import ValidationError
@@ -368,7 +368,7 @@ async def preview_effective_config(
             or not await can_read_scenario_row(db, user, scen):
         raise HTTPException(404, detail={"code": "scenario_not_found",
                                          "message": f"scenario not found: {sid}"})
-    # C8 审计(2026-11-23):手写 dict 入口的形状门 —— serviceBindings
+    # 手写 dict 入口的形状门 —— serviceBindings
     # 非 dict 形态(如 list)此前 .items() 直接 AttributeError → 500,
     # 应 422(fail-fast 不晚崩)。
     _raw_bindings = body.get("serviceBindings")
@@ -388,7 +388,7 @@ async def preview_effective_config(
     if scheme_id:
         try:
             sch = await scheme_store.get_row(db, sid, scheme_id)
-            # §8.2:方案 environmentId 链位退役 —— 存量 payload 键不再消费
+            # §8.2:方案不携带环境链位(ADR-0003 #21)—— 存量 payload 键不再消费
             bindings_raw = {
                 **scrub_retired_bindings(
                     (sch.payload or {}).get("serviceBindings")),
@@ -714,7 +714,7 @@ async def _resolved_services(db, scen, body: RunRequest,
 
     definition = definition_from_payload(scen.payload) if scen else {}
     steps = definition.get("steps") or []
-    # §8.2:标签 = 场景有效身份标签 > 项目默认 > 平台默认(显式位退役)
+    # §8.2:标签 = 场景有效身份标签 > 项目默认 > 平台默认(显式位不承载,ADR-0003 #21)
     from ..services.service_aliases import exec_auth_aliases_of_definition
     _tag_names = (list(await exec_auth_aliases_of_definition(
         db, definition, dict(body.service_bindings or {})))

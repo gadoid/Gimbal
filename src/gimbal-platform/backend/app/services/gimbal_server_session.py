@@ -5,7 +5,7 @@ spawn 到随机空闲端口，逐 case ``POST /runs`` + SSE 消费事件（→ �
 _EventIngester 同一入库面），取消走执行器 cancel 端点（协作取消），
 结束 terminate 进程树（Windows/Linux 无残留）。
 
-子进程泄漏防线（2026-11-03 复盘）：本进程被硬杀（SIGKILL/超时/带会话
+子进程泄漏防线：本进程被硬杀（SIGKILL/超时/带会话
 退出）时 close() 永不执行，旧执行器以 PPID=1 空转数日。spawn 现带双守卫，
 执行器侧另有 stdin EOF/空闲 TTL 自退（见 gimbal core/server.py 模块
 docstring），本模块不再单靠协作式回收：
@@ -13,14 +13,13 @@ docstring），本模块不再单靠协作式回收：
     （跨平台；也是 close() 的首选优雅通道）；
   - ``PR_SET_PDEATHSIG=SIGINT``（preexec_fn，非 Windows）：父进程死亡
     → 内核递 SIGINT，uvicorn 对 SIGINT/SIGTERM 同一条优雅收口路（不
-    依赖执行器版本；信号名随 launch 链评审 3.1 改 SIGINT——那边要求
-    协作取消，本链两信号等价）。助手实现在 ``gimbal_launcher.
-    _arm_pdeathsig``（launch 链共用）。
+    依赖执行器版本；SIGINT 要求协作取消，本链两信号等价）。
+    助手实现在 ``gimbal_launcher._arm_pdeathsig``（两链共用）。
 
-B6③(2026-11-23)后为**唯一执行链**:legacy ``gimbal_launcher.launch()``
-(run launch 子进程 stdout jsonl)已退役,``settings.EXEC_CHAIN`` 键与
-执行配方 ``chain`` 选择随之删除(台账 ``chain`` 键存量 legacy 值仅历史
-可读)。
+本模块为**唯一执行链**(ADR-0003 #23,登记册 B6③):legacy
+``gimbal_launcher.launch()``(run launch 子进程 stdout jsonl)已退场,
+``settings.EXEC_CHAIN`` 键与执行配方 ``chain`` 选择随之删除(台账
+``chain`` 键存量 legacy 值仅历史可读)。
 """
 from __future__ import annotations
 
@@ -169,7 +168,7 @@ class ServerSession:
             raise RuntimeError(f"server spawn failed: {e}") from e
         self._proc = proc
 
-        # D1(2026-10-13):泵闭包捕获本地 proc/stderr —— 不再触碰
+        # 泵闭包捕获本地 proc/stderr —— 不触碰
         # self._proc(close() 置空后泵仍能收尾,engine.log 尾部不丢)。
         self._stderr_task = asyncio.get_event_loop().create_task(
             _pump_stderr(proc.stderr, log_fh, on_log,
@@ -210,12 +209,12 @@ class ServerSession:
     async def close(self) -> None:
         """终止进程树（stdin EOF 优雅 → terminate → kill；无残留）。
 
-        D1(2026-10-13):先收 stderr 泵任务再置空 _proc —— 此前先
-        ``self._proc = None``,泵的 ``assert self._proc`` 随即 AttributeError,
+        先收 stderr 泵任务再置空 _proc —— 顺序反过来时
+        ``self._proc = None`` 先落,泵的 ``assert self._proc`` 随即 AttributeError,
         每次关会话记一条 "Task exception was never retrieved",engine.log
         尾部(进程终止前的 stderr 突发)可能丢、log 句柄不关。
 
-        泄漏防线随行(2026-11-03):先关 stdin 给执行器一个 EOF 优雅出口
+        泄漏防线随行:先关 stdin 给执行器一个 EOF 优雅出口
         (uvicorn should_exit:在飞 run/SSE 收尾后再退)。Windows 的
         terminate() 是硬杀(TerminateProcess),这个优雅窗口在 Windows
         上是唯一体面路径;超时或旧执行器无守卫 → 下方 terminate 兜底,
@@ -375,7 +374,7 @@ class ServerSession:
         """协作取消当前 run。
 
         ``scope="step"``（缺省,超时路径/cases 链）:步骤边界/未启动单元生效;
-        ``scope="unit"``（graph 单元级取消方案 2026-11-02 P1）:执行器只停
+        ``scope="unit"``（graph 单元级取消方案 2026-11-02）:执行器只停
         调度,在飞单元跑完,未启动主体记 cancelled,after 照常。POST /runs
         尚未返回 runId 时返回 False,调用方按节拍重试。
         """

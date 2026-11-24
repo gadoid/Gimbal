@@ -39,7 +39,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 # 引用键长度对齐既有列口径:别名全名 String(128)、条目名 String(64)、
 # carry 字段 String(255);carry 值 Text(不限,业务参数)。
-# 条目名域订正(2026-11-19):条目名 = service_identities.alias_name
+# 条目名域:条目名 = service_identities.alias_name
 # String(128) —— bindings 值(换用条目名)与 §8.10 aliases 同域;
 # 旧「条目名 String(64)」系退役 slot 列口径。
 _AliasName = Annotated[str, Field(min_length=1, max_length=128)]
@@ -73,8 +73,7 @@ class SystemSubConfig(BaseModel):
 
     service: str = Field(..., min_length=1, max_length=128,
                          description="目录服务名(分组键)")
-    # §8.10(2026-11-19)→ 决策 1 圈定即承诺(2026-11-20 阶段 1 起执行链
-    # 消费):圈定本配置采用的调用身份条目(声明侧)。**非空 = 白名单
+    # §8.10 圈定即承诺(执行链消费):圈定本配置采用的调用身份条目(声明侧)。**非空 = 白名单
     # 生效**:派发/预检时换用后取用集 ⊄ 圈定集 → 409 identity_not_circled
     # (precheck_hard_gate 同一道门;行级 @slot 绑定同码);空 = 未圈定,
     # 存量兼容(等同白名单关闭)。生效行 = 显式选定 > 本人默认行;令牌/
@@ -98,7 +97,7 @@ class ExecConfigCreate(BaseModel):
     # 配置级元信息(v7):说明 + 标签(列表识别信息,执行链不消费)
     description: _Description = ""
     tags: list[_Tag] = Field(default_factory=list, max_length=32)
-    # §8.2(2026-11-17):environmentId 链位退役 —— 字段删除,旧客户端
+    # environmentId 链位退役(ADR-0003 #21,§8.2)—— 字段删除,旧客户端
     # 多发该键被 pydantic 静默忽略
     systems: list[SystemSubConfig] = Field(default_factory=list,
                                            max_length=64)
@@ -230,7 +229,7 @@ async def create_exec_config(
         scope, scope_id = "project", pid
     else:
         scope, scope_id = "user", user.id
-    # TOK-07 写面闸(2026-11-20 审计):换用目标须存在且同基础服务,
+    # 写面闸:换用目标须存在且同基础服务,
     # 落库前拦(422 口径同 scenarios 的 binding 校验)
     from ..services.service_aliases import (
         BindingAliasInvalid, validate_slot_overrides)
@@ -382,7 +381,7 @@ async def exec_config_drift(
     合成的部分,提示可覆盖面)。plate 不可达 → ``plateReachable=
     False``,调用方先看信号再渲染(不可达 ≠ 全漂移)。"""
     row = await _access(db, config_id, user, write=False)
-    # 聚合单源(2026-11-22 收口):此前整循环包在一个 try 里 ——
+    # 聚合单源:此前整循环包在一个 try 里 ——
     # plate 抖动一次即误报全量 orphaned;单源内逐项隔离(/full 失败
     # = 该端点面缺席,不阻塞其余),与 carry_store.carry_drift 同源。
     from ..services.carry_store import plate_carry_faces

@@ -87,7 +87,7 @@ class MemberOut(BaseModel):
     displayName: str
     role: str
     addedAt: str | None = None
-    # 成员在本项目的资产数(A 级批次 2026-11-18,按 owner 归属聚合);
+    # 成员在本项目的资产数(按 owner 归属聚合);
     # add/patch 单行返回不带计数(默认 0,列表口径才消费)
     scenarioCount: int = 0
     suiteCount: int = 0
@@ -514,7 +514,7 @@ async def delete_project(
     await db.commit()
 
 
-# ── 实例 × 凭证匹配(A 级批次 2026-11-18)────────────────────────
+# ── 实例 × 凭证匹配 ────────────────────────
 class MatchAddrOut(BaseModel):
     service: str
     baseUrl: str
@@ -670,7 +670,7 @@ async def add_member(
 ) -> MemberOut:
     proj = await _load_project(db, project_id)
     await _require_manage(db, user, proj)
-    # 公共项目成员守卫(B1 收口 2026-11-22):不变量「公共项目无成员行」
+    # 公共项目成员守卫:不变量「公共项目无成员行」
     # —— can_run_scenario 项目分支纯查成员表,落行即可执行公共副本,
     # 击穿「公共副本对所有人不可执行」(_ownership.py 不变量 7);
     # 与 patch_project/delete_project 同闸同码。
@@ -712,7 +712,7 @@ async def patch_member(
 ) -> MemberOut:
     proj = await _load_project(db, project_id)
     await _require_manage(db, user, proj)
-    # 公共项目成员守卫(B1 收口 2026-11-22,与 add/remove 同闸同码)
+    # 公共项目成员守卫(与 add/remove 同闸同码)
     if proj.kind == "public":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -765,7 +765,7 @@ async def remove_member(
 ) -> None:
     proj = await _load_project(db, project_id)
     await _require_manage(db, user, proj)
-    # 公共项目**不设** add/patch 守卫同款 409(fresh-eyes 复核 2026-11-22):
+    # 公共项目**不设** add/patch 守卫同款 409:
     # remove 是 B1 窗口期遗留成员行的唯一 API 补救通道 —— 全闸会把病害
     # 锁进库(can_run_scenario 纯查成员表,残留行即活越权面)。放行删除 =
     # 朝「公共项目无成员行」不变量收敛;存量行当前为 0,守卫语义不变。

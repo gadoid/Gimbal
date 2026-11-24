@@ -8,9 +8,9 @@
  * 无驼峰别名)。服务别名不再挂靠环境(authz M2a S6)— 环境只经部署表
  * 给地址、经环境链选执行环境。
  *
- * 2026-11-11 补齐 CRUD 前端缺口:后端 POST/PUT/DELETE 早已存在,此前
+ * 前端 CRUD 补齐:后端 POST/PUT/DELETE 早已存在,此前
  * 一直没有调用方(部署地址页空态还指着已退役的服务信息管理环境面);
- * 2026-11-13 起调用方 = 服务注册页(/service-admin,与部署表/身份面同页),
+ * 调用方 = 服务注册页(/service-admin,与部署表/身份面同页),
  * 写面统一 ops.write(Admin+),与部署表同门。
  */
 import http from '@/api/http'
@@ -42,14 +42,14 @@ export function createEnvironment(
     .then(({ data }) => data)
 }
 
-/** 标签 → 环境定义(标签即环境,2026-11-18):按名精确查找,不存在则
+/** 标签 → 环境定义(标签即环境):按名精确查找,不存在则
  *  自动登记(幂等)。实例标签/改标签等写面用它落地自由标签。 */
 export function resolveEnvironment(name: string): Promise<EnvironmentRow> {
   return http.post<EnvironmentRow>('/environments/resolve', { name })
     .then(({ data }) => data)
 }
 
-/** 改环境(Admin+)—— 2026-11-18 环境降级后 name 是轻量标签,可改名
+/** 改环境(Admin+)—— 环境降级后 name 是轻量标签,可改名
  *  (后端校验重名 409;id 引用面不受影响) */
 export function updateEnvironment(
   id: number,

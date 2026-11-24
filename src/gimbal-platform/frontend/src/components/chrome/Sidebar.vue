@@ -174,7 +174,7 @@ interface SidebarGroup {
 const ActivityLineIcon: Component = (_props, { attrs }) =>
   h(SlibIcon, { name: 'activity', size: 14, ...attrs })
 
-// 结构基准 = F-sitemap v2:服务组顺序(2026-11-15 起认证管理更名凭证
+// 结构基准 = F-sitemap v2:服务组顺序(认证管理更名凭证
 // 管理并迁「我的」组)服务画像/变更适配/集成服务;
 // 常量池不进侧边栏(工作台卡片承接,/constants 仅深链可达)。
 const groups: SidebarGroup[] = [
@@ -182,18 +182,18 @@ const groups: SidebarGroup[] = [
     label: null,
     entries: [
       { path: '/home', label: '工作台', icon: HomeIcon },
-      // F5(2026-09-23):通知(全员;审计 tab 在页内按 admin 显隐)
+      // 通知(全员;审计 tab 在页内按 admin 显隐)
       { path: '/notifications', label: '通知', icon: BellIcon },
-      // 执行配置分层①(2026-11-11):全员 —— 置顶组语义 = 高频个人入口;
+      // 执行配置分层①:全员 —— 置顶组语义 = 高频个人入口;
       // 不放「服务」组避免与 Admin+ 管理面混层(设计方案 §4 入口裁定)
       { path: '/exec-configs', label: '配置', icon: MixerHorizontalIcon },
     ],
   },
   {
-    // 2026-11-10 IA:组更名「我的」—— 我的名下内容一组收口:场景 /
+    // 组更名「我的」—— 我的名下内容一组收口:场景 /
     // 关注(原「场景」组)+ 场景集(原「用例集」组并入,页面同名)。
     // 「公共场景 / 公共用例集」仍并入公共项目(S7.1 不变)。
-    // 2026-11-15:凭证管理(原服务组「认证管理」,更名)迁入 ——
+    // 凭证管理(原服务组「认证管理」,更名)迁入 ——
     // 账户装载是执行人个人资产(凭证池按人归属),语义归「我的」。
     label: '我的',
     entries: [
@@ -215,22 +215,22 @@ const groups: SidebarGroup[] = [
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      // 2026-11-15:凭证管理(原「认证管理」)迁「我的」组 —— 账户
+      // 凭证管理(原「认证管理」)迁「我的」组 —— 账户
       // 绑定是执行人个人资产;服务组回归纯「被调面」信息
       // 分层⑥:「默认值」页与个人层均已退役(全局默认在公共项目「配置」
       // 页签,个人默认在执行配置 /exec-configs)
       { path: '/adaptations', label: '变更适配', icon: ActivityLineIcon },
-      // 集成入服务组(2026-11-11 IA):不再单列成组,更名「集成服务」—
+      // 集成入服务组:不再单列成组,更名「集成服务」—
       // 外部系统集成 P1:功能(定时任务 → 工作台卡片)+ 平台凭证
       { path: '/integrations', label: '集成服务', icon: Share2Icon },
-      // 2026-11-13:服务配置/服务注册两治理面挪出本组(并入一页,见
+      // 服务配置/服务注册两治理面挪出本组(并入一页,见
       // 「平台」组)—— 服务组回归纯全员使用面
     ],
   },
   // 执行组(执行设计 §0):执行器(/run)/ 执行记录;字段来源分析(E2a)
   // 置灰不可点;数据分析(延后)置灰但可点 — §4.4:延后的东西藏起来会被
   // 遗忘,留灰入口,点进去撞上那条说明;opacity .42,不加角标。
-  // (2026-10-10 IA 调整:Suite 与集成已迁出;2026-11-11 集成再入服务组。)
+  // (沿革:Suite 与集成迁出服务组,后集成再入。)
   { label: '执行', entries: [
     { path: '/run', label: '执行器', icon: PlayIcon },
     { path: '/field-trace', label: '字段来源分析', icon: MagnifyingGlassIcon, disabled: true, disabledTitle: '字段来源分析 — 待 E2a 落地(预测模式无前置,事实模式等执行时快照)' },
@@ -238,7 +238,7 @@ const groups: SidebarGroup[] = [
     { path: '/analytics', label: '数据分析', icon: PieChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
   ] },
   { label: '平台', entries: [
-    // 2026-11-13 深度合并:原「服务配置」(身份面注册表)与「服务注册」
+    // 深度合并:原「服务配置」(身份面注册表)与「服务注册」
     // (独立部署页)并为同一页 —— 服务为锚,身份面(以谁)+ 各环境地址
     // (发到哪)两个切面;翻 11-11 IA P1 挪入服务组的旧案:合并后归
     // 治理面,「平台」组=平台基础信息(服务注册 + 用户管理),「服务」
@@ -270,7 +270,7 @@ function isActive(path: string): boolean {
   if (route.path === path) return true
   if (!route.path.startsWith(path + '/')) return false
   // 前缀让位:存在更长前缀的入口时让给它(如 /suites 在 /suites/public
-  // 页不激活「场景集」,2026-10-10 IA 调整引入的前缀包含关系)。
+  // 页不激活「场景集」,IA 调整引入的前缀包含关系)。
   return !flatEntries.value.some(
     (e) => e.path !== path && e.path.startsWith(path + '/'))
 }

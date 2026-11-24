@@ -80,7 +80,7 @@
         </select>
       </section>
 
-      <!-- 基础设置(stepTo / nRuns × parallel;旧 凭证策略·前缀·预设 已退役) -->
+      <!-- 基础设置(stepTo / nRuns × parallel;凭证策略·前缀·预设不进方案,ADR-0003 #25) -->
       <section class="run-section">
         <label class="run-label">基础设置 <span class="muted small">(步进调试 / 批量执行)</span></label>
         <div class="adv-grid">

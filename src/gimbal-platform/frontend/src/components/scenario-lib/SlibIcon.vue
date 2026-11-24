@@ -101,7 +101,7 @@ const RADIX: Partial<Record<SlibIconName, Component>> = {
   gear: GearIcon,
   // 便签卡(webhook v4 D18):随手记,铅笔头
   pencil: Pencil2Icon,
-  // 风格整理轮(2026-10-10):侧栏/页头图标唯一化 —— Suite=堆叠、集成
+  // 侧栏/页头图标唯一化 —— Suite=堆叠、集成
   // 中心=互连、数据分析=饼图、工作台=家、通知=铃铛,页头与侧栏渲染
   // 同一颗组件。
   stack: StackIcon,
@@ -109,7 +109,7 @@ const RADIX: Partial<Record<SlibIconName, Component>> = {
   pie: PieChartIcon,
   home: HomeIcon,
   bell: BellIcon,
-  // 问号悬浮提示(2026-11-05 说明统一轮):文字拼圆圈两轮都被评"丑",
+  // 问号悬浮提示:文字拼圆圈两轮都被评"丑",
   // 换正经图标;直接渲染 radix 同一颗,描边风格与侧栏/页头一致。
   help: QuestionMarkCircledIcon,
 }

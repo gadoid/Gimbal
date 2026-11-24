@@ -146,17 +146,17 @@ async def list_auths(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> AuthListOut:
-    """Page 信封 + 服务端过滤(M4,§6.3):``q``(username/system 子串;
+    """Page 信封 + 服务端过滤(§6.3):``q``(username/system 子串;
     username 账户化后为明文,可检索)、``token_type`` 精确。双计数 =
     ref 条目数 + 条目聚合场景数(auth_references.account_ref_counts)。
 
-    ``q`` 第三命中面(2026-11-19):**身份条目名** —— 缺凭证角标
+    ``q`` 第三命中面:**身份条目名** —— 缺凭证角标
     (FunctionCard)与导入对话框的修复深链发的是条目名,账户化后
     条目名 ≠ username/system,此前恒 0 命中、落「暂无账户」空态。
     命中口径 = 条目名所在系统的全部本人账户(哪条装载由条目 ref
     决定,列表按系统呈现即修复引导)。
 
-    双源检索(凭证治理 2c,2026-11-20 拍板 #10):``source`` 选池 —
+    双源检索:``source`` 选池 —
     ``personal``(默认,存量行为不变)/ ``project``(须 ``project_id``)/
     ``all``(本人池 ∪ 该项目池,行带 ``source`` 徽标)。检索是独立
     口径,与执行链「单池互斥选一」(credential_source)无涉 —— 有序
@@ -251,7 +251,7 @@ async def create_auth(
     session: DbSession,
 ) -> AuthAccountOut:
     from ..models.environment import Environment
-    # TOK-08a(2026-11-20 审计):个人池对齐项目池 —— 密码 ≥6 位才受
+    # 个人池对齐项目池 —— 密码 ≥6 位才受
     # 按值掩码保护(单源 _password_gate)
     require_maskable_password(payload.password)
     if await session.get(Environment, payload.env_id) is None:
@@ -282,7 +282,7 @@ async def create_auth(
         await session.commit()
     except IntegrityError as e:
         await session.rollback()
-        # 按约束名分派(复核收口 2026-11-22:blanket 把默认位冲突误报
+        # 按约束名分派(blanket 把默认位冲突误报
         # 成撞名)
         _code, _msg = account_integrity_conflict(e)
         raise HTTPException(
@@ -331,7 +331,7 @@ async def get_auth(
     base = _to_out(a, login_url=urls.get(a.id, ""))
     if not include_secrets:
         return base
-    # TOK-05 护栏(2026-11-20 审计):明文回显是拍板保留的内网测试策略,
+    # 明文回显护栏:明文回显是拍板保留的内网测试策略,
     # 但每次明文读取必须落审计行(best-effort,失败不阻塞读取)。
     from ..services import audit as audit_svc
     await audit_svc.record(
@@ -402,8 +402,8 @@ async def patch_auth(
         await session.commit()
     except IntegrityError as e:
         await session.rollback()
-        # 按约束名分派(复核收口 2026-11-22:改默认位撞 uq_account_
-        # default 被误报成「同名账户」)
+        # 按约束名分派(改默认位撞 uq_account_
+        # default 不是撞名,别误报成「同名账户」)
         _code, _msg = account_integrity_conflict(e)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

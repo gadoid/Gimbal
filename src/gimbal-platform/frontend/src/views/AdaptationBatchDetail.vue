@@ -87,7 +87,7 @@
         </div>
         <OpPreview :op="op" />
       </div>
-      <!-- 2026-09-23 分页批次:单 GET 全量返回 → 客户端切片;勾选集按
+      <!-- 单 GET 全量返回 → 客户端切片;勾选集按
            op.id 存,跨页保留 -->
       <div v-if="pageCount > 1 || detail.ops.length > 0" class="mt-2 flex justify-end">
         <Pagination
@@ -226,7 +226,7 @@ const selectedIds = computed(
   () => new Set(selectedOps.value.map((o) => o.id)))
 const mergeReady = computed(() => mergeSeedFrom(selectedOps.value) !== null)
 
-// 客户端分页(2026-09-23 批次):detail 单 GET 全量,ops 表切片渲染;
+// 客户端分页(detail 单 GET 全量,ops 表切片渲染;
 // 勾选集 selectedOps 按 op.id 存,翻页不丢。
 const { page, pageSize, paged, pageCount } = useClientPager(
   () => detail.value?.ops ?? [], 20, 'adaptation-ops',

@@ -7,7 +7,7 @@
 * ``rebuild``      全量重建 + 报告(Task 3)
 * ``unindexed_steps`` 未索引步骤只读清单(P5 适配中心挂牌)
 
-锚点行(2026-09-20):锚定了 endpoint 但 body/headers 全空的 step 也发
+锚点行:锚定了 endpoint 但 body/headers 全空的 step 也发
 一行哨兵行(``source=ANCHOR_SOURCE``、``field_name=ANCHOR_FIELD``)。
 此前这类 step 零行,对 endpoint→scenario 影响查询不可见——impact 靠
 全量 payload 兜底直扫补位(O(全部场景)/次),而 open_batch 的草案

@@ -14,7 +14,7 @@ class AdaptationSnapshot(Base):
     __tablename__ = "adaptation_snapshots"
     __table_args__ = (Index("ix_snap_batch", "batch_id"),)
 
-    # BIGINT(整体评审 2026-10-15 #10):事件型表与执行面同口径
+    # BIGINT:事件型表与执行面同口径
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     batch_id: Mapped[str] = mapped_column(String(64), nullable=False)
     # scenario|dataset|carry_binding(按服务)|carry_default(全局默认)

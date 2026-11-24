@@ -45,7 +45,7 @@ class NotificationListOut(BaseModel):
 
     items: list[NotificationOut]
     unread: int
-    # 2026-09-23 分页批次:真分页信封(total = 未读优先同口径下的总条数)
+    # 真分页信封(total = 未读优先同口径下的总条数)
     total: int = 0
     page: int = 1
     page_size: int = Field(default=50, alias="pageSize")
@@ -65,7 +65,7 @@ class UnreadCountOut(BaseModel):
 
 
 class HandoffUnreadItem(BaseModel):
-    """未读分享(悬浮标签数据源,2026-09-23 批次 F1)。
+    """未读分享(悬浮标签数据源)。
 
     前端以 Set<resourceId> 维护,列表行渲染 O(1) 查找;销账走
     POST /read(按 id)。
@@ -189,7 +189,8 @@ async def put_prefs(
         select(UserPref).where(
             UserPref.user_id == user.id, UserPref.key == _PREF_KEY)
     )).scalar_one_or_none()
-    # S7.4:存量 off 里的退役类型(share_ref_* 四型)静默滤除 —— Literal
+    # 存量 off 里的退役类型(share_ref_* 四型)静默滤除(ADR-0003 #20)
+    # —— Literal
     # 收窄后旧值回写会被 422 拒,历史偏好应能无损保存
     from ..services.notifications import NOTIFICATION_TYPES as _TYPES
     off = [v for v in body.off if v in _TYPES]

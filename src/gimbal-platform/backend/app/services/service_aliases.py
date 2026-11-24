@@ -5,7 +5,7 @@
 声明(条目),slot/kind 字段退役 —— 注入键 = 条目名(slot=alias 口径
 规约延续),kind 升服务主档(services.kind)。
 
-注册校验**强约束**(2026-09-20 拍板,口径延续):plate 态 ``alias_name``
+注册校验**强约束**(口径延续):plate 态 ``alias_name``
 必须通过 ``derive_base`` 落回已知服务集(目录 ∪ 主档)才可登记;
 不可达且主档无此服务 → 校验恒失败。external 态不经目录派生
 (base_service 显式指向主档 external 服务)。
@@ -355,13 +355,13 @@ async def validate_binding_aliases(
 async def validate_slot_overrides(
     db: AsyncSession, alias_overrides: dict[str, str] | None,
 ) -> None:
-    """执行配置绑定(换用条目)写面闸(TOK-07,2026-11-20 审计):声明
+    """执行配置绑定(换用条目)写面闸:声明
     条目与换用目标都须存在,且同基础服务 —— 换用只换「池内取哪条身份」,
     不许借道把别家基础服务的凭证注入原槽位发往原地址(运行时 precheck
     只拦「目标不存在」,跨基础服务此前任何层都不拦;与
     ``validate_binding_aliases`` 两分支同款口径)。
 
-    刻意差异(review 2026-11-20 登记):本闸**键侧无回落** ——
+    刻意差异:本闸**键侧无回落** ——
     ``validate_binding_aliases`` 的服务键允许未注册(回落自身为基础
     服务),而这里声明条目必须真实存在于注册表:换用键是池内取用条目,
     未注册 = 无池身份,绑定在运行时被 ``slot_lookup_overrides`` 静默
@@ -547,7 +547,7 @@ async def same_base_violations(
     模板 + ``call.user`` 直引)。刻意边界:
     * 未登记名跳过 —— 存在性是 ``unregistered_identities`` 的业务,
        本闸只裁已登记条目;否则 base 回落自身会造假阳性;
-    * **``extra_bases``**(评审 P2-2 收口,2026-11-21):手配草稿名
+    * **``extra_bases``**:手配草稿名
        → base 的叠层(``auth_drafts.base_overrides``)。闸在落池前跑,
        草稿名未入库、按「未登记跳过」会整体漏裁;叠层把它们视为
        「将登记且 base 已知」参与比对 —— 跨服务引用草稿首存即拦,
@@ -672,7 +672,7 @@ async def base_urls_for(
     return await deployment_urls(db, raw_names, env.env_id)
 
 
-# ─── 注册化保存/导入闸 判定单源(2026-11-22 收口)──────────────────
+# ─── 注册化保存/导入闸 判定单源 ──────────────────
 
 from dataclasses import dataclass  # noqa: E402  (闸单源置于模块尾部)
 

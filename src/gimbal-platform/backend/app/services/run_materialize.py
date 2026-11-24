@@ -121,7 +121,7 @@ def _substitute_slot_refs(node: Any, resolved_auths: list) -> None:
 
 def _step_service(step: dict) -> str | None:
     """step 的 service 键：call 形态优先(plate convert v2.1 批次 F 产出),
-    (api 形态已退役;无 call 声明 → None)。"""
+    (api 形态已归一,ADR-0003 #24;无 call 声明 → None)。"""
     call = step.get("call")
     svc = call.get("service") if isinstance(call, dict) else None
     return svc if isinstance(svc, str) and svc else None
@@ -129,7 +129,7 @@ def _step_service(step: dict) -> str | None:
 
 def referenced_services(steps: list) -> list[str]:
     """steps 里被引用的服务键(声明序去重)。公共函数 —— scenarios /
-    run_precheck / run_dispatcher 三处跨模块消费(2026-09-23 评审:私有
+    run_precheck / run_dispatcher 三处跨模块消费(私有
     ``_`` 前缀不该出现在跨模块 import 面)。
     """
     seen: dict[str, None] = {}
@@ -298,7 +298,7 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
             # 降级门控(无锚点存量 step):候选 = 绑定键 ∪ 全局默认键
             candidates = {**bound, **ctx.global_defaults}
             if candidates:
-                # #323(2026-10-15):导入落库的无锚点可执行场景曾在此被
+                # 导入落库的无锚点可执行场景曾在此被
                 # 灌全表绑定(orderPage ES 400)。门控语义按测试钉死不动,
                 # 此处仅留遥测 —— 无锚点 + 服务有绑定 = 高危注入面。
                 logger.warning(

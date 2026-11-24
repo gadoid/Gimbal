@@ -1,9 +1,9 @@
-"""查询取数上下文解析器(01-04 修复批,2026-11-24)。
+"""查询取数上下文解析器。
 
-rows 路由的旧前提 —— 「service_url 由前端按 authored config.services
-求值后传入,后端无集中 resolver」(query_views.py 路由 docstring,
-2026-09-07 spec)—— 随 D2 环境退役失效:config.services 的地址面已
-退役,新场景恒空 ⇒ 恒 ``service_url_required``。本模块把执行链同款
+rows 路由的前提(query_views.py 路由 docstring)——「service_url 由
+前端按 authored config.services 求值后传入,后端无集中 resolver」——
+已不成立(ADR-0003 #13):config.services 的地址面已退役,新场景恒空
+⇒ 恒 ``service_url_required``。本模块把执行链同款
 解析接到查询面,**复用既有单源,不建第二套规则**:
 
 * 读权限:表 B scenario.read(与 GET /scenarios/{id}/draft 同判;

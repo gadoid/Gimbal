@@ -172,7 +172,7 @@ export interface AuthAccountSecretsOut {
   username: unknown
 }
 
-// 调用身份草稿(保存期通道;架构一致性轮 2026-11-21 收窄)。
+// 调用身份草稿(保存期通道;架构一致性收窄)。
 // 
 // 只建 **username-ref 身份条目**,不创建账户、不碰密码 —— 凭证是
 // 独立资产,由 ``POST /auths`` 即时写入本人池/项目池;身份是全局
@@ -555,7 +555,7 @@ export interface EnvironmentCreate {
   name: unknown
 }
 
-// 标签 → 环境定义(2026-11-18「标签即环境」)。
+// 标签 → 环境定义(「标签即环境」)。
 export interface EnvironmentResolveIn {
   name: unknown
 }
@@ -641,7 +641,7 @@ export interface ExecutionListItemOut {
 
 // Page 信封(§4.1):既有 {items,total} 补齐 page/pageSize 即向后兼容。
 // 
-// ``failedTotal``(2026-10-21):与 ``total`` 同筛选口径的失败单数 —— 前端
+// ``failedTotal``:与 ``total`` 同筛选口径的失败单数 —— 前端
 // 筛选行的「共 N 条 · 失败 M 条」原先 N 是全量、M 却只数当前页,分页后
 // 口径打架;由服务端一次 count 给全口径值。
 export interface ExecutionListOut {
@@ -836,7 +836,7 @@ export interface HTTPValidationError {
   detail?: Array<ValidationError>
 }
 
-// 未读分享(悬浮标签数据源,2026-09-23 批次 F1)。
+// 未读分享(悬浮标签数据源)。
 // 
 // 前端以 Set<resourceId> 维护,列表行渲染 O(1) 查找;销账走
 // POST /read(按 id)。
@@ -898,7 +898,7 @@ export interface InstanceIdentityOut {
   refUsername?: unknown
 }
 
-// 实例改标签(2026-11-18 环境降级交互补齐;标签即环境)。
+// 实例改标签(环境降级交互;标签即环境)。
 // 
 // 目标环境二选一:``envId``(既有环境)或 ``envTag``(自由标签,不存在
 // 则自动登记为环境定义)。登录口/版本线/说明随行;API 地址
@@ -1073,7 +1073,7 @@ export interface ParamSlot {
 
 export type Pause = "none" | "on_failure" | "every_step"
 
-// 连通测速结果(服务配置管理抽屉;2026-11-17 M5)。
+// 连通测速结果(服务配置管理抽屉)。
 // 
 // ``ok`` 只表示「拿到了 HTTP 响应」—— 401/404 也是可达,与拨测
 // (auth_probe,验登录态)语义不同,别混用。
@@ -1359,7 +1359,7 @@ export interface Scenario {
   visibility?: unknown
 }
 
-// POST /scenarios/{id}/copy 可选请求体(2026-09-23 批次 F2 另存为)。
+// POST /scenarios/{id}/copy 可选请求体(另存为)。
 // 
 // 缺省(无 body)= 旧「复制到我的」行为,副本名沿用 ``(副本)`` 后缀;
 // 带 ``name`` = 另存为,重名由端点 409 + suggestion 交前端确认
@@ -1858,7 +1858,7 @@ export interface UserDeleteIn {
   transfer_to?: number | null
 }
 
-// M4 Page 信封(§6.3):用户列表分页(接口收紧已随 M2.5 落地)。
+// Page 信封(§6.3):用户列表分页(接口收紧已随 M2.5 落地)。
 export interface UserListOut {
   items: Array<UserPublic>
   page?: number

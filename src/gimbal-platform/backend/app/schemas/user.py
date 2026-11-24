@@ -10,8 +10,8 @@ from .auth import DisplayNameField, PasswordField, UsernameField
 from .page import PageOut
 
 
-# 三级单角色(authz W1 2026-11-07 更名:user | admin | super_admin;
-# 原 member→admin、原 admin→super_admin,权限边界不变)。
+# 三级单角色:user | admin | super_admin;
+# 原 member→admin、原 admin→super_admin,权限边界不变。
 Role = Literal["user", "admin", "super_admin"]
 
 
@@ -60,4 +60,4 @@ from .auth import UserPublic  # noqa: E402
 UserOut = UserPublic
 
 class UserListOut(PageOut[UserOut]):
-    """M4 Page 信封(§6.3):用户列表分页(接口收紧已随 M2.5 落地)。"""
+    """Page 信封(§6.3):用户列表分页(接口收紧已随 M2.5 落地)。"""

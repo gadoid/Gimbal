@@ -1,6 +1,6 @@
-"""services/adhoc_run.py — 临时调用(P3,设计 2026-11-02)的派发前校验链。
+"""services/adhoc_run.py — 临时调用(设计 2026-11-02)的派发前校验链。
 
-请求 ``steps`` 是配方,按 M1 同一原则收紧(§三):只能带锚点、服务别名、
+请求 ``steps`` 是配方,与入站调用同一原则收紧(§三):只能带锚点、服务别名、
 值与取回声明;method / path / headers / 地址 / 凭证 / 版本全部由平台按
 plate 定义、别名表、环境版本线补。校验全部在派发前完成(§四 2–6),
 不通过即 4xx、不建执行行;顺序:结构 → 锚点存在 → 服务别名 → 地址落点
@@ -318,7 +318,7 @@ async def resolve_versions(
            if choice.env_id is not None else None)
     meta_plate: dict[str, str] = {}
     unresolved: list[dict] = []
-    # 重构 §1.2:版本线迁 system_env_instances(env.lines JSON 列退役)
+    # 重构 §1.2:版本线在 system_env_instances(ADR-0003 #17)
     env_line_map = await env_chain.instance_lines(db, choice.env_id)
     for system in systems:
         if release and system in release:
@@ -393,12 +393,12 @@ async def prepare_adhoc(db: AsyncSession, req: Any, *, run_id: str,
     meta_plate = await resolve_versions(db, steps, req.release,
                                         user_id=user_id,
                                         identity_names=list(rows))
-    # TOK-02(2026-11-20 审计):身份条目须在本人个人池可取用(adhoc 无
+    # 身份条目须在本人个人池可取用(adhoc 无
     # 项目归属)—— 此前缺账户静默漏到引擎层匿名调用;与场景派发
     # identity_missing 硬门同口径(422 是 adhoc 的拒发通道)。排在
     # 结构/地址/版本校验之后(未种条目的存量用例先吃 adhoc_* 422)。
-    # D3 收口(2026-11-22):missing/ambiguous 分类报 —— 差集统一报
-    # 「未登记」把 account_ambiguous 误标,排障指向错误修复面。
+    # missing/ambiguous 分类报 —— 差集统一报
+    # 「未登记」会把 account_ambiguous 误标,排障指向错误修复面。
     _picked, _missing_ids, _ambig_ids = await pick_bindings_full(
         db, user_id, list(rows))
     if _missing_ids:

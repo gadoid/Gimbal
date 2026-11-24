@@ -21,12 +21,12 @@ export interface ActivityEventIn {
   toVersion?: string | null
   endpointId?: string | null
   opCount?: number | null
-  /** F3(2026-09-23):scenario 子动作 edit/rename/save_as/
+  /** scenario 子动作 edit/rename/save_as/
    * handoff_received;缺省(旧事件)= 按 edit 渲染。 */
   action?: string | null
   /** F3:子动作的结构化数据(oldName/newName/sourceScenarioId/senderName)。 */
   detail?: Record<string, unknown> | null
-  /** suite 面(2026-10-20:suite 事件此前只写不读,现并入时间线)。 */
+  /** suite 面(suite 事件此前只写不读,现并入时间线)。 */
   suiteId?: number | null
   /** integration 面(边沿事件:订阅/暂停/恢复/结论翻转)。 */
   taskId?: number | null

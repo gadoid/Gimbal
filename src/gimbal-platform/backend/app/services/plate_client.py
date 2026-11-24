@@ -129,8 +129,8 @@ def set_client_for_tests(client: httpx.AsyncClient | None) -> None:
 
 
 # ─── plate 契约归一化 ──────────────────────────────────────────────
-# fill_plate_defaults 已删除（M2 步骤 4 / Q18）：
-# 新 M2 Meta 只 name 必填（M6），平台无需补默认值——
+# fill_plate_defaults 已删除(ADR-0003 #15):
+# 新 M2 Meta 只 name 必填，平台无需补默认值——
 # 存储的定义即纯 M2 实例，保存时由 scenario_store 保证不写入平台元数据。
 
 
@@ -150,9 +150,9 @@ def _now_iso() -> str:
 # 解析预览[引用键 = 步骤引用 ∪ scope]与 service_aliases.py 审计;执行链
 # run_prepare 不读 scope —— 服务地址解析走步骤引用),但 plate 的
 # Scenario Config(extra="forbid")不建模 —— 随 convert 输入过界即
-# extra_forbidden → 执行 plate_rejected(首例 2026-11-22「订单创建
-# (call格式)(副本)」,11-21 服务范围重构起旁挂首次落进 config)。
-# TOK-01 同款单点收口:只在 plate 边界剥,存储/解析面不动。
+# extra_forbidden → 执行 plate_rejected(首例「订单创建
+# (call格式)(副本)」,服务范围重构起旁挂首次落进 config)。
+# 同款单点收口:只在 plate 边界剥,存储/解析面不动。
 _PLATFORM_SIDECAR_CONFIG_KEYS = ("var_locks", "service_scope")
 
 async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
@@ -162,7 +162,7 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     model_dump(exclude=...) 剥掉平台视图扩展字段(endpoints /
     navigation / config_summary / steps[*].api.view_hints /
     steps[*].request.fields_meta / steps[*].strategy[*].view_note)。
-    fields_meta 键控面 2026-09-05 目录化起随 M1 携带 state 与
+    fields_meta 键控面携带 state 与
     children 树(顶层 name 键控,值透传的 carry 顶层条目不进表)。
     step.field_states 是平台侧配置意图(§3.1),plate Step 模型
     extra=ignore 静默剥除 —— 注入面在 dispatch 预解析阶段读原始
@@ -174,7 +174,7 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     success.  Raises :class:`PlateUnavailableError` on connect / 5xx,
     :class:`PlateRejectedError` on 4xx.
 
-    TOK-01(2026-11-20 审计):入口**剥作者明文 users**(config.users)
+    入口**剥作者明文 users**(config.users)
     —— 池凭证经 materialize_run_copy 在 convert 产物上物化,执行链
     不依赖 convert 输入里的 users(run_materialize 对 converted users
     一律丢弃);此前作者内置凭证明文随 convert 输入进 plate,plate
@@ -182,7 +182,7 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     收口覆盖全部 8 个调用面(派发/graph/集成/adhoc/保存校验/适配/
     导入 ×2)。深拷贝后剥离,不改动调用方传入的 dict。
 
-    旁挂剥离(2026-11-22,TOK-01 同款单点收口):config 的平台旁挂键
+    旁挂剥离(同款单点收口):config 的平台旁挂键
     (``var_locks`` / ``service_scope``,``_PLATFORM_SIDECAR_CONFIG_KEYS``,
     契约见 frontend types/plate.ts ConfigView 注释「不进 M2 生成物」)
     不随 convert 输入过界 —— plate Config ``extra="forbid"``,多一个
@@ -230,7 +230,7 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
             message=str(envelope.get("error") or envelope),
             errors=[],
         )
-    # 信封契约断言(J-1 单点收口,2026-11-24):ok=true 但 data /
+    # 信封契约断言:ok=true 但 data /
     # data.converted 缺失或非对象 = plate 侧响应契约违约 —— 此前
     # `.get("converted") or {}` 全链静默空,半畸形回包以「空场景」流到
     # 物化/引擎才炸;在此单点断言,全部调用面经异常分类统一继承。
@@ -803,7 +803,7 @@ async def list_system_endpoints(
 ) -> list[dict]:
     """GET /api/systems/{system}/endpoint → data.items(working 树轻视图)。
 
-    导入重锚定(2026-10-15 #323)的反查候选源:条目含 id/service/
+    导入重锚定的反查候选源:条目含 id/service/
     method/path。5xx/网络错误上抛 PlateUnavailableError,4xx 上抛
     PlateRejectedError(调用方决定降级口径)。
     """
@@ -902,9 +902,9 @@ async def revision_objects(
 ) -> dict[str, str]:
     """GET /api/system/{id}/revisions/{line}/{n} → manifest.objects。
 
-    返回 ``{对象 id: review 状态}``(端点对象的评审面;W7 入库标准
+    返回 ``{对象 id: review 状态}``(端点对象的评审面;入库标准
     「生效修订中用到的接口全部已评审」的判定数据源)。修订不可变 →
-    修订缓存(B-7/W24 已随批:容量 FIFO)。``ref`` 必须是
+    修订缓存(容量 FIFO)。``ref`` 必须是
     ``<line>#<n>`` 精确修订。
     """
     if "#" not in ref:
@@ -940,7 +940,7 @@ async def revision_objects(
 
 
 async def validate_meta_plate_refs(meta_plate: dict[str, str]) -> None:
-    """保存端 meta.plate 引用校验(C-1,2026-10-13;与 R19 导入同口径)。
+    """保存端 meta.plate 引用校验(与导入面同口径)。
 
     每个声明须是 ``<line>#<n>``(working 豁免):线存在且 ``1 <= n <=
     线内修订数``。此前保存不校验 —— "1.0"(只有线)/"1.0#9"(修订不

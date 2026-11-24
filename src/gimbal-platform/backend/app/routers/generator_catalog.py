@@ -1,4 +1,4 @@
-"""Generator catalog proxy — Platform → Plate (generators 语法 dim, 2026-08-26).
+"""Generator catalog proxy — Platform → Plate (generators 语法 dim).
 
 常量池管理页需要 plate 内省出的生成器 kind 描述符(哪些 kind、每个
 kind 哪些参数)。权威源在 plate(``GET /api/generators`` 与

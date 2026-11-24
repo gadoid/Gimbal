@@ -8,7 +8,7 @@
      处置说明,r10.4)。 -->
 <template>
   <section id="tokens" class="flex flex-col gap-4" data-testid="tokens-section">
-    <!-- 分区头(说明收进问号悬浮,2026-11-05 归集轮) -->
+    <!-- 分区头(说明收进问号悬浮) -->
     <div class="flex flex-wrap items-center gap-2">
       <h2 class="m-0 text-[1rem] leading-[1.375rem] font-semibold">
         {{ mode === 'admin' ? `${props.ownerName ?? '该用户'} 的访问令牌` : '访问令牌' }}
@@ -436,7 +436,7 @@ const kindLabel = computed(() => '访问令牌')
 // ── admin 筛选 ─────────────────────────────────────────────────
 // 仅状态筛选(属主由子页 ownerId 钉死)。「全部」用哨兵 'all':reka-ui
 // SelectItem 禁空串 value(空串保留给「清空选择」),挂载即抛错
-// (2026-11-05 修复轮评审 N1)。
+// 的陷阱)。
 const adminStatus = ref<TokenStatus | 'all'>('all')
 watch(adminStatus, () => void reload())
 

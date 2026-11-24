@@ -202,7 +202,7 @@ async def _materialized_executable(
         # 的唯一开关(with_auth=False 跳过清单+解析);carry 见下方
         # (prepare_exec 内无条件构建)。
         service_bindings = {}
-    # §8.2(2026-11-17 环境降级轮):显式 environmentId 退役 —— 导出
+    # §8.2(ADR-0003 #21):显式 environmentId 不承载 —— 导出
     # 地址按 有效身份标签 > 项目默认 > 平台默认 解析
     from ..services.env_chain import EnvMixed, resolve_execution_tag
     from ..services.scenario_store import definition_from_payload as _dfp
@@ -322,9 +322,9 @@ async def _registry_gates(
     *, extra_known: "set[str] | None" = None,
     extra_bases: "dict[str, str] | None" = None,
 ) -> None:
-    """决策 1「引用即登记」保存闸(阶段 0;identity-registry §2)+
-    声明侧同 base 闸(阶段 3;TOK-07 声明面收口)+ 服务引用注册化闸
-    (架构终态,2026-11-21)—— 判定单源 2026-11-22 收口:三态解析与
+    """决策 1「引用即登记」保存闸(identity-registry §2)+
+    声明侧同 base 闸(声明面收口)+ 服务引用注册化闸
+    (架构终态 2026-11-21)—— 判定单源:三态解析与
     判定分支在 ``service_aliases.registry_gate_outcome``(导入面共用,
     此前 import 侧重实现且未知取值静默放行);本函数只做**载体映射**:
 
@@ -467,7 +467,7 @@ async def create_scenario(
             # ⑥:store 级版本声明闸的两种裁定 → 422(输入被拒)
             "meta_plate_missing_system": 422,
             "meta_plate_invalid_ref": 422,
-            # 凭证治理 §3.5(拍板 2026-11-20):明文快照直写 → 422
+            # 凭证治理 §3.5:明文快照直写 → 422
             "plaintext_users_rejected": 422,
             # 手配落池(§3.3 阶段 2,auth_drafts.materialize 单源):
             # 环境/系统/重名 422,同名条目/账户冲突 409,属主闸 403
@@ -570,7 +570,7 @@ async def scenario_signals(
         if row is None:
             out[sid] = {"trend": [], "lastRun": None}
             continue
-        # C3 收口(2026-11-22):公共判定对齐公共项目单源 —— 旧
+        # 公共判定对齐公共项目单源 —— 旧
         # 「project_id 非空 = public」宽口径令普通项目场景免默认方案锁,
         # SignalDots 混入非默认执行。
         is_public = row.project_id == public_project_id_cache
@@ -609,7 +609,7 @@ async def scenario_facets(
     q: str | None = None,
     visibility: str | None = None,
     scope: Literal["mine", "all"] = "all",
-    # A 级批次(2026-11-18):项目详情场景页签 FilterPopover 的项目口径
+    # 项目详情场景页签 FilterPopover 的项目口径
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> dict:
     """五维 facets:modules/systems/tags/authors/priorities 可选值+计数。
@@ -655,7 +655,7 @@ async def scenario_facets(
             for dim, pairs in out.items()
         }
 
-    # (SQLite 兜底聚合分支已随 SQLite 退役删除:PG 分支无条件 return)
+    # (PG 分支无条件 return,ADR-0003 #18)
 
 # ── 3) GET / (list) ────────────────────────────────────────────────
 @router.get("", response_model=ScenarioListOut | ScenarioOptionsOut)
@@ -670,10 +670,10 @@ async def list_scenarios(
     author: str | None = None,
     visibility: str | None = None,
     scope: Literal["mine", "all", "private"] = "all",
-    # S7.0 修正:补 alias —— 前端/项目页签发的是 projectId,缺 alias
-    # 时该过滤被静默忽略(S1.8 区切换器起就漏了)
+    # 补 alias —— 前端/项目页签发的是 projectId,缺 alias
+    # 时该过滤被静默忽略(区切换器起就漏了)
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
-    # 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):suite_members
+    # 按所属 Suite 筛选:suite_members
     # 反查成员 scenario_id 集下推;空集恒假(筛选语义,不 404)
     suite_id: Annotated[int | None, Query(alias="suiteId", ge=1)] = None,
     updated_within: Literal["24h", "7d", "30d"] | None = None,
@@ -712,7 +712,7 @@ async def list_scenarios(
     # SQLite:Python 兜底(本地量小,正确性优先)。
     # starred=true → 收藏集(≤20,cap 兜底)下推 SQL IN;
     # starred=false(排除收藏)走 Python 兜底分支(量小,不值得 NOT IN 分支)
-    # M6-2:收藏源改 UserStar 表(marks_store/stars.json 退役)
+    # 收藏源 = UserStar 表(ADR-0003 #22)
     from ..services import user_stars as user_stars_svc
 
     # 镜头参数归一(§5.1):公共页口径优先,scope 不叠加。
@@ -780,7 +780,7 @@ async def list_scenarios(
         tag=tag, author=author, updated_within=updated_within,
     )
     # 可见性纯判(表 B scenario.read + 项目上下文,谓词单点 can_pure;
-    # S7.4 引用复核分支随 share_refs 退役移除)。本分支仅
+    # 引用复核分支不复存在,ADR-0003 #20)。本分支仅
     # starred=false(排除收藏)走 Python 侧,其余走 SQL 分支。
     from ._ownership import can_pure
     from ..services.zone import my_project_roles, public_project_id
@@ -1102,7 +1102,7 @@ async def copy_scenario_to_me(
     """深拷贝场景+用例+数据集;新属主 = 调用者,visibility=private。
     需要读权限(public 或自己的场景才可复制)。
 
-    带 ``name``(另存为,2026-09-23 批次 F2):与本人已有场景重名 →
+    带 ``name``(另存为):与本人已有场景重名 →
     409 ``name_taken``,detail 带 ``suggestion``(计数后缀名),前端
     确认后带 suggestion 重发;重名判定走 resolve_name_conflict 唯一实现。
     """
@@ -1390,8 +1390,7 @@ async def delete_scenario(
     row = await _load_row(db, scenario_id)
     await _require_owner(db, user, row, verb="delete")
     owner_id, name = row.owner_id, row.name
-    # S7.4:share_refs 已退役(引用失效通知随之移除;引用行曾随
-    # FK CASCADE 消失,现表已删)
+    # share_refs 退场(ADR-0003 #20;引用失效通知随之移除,表已删)
     try:
         await scenario_store.delete(db, scenario_id)
     except KeyError as e:
@@ -1424,7 +1423,7 @@ async def export_scenario(
     if row is None:
         raise HTTPException(404, f"scenario_not_found: {scenario_id}")
     # 读闸同详情页:public ∨ 属主 ∨ 引用(404 不泄露存在性)。
-    # (旧代码直接调三参 can_read_scenario —— 签名收紧后即 500,2026-10-12)
+    # (以三参形态调 can_read_scenario 即 500 —— 签名已收紧)
     await _require_reader_async(db, user, row)
     from ..services.scenario_store import definition_from_payload
     payload = row.payload or {}
@@ -1465,5 +1464,5 @@ async def export_scenario(
 
 # ── R19 导入端点已退役(W3/W4,场景导入 v2.3 方案):可执行形态 +
 # 析出映射 + 单事务落库的新端点在 routers/scenario_import.py
-# (authz W7:CurrentUser + precheck 两阶段,create 建名另需 alias.write
+# (CurrentUser + precheck 两阶段,create 建名另需 alias.write
 # 能力),注册先于本模块的 /{scenario_id}。

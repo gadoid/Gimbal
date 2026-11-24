@@ -1,4 +1,4 @@
-// auditText.ts — 审计面板可读文本(2026-10-14 可读性收口):
+// auditText.ts — 审计面板可读文本(可读性收口):
 // * 动作:后端 AUDIT_ACTIONS 全键的中文标签表(unknown 回落原键);
 // * 对象:resource_name 快照优先(后端写审计时随 detail 落库,资源删了
 //   仍可读),老记录按类型回落 detail 里的名称字段,再回落 type:id;
@@ -20,7 +20,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'external_endpoint.query_safe': '只读标记变更(已退役:b3/C4 外部接口登记下线,历史审计只读)',
   'share.admin_revoke': '管理员撤销分享',
   'suite.admin_unpublish': '下架公共套件',
-  // 2026-10-20 横向件补全:admin-only 平台凭证写 + admin 越属主的
+  // admin-only 平台凭证写 + admin 越属主的
   // 删除/可见性变更(属主自操作不记,与 admin_unpublish 同口径)
   'integration.credential.write': '平台凭证变更',
   'scenario.admin_delete': '管理员删除场景',
@@ -31,7 +31,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   // 词表外存量动作:suites fork 落审计但未登记进 AUDIT_ACTIONS
   'suite.owner_fork': '复制私有套件',
   'suite.public_fork': '复制公共套件',
-  // 入站身份(webhook 设计 v3 P1)+ 入站发起的操作(收尾评审 2026-11-02 G4)
+  // 入站身份(webhook 设计 v3 P1)+ 入站发起的操作(收尾评审 G4)
   'token.create': '签发访问令牌',
   'token.renew': '令牌续期',
   'token.regenerate': '令牌重新生成',
@@ -45,7 +45,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'inbound.run': '经令牌发起执行',
   'inbound.denied': '令牌请求被拒',
   'inbound.task.write': '经令牌变更集成任务',
-  // 回调投递人工干预(全量评估 2026-11-02 #8)
+  // 回调投递人工干预()
   'webhook.redeliver': '人工补发回调',
 }
 

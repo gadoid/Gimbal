@@ -29,7 +29,7 @@ router = APIRouter(
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-#: 分桶 = 场景库的两个列表页 + 项目详情场景页签(A 级批次 2026-11-18);
+#: 分桶 = 场景库的两个列表页 + 项目详情场景页签;
 #: 条件在 mine/public/project 之间不互用(可见范围不同),project 桶再按
 #: 项目 id 隔离(每项目独立一组)。
 Bucket = Literal["mine", "public", "project"]

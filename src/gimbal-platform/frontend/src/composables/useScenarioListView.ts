@@ -12,7 +12,7 @@
  *
  * 筛选分组也住在这里:两页对分组做的事一字不差(存/应用/删),而应用
  * 要写的 q + filters 正是本骨架的私有状态 —— 拆成独立 composable
- * 只会让两页各抄一遍接线。分组语义(2026-09-22 定稿):chip = 以分组名
+ * 只会让两页各抄一遍接线。分组语义(chip = 以分组名
  * 搜索的开关 —— 点名 → 生效 q = 分组名(搜索框不回填,chip 高亮即
  * "正在搜什么");再点 → 取消回全量;手动输入/改筛选即退出分组态。
  */
@@ -30,14 +30,14 @@ import type { ScenarioListItem } from '@/types/scenario-composer'
 
 export type ScenarioListRow = ScenarioListItem
 
-/** 每页默认 10 条(2026-11-05 分页位置轮:列表卡定高 ≈ 10 行,
+/** 每页默认 10 条(列表卡定高 ≈ 10 行,
  *  更大档位在卡内滑轨滚动;用户手选的行数走 pager.sizes 偏好)。 */
 export const LIST_PAGE_SIZE = 10
 
 /** 分桶:mine = 「我的场景」页(S7.0 口径:scope=private——我名下且
  * 未加入任何项目;进项目的场景从项目页进),public = 公共页
  * (visibility=public,兼容别名 = 公共项目),project = 项目详情场景
- * 页签(A 级批次 2026-11-18:projectId 过滤 + 独立分组桶)。 */
+ * 页签(projectId 过滤 + 独立分组桶)。 */
 type Bucket = 'mine' | 'public' | 'project'
 
 export function useScenarioListView(
@@ -50,7 +50,7 @@ export function useScenarioListView(
   const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
   const filters = ref<ScenarioFilters>(emptyFilters())
 
-  // ── 分组态(2026-09-22 定稿)───────────────────────────────────
+  // ── 分组态───────────────────────────────────
   // chip 是"以分组名搜索"的开关:生效 q = 分组名,搜索框(searchBox)
   // 刻意不回填 —— 高亮的 chip 自己说明在搜什么;手动面(输入框/
   // FilterPopover)一动即退出分组态。groups 提前声明供 effQ 闭包取。
@@ -66,7 +66,7 @@ export function useScenarioListView(
   const params = () => ({
     q: effQ() || undefined,
     // 分桶下推:mine 桶恒 scope=private,public 桶维持 visibility=public,
-    // project 桶(A 级批次)= projectId 过滤(取代 scope/visibility)。
+    // project 桶 = projectId 过滤(取代 scope/visibility)。
     ...(bucket === 'mine'
       ? { scope: 'private' as const }
       : bucket === 'public'
@@ -74,7 +74,7 @@ export function useScenarioListView(
         : { projectId: opts.projectId }),
     // 「★ 仅看关注」只挂在 project 桶(场景库两页无此面)
     ...(bucket === 'project' && starred.value ? { starred: true } : {}),
-    // 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):同样 project 桶
+    // 按所属 Suite 筛选(同样 project 桶
     // 专属 —— 后端 suite_members 反查下推(空集恒假)。
     ...(bucket === 'project' && suiteId.value ? { suiteId: suiteId.value } : {}),
     system: filters.value.systems.join(',') || undefined,
@@ -273,7 +273,7 @@ export function useScenarioListView(
     pageCount: list.pageCount,
     loading: list.loading,
     filtering, filterableRows, facets, loadFacets,
-    // 2026-09-23 分页批次:每页行数可变(原为 LIST_PAGE_SIZE 定值直传)。
+    // 每页行数可变(原为 LIST_PAGE_SIZE 定值直传)。
     pageSize: list.pageSize,
     setPageSize: list.setPageSize,
     load, reload: list.reload, setPage: list.setPage,

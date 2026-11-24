@@ -1,4 +1,4 @@
-<!-- ScenariosMine.vue — 场景库 / 我的场景(编排工作台;2026-11-10 IA:
+<!-- ScenariosMine.vue — 场景库 / 我的场景(编排工作台;IA 调整:
      侧栏「我的 → 场景」,页头同名)。
      原 Scenarios.vue「我的编排」tab 拆出独立页:表格只负责列表浏览、
      方案快速预览、次数/并发轻量即时调整;深度编辑跳方案管理。 -->
@@ -165,7 +165,7 @@
                   <DropdownMenuContent align="end" class="sl-menu">
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('detail', row)">查看详情</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('edit', row)">编辑场景</DropdownMenuItem>
-                    <!-- F2(2026-09-23):重命名 —— 拉 draft 只改 meta.name 走既有
+                    <!-- 重命名 —— 拉 draft 只改 meta.name 走既有
                          PUT(name 生成列自动重算,后端零新增);软校验,重名不拦。 -->
                     <DropdownMenuItem class="sl-menu-item" data-testid="rename-menu" @click="renameScenario(row)">重命名</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" data-testid="share-menu" @click="openShare(row)">分享…</DropdownMenuItem>
@@ -428,7 +428,7 @@ watch(expandedInFlight, (id, _prev, onCleanup) => {
 
 /** 「全员视角」镜头退役(authz W3 后 admin 无越属主读,开关名不副实):
  *  本页恒 scope=private,所有角色同一句视角说明。
- *  计数走 PageHead count 常驻;视角说明收进问号悬浮(2026-11-05 说明统一轮);
+ *  计数走 PageHead count 常驻;视角说明收进问号悬浮);
  *  逐页收纳批把页脚徽章/默认方案口径段并入同一弹层,页脚不再常驻长说明。 */
 const BADGE_NOTE = '「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。'
 const pageSubtitle = computed(() => `你创建或拥有的编排\n\n${BADGE_NOTE}`)
@@ -566,7 +566,7 @@ function onQuickRun(): void {
   void doRunScheme(q.row, q.scheme, quickRunSource.value)
 }
 
-/** FE-01(2026-11-20 审计):场景库快捷执行在飞守卫 —— 执行是对被绑
+/** 场景库快捷执行在飞守卫 —— 执行是对被绑
  *  第三方的副作用动作,双击即双发;per-scheme busy 集 + 卡片按钮禁用
  *  (与 Runner.launching 守卫同分级)。 */
 const runningSchemes = ref(new Set<string>())
@@ -605,7 +605,7 @@ async function doRunScheme(
 // ── 关注(20 上限)─────────────────────────────────────────────
 async function toggleStar(row: ScenarioListItem) {
   // 乐观翻转:行来自服务端分页(useServerList),store.invalidate 不会
-  // 重拉当前页 —— 不翻行内状态,星星要等刷新页面才变(2026-09-23 修)
+  // 重拉当前页 —— 不翻行内状态,星星要等刷新页面才变(已修)
   const next = !row.starred
   row.starred = next
   try {
@@ -662,7 +662,7 @@ async function exportByScheme(row: ScenarioListItem, scheme: SchemeV2): Promise<
   }
 }
 
-// ── F2(2026-09-23):重命名 ───────────────────────────────────────
+// ── 重命名 ───────────────────────────────────────
 /** 拉 draft 只改 meta.name 走既有 PUT(name 生成列自动重算,后端零新增)。
  * 软校验口径:与已有场景重名不拦(库里躺着历史重名,硬拦会卡死老数据)。 */
 async function renameScenario(row: ScenarioListItem) {
@@ -684,7 +684,7 @@ async function renameScenario(row: ScenarioListItem) {
   }
 }
 
-// ── 分享弹窗(S7.4:引用徽标/共享区块随 share_refs 退役移除)─────
+// ── 分享弹窗(引用徽标/共享区块不复存在,ADR-0003 #20)─────
 const shareOpen = ref(false)
 const shareTarget = ref<{
   type: 'scenario' | 'suite'; id: string; name: string

@@ -133,7 +133,7 @@ function pruneDone(list: NoteItem[]): NoteItem[] {
   return list.filter((n) => !n.done || !n.doneAt || new Date(n.doneAt).getTime() > cutoff)
 }
 
-/** 读入归一(2026-11-05 修复轮评审 N3):修复前的存量条目是下划线键
+/** 读入归一(修复前的存量条目是下划线键
  * (created_at / done_at),GET 原样返回。不归一的话 toggle 追加 doneAt
  * 后同一条目两种键并存,后端 AliasChoices 先取 done_at、doneAt 成了多余
  * 字段被 extra=forbid 422 拒收 —— 整值 PUT,之后每次保存都失败。

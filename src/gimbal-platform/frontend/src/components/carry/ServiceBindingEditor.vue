@@ -256,7 +256,7 @@ function sourceLabel(row: ServiceRow): string {
   switch (sourceOf(row)) {
     case 'own': return ownLabel.value
     case 'service': return '服务级'
-    // FE-08d(2026-11-20 审计):实例模式无「服务级」单值显示位(按消费
+    // 实例模式无「服务级」单值显示位(按消费
     // 服务各异),但运行链序服务档**压过**层默认 —— 标签带限定,避免
     // 把「默认值/无行」读成最终生效值。
     case 'default': return isInstance.value ? '默认值(服务级可能覆盖)' : '默认值'

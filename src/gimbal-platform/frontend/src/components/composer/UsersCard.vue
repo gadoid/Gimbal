@@ -456,7 +456,7 @@ function poolForSystem(
 function mappedAccount(
   inst: ScopedServiceInstanceView, id: IdentityRow | null,
 ): AuthSession | null {
-  // A1 收口(2026-11-22):显示口径复用 identityResolve.pickAccountLike
+  // 显示口径复用 identityResolve.pickAccountLike
   // Backend(镜像后端 _pick_account_deterministic),废止本文件手写镜像
   // 的两处漂移 —— ① username 多候选取 same[0] 假"已映射"(执行将 409
   // account_ambiguous);② default 在合并双池找默认(执行按单池互斥

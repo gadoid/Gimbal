@@ -5,7 +5,7 @@
 文案。各源独立降级语义保留:sources 报告各源是否取到,任一源失败不
 拖垮整条轴。
 
-容量语义(2026-11-03 改造):``limit`` 是**每类上限**(缺省 30),不再
+容量语义:``limit`` 是**每类上限**(缺省 30),不再
 全局截断 —— 此前合流后统一截 ``limit``,单一类型刷屏会把其余类型挤出
 轴、且按类型筛选时远不足额。现在每类各留 30 条返回(≤ 6×limit 行),
 「全部」视图取混排最近 30 由前端负责(useActivityTimeline 的
@@ -34,7 +34,7 @@ router = APIRouter(prefix="/activity", tags=["activity"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-# 2026-11-03 起:每类一份等额窗口(此前 20/10/10 + 全局截断)
+# 每类一份等额窗口(此前 20/10/10 + 全局截断)
 PER_KIND_LIMIT = 30
 
 
@@ -68,7 +68,7 @@ class ActivityEvent(BaseModel):
     toVersion: str | None = None
     endpointId: str | None = None
     opCount: int | None = None
-    # suite 面(suites 事件此前只写不读 —— 2026-10-20 起并入时间线)
+    # suite 面(suites 事件此前只写不读,已并入时间线)
     suiteId: int | None = None
     # integration 面(边沿事件:订阅/暂停/恢复/结论翻转)
     taskId: int | None = None
@@ -92,7 +92,7 @@ async def get_activity(
     limit: Annotated[int, Query(ge=1, le=100)] = PER_KIND_LIMIT,
 ) -> ActivityOut:
     """本人活动轴:我的执行 + 我的私有场景改动 + 触碰我场景的适配批次
-    + 我的 suite/集成事件(2026-10-20 起)+ 入站调用(2026-11-03 起),
+    + 我的 suite/集成事件 + 入站调用,
     按 at 倒序合并。``limit`` = **每类上限**(不做全局截断,「全部」视图
     取混排最近 30 由前端负责 —— 见模块注释的容量语义改造说明)。
     """
@@ -101,7 +101,7 @@ async def get_activity(
 
     # ── 执行(owner 隔离;排队且无时间戳的行无处安放,跳过)─────────
     # 取 2×limit 再过滤无时间戳行,装满 limit 即停 —— 每类上限对执行源
-    # 同样成立(2026-11-03 容量语义),不随 2× 预取超发。
+    # 同样成立(容量语义),不随 2× 预取超发。
     try:
         rows = (await db.execute(
             select(Execution)
@@ -126,7 +126,7 @@ async def get_activity(
         logger.warning("活动轴执行源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["executions"] = False
 
-    # ── 场景事件(F3,2026-09-23:activity_events 真事件取代
+    # ── 场景事件(activity_events 真事件取代
     #    updated_at 反推;冷启动空窗已拍板接受 —— 旧口径本是假事件,
     #    不留暖场回退双口径)─────────────────────────────────────────
     try:
@@ -174,7 +174,7 @@ async def get_activity(
         logger.warning("活动轴适配批次源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["adaptations"] = False
 
-    # ── suite 事件(2026-10-20:suite.share_* 此前只写不读,同表同源
+    # ── suite 事件(suite.share_* 此前只写不读,同表同源
     #    查询补上;kind 区分路由渲染)────────────────────────────────
     try:
         rows = (await db.execute(

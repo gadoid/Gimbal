@@ -1,5 +1,5 @@
 /**
- * usePagerSize.ts — 列表页「每页行数」的用户偏好(2026-09-23 分页批次)。
+ * usePagerSize.ts — 列表页「每页行数」的用户偏好。
  *
  * 存储走 useUserPreference 的服务端键 ``pager.sizes``(值 = {页面slug:
  * 行数} 整值覆盖;同键全局单实例 → 12 个列表页共享一次 GET / 一发 PUT),

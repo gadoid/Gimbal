@@ -3,7 +3,7 @@
 * 权限 ``CurrentUser``(authz W7:导入开放至全体用户 —— User 可导入
   并映射到已有别名;``decision=create`` 建新别名另需 ``alias.write``
   能力,services 层 land() 拒 403 capability_forbidden);
-* 体积门在 ``scenario_import.read_bundle``(N3:原始 Request +
+* 体积门在 ``scenario_import.read_bundle``(原始 Request +
   Content-Length 预检 + 限长读,json.loads 之前拒绝);
 * 注册必须在 scenarios.router 之前(``/scenarios/import`` 先于
   ``/{scenario_id}`` catch-all);旧 definition-only 裸导入端点已随

@@ -1,5 +1,5 @@
 <!--
-  NotificationsCenter.vue — 通知中心(F5,2026-09-23 批次;2026-10-10
+  NotificationsCenter.vue — 通知中心(
   风格轮对齐平台规范:根容器复用全站 .slib 三壳标准、页头换 PageHead、
   主色回归 indigo --accent 系,弃用本页自带的 860px 窄居中布局与
   shadcn hsl(primary) 色板)。
@@ -34,7 +34,7 @@ const tab = ref<'notify' | 'audit'>('notify')
 const items = ref<NotificationItem[]>([])
 const unread = ref(0)
 const loading = ref(false)
-// 2026-09-23 分页批次:后端信封升级 page/pageSize/total,原「最近 50 条」
+// 后端信封升级 page/pageSize/total,原「最近 50 条」
 // 截断改为真分页(未读优先排序保持不变);每页行数存用户偏好。
 const page = ref(1)
 const { pageSize } = usePagerSize('notifications', 20)

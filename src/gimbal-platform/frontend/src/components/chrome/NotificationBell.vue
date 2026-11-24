@@ -4,7 +4,7 @@
      为一个铃铛引入 WebSocket/SSE 不划算);顺带比对 roleVersion,
      变了 → refetch me(localStorage 角色快照的收敛钩子,§1.3 第六轮)。
      下拉:最近通知(未读优先)+ 全部已读;底部「查看全部」→ 通知中心、
-     「管理通知类型」→ 个人设置 #notify(2026-11-12 弹层内嵌按 type
+     「管理通知类型」→ 个人设置 #notify(弹层内嵌按 type
      开关退役 —— 偏好管理收口到个人设置,弹层只管流水)。 -->
 <template>
   <Popover v-model:open="open">
@@ -60,7 +60,7 @@
         </button>
       </div>
 
-      <!-- F5(2026-09-23):弹层只留 30 条滚动,整页视图走通知中心 -->
+      <!-- 弹层只留 30 条滚动,整页视图走通知中心 -->
       <button
         type="button"
         class="block w-full border-t px-3 py-2 text-center text-caption text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
@@ -68,7 +68,7 @@
         @click="open = false; router.push('/notifications')"
       >查看全部 →</button>
 
-      <!-- 类型开关的管理收口到个人设置(2026-11-12):弹层不再内嵌
+      <!-- 类型开关的管理收口到个人设置:弹层不再内嵌
            按 type 开关 —— 偏好是低频设置,混在通知流水里既挤占弹层
            又让人误以为在这里调;个人设置 #notify 已有同一份偏好的
            开关面板(身份卡「通知偏好」同锚点)。 -->

@@ -57,7 +57,7 @@
         </button>
       </div>
 
-      <!-- 关键词 + 方法筛选(2026-09-22 增补):与状态 chip 叠加过滤 -->
+      <!-- 关键词 + 方法筛选(增补):与状态 chip 叠加过滤 -->
       <div class="grid-filter-row">
         <input
           v-model="search"

@@ -1,4 +1,4 @@
-<!-- PageBack.vue — 二级页返回链接的全站唯一形态(风格整理轮 2026-10-10)。
+<!-- PageBack.vue — 二级页返回链接的全站唯一形态()。
      12.5px 灰、hover 变 accent 且箭头左移 2px;此前 SuiteManage/SuiteCompose/
      DebugConsole 各写一份,字号/颜色/位移三处漂移。 -->
 <template>

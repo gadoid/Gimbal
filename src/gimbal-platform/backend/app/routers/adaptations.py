@@ -6,7 +6,7 @@ impact-summary、refs-drift 五个 working 全局目录口径的读面已删除
 (影响提示由版本提示/生效修订口径承接);引用索引健康检查仅存
 C10 unindexed-steps。
 
-批次生命周期端点(batches / ops / apply / rollback)在 Task 10 追加到本文件。
+批次生命周期端点(batches / ops / apply / rollback)在本文件。
 """
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ async def _require_op_access(db, user, op_id: int) -> None:
 async def unindexed_steps(user: CurrentUser, db: DbSession) -> list[UnindexedStepOut]:
     """C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。
 
-    B3 收口(2026-11-22):补 Admin+ 能力门(ops.write,模块 admin-only
+    Admin+ 能力门(ops.write,模块 admin-only
     约定同款,门在取数前)—— 此前 CurrentUser 裸门 + unindexed_steps
     全表扫无属主过滤,任何登录用户可枚举他人私有场景 id/步骤索引,
     违反「404 不泄露存在性」教义(模块 docstring 自称 admin-only,
@@ -300,7 +300,7 @@ async def compare_revisions(
 ) -> dict:
     """RS4a 比较（§5.3）:场景起点修订 vs 目标修订的 plate 差异 + 三组影响。
 
-    B4 收口(2026-11-22):场景读闸 —— 旧注释「R22:读面全员」与私有区
+    场景读闸 —— 「读面全员」旧口径与私有区
     教义(GET /scenarios/{id} 非可读 404 不泄露存在性)正面冲突,按
     GET 口径收窄:不可读 → 404 scenario_not_found。submit-suite 的
     逐成员内部 compare 不经此端点,其编辑权由 submit_adaptation
@@ -343,7 +343,7 @@ async def save_check(user: CurrentUser, db: DbSession,
     """RS4a 保存检查:①目标修订试算（阻断）②引用检查 ③保存方式推荐。
 
     R14:review_items 非空时提示确认,未确认提交被拒。
-    B4 收口(2026-11-22):场景读闸同 compare(404 不泄露存在性)。
+    场景读闸同 compare(404 不泄露存在性)。
     """
     from ._ownership import can_read_scenario_row
     from ..services.scenario_store import get_row as _get_row
@@ -404,8 +404,8 @@ async def submit_adaptation(user: CurrentUser, db: DbSession,
             "no_system_declared": 422,
         }) from e
     # not_scenario_owner 死分支与 except HTTPException: raise 空转均删
-    # (复核收口 2026-11-22):_ensure_edit_rights 的 403 经 HTTPException
-    # 自然传播,无需捕获形状。
+    # (_ensure_edit_rights 的 403 经 HTTPException
+    # 自然传播,无需捕获形状)。
 
 
 @router.get("/stale")
@@ -413,8 +413,8 @@ async def stale_scenarios(
     user: CurrentUser, db: DbSession,
     scope: str | None = Query(default=None),
 ) -> dict:
-    """RS4a 陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看
-    自己;authz W3:super_admin 全量分支删除,所有角色同镜头(仅自己)——
+    """陈旧清单（§2.3）:预览/新线/已修正/已退役。scope=mine 只看
+    自己;super_admin 全量分支删除,所有角色同镜头(仅自己)——
     他人场景的适配状态由属主自见,排查走审计。"""
     user_id = user.id
     try:
@@ -489,7 +489,7 @@ async def submit_suite(user: CurrentUser, db: DbSession,
     suite = await db.get(Suite, body.suiteId)
     if suite is None:
         raise HTTPException(404, f"suite_not_found: {body.suiteId}")
-    # B2 收口(2026-11-22)读闸:表 B suite.read —— 此前 db.get 裸取,
+    # 读闸:表 B suite.read —— db.get 裸取会放过不可读套件,
     # 任意登录用户可对他人私有 Suite 触发聚合(compare 吐他人场景面)
     # 或 copy 深拷贝(签名错配恰以 500 挡住,见下);不可读 → 404 不泄露
     # 存在性(与 suites fork _require_read_async 同源 can())。

@@ -4,7 +4,7 @@
      本组件只管内容区分区,不自带头部导航/返回。
      容器双档(样式归一):standard=1200(默认)/ wide=1480,流式
      max-w-[min(Npx,100%)];lead = 标题下、tabs 上的整宽导语区。
-     2026-11-05 说明统一轮(与 scenario-lib/PageHead 同口径):页面说明
+     说明统一(与 scenario-lib/PageHead 同口径):页面说明
      文字(subtitle)收进标题旁圆圈问号的悬浮提示(.slib-q),不常驻;
      随数据变化的状态/计数走 meta(常驻 caption)。 -->
 <template>
@@ -44,7 +44,7 @@ defineProps<{
   subtitle?: string
   /** 常驻状态行(统计 / 计数等随数据变化的信息),原副标位置 */
   meta?: string
-  /** 页头图标(与侧栏同一颗;风格整理轮:每页一图标不重复)。 */
+  /** 页头图标(与侧栏同一颗;每页一图标不重复)。 */
   icon?: SlibIconName
   /** 容器档位:standard=1200(默认)/ wide=1480(宽表格页) */
   width?: 'standard' | 'wide'

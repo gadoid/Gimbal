@@ -1,6 +1,6 @@
 <!-- ProjectScenariosTab.vue — 项目详情「场景 (用例)」页签(普通项目)。
 
-     A 级批次(2026-11-18)起改用场景库共享骨架 useScenarioListView 的
+     改用场景库共享骨架 useScenarioListView 的
      project 桶:检索 / FilterPopover(facets 项目口径)/ 筛选分组
      (project 桶,按项目隔离)/ 分页全部下推服务端,与「我的 / 公共
      场景」两页同一套心智模型;「★ 仅看关注」为 project 桶专属附加面
@@ -23,7 +23,7 @@
         data-testid="prj-scen-starred" title="仅看已关注(★)"
         @click="starred = !starred"
       >★ 仅看关注</button>
-      <!-- 按所属 Suite 筛选(stitch 0-2 批次 2026-11-23):下拉源 =
+      <!-- 按所属 Suite 筛选(下拉源 =
            本项目用例集列表;读失败不渲染(FE-02 纪律:失败≠空集)。 -->
       <select
         v-if="suites.length" class="seg-btn suite-select"

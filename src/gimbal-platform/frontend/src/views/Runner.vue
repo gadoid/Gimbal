@@ -14,7 +14,7 @@
   * 右栏顶部「暂未支持」灰条 = 批级执行策略,一条说明,不是可操作控件
   * 底部启动条:启动的是**可跑的**那几条(跑不了的留在队列里等换方案)
   * 原型页尾图例/各内联长说明已并入页头与各区块的问号弹层
-    (2026-11-05 逐页收纳批),页内不再常驻说明段
+    (逐页收纳),页内不再常驻说明段
 -->
 <template>
   <ListPage width="wide" title="执行器" icon="play"
@@ -529,7 +529,7 @@ async function launchQueue() {
   launching.value = true
   const batchId = genBatchId()
   const failures: string[] = []
-  // FE-08i(2026-11-20 审计):只移除**已成功发起**的队列项 —— 此前
+  // 只移除**已成功发起**的队列项 —— 此前
   // clearQueue() 无条件清空,发起失败(409 硬门等)的条也被清走,与
   // 「留在队列等修复」的注释/文案矛盾。
   const launchedKeys = new Set<string>()

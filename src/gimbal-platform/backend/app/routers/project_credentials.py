@@ -2,7 +2,7 @@
 
 项目凭证 = 归属项目的登录账户(``auth_accounts.project_id``;owner_id
 NULL)。修订总原则 1:唯一的共享账户;只有项目管理员能录入 / 修改,
-成员只能选用。可见性双口径(2026-11-20 拍板 #10):**本管理面列表**
+成员只能选用。可见性双口径:**本管理面列表**
 仍掩码(``_member_view``:成员视图 ``username=''``,密码恒掩码);
 **检索面**(``GET /auth?source=project``)username 对成员明文 —— 按名
 引用必需,掩码在此面不适用。
@@ -190,7 +190,7 @@ async def create_project_credential(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        # 按约束名分派(复核收口 2026-11-22:blanket 把默认位冲突误报
+        # 按约束名分派(blanket 把默认位冲突误报
         # 成撞名)
         _code, _msg = account_integrity_conflict(e)
         raise HTTPException(
@@ -262,8 +262,8 @@ async def patch_project_credential(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        # 按约束名分派(复核收口 2026-11-22:改默认位撞 uq_account_
-        # default 被误报成泛化「更新冲突」)
+        # 按约束名分派(改默认位撞 uq_account_
+        # default 不是泛化「更新冲突」)
         _code, _msg = account_integrity_conflict(e)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

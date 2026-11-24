@@ -1,20 +1,20 @@
 """AccessToken / AccessTokenScope — 访问令牌(webhook v4 §4.1)。
 
-v4 三段收敛的左侧身份:**单一令牌 ``gtk_``**,绑定一个用户(个人令牌)
-(authz C1:平台令牌随平台模式退役,只承载个人令牌)。调用方不在 Gimbal 登记 ——
+v4 三段收敛的左侧身份:**单一令牌 ``gtk_``**,绑定一个用户(个人令牌,
+authz C1:平台令牌随平台模式退役,只承载个人令牌)。调用方不在 Gimbal 登记 ——
 令牌下管理授权范围(允许使用的服务别名与凭证),调用、注册、每次定时
 运行前由平台计算本次用到的别名与凭证并核对子集关系。
 
 * 明文 = ``gtk_`` + ``secrets.token_urlsafe(32)``(43 字符),库里只存
   sha256 与展示片段 hint;回调签名密钥 Fernet 加密,同样只在生成/轮换
-  时返回一次(D10);
+  时返回一次;
 * 范围按对象外键存(:class:`AccessTokenScope`):对象删除即收回授权,
   同名重建不继承;别名改名级联;
 * 生命周期(§3.4):有效 →(自然到期)已到期 →(续期/重新生成)有效;
   (改密/停用/admin 强制)已失效 →(重新生成)有效;吊销 = 终态只读。
   派生拒绝(属主角色 < member / 属主未启用)不落库,认证时按当前值判。
 
-authz M2b Q2 —— **项目令牌**(``kind='project'``):以「项目用户」权限访问
+**项目令牌**(``kind='project'``):以「项目用户」权限访问
 单个项目的外部调用身份;``user_id`` 恒 NULL(个人面 ``user_id == uid`` 的
 查询天然排除项目令牌,签发人被删也不会 CASCADE 掉项目令牌),
 ``project_id`` 指向项目(无 FK,项目删除路由显式吊销);``holder_id`` =
@@ -40,7 +40,7 @@ class AccessToken(Base):
     __table_args__ = (
         # 认证按 hash 命中(唯一约束);列表按属主 + 吊销态过滤
         Index("ix_access_tokens_user", "user_id", "revoked_at"),
-        # M2b Q2:个人令牌 = 属主非空 ∧ 无项目;项目令牌 = 属主空 ∧ 有项目
+        # 个人令牌 = 属主非空 ∧ 无项目;项目令牌 = 属主空 ∧ 有项目
         CheckConstraint(
             "(kind = 'personal' AND user_id IS NOT NULL"
             " AND project_id IS NULL)"
@@ -123,7 +123,7 @@ class AccessTokenScope(Base):
 
     __tablename__ = "access_token_scopes"
     __table_args__ = (
-        # C8 审计(2026-11-23):此前 ck_scope_exactly_one 只活在迁移
+        # 此前 ck_scope_exactly_one 只活在迁移
         # 0033,模型侧零表达 —— fresh 库按模型建表(测试)与迁移库
         # 约束漂移。对齐进模型,模型/迁移从此同形。
         CheckConstraint("(alias_name IS NULL) <> (auth_id IS NULL)",

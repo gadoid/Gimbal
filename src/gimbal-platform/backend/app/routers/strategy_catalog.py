@@ -1,4 +1,4 @@
-"""Strategy catalog proxy — Platform → Plate (strategy 语法 dim, 2026-08-17).
+"""Strategy catalog proxy — Platform → Plate (strategy 语法 dim).
 
 前端"添加策略"需要 plate 内省出的 kind 描述符(哪些 kind、每个 kind
 哪些字段)。权威源在 plate(``GET /api/strategy`` 与

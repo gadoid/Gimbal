@@ -1,4 +1,4 @@
-"""导入重锚定(2026-10-15 #323 复盘):可执行形态 → 锚定存储形态。
+"""导入重锚定:可执行形态 → 锚定存储形态。
 
 导出产物是引擎可执行形态 —— reproject 在 convert 出口剥掉 step.endpoint,
 call 携带 binding 派生的 protocol/method/path/timeout。原样落库后步骤无
@@ -49,7 +49,7 @@ def is_anchored(entry: dict) -> bool:
 
     不能按 ``endpoint`` 非空判 —— not_in_revision 条目也携带命中的候选
     ID(供人排查"差一点锚到了谁"),消费者(precheck 分组/回填脚本)曾
-    因此把漂移步骤误报成已锚(#323 口径缺口,2026-10-15 实测发现)。
+    因此把漂移步骤误报成已锚(实测发现的口径缺口)。
     """
     return entry.get("reason") is None
 

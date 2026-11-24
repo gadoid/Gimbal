@@ -126,7 +126,7 @@ export function putInstance(
     .then(({ data }) => data)
 }
 
-/** 实例改标签(标签即环境,2026-11-18):目标 = 既有 envId 或自由 envTag
+/** 实例改标签(标签即环境):目标 = 既有 envId 或自由 envTag
  *  (不存在则后端自动登记为环境定义)。目标已有该系统实例 → 409。
  *  只搬登录口/版本线/说明;API 地址与身份条目按各自环境维护。 */
 export function moveInstance(

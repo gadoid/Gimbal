@@ -82,7 +82,7 @@ async def _count_admins(db: AsyncSession) -> int:
     ).scalar_one()
 
 
-# ── GET /roster — 成员选择器(2026-09-23 批次 F1 分发)─────────────────
+# ── GET /roster — 成员选择器 ─────────────────
 @router.get("/roster")
 async def get_roster(
     user: CurrentUser,
@@ -318,8 +318,8 @@ async def patch_user(
 
             from ..models.access_token import AccessToken
         
-            # RETURNING 只取本次 UPDATE 命中的行(评审 2026-11-05 P2:
-            # 按 invalidated_reason==deactivated 重取会把上一轮停用
+            # RETURNING 只取本次 UPDATE 命中的行(按
+            # invalidated_reason==deactivated 重取会把上一轮停用
             # 失效、尚未重新生成的历史令牌再通知一遍)
             res = await db.execute(_sa_update(AccessToken).where(
                 AccessToken.user_id == target.id,
@@ -604,8 +604,8 @@ async def delete_user(
     # purge:suite 删除(成员行级联),场景照旧走 scenario_store.delete。
     from ..models.suite import Suite, SuiteMember
 
-    # S7.4:引用处理整段随 share_refs 退役移除(存量已转私有副本;
-    # 此前的引用失效/属主变更通知不再有数据源)
+    # 引用处理不复存在(ADR-0003 #20:存量已转私有副本;
+    # 引用失效/属主变更通知不再有数据源)
 
     # suite id 删前物化:publicize/purge 都会删掉本用户全部 suite,
     # 删后再查恒空 —— 下方「引用已删 suite 的模板兜底删」(§3.6 通用
@@ -785,7 +785,7 @@ async def delete_user(
                     # (连贯 fail-closed,无半处置残留)。
             await db.execute(sa_delete(IntegrationTask).where(
                 IntegrationTask.template_id == tpl.id))
-            # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会
+            # 模板行本身也删(方案 §3.6:漏删会
             # 被下方 owner_id 统一更新挂到 __platform__ 名下,留下
             # 属主为系统用户的僵尸模板)
             await db.delete(tpl)
@@ -798,7 +798,7 @@ async def delete_user(
             await db.delete(tpl)
             disposed_tasks.append((tpl, "purge"))
 
-    # S1.7(D10):软删模板**直接删除** —— 不再兜底挂到 __platform__
+    # 软删模板**直接删除** —— 不兜底挂到 __platform__
     #(挂靠行会污染平台模板的属主判定;平台模板改 is_platform_template
     # 显式标记,0040 已迁移存量)。连带其实例行(卡片本就「已移除」)。
     await db.execute(sa_delete(IntegrationTask).where(

@@ -45,7 +45,7 @@ class ScenarioMeta(BaseModel):
     (``requirementRef`` 及 M2 后续新增)经 ``extra="allow"`` 原样透传。
     读侧由 ``_meta_from_row`` 从 payload.definition.meta 组装 —— 此前
     手写字段清单对未知键静默丢弃,requirementRef 读侧被剥、编排器水合
-    再保存即丢字段(A-1,2026-10-12);M2 Meta 每加一个字段都会重演。
+    再保存即丢字段;M2 Meta 每加一个字段都会重演。
     ``module``/``system`` 对齐 M2 空值语义('' / []):旧库存量空值
     原样保留,不再注入伪系统/模块 "default"(M11:meta.system 每个
     系统必须有 plate 声明,"default" 永远不合法)。
@@ -77,7 +77,7 @@ class ScenarioMeta(BaseModel):
     # 版本声明(Release 4.4):{系统: '<line>#<n>' | 'working'}。读侧必须
     # 透传 —— 编排器水合靠它保留版本声明;此前本模型缺此字段,普通 GET
     # 的响应序列化静默剥掉 plate,编排器导出/保存的草稿即失去重投影
-    # 依据(锚点步骤的 call 直通校验必炸,2026-10-12 导出失效根因之二)。
+    # 依据(锚点步骤的 call 直通校验必炸 —— 导出失效根因之二)。
     plate: dict[str, str] | None = Field(default=None, alias="plate")
 
     @field_validator("tags")
@@ -100,8 +100,8 @@ class ScenarioMeta(BaseModel):
     @field_validator("system")
     @classmethod
     def _validate_system(cls, v: list[str]) -> list[str]:
-        # A-1:空表 = 未声明系统,对齐 M2 Meta(List[str] = [])原样放行
-        # ——「至少一个」不再由读模型强制(旧兜底注入的伪系统 "default"
+        # 空表 = 未声明系统,对齐 M2 Meta(List[str] = [])原样放行
+        # ——「至少一个」不由读模型强制(旧兜底注入的伪系统 "default"
         # 与 M11 每系统须有 plate 声明冲突,已随兜底一并删除)。
         if not v:
             return []
@@ -161,7 +161,7 @@ class ParamSlot(BaseModel):
 
 
 class AuthDraftIn(BaseModel):
-    """调用身份草稿(保存期通道;架构一致性轮 2026-11-21 收窄)。
+    """调用身份草稿(保存期通道;架构一致性收窄)。
 
     只建 **username-ref 身份条目**,不创建账户、不碰密码 —— 凭证是
     独立资产,由 ``POST /auths`` 即时写入本人池/项目池;身份是全局
@@ -280,7 +280,7 @@ class DataSetDraft(BaseModel):
 
 
 # ─── runs ───────────────────────────────────────────────────────────
-# authz M2a S6:绑定里退役的两个字段(地址 = 环境 → 部署表;凭证 =
+# 绑定里退役的两个字段(地址 = 环境 → 部署表;凭证 =
 # 条目绑定)。带它们的请求 422,不静默丢弃 —— 调用方以为生效了更糟。
 RETIRED_BINDING_FIELDS = ("url", "authAlias", "auth_alias")
 
@@ -354,9 +354,9 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
-    # §8.2(2026-11-17 环境降级轮):方案环境链位退役 —— 存量 payload
+    # §8.2(ADR-0003 #21):方案环境链位退役 —— 存量 payload
     # 里的 environmentId 键不再消费(数据保留,读侧忽略)。
-    # M10 RunOptions 形状(迁移完成,不再收旧平铺键)
+    # RunOptions 形状(迁移完成,不再收旧平铺键)
     options: dict[str, Any] = Field(default_factory=lambda: {
         "step_from": None, "step_to": None,
         "n_runs": 1, "parallel": 1, "subscribe": None,
@@ -375,7 +375,7 @@ class ExportOverlay(BaseModel):
 
 
 class ScenarioCopyIn(BaseModel):
-    """POST /scenarios/{id}/copy 可选请求体(2026-09-23 批次 F2 另存为)。
+    """POST /scenarios/{id}/copy 可选请求体(另存为)。
 
     缺省(无 body)= 旧「复制到我的」行为,副本名沿用 ``(副本)`` 后缀;
     带 ``name`` = 另存为,重名由端点 409 + suggestion 交前端确认
@@ -412,7 +412,7 @@ class GraphUnitSpec(BaseModel):
     injection_entry_ids: list[str] = Field(default_factory=list,
                                            alias="injectionEntryIds")
     # 单元粒度服务绑定(与 graph 级合并,单元覆盖同名)。值收紧为
-    # ServiceBinding(评审 2026-11-01:此前 Any —— 字符串别名会被
+    # ServiceBinding(此前 Any —— 字符串别名会被
     # exec_auth_aliases 的 isinstance(dict) 分支静默跳过,清单/注入
     # 双漏;入站 API 上线前在 wire 面拒掉,不留给运行时静默丢弃)
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
@@ -446,7 +446,7 @@ class GraphSpec(BaseModel):
     # GraphUnitSpec.service_bindings:字符串别名在 wire 面 422,不静默跳过)
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
-    # §8.2(2026-11-17 环境降级轮):图级环境显式位退役 —— 逐单元按
+    # §8.2(ADR-0003 #21):图级环境显式位不承载 —— 逐单元按
     # 各自身份集合解析标签(身份 > 项目默认 > 平台默认),不整图拉平。
     # 裁剪控制(重构方案第 2 处:only / toNode;fromNode 不开放)
     control: GraphControlSpec | None = None
@@ -494,7 +494,7 @@ class RunRequest(BaseModel):
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )
-    # §8.2(2026-11-17 环境降级轮):environmentId 显式位全链退役(UI/
+    # §8.2(ADR-0003 #21):environmentId 显式位全链不承载(UI/
     # API/webhook 均不再接受,旧键发送被静默忽略);执行标签按
     # 身份 > 项目默认 > 平台默认 自动解析。
     # 执行配置分层②(设计方案 §5):显式选定执行配置 —— 条目绑定换池

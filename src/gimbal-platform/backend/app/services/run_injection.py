@@ -43,8 +43,8 @@ def _assign_strategy(value: Any, target: str) -> dict[str, Any]:
     assign.py 先 default 后 required,读不到时写字面量而非失败。
     其余值(含普通字符串 / dict / list / null)不带键,基座字段全取默认。
 
-    **整串 `"${...}"` 类同样补键(裁定 2026-11-24,dollar-brace-backfill
-    G:接受「null 是合法值」,改文档不改行为 —— 取代旧文「不可兜;不加键
+    **整串 `"${...}"` 类同样补键(dollar-brace-backfill:
+    接受「null 是合法值」,改文档不改行为 —— 取代旧文「不可兜;不加键
     也不改行为」,那句对 null 情形不成立)。**引擎在**任何策略执行之前**先
     整体预处理整个 scenario(gimbal/core/scenario_runner.py:258-266),
     `_resolve_strategy` 把 `Assign.source` 与 `Assign.default` **一并**过
@@ -254,7 +254,7 @@ def _host_conflict(body: Any, target: str) -> bool:
     except JsonPathError:           # 解析不了 ⇒ 走不动 ⇒ 冲突(见上「规则」)
         return True
     # 前缀 = call.request.body(三段,请求体通道;旧单段 request_body 前缀
-    # 已随 api→call 清理退役)。token 级认,不按字符串切。
+    # 已随 api→call 归一删除,ADR-0003 #24)。token 级认,不按字符串切。
     def _strip_body_prefix(ns) -> "list | None":
         vals = [n.value for n in ns[:3]
                 if n.kind is NodeKind.FIELD]
@@ -312,8 +312,8 @@ def as_step_index(x: Any) -> int | None:
 
 
 def validate_registry_shape(registry: Any) -> None:
-    """assertion_registry **写侧形状闸**(I-01,2026-11-24 裁定「隔离区 +
-    后端闸」):落库前校验,拦**非前端写入方**(直连 API / 脚本 / 旧
+    """assertion_registry **写侧形状闸**(「隔离区 +
+    后端闸」裁定):落库前校验,拦**非前端写入方**(直连 API / 脚本 / 旧
     客户端)。与 param_slots 同层同形(同层平台侧字段,写时校验,
     scenario_store create/PUT 双跑接线)。
 

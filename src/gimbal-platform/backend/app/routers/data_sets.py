@@ -94,12 +94,12 @@ async def list_data_sets(
     Data-set rows are business parameter matrices — listing every user's
     data would be a cross-user disclosure, so callers only see data-sets
     whose parent scenario they own, or that live in a project they are
-    a member of (r3二.1:项目区数据集 = 项目共享业务数据,同事的预览
-    剥敏感列,与单读同口径). authz W3: super_admin 全量分支删除 ——
+    a member of (项目区数据集 = 项目共享业务数据,同事的预览
+    剥敏感列,与单读同口径). super_admin 全量分支删除 ——
     admin 与普通用户同镜头,排查走审计。
     """
-    # S7.4:引用闭包随 share_refs 退役 —— 数据集只随自己场景;r3二.1
-    # 起并上项目区:成员可列同事的数据集(预览剥敏感列)
+    # 引用闭包不复存在(ADR-0003 #20)—— 数据集只随自己场景;并上
+    # 项目区:成员可列同事的数据集(预览剥敏感列)
     owned = await scenario_store.owned_scenario_ids(db, user)
     visible = owned | await scenario_store.project_member_scenario_ids(
         db, user)
@@ -107,7 +107,7 @@ async def list_data_sets(
         # Scope to the requested scenario (still visibility-filtered).
         visible = visible & {scenarioId}
     # Ownership filter pushed down as a SQL IN (was: full list + Python filter).
-    # authz W6:非属主(项目同事)的预览剥敏感列
+    # 非属主(项目同事)的预览剥敏感列
     return await data_set_store.list_summaries(
         db, scenario_ids=visible, owned_ids=set(owned))
 

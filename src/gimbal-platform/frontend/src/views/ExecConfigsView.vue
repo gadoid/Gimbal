@@ -12,7 +12,7 @@
      "带什么业务参数"内聚在调用身份上 —— 配置级 carryOverrides 写面退场,
      **配置收敛为"选身份"**;存量 carryOverrides 只读保留、保存原样回写
      (执行链照常消费,端点与数据不动)。
-     2026-11-19 v4 原型改造(stitch_scenario_environment_profile_manager,
+     v4 原型改造(stitch_scenario_environment_profile_manager,
      用户拍板:信息架构照原型、.slib 基座):左栏套件列表(.svc-split +
      .svc-rail 两栏基座)替代 chip 行;右工作台节点卡化(逐服务一张
      svc-panel,展开态 = v3 表单原样,收起态摘要行),虚线追加节点大卡,
@@ -21,20 +21,20 @@
      (§8.2 / 四层模型 / v3 退场决策)。**Ping All**:配置内全部服务部署行
      地址 ping + 换用绑定条目解析账户登录拨测(串行,ServiceAdmin
      testAllSlots 范式;场景声明条目不在本页知识范围,不测)。
-     2026-11-19 v4.1 交互加固:保存/删除/复制/设默认成功 toast(原静默
+     v4.1 交互加固:保存/删除/复制/设默认成功 toast(原静默
      刷新);脏检查(payload 快照比对,切换配置/新建前 confirmAction 拦截,
      内部刷新走 selectConfig 绕过);移除服务节点在有绑定/carry 时确认;
      Ping All 竞态守卫(运行中切配置 → 本轮结果作废);节点摘要 loading/
      未登记不给假「装载齐」;左栏内部分滚(标题/搜索/新建固定);底栏窄屏
      换行 + 提示省略;徽章横排;装载/拨测徽章列宽放宽。
-     2026-11-19 v4.2 工作台页签(用户决策):编辑配置(写)/ 服务列表(读)/
+     v4.2 工作台页签(用户决策):编辑配置(写)/ 服务列表(读)/
      关联与就绪度(诊断)/ 生效预览(验证)四页签 —— 四类任务体验不同,
      平铺互相稀释焦点。编辑页签 = 原节点卡编辑区;服务列表 = 服务装载
      概况读面(+「去编辑」定位节点);就绪度 = 地址矩阵 + 装载就绪 +
      Ping All(自底栏迁入,角标 = 缺口数);预览 = EffectivePreviewDialog
      内嵌模式(inline prop,去遮罩/关闭钮,双宿主默认弹窗行为不变)。
      新建模式隐页签(恒编辑);切配置/新建复位到编辑页签;表单态跨页签保留。
-     2026-11-19 v5 §8.10 圈定调用身份(用户决策:管理范围语义):身份条目
+     v5 §8.10 圈定调用身份(用户决策:管理范围语义):身份条目
      表从「注册表全量摊开」改为首列「纳入」勾选 —— aliases = 本配置采用
      的声明条目集合(persist,执行链不消费);取消纳入一并移除换用;
      未勾行灰显。就绪度装载面板/服务列表概况/Ping All 拨测目标全部改
@@ -665,13 +665,13 @@
 <script setup lang="ts">
 /** ExecConfigsView.vue — 执行配置管理页 + ③ 关联枢纽(设计方案 §4/§8)。
  * 列表(左栏 rail)/编辑(整体替换式 PATCH)/默认切换/复制/两步删除;
- * 错误内联。表单 v2(2026-11-18 晚,级联驱动):服务 select(主档)→
+ * 错误内联。表单 v2(级联驱动):服务 select(主档)→
  * 实例过滤(表单态,§8.2 后配置不固化环境)→ 身份条目表(行 = 注册表
  * 条目,行内「换用为」select 候选按环境分组,选了即 upsert binds);
  * 存量绑定(声明 ∉ 注册表)落存量节。表单 v3(2026-11-19,carry 退场):
  * 配置级 carryOverrides 写面撤下 —— 业务参数随调用身份走;存量值只读
  * 保留、保存原样回写;枢纽④(carry 覆盖 + 漂移)随之退场。
- * v4(2026-11-19,原型改造):左栏列表 + 节点卡(展开/收起)+ 虚线追加
+ * v4(原型改造):左栏列表 + 节点卡(展开/收起)+ 虚线追加
  * 节点 + sticky 底栏 + 机制横幅 —— 布局层重构,业务逻辑零改动;新增
  * Ping All(地址 ping + 绑定账户拨测,ServiceAdmin testAllSlots 串行
  * 范式,失败前端合成计入)。
@@ -816,7 +816,7 @@ const bypassDegraded = computed(() => {
 })
 
 // ── 写面注册簿数据(懒加载,静默降级;单一数据源 = binds)──────────
-// 复核收口(2026-11-22):懒加载/缓存/错误态单源化到 useAliasCache
+// 懒加载/缓存/错误态单源化到 useAliasCache
 // (与 ServiceAdmin 共享同一镜像);本视图只保留投影。
 const { entries: _aliasEntries, ensure: _ensureAliasBase } = useAliasCache()
 /** 逐服务身份条目表(listAliases base 过滤;与 listAllAliases 同口径) */
@@ -1466,7 +1466,7 @@ async function reload(): Promise<void> {
   rows.value = await listExecConfigs()
 }
 
-/** FE-05(2026-11-20 审计):保存在飞守卫 —— create 双击发双 POST(后端
+/** 保存在飞守卫 —— create 双击发双 POST(后端
  *  名唯一兜底,第二个 409 误显为失败);saving 态 + 按钮禁用。 */
 const saving = ref(false)
 
@@ -1488,7 +1488,7 @@ async function save(): Promise<void> {
     systems: payloadOf(),
   }
   saving.value = true
-  // FE-08h(2026-11-20 审计):selectConfig 会复位到编辑页签 —— 用户停在
+  // selectConfig 会复位到编辑页签 —— 用户停在
   // 就绪度/预览页签保存时不应被跳走;保存后恢复原页签(切配置/新建的
   // 复位语义不变)。
   const tabBefore = activeTab.value

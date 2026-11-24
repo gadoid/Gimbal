@@ -27,7 +27,7 @@ export const DEFAULT_TIMELINE_COLORS: Record<TimelineKind, string> = {
   adaptation: 'var(--avatar-4)',
   suite: 'var(--avatar-5)',
   integration: 'var(--avatar-6)',
-  // 入站调用(2026-11-03):外部触发单独一档色
+  // 入站调用:外部触发单独一档色
   inbound: 'var(--avatar-7)',
 }
 

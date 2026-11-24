@@ -156,11 +156,11 @@ async def me_summary(
 
     # ── 集成任务暂停(error;token/范围类成因)────────────────────
     # 注意先 await execute 再 .scalars():写成 `await db.execute(...).scalars()`
-    # 会把整条链一起 await(对 coroutine 调 .scalars → 500,2026-11-05 修复)
-    # 2026-11-05 评审 P2-7:告警直接深链到集成详情页(此前统一跳列表页),
+    # 会把整条链一起 await(对 coroutine 调 .scalars → 500 的陷阱)
+    # 告警直接深链到集成详情页(此前统一跳列表页),
     # 并补上凭证认证失败(auth_failed)。详情页路由参数是模板 id(GET
     # /integration/tasks/{id} 对实例 id 404),链接取 inst.template_id
-    # 而非 inst.id(2026-11-05 修复轮评审 N2)。authz C1:平台模板暂停对
+    # 而非 inst.id。平台模板暂停对
     # admin+ 全员可见的并集分支随平台模式退役 —— 恒按本人持有过滤。
     _paused_rows = await db.execute(select(IntegrationTask).where(
         IntegrationTask.state == "paused",

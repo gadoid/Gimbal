@@ -20,7 +20,7 @@ export interface NotificationItem {
 export interface NotificationList {
   items: NotificationItem[]
   unread: number
-  /** 2026-09-23 分页批次:后端 list 升级 page/pageSize/total 信封 */
+  /** 后端 list 升级 page/pageSize/total 信封 */
   total: number
   page: number
   pageSize: number
@@ -39,14 +39,14 @@ export type SwitchableType =
   | 'scenario_unpublished'
   | 'role_changed'
   | 'resource_transferred'
-  // F1(2026-09-23):分发接收提醒(悬浮标签同一数据源;关 = 标签同步消失)。
+  // 分发接收提醒(悬浮标签同一数据源;关 = 标签同步消失)。
   // resource_transferred(资源转让)= 所有权转移,留给离职处置线,语义不同。
   | 'resource_handoff'
-  // 2026-10-20 横向件补全:以下类型此前已在发射但没进开关清单 ——
+  // 以下类型此前已在发射但没进开关清单 ——
   // 集成任务的高频告警(连续失败/自动暂停)此前用户无法关闭。
   | 'scenario.version_change'
   | 'integration'
-  // S7.4 引用分享退役:一次性转换回执(历史 share_ref_* 行照常展示,
+  // 引用分享退场(ADR-0003 #20):一次性转换回执(历史 share_ref_* 行照常展示,
   // 标签保留在下方 LABELS)
   | 'share_ref_converted'
   // M2a S7.2:提升流程(加入申请审批)

@@ -109,7 +109,7 @@ export interface IOFieldBinding {
 }
 
 /**
- * DeclarationEntry 视图 —— declarations 目录条目(字段状态目录,2026-09-05)。
+ * DeclarationEntry 视图 —— declarations 目录条目(字段状态目录)。
  * 对齐 io_spec.py DeclarationEntry(extra="forbid");plate 序列化经
  * EndpointDetailView exclude_none 裁剪后,type/state/default/example/enum
  * 为 null 的键不在 dict 中(此处标可选,消费侧按缺省 null 处理)。

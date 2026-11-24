@@ -1,4 +1,4 @@
-<!-- ExecutionReportPanel — 执行报告(B4,2026-11-06 日志报告整理)。
+<!-- ExecutionReportPanel — 执行报告。
 
      数据只来自 GET /executions/{id}/report(后端从步骤表渲染,不读文本
      日志),回答四个问题:哪一步失败、哪条断言、期望/实际是什么、请求
@@ -179,7 +179,7 @@ watch(() => props.executionId, () => { report.value = null; open.value = new Set
 watch(() => props.running, (now, before) => { if (before && !now) void load() })
 onUnmounted(() => { if (timer) clearTimeout(timer) })
 
-/** S1 失败根因直达(2026-11-12 自行级明细「查看日志」迁入):失败
+/** S1 失败根因直达(自行级明细「查看日志」迁入):失败
  *  unit → 该 unit 的 step.failed 事件 (ts,id) 为锚,深链进混合时间轴
  *  上下文窗口。锚点查询限定本 unit(按全局前 50 条找锚会锚到别的
  *  unit 的失败点);取末条(有重试时锚在最终那次失败 —— 首次失败的

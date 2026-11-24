@@ -2,7 +2,7 @@ import type { FieldState } from './plate'
 /**
  * types/scenario-composer.ts — 场景编排的平台容器类型
  *
- * 编排结构统一为容器对象(用户 2026-08-13 拍板):
+ * 编排结构统一为容器对象(用户拍板):
  * - definition: plate 完整结构(ScenarioView),描述"变化的被测系统",原样透传 plate /convert
  * - orchestration: 平台渲染/编排辅助字段,与 definition 易分离
  *
@@ -33,7 +33,7 @@ export interface Orchestration {
 }
 
 // ─── 平台草稿容器 ──────────────────────────────────────────────────
-/** 调用身份草稿(保存期通道;架构一致性轮 2026-11-21 收窄):
+/** 调用身份草稿(保存期通道;架构一致性收窄):
  *  只建 username-ref 身份条目,不创建账户、不碰密码 —— 凭证由
  *  `POST /auths` 即时写入池;Admin 走服务注册,非 Admin 随场景保存
  *  同事务建条目。`baseService` = 用户选中的服务实例锚(不再是 system)。 */
@@ -148,7 +148,7 @@ export interface ScenarioOptionsPage {
   pageSize: number
 }
 
-// ─── 数据集(Case 层已解散,数据集直接挂场景;执行环境已随 D2 退役)──
+// ─── 数据集(Case 层已解散,数据集直接挂场景;执行环境键不再写入,ADR-0003 #13)──
 export interface DataSetRow { [field: string]: string | number | boolean }
 
 export interface DataSet {

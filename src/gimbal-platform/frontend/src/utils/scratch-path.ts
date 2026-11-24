@@ -4,11 +4,11 @@
  * 引擎 scratch 根 = call 信封(`gimbal/strategy/builtin/call.py` 在调用后
  * 写入 `$.call.*`:response.body / response.status / response.meta.headers /
  * elapsed_ms / request.body …),策略(extract/assertion/assign)的 JSONPath
- * 导航以 call 信封为根(api→call 清理:旧 `$.response_body` scratch 域退役,
+ * 导航以 call 信封为根(api→call 归一(ADR-0003 #24):旧 `$.response_body` scratch 域不复存在,
  * 前端直产 call 域,不再依赖 plate convert 的路径重写)。
  *
  * 映射规则(设计文档 2026-08-18-step-editor-io-cards-design.md §2.1,域随
- * 2026-09-28 api→call 清理切换):
+ * api→call 归一(ADR-0003 #24)切换):
  * - `$.status` → `$.call.response.status`(引擎独立 key,特判)
  * - `$` / `''`  → `$.call.response.body`(根 = 整个响应体)
  * - 其余        → `$.` 前缀替换为 `$.call.response.body.`,下标语法原样保留;

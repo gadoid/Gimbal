@@ -8,15 +8,15 @@
 - **实例不保存定义副本**:模板修改后实例下次执行即生效,避免分叉。
 - **不写执行记录**(决策 3):本表即集成的全部状态,行台账/事件/
   案卷都不落 —— 需要排查时执行器引擎日志可按需开启。
-- 评审 E6(2026-10-09):``target_type`` 一等列,scenario 先行,
-  suite(Suite 层重构已收官)随后接入,免二次迁移;P1 执行链只
+- ``target_type`` 一等列,scenario 先行,
+  suite(Suite 层重构已收官)随后接入,免二次迁移;执行链只
   消费 scenario。
-- 评审 E7:模板删除走软删(``removed_at``),被订阅的公共模板硬删
+- 模板删除走软删(``removed_at``),被订阅的公共模板硬删
   会让所有人卡片同时失效;卡片据 removed_at/可见性走「已移除」态。
 - 平台模式的实例 ``holder_id`` = 平台系统用户(users.is_system,
-  迁移 0015 种子);个人模式(P2)= 每个订阅者一个实例。
+  迁移 0015 种子);个人模式 = 每个订阅者一个实例。
 
-实例 ``state`` / ``run_status`` 写入点分类(N2 归一登记;新增写入点
+实例 ``state`` / ``run_status`` 写入点分类(归一登记;新增写入点
 须回此登记):
 - **运行结果**(唯一入口 = integration_runner._finish;租约超时回收
   _recover_stuck 也经它落 timeout):state 回 idle/paused、run_status、
@@ -68,28 +68,27 @@ class IntegrationTask(Base):
     # visibility 列随 0043 删除;API 的 visibility 入参语义不变
     #(公开 ⇔ project_id=公共项目,创建/更新走 zone.apply_*)。
     # 项目区:仅模板行使用 —— 公共项目 = 公开模板(可订阅),
-    # 实例行恒空(实例归持有人,个人对象)。S1.7 起 _can_manage 判定
-    # 平台模板改用下方 is_platform_template,不再比对属主。
+    # 实例行恒空(实例归持有人,个人对象)。_can_manage 判定
+    # 平台模板用下方 is_platform_template,不比对属主。
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id"), nullable=True, index=True)
-    # D10 显式标记:「平台维护的保活模板」与「个人发布的公共模板」的
+    # 「平台维护的保活模板」与「个人发布的公共模板」的
     # 区分依据(0038 起靠属主 == __platform__ 判定,软删挂靠行会误伤)
     is_platform_template: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa_false())
     # identity_mode 列随平台模式退役删除(0038 收敛 → 0039 删列)
-    # identity_mode 列随平台模式退役删除(0038 收敛 → 0039 删列)
-    # 评审 E6:scenario 先行,suite 随后(target_type + 两个可空引用)
+    # scenario 先行,suite 随后(target_type + 两个可空引用)
     target_type: Mapped[str] = mapped_column(String(16), default="scenario")
     scenario_id: Mapped[str] = mapped_column(String(128), nullable=True)
     suite_id: Mapped[int] = mapped_column(Integer, nullable=True)
     scheme_id: Mapped[str] = mapped_column(String(128), nullable=True)
-    # 主要对接系统名(限流分组;P1 可空 = 不分组)
+    # 主要对接系统名(限流分组;可空 = 不分组)
     target_system: Mapped[str] = mapped_column(String(64), default="")
     trigger_cron: Mapped[str] = mapped_column(String(64), default="*/5 * * * *")
     result_policy: Mapped[str] = mapped_column(String(16), default="latest")
-    # 卡片模板(P1 固定 status;后续 kv/counter/list)
+    # 卡片模板(固定 status;后续 kv/counter/list)
     card_template: Mapped[str] = mapped_column(String(16), default="status")
-    # E1(评审):token 等敏感值禁止进 outputs/state_vars —— 由 runner
+    # token 等敏感值禁止进 outputs/state_vars —— 由 runner
     # 侧脱敏保证;此处仅存映射定义本身
     output_mapping: Mapped[dict] = mapped_column(JsonVar, default=dict)
     state_mapping: Mapped[dict] = mapped_column(JsonVar, default=dict)
@@ -100,7 +99,7 @@ class IntegrationTask(Base):
     # 模板公共化**不剥离**令牌绑定:只有注册方自己的实例执行时写回调
     # 投递行;订阅者实例按自身身份运行,永不向原注册方回调。读面:非
     # 属主视角(公共模板列表/详情)隐藏 token/client_ref。
-    # JWT 管理者可解绑(D26):token_id 置空 + manual 暂停。
+    # JWT 管理者可解绑:token_id 置空 + manual 暂停。
     token_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("access_tokens.id", ondelete="SET NULL",
                                name="fk_integration_tasks_token_id"),
