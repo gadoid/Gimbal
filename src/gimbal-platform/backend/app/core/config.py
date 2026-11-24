@@ -45,6 +45,26 @@ class Settings(BaseSettings):
     # 开号 —— 对外/生产部署应显式置 false。
     REGISTRATION_OPEN: bool = True
 
+    # ── Auth 限流(known-issue auth/login-rate-limit-gap 落地步,────
+    # 2026-11-24)login/refresh/register 三端点进程内滑动窗(双键 =
+    # IP + 账号,任一面耗尽即 429 数值码 4291);nginx 为唯一入口,
+    # X-Real-IP 为 IP 键源(取值口径见 core/rate_limit.py)。
+    AUTH_RATE_LIMIT_ENABLED: bool = True
+    # login:账号面防爆破(错密重试),IP 面防密码喷洒(多账号轮询)。
+    AUTH_LOGIN_ACCT_MAX: int = 6
+    AUTH_LOGIN_ACCT_WINDOW_S: int = 60
+    AUTH_LOGIN_IP_MAX: int = 30
+    AUTH_LOGIN_IP_WINDOW_S: int = 60
+    # register:慢窗配额(生产已 REGISTRATION_OPEN=false,余量给管理员
+    # 开号前的零星自助尝试)。
+    AUTH_REGISTER_ACCT_MAX: int = 3
+    AUTH_REGISTER_ACCT_WINDOW_S: int = 600
+    AUTH_REGISTER_IP_MAX: int = 10
+    AUTH_REGISTER_IP_WINDOW_S: int = 600
+    # refresh:body 是 refresh token 非 username,无账号面,IP 面即可。
+    AUTH_REFRESH_IP_MAX: int = 30
+    AUTH_REFRESH_IP_WINDOW_S: int = 60
+
     # ── DB ────────────────────────────────────────────────
     # 锚定 backend/(见 _BACKEND_ROOT):误启动目录不再另起炉灶。
     # SQLite 已退役(2026-10-14):不再有本地默认回退 URL —— 空值/

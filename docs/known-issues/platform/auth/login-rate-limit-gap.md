@@ -1,7 +1,8 @@
 # 登录/注册缺少应用层限流与 CI 安全门（P2 待排期）
 
 > **模块**：`gimbal-platform/backend`（`app/routers/auth.py` × `app/core/config.py`）+ CI
-> **状态**：未修复（2026-11-24 登记为 P2 待排期；同日已收口生产注册开关）
+> **状态**：**已落地**（2026-11-24 fix/core-wrapup 轮提前收口:限流中间件 + pip-audit/DAST 门;
+> 生产注册开关同日早前已收口）
 > **来源**：外部评估清单 P1-6（2026-11-24，对照部署位 `5ffdea06` 核实属实）
 
 ---
@@ -41,3 +42,39 @@
    （与前端 `npm audit` 门同挂 plate-ci,分级别阈值）。
 
 两步都动 auth 面,建议与下一次 auth 相关演进同批,不单独立轮。
+
+## 修复记录（2026-11-24,fix/core-wrapup 轮 —— 用户裁定提前收口）
+
+登记建议「与下次 auth 演进同批」;用户明确指示在收尾分支处理,排期提前。
+
+**①限流中间件**(原登记措辞是方向;实现取端点内挂点,免读 body 的
+middleware 复杂度 —— 语义等价且测试面更直接):
+
+- `app/core/rate_limit.py`:进程内双键滑动窗(免锁:消费方全 async,
+  窗口操作无 await 点;**进程内即权威** —— 单进程部署裁定使然,重启
+  丢窗可接受)。IP 键取 `X-Real-IP`(nginx gimbal.conf 恒重写为
+  `$remote_addr`,反代后不可伪造;直连后端端口可伪造头键 —— 部署约定
+  nginx 为唯一入口,见模块 docstring);
+- 接线:`login` / `register` 按 IP+账号双键(`login` 账号面 6/60s 防
+  爆破、IP 面 30/60s 防喷洒;`register` 3/600s、10/600s 慢窗),
+  `refresh` 仅 IP 面(body 是 token);**限流先于 bcrypt 验证** ——
+  爆破预算耗尽后连哈希都不算;
+- 429 族:数值码 **4291**(`_codes.py`,进契约快照 error-codes.json +
+  前端 errorCodes.ts)+ `Retry-After` 头;拒绝不记窗(重试不推长封锁);
+- 档位全走 settings(`AUTH_*_MAX/_WINDOW_S` 共 9 项,`AUTH_RATE_LIMIT_
+  ENABLED=False` 整面旁路);conftest 全套件默认旁路(套件登录密度远超
+  预算),专测 `test_auth_rate_limit.py` 8 用例(双键分账:换 IP 打同账号
+  仍被账号面拦 = 防分布式爆破、拒绝不记窗、滑出语义注入 now 直打)。
+
+**②CI 安全门**:
+
+- `pip-audit` 进 plate-ci gate job(审 lock 精确版本,editable 跳过);
+  首跑 OSV 面发现 21 条 advisory:certifi / opentelemetry-api 两个运行时
+  补丁位随 lock 重生提钉(requirements.in 加下界),datamodel-code-
+  generator 0.28.5 的 9 条 PYSEC(M2 生成器钉死,跨大版本升级是独立轮)
+  另立登记 `datamodel-codegen-pysec-tail.md` + CI 显式 `--ignore-vuln`
+  白名单指回该登记;
+- `dast` job:ZAP baseline 被动扫描(后端 :18000 + 前端 vite preview
+  :4173,空库 bootstrap + 一次性开发密钥);分钟级开销不进每次 push,
+  `workflow_dispatch` 手动触发,阈值 = 仅 FAIL 级红(`-I` 吞 WARN 噪音)。
+  **首次 dispatch 即其冒烟测试**(本机无 gh 凭证,触发面在用户侧)。

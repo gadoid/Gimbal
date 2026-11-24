@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ..core.rate_limit import RateLimited, client_ip, check as _rl_check
 from ..core.security import (
     create_access_token,
     create_refresh_token,
@@ -29,12 +30,50 @@ from ..schemas.auth import (
 )
 from ..core.config import settings
 from ._codes import (
-    ACCOUNT_DISABLED, BAD_CREDENTIALS, NAME_TAKEN_ON_REGISTER,
-    REGISTRATION_CLOSED, code_detail,
+    ACCOUNT_DISABLED, AUTH_RATE_LIMITED, BAD_CREDENTIALS,
+    NAME_TAKEN_ON_REGISTER, REGISTRATION_CLOSED, code_detail,
 )
 from ._name_checks import assert_name_available
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ── auth 限流(known-issue auth/login-rate-limit-gap 落地步)──────
+def _enforce_rate_limit(
+    action: str, request: Request, *, account: str | None = None,
+) -> None:
+    """双键滑动窗在耗尽面即 429(数值码 4291 + Retry-After);档位随
+    settings 即时取值(测试可 monkeypatch),``AUTH_RATE_LIMIT_ENABLED=
+    False`` 整面旁路(conftest 全套件默认旁路,见 tests/conftest)。"""
+    if not settings.AUTH_RATE_LIMIT_ENABLED:
+        return
+    try:
+        if action == "login":
+            _rl_check(
+                action, ip=client_ip(request), account=account,
+                ip_max=settings.AUTH_LOGIN_IP_MAX,
+                ip_window_s=settings.AUTH_LOGIN_IP_WINDOW_S,
+                acct_max=settings.AUTH_LOGIN_ACCT_MAX,
+                acct_window_s=settings.AUTH_LOGIN_ACCT_WINDOW_S)
+        elif action == "register":
+            _rl_check(
+                action, ip=client_ip(request), account=account,
+                ip_max=settings.AUTH_REGISTER_IP_MAX,
+                ip_window_s=settings.AUTH_REGISTER_IP_WINDOW_S,
+                acct_max=settings.AUTH_REGISTER_ACCT_MAX,
+                acct_window_s=settings.AUTH_REGISTER_ACCT_WINDOW_S)
+        else:  # refresh:body 是 token 非 username,只有 IP 面
+            _rl_check(
+                action, ip=client_ip(request),
+                ip_max=settings.AUTH_REFRESH_IP_MAX,
+                ip_window_s=settings.AUTH_REFRESH_IP_WINDOW_S)
+    except RateLimited as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=code_detail(AUTH_RATE_LIMITED, "请求过于频繁,请稍后再试"),
+            headers={"Retry-After": str(max(1, int(e.retry_after)))},
+        ) from e
+
 
 
 # ── helpers ──────────────────────────────────────────────────────
@@ -64,7 +103,9 @@ def _token_out(u: User) -> TokenOut:
 async def register(
     payload: RegisterIn,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> TokenOut:
+    _enforce_rate_limit("register", request, account=payload.username)
     # 首个真人用户判定 —— 只数 is_system=False(整体评审 2026-10-15:
     # 0015 迁移为集成平台模式种了 ``__platform__`` 系统用户,空库建库后
     # users 表恒有 1 行,此前 count()==0 永不成立 → 上线空库首个注册者
@@ -120,7 +161,10 @@ async def register(
 async def login(
     payload: LoginIn,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> TokenOut:
+    # 限流先于 bcrypt 验证 —— 爆破预算耗尽后连哈希都不算(成本面收口)
+    _enforce_rate_limit("login", request, account=payload.username)
     user = (
         await db.execute(select(User).where(User.username == payload.username))
     ).scalar_one_or_none()
@@ -224,7 +268,9 @@ async def change_password(
 async def refresh(
     payload: RefreshIn,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> TokenOut:
+    _enforce_rate_limit("refresh", request)
     try:
         data = decode_token(payload.refresh_token)
     except ValueError as e:

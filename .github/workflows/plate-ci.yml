@@ -67,6 +67,21 @@ jobs:
         run: |
           pip install -q pyflakes
           python -m pyflakes src/gimbal src/gimbal_plate src/gimbal-platform/backend/app src/gimbal-platform/backend/tests scripts 2>&1 | grep -E "undefined name" && exit 1 || true
+      # 供应链审计门(auth 加固批第②步,known-issue auth/login-rate-limit-gap):
+      # Python 侧依赖审计 —— 审已装环境(= lock 精确版本),editable 本仓
+      # 两包跳过(自有代码不在 PyPI)。与前端 npm audit 门同阈值思路:
+      # 命中即红。唯一白名单 = datamodel-code-generator 的 9 条 PYSEC
+      # (M2 生成器钉死 0.28.5,升级是独立轮,见 known-issues
+      # platform/auth/datamodel-codegen-pysec-tail.md)。
+      - name: 供应链审计门 — pip-audit
+        run: |
+          pip install -q pip-audit
+          pip-audit --skip-editable \
+            --ignore-vuln PYSEC-2026-3555 --ignore-vuln PYSEC-2026-3557 \
+            --ignore-vuln PYSEC-2026-3558 --ignore-vuln PYSEC-2026-3560 \
+            --ignore-vuln PYSEC-2026-3561 --ignore-vuln PYSEC-2026-3563 \
+            --ignore-vuln PYSEC-2026-3564 --ignore-vuln PYSEC-2026-3565 \
+            --ignore-vuln PYSEC-2026-3566
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -164,3 +179,72 @@ jobs:
           npm ci || npm install
           npx vue-tsc --noEmit
           npx vitest run --silent
+  # DAST 门(auth 加固批第②步,known-issue auth/login-rate-limit-gap):
+  # ZAP baseline 被动扫描 —— GB 级镜像 + 全站扫描是分钟级开销,不进
+  # 每次 push;workflow_dispatch 手动触发(A-2 同款入口)。阈值 = 仅
+  # FAIL 级红(-I 吞 WARN 噪音,首跑基线按 FAIL 面 promise)。首次
+  # dispatch 即本 job 的冒烟测试 —— 本机无 gh 凭证,触发面在用户侧。
+  dast:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # 与 gate 同款 PG service:空库 bootstrap(baseline fresh + stamp head)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gimbal
+          POSTGRES_PASSWORD: gimbal
+          POSTGRES_DB: gimbal
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gimbal"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (lock 精确版本 + editable 本仓包)
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e . -e src/gimbal-platform/backend
+      - name: 起后端(空库 bootstrap,一次性密钥,不触真网)
+        env:
+          DATABASE_URL: postgresql+asyncpg://gimbal:gimbal@localhost:5432/gimbal
+          # 一次性开发密钥:仅在扫描容器内存活,不是任何真实部署的密钥。
+          JWT_SECRET: dast-only-secret-not-for-any-real-env
+          FERNET_KEY: -UZinkIo4tGUZVs9lSm6QYiiafQU3pmvnlC5IRKHha0=
+          REGISTRATION_OPEN: "false"
+        run: |
+          cd src/gimbal-platform/backend
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 18000 \
+            > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18000/api/health >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:18000/api/health || { cat /tmp/backend.log; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 起前端预览(构建 dist + vite preview)
+        run: |
+          cd src/gimbal-platform/frontend
+          npm ci || npm install
+          npm run build
+          nohup npx vite preview --host 127.0.0.1 --port 4173 > /tmp/preview.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:4173 >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:4173 >/dev/null || { cat /tmp/preview.log; exit 1; }
+      - name: ZAP baseline 扫描(后端 API + 前端站点)
+        run: |
+          mkdir -p zap
+          docker pull -q ghcr.io/zaproxy/zaproxy:stable
+          docker run --rm --network host -v "$PWD/zap":/zap/wrk:rw \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://127.0.0.1:18000 -I
+          docker run --rm --network host -v "$PWD/zap":/zap/wrk:rw \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://127.0.0.1:4173 -I

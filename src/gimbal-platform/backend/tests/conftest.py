@@ -443,6 +443,21 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _disable_auth_rate_limit(monkeypatch):
+    """Auth 限流整套件默认旁路(known-issue auth/login-rate-limit-gap
+    配套):进程内窗口是单实例,套件登录密度远超默认预算 —— 全套件
+    旁路;限流面本身由 tests/test_auth_rate_limit.py 显式开闸专测。
+    同时逐测清窗,防任何未显式开闸的面泄漏跨测试状态。"""
+    from app.core import rate_limit
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AUTH_RATE_LIMIT_ENABLED", False)
+    rate_limit.reset()
+    yield
+    rate_limit.reset()
+
+
+@pytest.fixture(autouse=True)
 def _isolate_plate_contract_caches():
     """Reset the process-wide ``/full`` contract caches between tests.
 

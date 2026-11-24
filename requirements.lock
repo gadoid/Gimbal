@@ -23,8 +23,9 @@ bcrypt==5.0.0
     # via gimbal-platform-backend
 black==26.10.1
     # via datamodel-code-generator
-certifi==2026.7.22
+certifi==2026.11.20
     # via
+    #   -r requirements.in
     #   httpcore
     #   httpx
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
@@ -100,8 +101,10 @@ mypy-extensions==1.1.0
     # via
     #   black
     #   mypy
-opentelemetry-api==1.45.1
-    # via fastapi
+opentelemetry-api==1.45.2
+    # via
+    #   -r requirements.in
+    #   fastapi
 packaging==26.3
     # via
     #   black

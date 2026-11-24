@@ -236,6 +236,7 @@ export const NUMERIC_ERROR_CODES = {
   4091: "SELF_DELETE",
   4092: "LAST_ADMIN",
   4093: "NAME_TAKEN",
+  4291: "AUTH_RATE_LIMITED",
 } as const
 
 export type NumericApiErrorCode = keyof typeof NUMERIC_ERROR_CODES

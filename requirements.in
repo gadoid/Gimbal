@@ -8,3 +8,12 @@
 #   pip install --no-deps -e . -e src/gimbal-platform/backend
 -e .[dev]
 -e ./src/gimbal-platform/backend
+
+# 供应链提钉(2026-11-24,pip-audit OSV 面;auth 加固批配套):
+#   certifi PYSEC-2026-4320 → ≥2026.10.18(运行时,requests 链)
+#   opentelemetry-api CVE-2026-126360 → ≥1.45.2(运行时,fastapi 传递)
+# datamodel-code-generator 0.28.5 的 PYSEC 尾巴不在提钉内 —— M2 生成器
+# 参数与生成物漂移守卫钉死版本,升级是独立轮,见 known-issues
+# platform/auth/datamodel-codegen-pysec-tail.md。
+certifi>=2026.10.18
+opentelemetry-api>=1.45.2

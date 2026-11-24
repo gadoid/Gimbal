@@ -13,6 +13,7 @@ NAME_TAKEN_ON_REGISTER = 4003   # username/display_name already exists
 BAD_CREDENTIALS = 4004          # login: wrong username or password
 ACCOUNT_DISABLED = 4005         # login: is_active=False
 REGISTRATION_CLOSED = 4006      # register: REGISTRATION_OPEN=False 且已有真人用户
+AUTH_RATE_LIMITED = 4291        # login/refresh/register: 限流窗口耗尽(known-issue auth/login-rate-limit-gap)
 
 # users.py
 ADMIN_REQUIRED = 4031           # non-admin called an admin-only endpoint
