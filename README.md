@@ -277,6 +277,8 @@ gimbal self-check
 
 根目录 `pytest` 运行 `pyproject.toml` 中配置的默认测试集；CI 会显式覆盖 Plate、执行器、平台后端、迁移、打包和前端。
 
+> Windows 开发提示：仓库脚本对子进程已显式 `encoding="utf-8"`（`scripts/gen_m2.py` 等），正常无需额外环境变量；个别工具链仍以本地代码页输出时，设 `PYTHONUTF8=1` 再跑即可（CI Linux 环境不受影响）。
+
 ### 平台后端
 
 后端测试需要 PostgreSQL，并设置 `TEST_DATABASE_URL`。默认启用 pytest-xdist；单进程调试可加 `-n0`。
