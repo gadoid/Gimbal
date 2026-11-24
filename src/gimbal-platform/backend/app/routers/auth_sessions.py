@@ -122,8 +122,8 @@ async def _revive(user_id: int) -> None:
     try:
         from ..services import integration_runner as _ir
         await _ir.revive_paused_instances(user_id)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001 — 恢复是增强,失败不阻断写面
+        logger.warning("auth_sessions: 账户补齐信号恢复集成实例失败:{}", e)
 
 
 def _drop_credential_cache(user_id: int, account: AuthAccount,

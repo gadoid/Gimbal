@@ -11,6 +11,8 @@ from .run_semantics import INTEGRATION, PIN, UNDECLARED, WORKING, invalid_reason
 
 from datetime import datetime, timedelta
 
+from loguru import logger
+
 from ..core.timeutil import ensure_aware
 
 from sqlalchemy import delete as sa_delete
@@ -103,8 +105,10 @@ async def post_save_chain(db: AsyncSession, row: "ComposerScenario") -> None:
     适配直存同走 —— 适配直存此前漏,适配保存后 verified 不升 effective。"""
     try:
         await _bump_verified_to_effective(db, row)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001 — best-effort 升档,不阻塞保存主链
+        logger.warning(
+            "scenario_store: verified→effective 升档失败,保持原值(id={}):{}",
+            row.id, e)
 
 
 async def enforce_meta_plate(definition: dict,
@@ -1319,7 +1323,10 @@ def _extras_from_payload(
     if isinstance(orch_raw, dict):
         try:
             orchestration = Orchestration.model_validate(orch_raw)
-        except Exception:
+        except Exception as e:  # noqa: BLE001 — 畸形行不 500,渲染面重建
+            logger.warning(
+                "scenario_store: orchestration 模型校验失败,按缺失处理"
+                "(payload 形状漂移?):{}", e)
             orchestration = None
     return config, resource, orchestration
 

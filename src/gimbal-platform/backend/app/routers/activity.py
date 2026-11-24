@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
+from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -121,7 +122,8 @@ async def get_activity(
             if taken >= limit:
                 break
         sources["executions"] = True
-    except Exception:
+    except Exception as e:  # noqa: BLE001 — 设计内逐源降级,失败原因可见
+        logger.warning("活动轴执行源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["executions"] = False
 
     # ── 场景事件(F3,2026-09-23:activity_events 真事件取代
@@ -143,7 +145,8 @@ async def get_activity(
                 name=d.get("name") or r.resource_id,
                 action=r.kind, detail=d or None))
         sources["scenarios"] = True
-    except Exception:
+    except Exception as e:  # noqa: BLE001 — 设计内逐源降级,失败原因可见
+        logger.warning("活动轴场景事件源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["scenarios"] = False
 
     # ── 适配批次(触碰我场景的批次;member 无全量权,owner 视图人人可读)──
@@ -167,7 +170,8 @@ async def get_activity(
                 opCount=int(ops),
             ))
         sources["adaptations"] = True
-    except Exception:
+    except Exception as e:  # noqa: BLE001 — 设计内逐源降级,失败原因可见
+        logger.warning("活动轴适配批次源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["adaptations"] = False
 
     # ── suite 事件(2026-10-20:suite.share_* 此前只写不读,同表同源
@@ -193,7 +197,8 @@ async def get_activity(
                 name=d.get("name") or r.resource_id,
                 action=r.kind, detail=d or None))
         sources["suites"] = True
-    except Exception:
+    except Exception as e:  # noqa: BLE001 — 设计内逐源降级,失败原因可见
+        logger.warning("活动轴 suite 事件源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["suites"] = False
 
     # ── 集成事件(边沿:订阅/退订/暂停/恢复/翻转;个人实例归持有人轴)──
@@ -218,7 +223,8 @@ async def get_activity(
                 name=d.get("name") or r.resource_id,
                 action=r.kind, detail=d or None))
         sources["integrations"] = True
-    except Exception:
+    except Exception as e:  # noqa: BLE001 — 设计内逐源降级,失败原因可见
+        logger.warning("活动轴集成事件源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["integrations"] = False
 
     # ── 入站调用(webhook v4 §7.3:经**个人令牌**触发的执行/临时调用;
@@ -245,7 +251,8 @@ async def get_activity(
                 clientRef=d.get("client_ref"),
                 action=r.kind, detail=d or None))
         sources["inbound"] = True
-    except Exception:
+    except Exception as e:  # noqa: BLE001 — 设计内逐源降级,失败原因可见
+        logger.warning("活动轴入站调用源查询失败,该源降级为缺失(sources=false):{}", e)
         sources["inbound"] = False
 
     events.sort(key=lambda e: e.at, reverse=True)

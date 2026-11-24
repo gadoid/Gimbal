@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -425,7 +426,8 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
             inst2 = await db.get(IntegrationTask, inst.id)
             await integration_runner.refresh_consent(db, tpl, scen, inst2)
             await db.commit()
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001 — 留底是增强,失败不阻断创建
+            logger.warning("integration: owner 实例指纹留底失败,创建面继续:{}", e)
             await db.rollback()
     await audit_svc.record_inbound(db, principal, "inbound.task.write", detail={
         "fn": "create", "task": tpl.id, "name": tpl.name,

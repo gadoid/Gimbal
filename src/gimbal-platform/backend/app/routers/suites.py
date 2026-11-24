@@ -1113,6 +1113,8 @@ async def run_suite(
         except (run_dispatcher.NotFound, run_dispatcher.Conflict) as e:
             skipped.append({"scenarioId": sid, "reason": e.code})
         except Exception as e:  # noqa: BLE001 —— 基础设施异常不连坐(§6.6)
+            logger.warning("suites: 批量派发成员 {} 基础设施异常,按落库事实归类:{}",
+                           sid, e)
             await db.rollback()
             # 归类按落库事实:enqueue 自决 commit 后抛错的成员,其执行
             # 行已存在、之后会照常跑 —— 归 started 附警告,不进 skipped。
@@ -1341,7 +1343,8 @@ async def validate_suite(
                     db, scen.scenario_id, scen.payload,
                     _req_from_scheme(m.scenario_id, scheme, "precheck"))
                 est += run_dispatcher.fanout_total(fd, inj)
-            except Exception:  # noqa: BLE001 — 总量估算失败不拦预检
+            except Exception as e:  # noqa: BLE001 — 总量估算失败不拦预检
+                logger.warning("suites: 预检 fanout 总量估算失败,按 1 保守计:{}", e)
                 est += 1
     else:
         # ── 编排:逐单元可运行 + 物化 + 执行器编译 ─────────────────
@@ -1828,8 +1831,8 @@ async def unpublish_suite(
                 title=f"集成任务「{tpl.name}」已移除",
                 message="引用的公共套件已下架,订阅随之失效;"
                         "卡片会显示「已移除」,可自行删卡")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001 — 通知是 best-effort
+            logger.warning("suites: 套件下架订阅者通知失败(下架面继续):{}", e)
     # 越属主下架(Admin+ 治理):通知 + 审计
     if copy.owner_id != user.id:
         try:
@@ -1841,8 +1844,8 @@ async def unpublish_suite(
                       f"Suite「{suite.name}」的公共副本(原件仍在你的"
                       f"私有区;成员场景的公共状态不受影响)。"),
                 link=f"/suites/{suite.id}")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001 — 通知是 best-effort
+            logger.warning("suites: 套件属主下架通知失败:{}", e)
         await audit_svc.record(
             db, actor_id=user.id,
             actor_name=user.display_name or user.username,

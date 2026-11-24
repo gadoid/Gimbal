@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -247,8 +248,8 @@ async def change_password(
                 body="经它们注册的任务已暂停;如需继续使用,请到"
                      "「个人设置 → 访问令牌」重新生成(完成后任务自动恢复)",
                 link="/profile#tokens")
-        except Exception:  # noqa: BLE001 — 通知是增强
-            pass
+        except Exception as e:  # noqa: BLE001 — 通知是增强,失败不阻断
+            logger.warning("auth: 改密令牌失效通知失败,继续暂停面:{}", e)
         # 逐令牌暂停注册方实例 + 通知(§3.4)
         toks = (await db.execute(_select(AccessToken).where(
             AccessToken.user_id == row.id,

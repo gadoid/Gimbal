@@ -306,6 +306,8 @@ async def list_endpoints(
             code = err.get("code", "plate_rejected")
             message = err.get("message", resp.text[:200])
         except Exception:
+            # C6 判例:非 JSON 错误页,失败原因经 message 纯文本进响应,
+            # 可见性由载荷承载,无需旁路日志
             code = "plate_rejected"
             message = resp.text[:200] or f"HTTP {resp.status_code}"
         raise HTTPException(status_code=resp.status_code, detail={

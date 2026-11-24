@@ -100,6 +100,8 @@ async def _http_probe(url: str) -> tuple[bool, int | None, int, str]:
         ms = int((time.perf_counter() - started) * 1000)
         return True, resp.status_code, ms, f"HTTP {resp.status_code} · {ms}ms"
     except Exception as e:  # noqa: BLE001 — 测速失败是结果不是 500
+        # C6 判例:失败原因(type+message)随测速结果四元组返回给调用方,
+        # 可见性由返回值承载,无需旁路日志
         ms = int((time.perf_counter() - started) * 1000)
         return False, None, ms, f"不可达: {type(e).__name__}: {e}"
 

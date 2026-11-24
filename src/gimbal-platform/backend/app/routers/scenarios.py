@@ -939,8 +939,8 @@ async def _take_down_public_copy(
                 title=f"集成任务「{tpl.name}」已移除",
                 message="引用的公共内容已下架,订阅随之失效;"
                         "卡片会显示「已移除」,可自行删卡")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001 — 通知是 best-effort
+            logger.warning("scenarios: 下架订阅者通知失败(继续下架面):{}", e)
     for su in hit:
         if su.owner_id is not None and su.owner_id != user.id:
             from ..services import notifications as _ns
@@ -952,8 +952,8 @@ async def _take_down_public_copy(
                     body=f"成员场景 {original_id or copy_sid} 下架,"
                          f"其所属公共 Suite 副本已一并下架。",
                     link=f"/suites/{su.id}")
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001 — 通知是 best-effort
+                logger.warning("scenarios: suite 成员下架通知失败:{}", e)
 
 
 @router.post("/{scenario_id}/publish", response_model=Scenario)
@@ -1081,8 +1081,8 @@ async def unpublish_scenario(
                          f"下架了 {original_id} 的公共副本"
                          f"(原件仍在你的私有区)。",
                     link=f"/scenarios/{original_id}/detail")
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001 — 通知是 best-effort
+                logger.warning("scenarios: 属主下架通知失败(下架面继续):{}", e)
         return await scenario_store.get(
             db, original_id, user_id=user.id)
 

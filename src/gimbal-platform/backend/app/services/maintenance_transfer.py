@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,5 +80,6 @@ async def transfer_maintenance(
                          else "(你成为维护者)")),
                 link=(f"/scenarios/{resource_id}/detail"
                       if resource_type == "scenario" else None))
-        except Exception:  # noqa: BLE001 — 通知是增强
+        except Exception as e:  # noqa: BLE001 — 通知是增强,转移主链不阻断
+            logger.warning("maintenance_transfer: 转移通知失败,转移面继续:{}", e)
             await db.rollback()

@@ -15,6 +15,7 @@ import uuid
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -450,7 +451,8 @@ async def list_services(
         catalog = {e["name"] for e in
                    await plate_client.catalog_service_entries()
                    if e.get("name")}
-    except Exception:  # noqa: BLE001 — 对账是增强,不可达不阻塞读面
+    except Exception as e:  # noqa: BLE001 — 对账是增强,不可达不阻塞读面
+        logger.warning("services: plate 目录对账不可达,reachable=false:{}", e)
         reachable = False
     by_name = {s.name: s for s in rows}
     services = [
@@ -491,7 +493,8 @@ async def import_catalog(
     reachable = True
     try:
         rows = await plate_client.catalog_service_rows(refresh=True)
-    except Exception:  # noqa: BLE001 — 目录不可达不阻塞主档
+    except Exception as e:  # noqa: BLE001 — 目录不可达不阻塞主档
+        logger.warning("services: plate 目录拉取失败,目录对账面降级:{}", e)
         rows = []
         reachable = False
     catalog = {r["name"]: r for r in rows if r.get("name")}
@@ -548,8 +551,8 @@ async def create_service(
                     "(登记防错别字;第三方服务请用 kind=external)")
         except HTTPException:
             raise
-        except Exception:  # noqa: BLE001 — plate 不可达放行(主档自足)
-            pass
+        except Exception as e:  # noqa: BLE001 — plate 不可达放行(主档自足)
+            logger.warning("services: 登记防错字对账不可达,放行登记:{}", e)
     dup = (await db.execute(select(Service.id).where(
         Service.name == body.name))).scalar()
     if dup is not None:

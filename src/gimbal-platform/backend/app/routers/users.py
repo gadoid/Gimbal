@@ -26,6 +26,7 @@ import string
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from loguru import logger
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -304,8 +305,8 @@ async def patch_user(
                 link="/home",
                 commit=False,
             )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001 — 通知是增强,不阻断
+            logger.warning("users: 角色变更通知失败,继续权限写面:{}", e)
     revoked_tokens = 0
     if "is_active" in data:
         target.is_active = data["is_active"]
@@ -458,8 +459,8 @@ async def reset_password(
                   f"你的 {invalidated} 张个人令牌已同步失效(经它们注册的"
                   "任务已暂停,改密后到「个人设置 → 访问令牌」重新生成)"),
             link="/profile#security")
-    except Exception:  # noqa: BLE001 — 通知是增强,不阻断
-        pass
+    except Exception as e:  # noqa: BLE001 — 通知是增强,不阻断
+        logger.warning("users: 密码重置通知失败,继续令牌失效面:{}", e)
     # 逐令牌暂停注册方实例(与自服务改密同款,§3.4)—— RETURNING 只
     # 取本次 UPDATE 命中的行(:329 同文件教训:按 invalidated_reason
     # 重取会把上一轮重置失效、尚未重新生成的历史令牌再暂停一遍)。
@@ -773,7 +774,8 @@ async def delete_user(
                         title=f"集成任务「{tpl.name}」已删除",
                         body="任务属主账号已注销,模板随之删除;"
                              "卡片会显示「已移除」,可自行删卡")
-                except Exception:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("users: 注销公示通知失败,处置面继续:{}", e)
                     # 公示是增强,不阻断处置(与 reset_password 通知同
                     # 语义)。**不得 rollback()**:此处回滚会把此前已
                     # 完成的处置写入(transfer/删除/更属主)整批吞掉,
@@ -781,7 +783,6 @@ async def delete_user(
                     # 通知失败按非 DB 错误吞掉继续;若确为 DB 级错误,
                     # 事务已中止,后续语句自然失败 → 整端点 500、零提交
                     # (连贯 fail-closed,无半处置残留)。
-                    pass
             await db.execute(sa_delete(IntegrationTask).where(
                 IntegrationTask.template_id == tpl.id))
             # 模板行本身也删(方案 §3.6;评审 2026-11-05 P1:漏删会

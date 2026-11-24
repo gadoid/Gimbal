@@ -255,7 +255,8 @@ def is_stale(tpl_cron: str, last_run_at: datetime | None,
         nf1 = next_fire(tpl_cron, lr)
         nf2 = next_fire(tpl_cron, nf1)
         return now > ensure_aware(nf2) + timedelta(seconds=STALE_GRACE_SECONDS)
-    except Exception:  # noqa: BLE001 — cron 坏 = 回退旧行为
+    except Exception as e:  # noqa: BLE001 — cron 坏 = 回退旧行为,降级可见
+        logger.warning("integration: 过期判定 cron 解析失败,回退 1 小时口径:{}", e)
         return (now - lr) > timedelta(hours=1)
 
 
@@ -272,7 +273,8 @@ def _period_seconds(cron: str, anchor: datetime | None) -> float:
         nf1 = ensure_aware(next_fire(cron, base))
         nf2 = ensure_aware(next_fire(cron, nf1))
         return max(60.0, (nf2 - nf1).total_seconds())
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 — 解析失败回退 1 小时,降级可见
+        logger.warning("integration: 通知节流周期 cron 解析失败,回退 3600s:{}", e)
         return 3600.0
 
 
@@ -340,8 +342,10 @@ class IntegrationChannels:
                 sess, slot.session = slot.session, None
                 try:
                     await sess.close()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as close_err:  # noqa: BLE001 — 收口失败可见
+                    logger.warning(
+                        "integration: 故障会话收口 close 失败(可能留进程):{}",
+                        close_err)
                 raise
         finally:
             await self._release(slot)
@@ -360,8 +364,8 @@ class IntegrationChannels:
         for sess in to_close:
             try:
                 await sess.close()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001 — 回收失败可见(可能留进程)
+                logger.warning("integration: 空闲会话回收 close 失败:{}", e)
         return len(to_close)
 
     async def close_all(self) -> None:
@@ -369,8 +373,8 @@ class IntegrationChannels:
             if s.session is not None:
                 try:
                     await s.session.close()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as e:  # noqa: BLE001 — 收口失败可见(可能留进程)
+                    logger.warning("integration: close_all 会话收口失败:{}", e)
                 s.session = None
 
 
@@ -1123,7 +1127,8 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             # S2.1:模板环境(指纹与执行同一份,不吃持有人偏好)
             try:
                 tpl_env = await _template_env(db, scen, scheme_payload)
-            except Exception:  # noqa: BLE001 — 环境查询失败按旧 ③ 行为
+            except Exception as e:  # noqa: BLE001 — 环境查询失败按旧 ③ 行为
+                logger.warning("integration: 模板环境查询失败,按无环境解析:{}", e)
                 tpl_env = None
             if consent_gate:
                 try:
@@ -1445,7 +1450,9 @@ async def _finish(
         inst.state_vars = merged
     try:
         inst.next_run_at = next_fire(tpl.trigger_cron, now)
-    except Exception:  # noqa: BLE001 — cron 坏 = 顺延一小时,不炸调度
+    except Exception as e:  # noqa: BLE001 — cron 坏 = 顺延一小时,不炸调度
+        logger.warning("integration: 实例 {} 下次调度 cron 解析失败,顺延 1 小时:{}",
+                       inst.id, e)
         inst.next_run_at = now + timedelta(hours=1)
 
     # ── 结论通知边沿合并(D9)── 状态机在 commit 前算好,发送在 commit 后

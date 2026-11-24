@@ -44,6 +44,8 @@ def proxy_error(
     try:
         env = resp.json()
     except Exception:  # noqa: BLE001
+        # C6 判例:非 JSON 错误页,失败原因经 error.message 进 HTTPException
+        # 载荷,可见性由载荷承载,无需旁路日志
         env = {"ok": False, "error": {"message": resp.text[:200]}}
     return HTTPException(
         status_code=resp.status_code,

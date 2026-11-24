@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -217,7 +218,8 @@ async def _item_slot_map(db, user, item: PrecheckItem) -> tuple[dict[str, str],
     try:
         from ..services.exec_config import load_choice
         cfg = await load_choice(db, user.id, item.exec_config_id)
-    except Exception:  # noqa: BLE001 — 预检不因配置不可加载而连坐
+    except Exception as e:  # noqa: BLE001 — 预检不因配置不可加载而连坐
+        logger.warning("run_precheck: 执行配置加载失败,该配置跳过鉴权预检:{}", e)
         return {}, frozenset()
     if cfg is None:
         return {}, frozenset()
@@ -233,7 +235,8 @@ async def _item_slot_map(db, user, item: PrecheckItem) -> tuple[dict[str, str],
         return await slot_lookup_overrides(
             db, (definition_from_payload(scen.payload or {})
                  ).get("steps") or [], None, cfg.bindings), circled
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 — 覆盖解析失败,按无覆盖预检
+        logger.warning("run_precheck: slot 覆盖解析失败,按无覆盖口径预检:{}", e)
         return {}, circled
 
 
@@ -424,7 +427,8 @@ async def _gate_unbound_services(
             from ..services import service_aliases
             alias_urls = await service_aliases.base_urls_for(
                 db, candidates, env=env)
-        except Exception:  # noqa: BLE001 — 查表失败保守多报(不误放行)
+        except Exception as e:  # noqa: BLE001 — 查表失败保守多报(不误放行)
+            logger.warning("run_precheck: 别名基址查表失败,按未解析保守多报:{}", e)
             alias_urls = {}
         candidates = [s for s in candidates if not service_url_resolved(
             s, alias_base_urls=alias_urls)]

@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, status
+from loguru import logger
 from pydantic import BaseModel, Field
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy import String, cast, func, or_, select
@@ -433,7 +434,8 @@ async def get_execution(
         if row is not None:
             out.current_plate = ((row.payload or {}).get("definition")
                                  or {}).get("meta", {}).get("plate") or None
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 — 台账读失败不阻塞详情
+        logger.warning("executions: current_plate 台账读失败,降级为空:{}", e)
         out.current_plate = None
     return out
 

@@ -397,7 +397,9 @@ async def _available_revisions(meta_plate: dict) -> dict:
         line = ref.split("#")[0]
         try:
             items = await plate_client.list_line_revisions(system, line)
-        except Exception:  # noqa: BLE001 — 提示降级,不阻塞
+        except Exception as e:  # noqa: BLE001 — 提示降级,不阻塞导入
+            logger.warning(
+                "scenario_import: 修订提示查询失败({}#{})降级跳过:{}", system, line, e)
             continue
         refs = sorted({r for r in (_rev_id(i) for i in items) if r})
         if refs:

@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import Any, Awaitable, Callable
 
 import httpx
+from loguru import logger
 
 from app.auth import AuthError, AuthSession, get_authenticator
 from app.services import jsonpath as jsonpath_mod  # 镜像拷贝,同 plate 先例
@@ -185,8 +186,8 @@ def _kill_credential(session: Any, cred_key: "tuple[int, str] | None") -> None:
     if session is not None and cred_key is not None:
         try:
             session.clear_token()
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 — 清理失败不遮蔽 401 降级
+            logger.warning("query_view: 401 拉黑 clear_token 失败,已入 dead-set:{}", e)
         _cred_dead.add(cred_key)
 
 

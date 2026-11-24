@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -269,7 +270,8 @@ def _touch_last_used(tok: AccessToken, now: datetime) -> bool:
 async def _commit_touch(db: AsyncSession) -> None:
     try:
         await db.commit()
-    except Exception:  # noqa: BLE001 — 观测面写失败不拦认证
+    except Exception as e:  # noqa: BLE001 — 观测面写失败不拦认证
+        logger.warning("access_token: 观测面 commit 失败已回滚,认证不受影响:{}", e)
         await db.rollback()
 
 
@@ -667,8 +669,8 @@ async def pause_token_instances(
                 db, tpl, inst, event_type="integration.paused",
                 fields={"reason": paused_reason, "message": message[:500],
                         "at": iso_utc_z(now)})
-        except Exception:  # noqa: BLE001 — 回调构造失败不拦暂停(S4)
-            pass
+        except Exception as e:  # noqa: BLE001 — 回调构造失败不拦暂停(S4)
+            logger.warning("access_token: 暂停回调构造失败,暂停面继续:{}", e)
         names.append({"id": tpl.id, "name": tpl.name})
     # D33:admin 强制失效的处置说明必须到达属主 —— 即使没有暂停的任务
     # 也发通知(空任务面去掉任务列表段)。
@@ -686,8 +688,8 @@ async def pause_token_instances(
             await create_notification(
                 db, user_id=recipient, type_="integration",
                 title=title, body=body, link=link)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001 — 通知是增强(D33 处置说明)
+        logger.warning("access_token: 令牌失效属主通知失败,主面继续:{}", e)
     return names
 
 
@@ -698,8 +700,8 @@ async def revive_token_tasks(db: AsyncSession, tok: AccessToken) -> None:
 
     try:
         await integration_runner.revive_paused_instances(token_id=tok.id)
-    except Exception:  # noqa: BLE001 — 恢复失败不影响主操作
-        pass
+    except Exception as e:  # noqa: BLE001 — 恢复失败不影响主操作
+        logger.warning("access_token: 令牌 {} 注册实例恢复失败:{}", tok.id, e)
 
 
 # ── 状态机(§3.4)───────────────────────────────────────────────
