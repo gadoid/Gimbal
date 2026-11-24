@@ -44,15 +44,10 @@ class SuiteCompositionIn(BaseModel):
     mode: Literal["aggregate", "chain", "fanout", "compose"] = "aggregate"
     members: list[CompositionMemberIn] = Field(max_length=100)
     modeConfig: dict = Field(default_factory=dict)
-    # 公共 Suite 加私有成员的发布确认标志(与 add_members 同一套 409)
-    publishUnpublished: bool = False
 
 
 class SuiteMembersAddIn(BaseModel):
     scenarioIds: list[str] = Field(..., min_length=1)
-    # P2 §7.9:公共 suite 加未发布成员的发布确认标志(确认后成员
-    # 发布 + 入组同事务;缺省 False → 409 suite_member_publish_required)
-    publishUnpublished: bool = False
 
 
 class SuiteMembersOrderIn(BaseModel):

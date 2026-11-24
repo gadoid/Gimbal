@@ -1664,7 +1664,6 @@ export interface SuiteCompositionIn {
   members: Array<CompositionMemberIn>
   mode?: "aggregate" | "chain" | "fanout" | "compose"
   modeConfig?: Record<string, unknown>
-  publishUnpublished?: boolean
   rev: number
 }
 
@@ -1714,7 +1713,6 @@ export interface SuiteMemberOut {
 }
 
 export interface SuiteMembersAddIn {
-  publishUnpublished?: boolean
   scenarioIds: Array<unknown>
 }
 

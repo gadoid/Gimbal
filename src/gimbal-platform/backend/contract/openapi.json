@@ -8233,11 +8233,6 @@
             "title": "Modeconfig",
             "type": "object"
           },
-          "publishUnpublished": {
-            "default": false,
-            "title": "Publishunpublished",
-            "type": "boolean"
-          },
           "rev": {
             "title": "Rev",
             "type": "integer"
@@ -8507,11 +8502,6 @@
       },
       "SuiteMembersAddIn": {
         "properties": {
-          "publishUnpublished": {
-            "default": false,
-            "title": "Publishunpublished",
-            "type": "boolean"
-          },
           "scenarioIds": {
             "items": {
               "type": "string"

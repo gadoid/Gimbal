@@ -316,8 +316,7 @@ class TestSuiteNarrowed:
         assert r.status_code == 201, r.text
         sid = r.json()["suiteId"]
         r = await client.post(f"/api/suites/{sid}/members", headers=h_owner,
-                              json={"scenarioIds": ["sc-mb-su"],
-                                    "publishUnpublished": False})
+                              json={"scenarioIds": ["sc-mb-su"],})
         assert r.status_code == 200, r.text
         return sid
 

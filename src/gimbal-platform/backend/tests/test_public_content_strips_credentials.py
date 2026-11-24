@@ -294,8 +294,7 @@ class TestStripping:
                               json={"name": "w6-suite", "description": ""})
         sid = r.json()["suiteId"]
         await client.post(f"/api/suites/{sid}/members", headers=h_owner,
-                          json={"scenarioIds": ["sc-w6-su"],
-                                "publishUnpublished": False})
+                          json={"scenarioIds": ["sc-w6-su"],})
         h_other = await role_headers(client, "sc_spc", role="user")
         # 私有 suite + 引用分享 → 被分享人深拷贝(三入口之一;
         # 公共路径的成员在级联发布时已剥,这里钉私有源头不外带)
@@ -535,8 +534,7 @@ async def test_suite_validate_reports_builtin_auth_shadowed(
                                 "projectId": pid})
     sid = r.json()["suiteId"]
     await client.post(f"/api/suites/{sid}/members", headers=h_owner,
-                      json={"scenarioIds": ["sc-w6-sv"],
-                            "publishUnpublished": False})
+                      json={"scenarioIds": ["sc-w6-sv"],})
 
     # 属主自查:不告警
     r = await client.post(f"/api/suites/{sid}/validate", headers=h_owner)

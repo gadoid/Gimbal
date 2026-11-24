@@ -30,17 +30,26 @@ import type {
   SuitePage,
   SuiteSummary,
 } from '@/api/suites'
+import type { ProjectMember, ProjectOut } from '@/api/projects'
+import type { UserOut, UsersPage } from '@/api/users'
+import type { AuthReferences, AuthsPage } from '@/api/auth_sessions'
 import type {
+  AuthListOut,
+  AuthReferencesOut,
   ExecutionListItemOut,
   ExecutionListOut,
   ExecutionOut,
   ExecutionRowOut,
   ExecutionSummaryOut,
+  MemberOut,
+  ProjectOut as ProjectOutG,
   SuiteDetailOut,
   SuiteLookupItem as SuiteLookupItemOut,
   SuiteMemberOut,
   SuitePageOut,
   SuiteSummaryOut,
+  UserListOut,
+  UserPublic,
 } from './openapi'
 
 // ── executions 域 ──────────────────────────────────────────────
@@ -80,6 +89,28 @@ const _s4: SuiteMemberOut = _suiteMember
 declare const _suiteLookup: SuiteLookupItem
 const _s5: SuiteLookupItemOut = _suiteLookup
 
+// ── projects / users / auth_sessions 域(切片 3)───────────────────
+declare const _project: ProjectOut
+const _p1: ProjectOutG = _project
+
+declare const _projectMember: ProjectMember
+const _p2: MemberOut = _projectMember
+
+declare const _user: UserOut
+const _u1: UserPublic = _user
+
+declare const _usersPage: UsersPage
+const _u2: UserListOut = _usersPage
+
+declare const _authRefs: AuthReferences
+const _a1: AuthReferencesOut = _authRefs
+
+declare const _authsPage: AuthsPage
+const _a2: AuthListOut = _authsPage
+
 // 编译期防未使用告警(guards 是纯类型层,无运行时产物)
-export const CONTRACT_GUARD_DOMAINS = ['executions', 'suites'] as const
-void [_g1, _g2, _g3, _g4, _g5, _s1, _s2, _s3, _s4, _s5]
+export const CONTRACT_GUARD_DOMAINS = [
+  'executions', 'suites', 'projects', 'users', 'auth_sessions',
+] as const
+void [_g1, _g2, _g3, _g4, _g5, _s1, _s2, _s3, _s4, _s5,
+  _p1, _p2, _u1, _u2, _a1, _a2]

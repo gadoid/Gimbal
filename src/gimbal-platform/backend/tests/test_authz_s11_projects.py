@@ -624,8 +624,7 @@ class TestS13PublishSemantics:
                               json={"name": "s13-suite", "description": ""})
         suite_id = r.json()["suiteId"]
         r = await client.post(f"/api/suites/{suite_id}/members", headers=h,
-                              json={"scenarioIds": ["sc-s13-sq"],
-                                    "publishUnpublished": False})
+                              json={"scenarioIds": ["sc-s13-sq"],})
         assert r.status_code == 200, r.text
         # 成员未发布 → 422 suite_member_not_public(不再级联代发布)
         r = await client.post(f"/api/suites/{suite_id}/publish", headers=h)
@@ -648,8 +647,7 @@ class TestS13PublishSemantics:
                               json={"name": "s13-suite2", "description": ""})
         suite_id = r.json()["suiteId"]
         await client.post(f"/api/suites/{suite_id}/members", headers=h,
-                          json={"scenarioIds": ["sc-s13-sp"],
-                                "publishUnpublished": False})
+                          json={"scenarioIds": ["sc-s13-sp"],})
         assert (await client.post(
             "/api/scenarios/sc-s13-sp/publish", headers=h)).status_code == 200
         r = await client.post(f"/api/suites/{suite_id}/publish", headers=h)

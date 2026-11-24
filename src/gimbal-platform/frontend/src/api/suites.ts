@@ -120,7 +120,6 @@ export interface CompositionBody {
   mode: SuiteMode
   members: CompositionMember[]
   modeConfig: SuiteModeConfig
-  publishUnpublished?: boolean
 }
 
 /** 409 suite_rev_conflict 附最新内容(自动保存冲突合并用)。 */
@@ -235,11 +234,11 @@ export async function putSuiteComposition(
 }
 
 export async function addSuiteMembers(
-  suiteId: number, scenarioIds: string[], publishUnpublished = false,
+  suiteId: number, scenarioIds: string[],
 ): Promise<SuiteDetail> {
   const { data } = await http.post<SuiteDetail>(
     `/suites/${suiteId}/members`,
-    { scenarioIds, publishUnpublished })
+    { scenarioIds })
   return data
 }
 

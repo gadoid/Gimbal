@@ -296,7 +296,7 @@ function markDirty(): void {
   saveTimer = window.setTimeout(() => { saveTimer = null; void save() }, AUTOSAVE_MS)
 }
 
-async function save(publishUnpublished = false): Promise<void> {
+async function save(): Promise<void> {
   const d = detail.value
   if (!d || !canEdit.value || saveState.value !== 'dirty') return
   saveState.value = 'saving'
@@ -311,7 +311,7 @@ async function save(publishUnpublished = false): Promise<void> {
     }
     const out = await putSuiteComposition(d.suiteId, {
       rev: d.rev, mode: mode.value, members: members.value,
-      modeConfig: config.value, publishUnpublished,
+      modeConfig: config.value,
     })
     detail.value = out
     const cfg: SuiteModeConfig = { ...(out.modeConfig ?? {}) }
