@@ -8,6 +8,7 @@
  * /change-password(带 redirect),改密位复位后放行。
  */
 import { describe, it, expect, beforeEach } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
@@ -28,14 +29,18 @@ function loginAs(role: keyof typeof CAPS_BY_ROLE = 'user', signedIn = true) {
   auth.capabilities = CAPS_BY_ROLE[role]
 }
 
+// vitest≥4 调度下 push promise 可能早于守卫/重定向链落定 —— 显式等落定
+// 再读 currentRoute,断言不再依赖微任务运气(vitest 2 时代的隐式顺序)。
 async function nav(path: string) {
-  return router.push(path).then(() => router.currentRoute.value.fullPath)
+  await router.push(path)
+  await flushPromises()
+  return router.currentRoute.value.fullPath
 }
 
 describe('router — 能力矩阵守卫(authz W8)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setActivePinia(createPinia())
-    router.push('/').catch(() => undefined)
+    await router.push('/').catch(() => undefined)
   })
 
   it('未登录访问受保护页 → /login 且带回跳地址', async () => {
@@ -81,9 +86,9 @@ describe('router — 能力矩阵守卫(authz W8)', () => {
 })
 
 describe('router — authz W6 只能改密门', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setActivePinia(createPinia())
-    router.push('/').catch(() => undefined)
+    await router.push('/').catch(() => undefined)
   })
 
   it('must_change_password 为真 → 一切页面重定向 /change-password(带回跳)', async () => {

@@ -210,6 +210,9 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
   })
 
   it('删除 405(default 兜底)→ 提示默认方案不可删除', async () => {
+    // vitest≥4 的 restoreAllMocks 不再把模块 mock 恢复到工厂默认 ——
+    // 上个用例的 confirmAction→false 会泄漏到这里,显式声明本用例走确认路径。
+    vi.mocked(confirmAction).mockResolvedValue(true)
     vi.spyOn(api, 'deleteRunScheme')
       .mockRejectedValue(Object.assign(new Error('Method Not Allowed'), { status: 405 }))
     const warn = vi.spyOn(toast, 'warning')

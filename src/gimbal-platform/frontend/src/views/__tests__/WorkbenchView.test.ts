@@ -55,7 +55,11 @@ describe('WorkbenchView — /home(registry 宿主)', () => {
 
   it('撤区后执行历史仍有路可达 ——「最近执行」卡卡头深链', async () => {
     const w = mountPage()
-    await vi.waitFor(() => expect(w.find('[data-testid="wb-card-recent-executions"]').exists()).toBe(true))
+    // vitest 5 forks 池在全量并发下本用例的挂载偶发超 1s 默认窗 —— 宽限到 3s
+    await vi.waitFor(
+      () => expect(w.find('[data-testid="wb-card-recent-executions"]').exists()).toBe(true),
+      { timeout: 3000 },
+    )
     expect(w.find('[data-testid="wb-card-recent-executions"] .manage-link').attributes('href'))
       .toBe('/executions')
     w.unmount()

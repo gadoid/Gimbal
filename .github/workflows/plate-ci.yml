@@ -148,7 +148,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # vitest 5 / @vitejs/plugin-vue 6 均要求 ≥22.12(2026-11-24
+          # dev 依赖升级轮拍板);生产 dist 构建同用 Node 22。
+          node-version: 22
+      - name: 供应链审计门 — npm audit(critical/high 即红)
+        # 评估清单 P0-3:审计不再只在安装时打印告警。门槛 = critical/high
+        # (moderate 尾巴见 known-issues/platform/frontend/audit-moderate-tail.md;
+        # 其中 vue-tsc 2.x 链与 editorconfig 链均无修复版本,vue-tsc 3 升级被
+        # 上游回归阻塞 —— 详见该记录)。新 critical/high advisory 落地即红。
+        working-directory: src/gimbal-platform/frontend
+        run: npm audit --audit-level=high
       - name: vitest
         working-directory: src/gimbal-platform/frontend
         run: |

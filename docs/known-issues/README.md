@@ -37,6 +37,8 @@
 > └── platform/
 >     ├── judgment-face/              # 判定面 / 可注入面 / 悬空检测 / 注入物化
 >     ├── declaration-cache/          # 声明面取数缓存与降级
+>     ├── auth/                       # 登录/注册加固（限流、CI 安全门）
+>     ├── frontend/                   # 前端构建/测试链（依赖审计边界）
 >     ├── registry/                   # 断言注册表与其前端消费
 >     ├── scenario-store/             # 场景读形状
 >     ├── run-journal/                # 执行日志（JSONL）
@@ -70,3 +72,5 @@
 > | [platform/documentation/pre-plan-retirement-comments.md](platform/documentation/pre-plan-retirement-comments.md) | docs/adr + 代码注释 | P2 | 未修复（**独立工作**） | 计划之前（早于 `bd99740`）的退场仍靠注释承载，ADR-0003 无对应行；补录是独立工作 |
 > | [platform/documentation/platform-api-doc-false-sections.md](platform/documentation/platform-api-doc-false-sections.md) | 文档（平台 API 文档） | **P1** | **已修复**（2026-11-24 端点级重写 + CI 守卫） | `/api/cases` 家族五节已按甲类端点级重写（退役注 + 职责去向），乙类组件引用同批清障；`check_api_doc.py` 三挂（plate-ci 步骤 + pytest 双守卫 + paths `docs/**`）—— 文档再描述不存在端点即红 |
 > | [platform/declaration-cache/canvas-render-path-fetch.md](platform/declaration-cache/canvas-render-path-fetch.md) | platform/frontend | P2 | **已修复**（阶段二 Task 7） | 画布两处渲染期取数（`stepDecls` 是函数、`currentFull` 是 computed）已收口：删两处 + 按 step 端点集的 `immediate: true` 预拉覆盖面加测试钉住 |
+| [platform/auth/login-rate-limit-gap.md](platform/auth/login-rate-limit-gap.md) | platform/backend × CI | P2 | 未修复（生产注册开关 2026-11-24 已收口） | 登录/注册无应用层限流（app 与 nginx 均无）、CI 缺 pip-audit/DAST 门；限流中间件与安全门与下一次 auth 演进同批排期 |
+| [platform/frontend/audit-moderate-tail.md](platform/frontend/audit-moderate-tail.md) | platform/frontend × CI | P2 | **已收口**（critical/high 清零 + 审计门在位） | vitest 2→5 / vite 5→6 升级落地；剩 4 moderate 全为无修复版本（editorconfig 链），vue-tsc 3 升级被上游回归阻塞（reactive v-model 误插 `.value`、兄弟条件块收窄重置） |
