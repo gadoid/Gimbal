@@ -1,7 +1,8 @@
 /**
- * Runner.vue 执行配置选择器(执行配置分层②)— 启动条整批共用的执行
- * 上下文:不选 = 默认链(不带 execConfigId);选定 → 逐条 runScenario
- * 都带 execConfigId(值 = 选定行 id)。
+ * Runner.vue 执行配置选择器**退役钉**(账户组合 §8.3/ADR-0003 #26):
+ * 运行期换用载体 0 使用判死 —— 下拉不再渲染、发起载荷恒不带
+ * execConfigId(默认链自动占位);「以谁的身份跑」由场景绑定
+ * (组合/方案)决定,Runner 不提供第三层身份选择。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -26,15 +27,6 @@ vi.mock('@/api/scenario-composer', async (importOriginal) => {
     runScenario: vi.fn().mockResolvedValue({ runId: 'r', executionId: 1 }),
   }
 })
-
-vi.mock('@/api/execConfigs', () => ({
-  listExecConfigs: vi.fn().mockResolvedValue([
-    { id: 5, name: '商户B视角', isDefault: true, environmentId: null,
-      systems: [] },
-    { id: 8, name: '审计视角', isDefault: false, environmentId: 2,
-      systems: [] },
-  ]),
-}))
 
 vi.mock('@/composables/useRunAssembly', async () => {
   const { ref } = await import('vue')
@@ -75,36 +67,24 @@ async function mountAndQueue() {
   return w
 }
 
-describe('Runner 执行配置选择器(分层②)', () => {
+describe('Runner 执行配置选择器退役(账户组合 §8.3)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
-  it('选择器列出本人配置(默认行带「默认」标);不选 = 默认链', async () => {
+  it('下拉不再渲染(第三层身份选择移除)', async () => {
     const w = await mountAndQueue()
-    const sel = w.get('[data-testid="runner-exec-config"]')
-    const options = sel.findAll('option').map((o) => o.text())
-    expect(options).toEqual(['(默认链)', '商户B视角(默认)', '审计视角'])
+    expect(w.find('[data-testid="runner-exec-config"]').exists()).toBe(false)
     w.unmount()
   })
 
-  it('选定 → 逐条发起带 execConfigId;不选 → 不带', async () => {
+  it('发起载荷恒不带 execConfigId(默认链自动占位)', async () => {
     const w = await mountAndQueue()
-    // 默认链:载荷无 execConfigId
     await w.get('[data-testid="runner-launch"]').trigger('click')
     await flushPromises()
     expect(runScenario).toHaveBeenCalledWith(
       expect.not.objectContaining({ execConfigId: expect.anything() }))
-
-    // 重新入队(发起后队列清空;picker 仍开着,不必再开)→ 显式选定 8 号
-    await w.get('[data-testid="runner-add-btn-sc-1"]').trigger('click')
-    await flushPromises()
-    await w.get('[data-testid="runner-exec-config"]').setValue('8')
-    await w.get('[data-testid="runner-launch"]').trigger('click')
-    await flushPromises()
-    expect(runScenario).toHaveBeenLastCalledWith(
-      expect.objectContaining({ execConfigId: 8 }))
     w.unmount()
   })
 })

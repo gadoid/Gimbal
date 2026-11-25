@@ -28,6 +28,16 @@ describe('router — 深链可达性', () => {
     expect(router.resolve('/executions/7/events').matched.at(-1)?.path)
       .toBe('/executions/:id(\\d+)/events')
   })
+
+  it('账户组合:新路由命中;执行配置旧深链重定向(ADR-0003 #26,书签兼容)', () => {
+    // 新路由 = 管理页本体
+    expect(router.resolve('/account-combos').matched.at(-1)?.path)
+      .toBe('/account-combos')
+    // 旧深链 → 重定向记录(目标 = /account-combos;同 /profile/config 先例)
+    const resolved = router.resolve('/exec-configs')
+    expect(resolved.matched.at(-1)?.redirect).toBe('/account-combos')
+    expect(resolved.matched.at(-1)?.path).not.toBe(CATCH_ALL)
+  })
 })
 
 describe('router — 新建画布别名', () => {

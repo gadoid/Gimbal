@@ -225,19 +225,9 @@
             </template>
           </div>
           <div class="launch-actions">
-            <!-- 执行配置分层②:整批共用的执行上下文(在哪/以谁/带什么
-                 业务参数)——「(默认链)」= 默认配置自动占位(env 位④/
-                 私有区 carry);显式选定才带绑定与项目区 carry 覆盖 -->
-            <label class="exec-cfg-label" for="runner-exec-config">执行配置</label>
-            <select id="runner-exec-config" class="exec-cfg-select"
-              data-testid="runner-exec-config" v-model="execConfigId"
-              :disabled="!queue.length || launching">
-              <option value="">(默认链)</option>
-              <option v-for="c in execConfigs" :key="c.id" :value="String(c.id)">
-                {{ c.name }}{{ c.isDefault ? '(默认)' : '' }}
-              </option>
-            </select>
-            <QTip text="执行配置 = 这批执行共用的外部支撑:环境、条目绑定、carry 覆盖。不选 = 默认链(你的默认配置自动生效:环境兜底 + 私有区 carry);显式选定一套才会带绑定换用条目与项目区 carry 覆盖(执行人负责,预览可自证每个值的来路)。" />
+            <!-- 执行配置下拉已退役(账户组合 §8.3/ADR-0003 #26):运行期
+                 换用载体 0 使用判死;「以谁的身份跑」由场景绑定(组合/方案)
+                 决定,Runner 不再提供第三层身份选择 -->
             <Button v-if="queue.length" variant="outline" size="sm" :disabled="launching"
               data-testid="runner-clear" @click="clearQueue">清空</Button>
             <Button size="sm" data-testid="runner-launch"
@@ -265,7 +255,6 @@ import { showError } from '@/utils/errorFallback'
 import { listScenarioOptions, listRunSchemes, precheckRun, runScenario } from '@/api/scenario-composer'
 import { ApiError } from '@/api/http'
 import type { PrecheckResult, SchemeV2, DataSetSelection } from '@/api/scenario-composer'
-import { listExecConfigs, type ExecConfigRow } from '@/api/execConfigs'
 import type { RunOptions } from '@/types/m2'
 import type { ScenarioOptionsItem } from '@/types/scenario-composer'
 import { useRunAssembly, type RunConfirmOpts } from '@/composables/useRunAssembly'
@@ -469,14 +458,12 @@ function applyPayload(selection: DataSetSelection[], opts: RunConfirmOpts) {
 const launching = ref(false)
 const launchProgress = ref('')
 
-// 执行配置分层②:整批共用的执行上下文('' = 默认链,默认配置自动占位)
-const execConfigs = ref<ExecConfigRow[]>([])
-const execConfigId = ref('')
+// 执行配置下拉已退役(账户组合 §8.3):「以谁的身份跑」由场景绑定
+// (组合/方案)决定;Runner 不再加载配置列表,发起载荷恒不带
+// execConfigId(默认链自动占位)。
 
 onMounted(() => {
   void loadPicker()
-  listExecConfigs().then((rows) => { execConfigs.value = rows })
-    .catch(() => { execConfigs.value = [] })   // 读不到不阻塞发队列
 })
 
 function payloadOf(item: QueueItem): { selection: DataSetSelection[]; opts: RunConfirmOpts } {
@@ -558,8 +545,6 @@ async function launchQueue() {
         ...(opts.injectionEntryIds?.length ? { injectionEntryIds: opts.injectionEntryIds } : {}),
         // S8 收口:面板确认的凭证来源随发起下发(缺省 = 个人)
         ...(opts.credentialSource ? { credentialSource: opts.credentialSource } : {}),
-        // 分层②:整批共用的执行配置(显式选定才带;'' = 默认链)
-        ...(execConfigId.value ? { execConfigId: Number(execConfigId.value) } : {}),
         batchId,
       })
       launchedKeys.add(keyOf(item))
@@ -735,12 +720,6 @@ async function launchQueue() {
 .launch-text { flex: 1; min-width: 13.75rem; font-size: 0.71875rem; color: #5B6472; line-height: 1.7; }
 .launch-text strong { color: var(--sl-ink); }
 .launch-actions { display: flex; gap: 0.5rem; align-items: center; }
-.exec-cfg-label { font-size: 0.6875rem; color: #8B93A1; }
-.exec-cfg-select {
-  max-width: 11.25rem; padding: 0.1875rem 0.375rem; font-size: 0.75rem;
-  border: 1px solid var(--sl-line); border-radius: 0.375rem; background: var(--c-surface); color: var(--sl-ink);
-}
-.exec-cfg-select:disabled { color: #8B93A1; background: #F3F5F8; }
 
 .mono { font-family: var(--font-mono, monospace); }
 

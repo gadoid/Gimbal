@@ -129,12 +129,18 @@ export const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 执行配置(执行配置分层①):个人面·全员 —— 环境/条目
-    // 绑定/carry 覆盖的跨场景载体,唯一入口(决策 8 终局;「我的配置」
-    // 页随批次⑥退役后由本页承接)
-    path: '/exec-configs',
-    component: () => import('@/views/ExecConfigsView.vue'),
+    // 账户组合(账户组合设计方案 §8.3,2026-11-25):个人面·全员 ——
+    // 服务 → 身份条目的跨场景默认映射,唯一入口;壳 = 原执行配置页
+    // 语义旋转(执行配置 CRUD 冻结保留,表/端点/链路不动)。旧深链
+    // 重定向(书签兼容,同 /profile/config 先例)。
+    path: '/account-combos',
+    component: () => import('@/views/AccountCombosView.vue'),
     meta: { requiresAuth: true },
+  },
+  {
+    // 执行配置页退役(账户组合 §8.3/ADR-0003 #26):旧深链 → 账户组合
+    path: '/exec-configs',
+    redirect: '/account-combos',
   },
   {
     // 个人设置(P2-1;原型 Main/Tokens/CardSettings = 子页面而非同页
@@ -162,10 +168,10 @@ export const routes = [
       { path: 'tokens', component: () => import('@/views/ProfileTokens.vue') },
       // CardSettings.html:工作台身份卡
       { path: 'card', component: () => import('@/views/ProfileCard.vue') },
-      // 分层⑥(决策 8):「我的配置」页退役 —— 三卡全迁执行配置
-      // (/exec-configs):env 偏好收编 + 个人 carry 层收编 + 漂移面板
-      // 迁配置详情;旧深链重定向(书签兼容)。
-      { path: 'config', redirect: '/exec-configs' },
+      // 分层⑥(决策 8):「我的配置」页退役 —— 三卡全迁执行配置,
+      // 后随执行配置页语义旋转(ADR-0003 #26)续指账户组合;旧深链
+      // 重定向链(书签兼容)。
+      { path: 'config', redirect: '/account-combos' },
     ],
   },
   {

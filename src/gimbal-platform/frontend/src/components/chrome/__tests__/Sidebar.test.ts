@@ -78,7 +78,7 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
     expect(links.length).toBe(16)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
-      '/home', '/notifications', '/exec-configs',
+      '/home', '/notifications', '/account-combos',
       '/scenarios/follows', '/scenarios/mine',
       // 2026-11-10 IA:场景集并入「我的」组(原「用例集」组退役)
       '/suites',
@@ -149,7 +149,7 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     expect(hrefs).not.toContain('/service-admin')
     expect(hrefs).not.toContain('/admin/deployments')  // 旧独立部署页已并入服务注册
     expect(hrefs).toContain('/projects')  // S7.1:项目入口全员可见
-    expect(hrefs).toContain('/exec-configs')  // 执行配置:全员个人面
+    expect(hrefs).toContain('/account-combos')  // 账户组合:全员个人面(原「配置」语义旋转)
     expect(hrefs.length).toBe(14)
     w.unmount()
   })

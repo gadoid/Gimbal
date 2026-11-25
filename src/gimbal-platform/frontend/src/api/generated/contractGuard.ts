@@ -34,8 +34,12 @@ import type { ProjectMember, ProjectOut } from '@/api/projects'
 import type { UserOut, UsersPage } from '@/api/users'
 import type { AuthReferences, AuthsPage } from '@/api/auth_sessions'
 import type {
+  AccountComboCreate,
+  AccountComboUpdate,
+  AccountComboView,
   AuthListOut,
   AuthReferencesOut,
+  ComboEntry as ComboEntryG,
   ExecutionListItemOut,
   ExecutionListOut,
   ExecutionOut,
@@ -51,6 +55,12 @@ import type {
   UserListOut,
   UserPublic,
 } from './openapi'
+import type {
+  AccountComboCreateInput,
+  AccountComboRow,
+  AccountComboUpdateInput,
+  ComboEntry,
+} from '@/api/accountCombos'
 
 // ── executions 域 ──────────────────────────────────────────────
 declare const _execution: Execution
@@ -108,9 +118,26 @@ const _a1: AuthReferencesOut = _authRefs
 declare const _authsPage: AuthsPage
 const _a2: AuthListOut = _authsPage
 
+// ── account-combos 域(账户组合批 4,2026-11-25)──────────────────
+// 手写 AccountComboRow ⊆ 生成 AccountComboView;Create/Update 入参形状
+// 与生成 schema 对向钉(ComboEntry 双侧)。绑定端点响应是内联形状
+// (无契约 schema),不适用本断言方向。
+declare const _comboRow: AccountComboRow
+const _c1: AccountComboView = _comboRow
+
+declare const _comboEntry: ComboEntry
+const _c2: ComboEntryG = _comboEntry
+
+declare const _comboCreate: AccountComboCreateInput
+const _c3: AccountComboCreate = _comboCreate
+
+declare const _comboUpdate: AccountComboUpdateInput
+const _c4: AccountComboUpdate = _comboUpdate
+
 // 编译期防未使用告警(guards 是纯类型层,无运行时产物)
 export const CONTRACT_GUARD_DOMAINS = [
   'executions', 'suites', 'projects', 'users', 'auth_sessions',
+  'account_combos',
 ] as const
 void [_g1, _g2, _g3, _g4, _g5, _s1, _s2, _s3, _s4, _s5,
-  _p1, _p2, _u1, _u2, _a1, _a2]
+  _p1, _p2, _u1, _u2, _a1, _a2, _c1, _c2, _c3, _c4]

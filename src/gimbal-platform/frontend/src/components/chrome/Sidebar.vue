@@ -184,9 +184,10 @@ const groups: SidebarGroup[] = [
       { path: '/home', label: '工作台', icon: HomeIcon },
       // 通知(全员;审计 tab 在页内按 admin 显隐)
       { path: '/notifications', label: '通知', icon: BellIcon },
-      // 执行配置分层①:全员 —— 置顶组语义 = 高频个人入口;
-      // 不放「服务」组避免与 Admin+ 管理面混层(设计方案 §4 入口裁定)
-      { path: '/exec-configs', label: '配置', icon: MixerHorizontalIcon },
+      // 账户组合(账户组合 §8.3,原「配置」= 执行配置页语义旋转):
+      // 全员置顶高频个人入口;不放「服务」组避免与 Admin+ 管理面
+      // 混层(设计方案 §4 入口裁定沿用)
+      { path: '/account-combos', label: '账户组合', icon: MixerHorizontalIcon },
     ],
   },
   {
