@@ -33,6 +33,9 @@ from .project import Project, ProjectMember
 from .project_promotion import ProjectPromotion
 # 执行配置(执行配置分层①:场景外部支撑的跨场景载体,scope user|project)
 from .exec_config import ExecConfig
+# 账户组合(账户组合设计方案 §4.1:服务→身份条目的跨场景默认映射层,
+# 引用语义,scope user|project 同 exec_configs 维度口径)
+from .account_combo import AccountCombo
 # 服务注册重构(2026-11-16,docs/service-registry-redesign.md §1):
 # 主档(注册簿)/环境×系统实例/身份条目(别名迁居,env 显式化)/账户实体化
 from .service import Service
@@ -74,6 +77,7 @@ __all__ = [
     "ProjectMember",
     "Deployment",
     "ExecConfig",
+    "AccountCombo",
     "Service",
     "SystemEnvInstance",
     "ServiceIdentity",

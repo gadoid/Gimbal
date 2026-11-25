@@ -2,6 +2,48 @@
 // 生成 —— 勿手改;单源事实在后端契约快照(gen_api_contract.py)。
 // 切换策略:api/*.ts facade re-export,组件 import 面零改动。
 
+export interface AccountComboCreate {
+  description?: unknown
+  entries?: Array<ComboEntry>
+  isDefault?: boolean
+  name: unknown
+  projectId?: number | null
+  scope?: "user" | "project"
+}
+
+export interface AccountComboListOut {
+  personal: Array<AccountComboView>
+  projects: Array<AccountComboProjectGroup>
+}
+
+export interface AccountComboProjectGroup {
+  items: Array<AccountComboView>
+  projectId: number
+  projectName: unknown
+}
+
+// 整体替换式 PATCH。None = 不改;entries 显式给值(含 [])则
+// 整体替换 —— 替换后逐条过保存面校验,条目有实质变化 revision +1。
+export interface AccountComboUpdate {
+  description?: unknown | null
+  entries?: Array<ComboEntry> | null
+  name?: unknown | null
+}
+
+export interface AccountComboView {
+  description?: unknown
+  entries: Array<ComboEntry>
+  id: number
+  isDefault: boolean
+  name: unknown
+  referenceCount?: number
+  revision: number
+  scope: unknown
+  scopeId: number
+  updatedAt?: unknown | null
+  updatedByName?: unknown | null
+}
+
 export interface ActivityEvent {
   action?: unknown | null
   at: unknown
@@ -406,6 +448,16 @@ export interface CheckSelector {
   bracket?: Bracket | null
   refs?: Array<unknown>
   tags?: Array<unknown>
+}
+
+export interface ComboBindIn {
+  comboId?: number | null
+}
+
+// 组合条目:服务键 → 身份条目名(一条一服务,§2.1)。
+export interface ComboEntry {
+  alias: unknown
+  service: unknown
 }
 
 // composition 的成员行:顺序即列表顺序(聚合发起序/串联链路序/
@@ -1187,6 +1239,7 @@ export interface ProjectCredentialListOut {
 export interface ProjectOut {
   canManage?: boolean
   canWrite?: boolean
+  comboCount?: number
   defaultEnvironmentId?: number | null
   defaultEnvironmentName?: unknown | null
   description: unknown

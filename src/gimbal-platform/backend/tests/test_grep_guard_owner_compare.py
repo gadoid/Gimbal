@@ -40,6 +40,10 @@ _ALLOWLIST: dict[str, int] = {
 # 存量冻结(2026-11-16 registry 重构后重扫,88 条;分类见模块注释 ——
 #  AuthSession→AuthAccount 系同域改名,个人凭证数据类不变)
     'routers/access_tokens.py:.where(AuthAccount.owner_id == holder)': 1,
+    # 账户组合(2026-11-25,批 1):绑定端点的 §5.3 硬同区判定 —— 个人
+    # 组合仅绑本人私有场景。**不是权限闸**(可读性/写权已由 _require_owner
+    # 与组合可读判先行),只决定「同不同区」,违例 422 scope_mismatch。
+    'routers/account_combos.py:if row.owner_id != combo.scope_id:': 1,
     'routers/activity.py:.where(Execution.owner_id == user.id)': 1,
     # 凭证治理阶段 2(2026-11-20)/架构一致性轮(2026-11-21):身份草稿的
     # 账户可见性 = 本人池 ∪ 场景项目池(pool_clause 单点;只决定「能否

@@ -79,6 +79,8 @@ class ProjectOut(BaseModel):
     suiteCount: int = 0
     taskCount: int = 0
     pendingPromotions: int = 0
+    # 账户组合(账户组合 §5.4):项目资产计数,详情端点填
+    comboCount: int = 0
 
 
 class MemberOut(BaseModel):
@@ -198,6 +200,7 @@ def _can_write(proj: Project, my_role: str | None) -> bool:
 async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
     """S7.0 详情读面:默认环境名 + 场景 / 用例集 / 集成模板计数
     (集成只数模板行,软删不计)+ 待审批加入申请数(页签徽标)。"""
+    from ..models.account_combo import AccountCombo
     from ..models.composer_scenario import ComposerScenario
     from ..models.environment import Environment
     from ..models.integration_task import IntegrationTask
@@ -225,6 +228,10 @@ async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
         "pendingPromotions": await _count(select(ProjectPromotion).where(
             ProjectPromotion.project_id == proj.id,
             ProjectPromotion.status == "pending")),
+        # 账户组合(账户组合 §5.4):项目资产计数(详情页签徽标)
+        "comboCount": await _count(select(AccountCombo).where(
+            AccountCombo.scope == "project",
+            AccountCombo.scope_id == proj.id)),
     }
 
 
@@ -470,9 +477,11 @@ async def delete_project(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "public_project_protected",
                     "message": "公共项目不可删除"})
-    # 内容闸:四张对象表任一挂靠即拒
+    # 内容闸:五张对象表任一挂靠即拒(账户组合 §5.4:四表 → 五表,
+    # 组合是项目资产,项目删除前须清空)
     from sqlalchemy import select as _sel
 
+    from ..models.account_combo import AccountCombo
     from ..models.composer_scenario import ComposerScenario
     from ..models.integration_task import IntegrationTask
     from ..models.report_definition import ReportDefinitionRow
@@ -493,12 +502,18 @@ async def delete_project(
         occupied = (await db.execute(_sel(ReportDefinitionRow.id).where(
             ReportDefinitionRow.project_id == project_id).limit(1))
         ).scalar_one_or_none()
+    if occupied is None:
+        # scope 无 FK(维度口径):按 (scope='project', scope_id) 查
+        occupied = (await db.execute(_sel(AccountCombo.id).where(
+            AccountCombo.scope == "project",
+            AccountCombo.scope_id == project_id).limit(1))
+        ).scalar_one_or_none()
     if occupied is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status.HTTP_409_CONFLICT,
             detail={"code": "project_not_empty",
                     "message": "项目内仍有内容(场景/套件/集成模板/报告"
-                               "定义),需先清空或迁走再删除"})
+                               "定义/账户组合),需先清空或迁走再删除"})
     await _audit(db, user, "project.deleted", proj, {"name": proj.name})
     # S8:项目账户随项目删除(FK NO ACTION —— 显式删,凭证是项目的配置
     # 不是内容,不进内容闸)

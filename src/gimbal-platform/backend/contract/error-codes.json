@@ -204,6 +204,79 @@
       ],
       "statuses": []
     },
+    "account_combo_entry_invalid": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
+      "sites": [
+        "app/routers/account_combos.py:94"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "account_combo_in_use": {
+      "shapes": [
+        [
+          "code",
+          "message",
+          "scenarios"
+        ]
+      ],
+      "sites": [
+        "app/routers/account_combos.py:454"
+      ],
+      "statuses": [
+        409
+      ]
+    },
+    "account_combo_name_exists": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
+      "sites": [
+        "app/routers/account_combos.py:101"
+      ],
+      "statuses": [
+        409
+      ]
+    },
+    "account_combo_not_found": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
+      "sites": [
+        "app/routers/account_combos.py:71",
+        "app/routers/account_combos.py:80"
+      ],
+      "statuses": [
+        404,
+        422
+      ]
+    },
+    "account_combo_scope_mismatch": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
+      "sites": [
+        "app/routers/account_combos.py:87"
+      ],
+      "statuses": [
+        422
+      ]
+    },
     "account_missing": {
       "sites": [
         "app/routers/run_precheck.py:572"
@@ -879,7 +952,7 @@
         "app/routers/deployments.py:140",
         "app/routers/project_credentials.py:170",
         "app/routers/project_credentials.py:246",
-        "app/routers/projects.py:444",
+        "app/routers/projects.py:451",
         "app/routers/services.py:735"
       ],
       "statuses": [
@@ -972,7 +1045,7 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:158"
+        "app/routers/projects.py:160"
       ],
       "statuses": [
         422
@@ -1176,14 +1249,14 @@
     "invalid_action": {
       "sites": [
         "app/services/adaptation_service.py:108",
-        "app/services/plate_client.py:228",
-        "app/services/plate_client.py:535",
-        "app/services/plate_client.py:732",
-        "app/services/plate_client.py:761",
-        "app/services/plate_client.py:795",
-        "app/services/plate_client.py:823",
-        "app/services/plate_client.py:860",
-        "app/services/plate_client.py:932"
+        "app/services/plate_client.py:231",
+        "app/services/plate_client.py:538",
+        "app/services/plate_client.py:735",
+        "app/services/plate_client.py:764",
+        "app/services/plate_client.py:798",
+        "app/services/plate_client.py:826",
+        "app/services/plate_client.py:863",
+        "app/services/plate_client.py:935"
       ],
       "statuses": []
     },
@@ -1200,7 +1273,7 @@
     },
     "invalid_ref": {
       "sites": [
-        "app/services/plate_client.py:911"
+        "app/services/plate_client.py:914"
       ],
       "statuses": []
     },
@@ -1231,8 +1304,8 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:738",
-        "app/routers/projects.py:787"
+        "app/routers/projects.py:753",
+        "app/routers/projects.py:802"
       ],
       "statuses": [
         409
@@ -1273,7 +1346,7 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:692"
+        "app/routers/projects.py:707"
       ],
       "statuses": [
         409
@@ -1287,7 +1360,7 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:684"
+        "app/routers/projects.py:699"
       ],
       "statuses": [
         422
@@ -1495,12 +1568,12 @@
         "app/routers/project_promotions.py:329",
         "app/routers/project_tokens.py:62",
         "app/routers/project_tokens.py:79",
-        "app/routers/projects.py:99",
-        "app/routers/projects.py:123",
-        "app/routers/projects.py:402",
-        "app/routers/projects.py:575",
-        "app/routers/projects.py:725",
-        "app/routers/projects.py:776",
+        "app/routers/projects.py:101",
+        "app/routers/projects.py:125",
+        "app/routers/projects.py:409",
+        "app/routers/projects.py:590",
+        "app/routers/projects.py:740",
+        "app/routers/projects.py:791",
         "app/routers/report_definitions.py:151",
         "app/routers/report_definitions.py:155",
         "app/routers/report_definitions.py:174",
@@ -1601,7 +1674,7 @@
         "app/routers/carry.py:96",
         "app/routers/project_credentials.py:98",
         "app/routers/project_tokens.py:80",
-        "app/routers/projects.py:127",
+        "app/routers/projects.py:129",
         "app/services/project_promotion.py:89"
       ],
       "statuses": [
@@ -1870,8 +1943,8 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:169",
-        "app/routers/projects.py:433"
+        "app/routers/projects.py:171",
+        "app/routers/projects.py:440"
       ],
       "statuses": [
         409
@@ -1885,14 +1958,21 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:497"
+        "app/routers/projects.py:512"
       ],
       "statuses": [
         409
       ]
     },
     "project_role_readonly": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
       "sites": [
+        "app/routers/account_combos.py:245",
         "app/services/project_promotion.py:72",
         "app/services/zone.py:97"
       ],
@@ -1976,7 +2056,7 @@
       ],
       "sites": [
         "app/routers/project_credentials.py:81",
-        "app/routers/projects.py:567"
+        "app/routers/projects.py:582"
       ],
       "statuses": [
         409
@@ -2020,10 +2100,10 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:423",
-        "app/routers/projects.py:469",
-        "app/routers/projects.py:678",
-        "app/routers/projects.py:717"
+        "app/routers/projects.py:430",
+        "app/routers/projects.py:476",
+        "app/routers/projects.py:693",
+        "app/routers/projects.py:732"
       ],
       "statuses": [
         409
@@ -3041,6 +3121,8 @@
     "app/routers/access_tokens.py:593": "e.code",
     "app/routers/access_tokens.py:646": "e.code",
     "app/routers/access_tokens.py:685": "e.code",
+    "app/routers/account_combos.py:186": "e.code",
+    "app/routers/account_combos.py:349": "e.code",
     "app/routers/auth_sessions.py:290": "_msg or f\"account '{payload.username}' already exists for system '{payload.system}' in this environment\"",
     "app/routers/auth_sessions.py:410": "_msg or '更新冲突:同系统同环境已存在同名账户'",
     "app/routers/exec_configs.py:241": "e.code",
@@ -3069,7 +3151,7 @@
     "app/routers/services.py:819": "code",
     "app/routers/suites.py:352": "e.code",
     "app/routers/suites.py:601": "payload",
-    "app/services/plate_client.py:694": "resp.json().get('error', {}).get('code', 'plate_error')",
+    "app/services/plate_client.py:697": "resp.json().get('error', {}).get('code', 'plate_error')",
     "app/services/run_dispatcher.py:1146": "e.code",
     "app/services/run_dispatcher.py:1437": "e.code",
     "app/services/run_dispatcher.py:1475": "code",
@@ -3105,6 +3187,6 @@
     ],
     "int_codes_module": "app/routers/_codes.py",
     "note": "动态(非字面量)code 位点在 dynamic 面:取值由对应异常/helper 调用位点枚举,位点增删即契约变化;无码纯 message detail 不入面",
-    "scanned_files": 178
+    "scanned_files": 180
   }
 }

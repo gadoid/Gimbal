@@ -2157,7 +2157,9 @@ def test_0066_incremental_model_align():
                     "WHERE alias_name = 't66-ident'"))
 
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0066_incremental_model_align"
+            # head 钉随新头迁移前移(0067_account_combos 批;0066 自身
+            # 的终态断言在下方结构比对,不依赖 head 是谁)
+            assert _revision(sync_url) == "0067_account_combos"
 
             with eng.connect() as c:
                 assert _scope_fk_options(c) == {
@@ -2202,7 +2204,9 @@ def test_0066_fresh_chain_noop():
         command.upgrade(_cfg(sync_url), "0001_baseline")
         command.stamp(_cfg(sync_url), "0065_execution_row_run_error")
         command.upgrade(_cfg(sync_url), "head")
-        assert _revision(sync_url) == "0066_incremental_model_align"
+        # head 钉随新头前移(0067 批):0066 在 fresh 链空转、0067 另建
+        # 新表 —— 下方三断言仍只验 0066 的空转形态
+        assert _revision(sync_url) == "0067_account_combos"
         eng = create_engine(sync_url)
         try:
             with eng.connect() as c:
