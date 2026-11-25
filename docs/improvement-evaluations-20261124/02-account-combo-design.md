@@ -1,8 +1,9 @@
 # 账户组合（Account Combo）设计稿
 
-> **日期**：2026-11-25
-> **状态**：设计稿（待批准后按 §11 批次开工）
+> **日期**：2026-11-25（v2 同日评审修订）
+> **状态**：设计稿 v2 —— 外部评审主张全部经代码核实（三路只读探查，逐条处置见 §13）；待批准后按 §12 批次开工
 > **来源**：`01-02-config-and-preset-pool.md` 讨论线演化；含 `01-03 §5.3`（项目执行配置）的裁定承接
+> **评审**：`03-account-combo-design-review.md`（外部评审，2026-11-25 归档；其 file:line 主张已逐条对照代码核实——全部属实，个别位置语义有勘误，见 §13 末）
 > **关联**：01-03 §5 三项（场景行菜单 / 导入到项目 / 项目集成）已另行拍板，独立成批，不在本稿范围
 
 ---
@@ -20,7 +21,7 @@
 
 | 维度 | 事实 |
 |---|---|
-| 可选入口 | 仅 Runner 页一个下拉（`Runner.vue:233`）；场景/编排器运行弹框、套件、集成都选不了；令牌/图/临时执行携带即 409 |
+| 可选入口 | 仅 Runner 页一个下拉（`Runner.vue:231-239`）；场景/编排器运行弹框、套件、集成都选不了；令牌/图/临时执行携带即 409 |
 | 线上使用 | 库中 3 条配置、0 条默认；**300 次执行 0 次**带 `execConfigId`（后端只要选了就写快照，0 可信） |
 | 每次执行实际带的 | `serviceBindings` 300/300——"以谁的身份跑"的真正载体是运行方案 |
 | 页面史 | 11-18~11-19 两天六轮重设计（v2~v6，均有决策记录）；每轮后对象更窄：carry 写面退场 → 环境字段删除（0060）→ `aliases` 圈定"执行链不消费" → 项目池撤下 |
@@ -41,13 +42,16 @@
 | 3 | 应用组合 = 把内容**拷贝**进默认运行方案 `serviceBindings` | **推翻**：拷贝语义下组合一拷即逝，场景不"使用"组合；改为场景层**引用**绑定 |
 | 4 | 运行期临时选组合（每次执行挑） | **否决**：Runner 下拉形态已由 0 使用判死；每个运行入口不再加第三层身份选择 |
 | 5 | Ping All 迁服务注册页 | **不再需要**：管理页壳保留，Ping All 留家 |
+| 6 | 解析序三层表述「步骤直引 > 方案 > 组合」 | **修正（评审 §3.1）**：实测存在五个绑定装配面、各有显式覆盖层（请求级/图级/单元级）且面内合并序不一（图级实为最低层）；改为「组合 = 各面既有合并结果之下的基础层」+ 逐面装配点表（§3） |
+| 7 | 组合缺失时「解析回退裸键」措辞 | **改写（评审 §3.5）**：fail-closed 原意被误读的风险坐实——明确「组合/条目缺失 = 预检直接拦截报 `identity_combo_missing`，绝不以裸键继续执行」；条目校验复用 `validate_binding_aliases` 同基础服务闸 |
+| 8 | 「存为组合」收敛步骤直引 | **收回（评审 §4.2）**：同服务多步骤直引不同身份时收敛丢信息；改为只快照方案绑定层，直引服务显式列出、不自动收编 |
+| 9 | `accountCombo` 随整稿 PUT 保存 | **改道（评审 §3.6）**：编排器 2.5s 防抖全量 PUT（含 config）后写覆盖坐实、全仓无乐观锁；改为**服务端托管键**（PUT 恒剥、唯一写通道 = 专用绑定端点），整类并发覆盖消灭，不为此引入乐观锁 |
 
 **已拍板项**：
 
 - 组合为**引用语义**：场景绑定组合、执行时活引用；改动传播到所有引用场景（与注册表"改密一处、装载它的条目全体生效"同一条原则上提一层）。
-- 解析序：**步骤直引 > 方案 `serviceBindings`（按服务覆盖）> 组合条目（基础默认）**。
 - 存储**净路径**：新表 `account_combos`，旧 `exec_configs` 冻结不删（零数据迁移；退场走记录不走删除）。
-- 场景侧引用放 **`config` sidecar 键**（同 `service_scope` 家族，零迁移），不放运行方案列。
+- 场景侧引用放 **`config` sidecar 键**（同 `service_scope` 家族，零迁移），不放运行方案列；且为**服务端托管键**（见 §4.2）。
 - 项目执行配置**不恢复**前端（11-18 决策确认；其需求由组合 + 项目配置页签承接）。
 - 步骤卡声明式徽章 + 就地"新建即注册"保留立项（定位：步骤级覆盖 + 注册缺口就地补）。
 
@@ -60,20 +64,40 @@
         │ 基础默认                        │ 按服务覆盖
         └───────────┬────────────────────┘
                     ▼
-        身份解析序:步骤直引 > 方案绑定 > 组合条目
+   各执行面既有绑定合并(请求级/图级/单元级——面内现状不动)
                     ▼
-        身份条目(注册表) → 账户池(个人/项目) → 系统实例登录口 + authenticator → token → 完整执行
+        身份解析序(完整五层,见下)
+                    ▼
+        身份条目(注册表) → 账户池(credentialSource 链决定个人/项目) → 系统实例登录口 + authenticator → token → 完整执行
 ```
 
-三层各司其职：
+**解析序（v2，逐面核实后的完整表述）**：
 
-| 层 | 回答 | 复用性 |
+```
+步骤直引(call.user / ${auth.X.token} 徽章,粒度最细天然优先)
+  > 各执行面显式覆盖(单次请求 / 图级 / 单元级——面内现状保持不动)
+  > 运行方案 serviceBindings
+  > 账户组合条目(基础默认)
+  > 服务键自身(effective_alias 既有回落)
+```
+
+组合与各面的关系恒为 `merged = {**组合条目, **该面既有合并结果}`——组合**永远垫底**，不重排任何面内覆盖序。
+
+**绑定装配面实测表**（评审 §3.1 核实结论；行号为 2026-11-25 时点）：
+
+| 执行面 | 绑定装配点（实测） | 面内覆盖序 |
 |---|---|---|
-| **账户组合**（新对象） | 这类场景，各服务默认用哪个身份条目 | 跨场景；个人 / 项目共享 |
-| 运行方案 `serviceBindings` | 这个场景，某服务特例用谁 | 场景级覆盖 |
-| 步骤直引（徽章面） | 这一步特例用谁 | 步骤级，罕见 |
+| 单场景 JWT 运行 | dispatcher/prepare 直接消费请求 `serviceBindings`（前端按所选方案内联拼好；后端方案级仅进 `config_json` 溯源 `run_dispatcher.py:1650`） | 请求级（前端拼好） |
+| 单场景令牌运行 | `runs.py` `_apply_scheme_recipe`（:143-146）服务端整体覆写（令牌自带即拒） | 服务端方案覆写 |
+| 生效配置预览 | `routers/runs.py:387-395`（`/runs/preview`） | 请求级 > 方案 |
+| Suite 图 | `graph_dispatch.py:122-127`（方案级→单元级）、`:137-143`（图级→前两者） | 单元级 > 方案级 > 图级 |
+| 集成 | `integration_runner.py:463-479`（`_load_exec_shape` → `resolve_for_run`） | 方案级 |
+| Suite 直跑 | `suites.py:938-961`（`_req_from_scheme`，读**默认方案**） | 方案级 |
+| 查询取数 | `query_context.py:86-88`（**定义级**绑定、无 schemeId——v2 增补见 §7） | 定义级 |
 
-组合内容形状：`{ entries: [{service, alias}] }`——服务键 → **已登记**身份条目。不存 envId（条目自带环境）、不存账户（条目引用账户）、不存地址与明文。完全遵守"新注册或选已注册"原则；组合本身就是对注册表的引用集。
+**统一实现取轻形态**：单点助手 `combo_base(db, scenario_row) -> dict`（读 `config.accountCombo` → 组合 `payload.entries` → 存活性校验），各面在读取方案/定义绑定处加一次**垫底合并**；不建大一统 resolver 重排面内序。五面不接则漂移的风险由 §10 测试面的「五面同基础断言」钉死。
+
+组合内容形状：`{ entries: [{service, alias}] }`——服务键 → **已登记**身份条目。不存 envId（条目自带环境）、不存账户（条目引用账户）、不存地址与明文、不存凭证池（池由执行链既有 `credentialSource` 链决定，见 §6 池规则）。完全遵守"新注册或选已注册"原则；组合本身就是对注册表的引用集。
 
 ---
 
@@ -82,26 +106,45 @@
 ### 4.1 新表 `account_combos`（Alembic 0067）
 
 ```python
-id           PK
-scope        'user' | 'project'        # ExecConfig 的 (scope, scope_id) 同款先例,无 FK
-scope_id     int
-name         ≤64, unique(scope, scope_id, name)
-description  ≤2048
-is_default   bool                      # partial unique:每 (scope, scope_id) 至多一条
-             # 语义 = 「推荐默认」:新建场景时预选,不静默自动写入
-payload      JSONB: {"entries": [{"service": str, "alias": str}]}
-             # alias = ServiceIdentity.alias_name(必须已登记);一条一服务
+id            PK
+scope         'user' | 'project'      # ExecConfig 的 (scope, scope_id) 同款先例,无 FK
+scope_id      int
+name          ≤64, unique(scope, scope_id, name)
+description   ≤2048
+is_default    bool                    # partial unique:每 (scope, scope_id) 至多一条
+              # 语义 = 「推荐默认」:新建场景时预选,不静默自动写入
+payload       JSONB: {"entries": [{"service": str, "alias": str}]}
+              # alias = ServiceIdentity.alias_name(必须已登记);一条一服务
+revision      int, 初值 1,PATCH +1   # 溯源用(评审 §3.7);执行快照记录 id+name+revision
+updated_by_id int | None              # 项目组合多成员改动溯源
 created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 ```
 
+- 条目校验**复用** `validate_binding_aliases`（`service_aliases.py:327-352`：别名存在 ∧ 与服务键同基础服务，`binding_alias_unknown` / `binding_alias_mismatch` 同码族）——组合自身新增码只留形状/重复类（见 §5）。
 - 迁移纪律：增量升级门（快照链 `upgrade head` + 模型比对）+ 空库门 create_all 自动覆盖；部署前置 pg_dump（runbook 纪律，排备份窗口）。
 - 存量 `exec_configs` **冻结**：3 行数据原样、CRUD 端点冻结、重跑回放照常。
 
-### 4.2 场景侧引用键 `config.accountCombo`（platform sidecar，零迁移）
+### 4.2 场景侧引用键 `config.accountCombo`（platform sidecar，零迁移，**服务端托管**）
 
-- 形态：`config.accountCombo: <combo_id>`；与 `service_scope` / `var_locks` 同族：**plate 边界剥离**（`plate_client.py` sidecar 剥离清单加一键）。
+- 形态：`config.accountCombo: <combo_id>`；与 `service_scope` / `var_locks` 同族：**plate 边界剥离**（`plate_client.py:156` sidecar 剥离清单加一键）。
+- **服务端托管键**（v2，消灭自动保存并发覆盖类）：
+  - 唯一写通道 = `POST /api/scenarios/{sid}/account-combo`（§5）；整稿 PUT **恒剥** incoming 的 `accountCombo` 键并**保留存量值**（先例：`param_slots` 的 `not in model_fields_set` 保留分支 + `users` 明文闸"不许新增、保留存量"）；
+  - 编排器前端 draft 不携带该键（组合选择单独 ref 管理，走绑定端点）——2.5s 防抖全量 PUT（`CaseComposer.vue:361-389`）无论何时触发都不可能抹掉绑定；
+  - 由此**不引入乐观锁 / expectedUpdateTime**（场景 PUT 全仓 last-write-wins 为既有现状，本稿不为此扩栈；若要改走乐观锁须在批 1 前提出）。
 - 导出 bundle **不携带**；导入侧 precheck 决策清单加一行说明："原场景的组合引用不随包迁移，导入后请重新绑定"。
-- 保存闸（仿 `_service_scope_gate`）：组合不存在或当前用户不可读 → 422 `account_combo_not_found`（fail-fast 同 `service_scope_env_not_found` 先例）。
+- **`copy_scenario()` 恒剥**（v2，评审 §3.3 全采纳；先例 = `users`「副本=新建，恒剥」`scenario_store.py:716-725`）：七个调用方路径一律不带组合引用，副本重新绑定——
+
+| 复制路径 | 调用点 | 目标宿主 |
+|---|---|---|
+| 复制到我的 / 另存为 | `routers/scenarios.py:1122` | 跨属主 → 私有区 |
+| 发布到公共库 | `scenario_store.publish_copy`（:1006） | 公共项目（**公共场景天然无组合引用**） |
+| 分享拷贝 | `routers/shares.py:76` | 跨属主 → 私有区 |
+| Suite fork / 套件分享 / 适配副本 | `suite_copy.py:140` | 跨属主 |
+| 项目晋升 / 加入项目 | `project_promotion.py:418` | 同属主 → 目标项目 |
+| 引用转副本 | `share_ref_retire.py:77` | 跨属主 → 私有区 |
+| 变更适配「保存为副本」 | `adaptation_service.py:1886` | 跨属主 → 私有区 |
+
+- 绑定闸（专用端点上，仿 `_service_scope_gate` 的 fail-fast 先例）：组合不存在或当前用户不可读 → 422 `account_combo_not_found`（错误码状态分配见 §5 勘误）。
 
 ---
 
@@ -112,29 +155,46 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 | `GET /api/account-combos[?projectId]` | 个人 = 本人；项目 = 成员任一角色 | 列表按 scope 分组返回 |
 | `POST`（个人） | 任意登录用户 | |
 | `POST`（项目） | 项目可写角色（WRITER_ROLES） | |
-| `PATCH /{id}` | 同上写门 | 改名/描述/条目；逐条校验：alias 未登记或重复服务 → 422 `account_combo_entry_invalid` |
+| `PATCH /{id}` | 同上写门 | 改名/描述/条目；**条目逐条过 `validate_binding_aliases`**（别名未登记/异基础服务 → 422 复用既有码族；形状/重复服务 → 422 `account_combo_entry_invalid`）；`revision` +1、记 `updated_by_id` |
 | `POST /{id}/set-default` | 写门 | 换默认（旧默认自动摘除） |
-| `DELETE /{id}` | 写门 | **被引用时 409 `account_combo_in_use` + 引用场景清单**；不解绑不给删（不做静默悬空） |
-| `POST /api/scenarios/{sid}/account-combo` | 场景写闸（表 B write） | 管理页「应用到场景」的轻入口：`{comboId: int \| null}`；null = 解绑。**避免整稿 PUT**（非属主读面剥 `users` 的既有隐患面） |
+| `DELETE /{id}` | 写门 | **被引用时 409 `account_combo_in_use` + 引用场景清单**；不解绑不给删（不做静默悬空）；in-use 复核与删除**同事务** |
+| `POST /api/scenarios/{sid}/account-combo` | 场景写闸（表 B write）∧ 组合可读（本人/同项目成员） | 管理页「应用到场景」与编排器共用的轻入口：`{comboId: int \| null}`；null = 解绑。**避免整稿 PUT**（非属主读面剥 `users` 的既有隐患面 + §4.2 服务端托管） |
+
+**错误码状态分配（v2 勘误——原稿 §4.2 与 §5 自相矛盾，评审 §4.1 属实）**：
+
+- 组合**资源端点**（GET/PATCH/DELETE `/{id}`、set-default）命中不存在 → **404** `account_combo_not_found`；
+- **场景侧**绑定/保存闸引用了不存在或不可读的组合 → **422** `account_combo_not_found`（同码双态，face 决定 status）。
 
 错误码族全进契约快照（AST 提取 → `error-codes.json` → 前端 `errorCodes.ts`）：
-`account_combo_not_found`(404) / `account_combo_entry_invalid`(422) / `account_combo_in_use`(409) / `identity_combo_missing`(运行与预检侧，见 §6)。
+`account_combo_not_found`(404/422) / `account_combo_entry_invalid`(422) / `account_combo_in_use`(409) / `identity_combo_missing`(预检与执行侧，409，见 §6) / `query_identity_ambiguous`(查询侧，见 §7)。
+
+**审计与治理**（v2，评审 §3.7 采纳）：创建/修改/设默认/删除/绑定/解绑入既有审计流；编辑/删除前端先展示引用场景数与清单；`account_combos` 进**项目删除内容闸**（现四表 → 五表，`projects.py:473-495`）与项目详情资源计数。
 
 ---
 
-## 6. 执行链（唯一新增消费面，替换刚退役的 slot-map 死面）
+## 6. 执行链（组合 = 各面垫底层，fail-closed）
 
-1. **绑定组装合并**：`run_prepare`/dispatcher 从 scheme_payload 取 `serviceBindings` 处，先取组合基础图：
-   `merged = {**组合条目, **方案绑定}`（方案按服务覆盖组合）；步骤直引不受影响（粒度更细，天然优先）。
+1. **垫底合并**：各装配面（§3 表）在读取方案/定义绑定处调 `combo_base(db, scenario_row)` 垫底：`merged = {**组合条目, **该面既有合并结果}`；JWT 单场景在后端 prepare/dispatcher 权威合并（不依赖前端拼全）；令牌面在 `_apply_scheme_recipe` 之前垫底；预览面在 `runs.py:387-395` 合并处垫底。步骤直引不受影响（粒度更细，天然优先）。
 2. **环境不变**：组合条目 = 身份条目，自带环境标签 → `resolve_execution_tag` 原链照走。
-3. **预检**：组合被删/条目悬空 → 解析回退裸键 → 409 `identity_combo_missing`（归 `missing_credential` 族：修复自动恢复，集成实例暂停/复活钩子同模式）。
-4. **执行快照**：`config_json.serviceBindings` 从"存方案原值"改为**存合并终值**，另加 `accountComboId` 溯源键；重跑按既有原则吃快照终值。
-5. **查询取数同步**：`query_context.resolve_query_context` 的 `effective_alias` 用同一合并基础（查询视角 = 执行视角的既有裁定）。
+3. **预检 fail-closed（v2 措辞改写）**：组合被删（不应发生——删除有 in-use 闸，悬空仅来自竞态）或条目悬空（别名被注销）→ **409 `identity_combo_missing`（携带 comboId / service / 缺失 alias），绝不以裸键继续执行**；诊断面可展示回退解析结果，仅供修复定位，不用于执行。修复组合或重新绑定后自动恢复（同 `missing_credential` 族语义：集成实例暂停/复活钩子同模式）。
+4. **执行快照**：`config_json.serviceBindings` 存**合并终值**；溯源键 `accountComboId + accountComboName + accountComboRevision`（v2 增 name/revision，评审 §3.7）；重跑按既有原则吃快照终值。
+5. **查询取数同步**：`query_context.resolve_query_context` 用同一垫底基础（§7 v2 增补后含 schemeId）。
 6. **就绪预览/拨测**：组合的逐服务装载、地址矩阵、Ping All 复用既有解析器（`getSlotStatus` / 部署表 / Ping All 范式）。
 
+**池规则（v2 明确——评审 §3.2 的回答）**：**组合不引入任何新的池选择规则**。实测现状：场景在项目内 ≠ 自动用项目池；池由 `credentialSource` 显式链决定（缺省 = 执行人个人池；`"project"` 经 `can_use_project_credentials` 成员闸切场景所属项目池；两池互斥单源 `_pool_clause`，`run_prepare.py:120-134`；定值点 `run_dispatcher.py:1281-1310`）。组合条目只给 alias，池解析沿用该链——「绑定一次即完整可执行」由**就绪报告与预检**兜底（条目身份在当前执行池无账户 → `identity_combo_missing` / 就绪报告标黄显示池命中状态），不由组合硬性保证。就绪报告与执行快照显示 `credentialSource` 池命中（既有字段，不新增维度）。公共场景无组合引用（发布恒剥，§4.2）。
+
 ---
 
-## 7. 场景接入 UX
+## 7. 查询链（v2 扩充，评审 §3.4 全采纳）
+
+1. **方案感知**：rows 上下文增 `schemeId` 参数（前端传当前生效方案；缺省回落默认方案——与执行面 `resolve_for_run` 同款回落）。`resolve_query_context` 的绑定基础从「定义级」改为「schemeId 解析 + 组合垫底」，与执行同基础（查询视角 = 执行视角的既有裁定）。
+2. **步骤身份扫描补齐**：现前端只扫 headers `${auth.*}`（`CaseComposerCanvas.vue:1365-1371` `headerAuthTagOf`），不覆盖 `call.user` 直引；后端已有含 `call.user` 的扫描器 `auth_ref_scan.step_auth_refs`（`:39-41`）——查询链接线复用，前端 `headerAuthTagOf` 同步补 `call.user` 分支。
+3. **多身份不猜测**：同一步存在多个直接身份且无法唯一判定 → 422 `query_identity_ambiguous`，不取第一个。
+4. **池通道与缓存隔离**：查询凭证加载器 `_loader`（`query_views.py:40`）增 `cred_project_id` 通道（`_resolve_identities` 既有参数，`run_prepare.py:168-171`，现状查询链恒走个人池）；查询 L1 缓存键 `(name, ref, (owner_id, query_alias))`（`query_view_runner.py:390-395`）与单飞锁键增凭证池维度——个人池/项目池不串缓存。
+
+---
+
+## 8. 场景接入 UX
 
 **编排器配置页签「凭证与调用身份」区**：
 
@@ -147,21 +207,21 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 
 - **未使用组合**：现状不变（步骤直引 / 裸键裸跑、预检拦）——组合是可选增强，不强制；
 - **新建场景**：组合选择器把项目默认组合**预选**（不自动写），一键绑定即完整可执行——创建时与创建后是同一个动作；
-- **存为组合**：把当前逐服务生效选择（方案绑定 ∪ 直引收敛）快照成组合，归属个人或当前场景所属项目；
-- **切换/解除**：一步改引用，不动方案绑定与步骤；
+- **存为组合（v2 修订，评审 §4.2 采纳）**：**只快照方案绑定层**为组合条目；存在步骤直引的服务**单独列出**（「该服务的身份来自步骤级直引，不自动收进组合」），用户可显式为该服务手补一条组合条目；不自动覆盖、不自动收敛步骤身份；
+- **切换/解除**：一步改引用（走绑定端点），不动方案绑定与步骤；
 - **改动传播**：组合里换掉某服务的条目 → 所有绑定场景下次执行即生效；悬空由预检与徽章显形，不静默。
 
 ---
 
-## 8. 管理页（形式保留、语义旋转）
+## 9. 管理页（形式保留、语义旋转）
 
 `ExecConfigsView` 壳按净路径**改绑到组合端点**，形式不动：
 
 | 现形式 | 旋转后 |
 |---|---|
-| 左栏配置列表（仅个人） | 组合列表，**scope 分组（个人 / 我所在的项目）**；默认组合带标记 |
-| 逐服务节点卡（v6 已选列表 + 搜索加入） | 组合条目编辑（选已登记条目，就地显示装载坐标/解析账户） |
-| 「关联与就绪度」页签（地址矩阵 + 装载就绪 + **Ping All 留家**） | 语义 = "这套组合能否完整执行"的诊断面 |
+| 左栏配置列表（仅个人） | 组合列表，**scope 分组（个人 / 我所在的项目）**；默认组合带标记；编辑/删除前展示引用场景数与清单 |
+| 逐服务节点卡（v6 已选列表 + 搜索加入） | 组合条目编辑（选已登记条目，就地显示装载坐标/解析账户/**池命中状态**） |
+| 「关联与就绪度」页签（地址矩阵 + 装载就绪 + **Ping All 留家**） | 语义 = "这套组合能否完整执行"的诊断面（含 `credentialSource` 池命中列） |
 | 「生效预览」页签 | v1 = 「应用到场景」动作自带逐服务就绪报告；v2 再做"选场景预演应用结果" |
 | 换用为 / carry 覆盖面 | 退役（组合不含；carry 另有五张维护面） |
 | Runner 页下拉 | 移除 |
@@ -169,7 +229,7 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 
 ---
 
-## 9. 退场与登记
+## 10. 退场与登记
 
 - **执行配置**按 ADR-0003 纪律补退场行 + 详情小节：页面语义旋转、Runner 选择器移除、slot-map 换用面退役；**表/端点/链路冻结保留**（重跑回放依赖快照，不动）。
 - 01-02 原文五项待拍板的最终答案（同步回评估目录 README）：
@@ -184,28 +244,53 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 
 ---
 
-## 10. 测试面
+## 11. 测试面
 
-**后端**：组合 CRUD 门（项目角色矩阵）；条目校验（悬空/重复服务）；场景保存闸（组合不可读 422）；**解析序矩阵**（步骤直引 > 方案绑定 > 组合条目，三向钉）；删除被引用 409 带清单；预检 `identity_combo_missing`；快照存合并终值 + `accountComboId`；查询链同基础；`test_metadata_invariants` 钉 UtcDateTime；迁移门（增量 + 空库）。
+**后端**：组合 CRUD 门（项目角色矩阵）；条目校验（复用 `validate_binding_aliases`：悬空/异基础服务/重复服务）；场景绑定闸（组合不可读 422）；**解析序矩阵**（步骤直引 > 面内覆盖 > 方案 > 组合 > 服务键，五装配面各一钉：JWT 运行/令牌/预览/图/集成/Suite 直跑/查询）；删除被引用 409 带清单；预检 `identity_combo_missing` **fail-closed**（不裸键执行）；快照存合并终值 + `accountComboId/Name/Revision`；查询链同基础 + 非默认方案身份正确 + `call.user` 直引 + 多身份 `query_identity_ambiguous` + 个人/项目池缓存隔离；**服务端托管键**（incoming PUT 带异值 → 存量保留；模拟 auto-save 旧稿 PUT 不抹绑定）；**copy 恒剥**（七复制路径不带组合引用）；`revision`/审计/项目删除内容闸与资源计数含组合；`test_metadata_invariants` 钉 UtcDateTime；迁移门（增量 + 空库）。
 
-**前端**：组合选择器三态（未用/已用/来源徽章）；存为组合；管理页改绑冒烟；`accountCombo` sidecar 不进导出 bundle。
+**前端**：组合选择器三态（未用/已用/来源徽章）；存为组合（不收敛直引，直引服务显式列出）；管理页改绑冒烟；`accountCombo` sidecar 不进导出 bundle、不进编排器 draft。
 
 ---
 
-## 11. 实施批次
+## 12. 实施批次（v2 重排，评审 §5 采纳）
 
 | 批 | 内容 | 依赖 |
 |---|---|---|
-| **1 组合后端** | 表 0067 + CRUD 端点 + 场景 sidecar 保存闸 + 契约重生 | 备份窗口（迁移） |
-| **2 链消费** | 绑定合并 + 预检分类 + 快照终值 + 查询链同步 | 批 1 |
-| **3 编排器接入** | 使用组合选择器 + 逐服务来源视图 + 存为组合 + 应用轻端点 | 批 1 |
-| **4 管理页旋转** | 壳改绑新端点 + scope 分组 + 就绪/Ping All 复用 + Runner 下拉移除 + 导航改名 + ADR-0003 补录 | 批 1、3 |
+| **0 契约收口**（= 本稿 v2） | 解析序全表 / 池规则 / 跨区复制矩阵 / 查询上下文增补 / 错误码分配 成文定契 | —（已完成） |
+| **1 组合后端** | 表 0067（含 `revision`/`updated_by_id`）+ CRUD（复用 `validate_binding_aliases`）+ 审计 + 项目内容闸/资源计数 + 服务端托管键（PUT 剥离）+ 绑定端点 + copy 恒剥 + 契约重生 | 备份窗口（迁移） |
+| **2 全执行面接入** | `combo_base` 单点 + 五面垫底合并 + 预检 fail-closed + 快照终值（含 revision 溯源） | 批 1 |
+| **3 查询与跨区生命周期** | `schemeId` + `call.user` 扫描 + `query_identity_ambiguous` + 查询池通道与缓存隔离 | 批 1（可与批 2 并行） |
+| **4 前端旋转** | 管理页改绑 + scope 分组 + 就绪报告池命中 + 编排器选择器/存为组合（不收敛直引）+ Runner 下拉移除 + 导航改名 + ADR-0003 补录 | 批 1-3 |
 | **5 01-03 §5**（另行成批，与本稿并行） | 场景行菜单 + 导入到项目 + 项目集成（管理权表 B 收编）+ 非属主 PUT 加固 | 无 |
 
 ---
 
-## 12. 待过目默认项（不反对即按此执行）
+## 13. 评审主张逐条处置（2026-11-25 核实轮）
+
+评审稿（`03-account-combo-design-review.md`）全部代码主张经三路只读探查核实，处置如下：
+
+| 评审主张 | 核实结果 | 处置 |
+|---|---|---|
+| §3.1 五装配点漂移 / 建统一解析器 | **属实**（位置勘误见下；另核实 JWT 执行面方案级仅进溯源、绑定由前端内联，故"请求级覆盖"在 JWT 面已由前端拼好） | **采纳**——§3 装配面实测表 + `combo_base` 垫底合并；实现取轻形态，不建大一统 resolver；评审给出的线性优先级序按面内实测修正（图级实为最低层，非"请求级 > 方案"） |
+| §3.2 范围与凭证池归属 | **属实**（cred_project_id 定值在 `run_dispatcher.py:1281-1310`；查询链 owner-only；**但"场景在项目内 ≠ 自动用项目池"——池由 credentialSource 显式链决定**） | **部分采纳**——组合零池规则（§6）；公共场景无组合（发布恒剥）；"组合可见但池无账户"由就绪报告 + 预检显形兜底。评审的「个人组合只能用于私有场景」硬限制**不采纳**：与既有池架构冲突（项目场景今天缺省就用执行人个人池，方案绑定同语义），收紧与否列 §14 默认项 5 待过目 |
+| §3.3 copy_scenario 带走 accountCombo | **属实且更广**：copy 只剥 `users`，七个调用方全带走 config 其余键；publish/promotion 同属主也带；sidecar 键在跨区路径零处理先例 | **采纳**——恒剥（"副本=新建"先例，同 `users`），全七路径重新绑定；公共场景天然无组合 |
+| §3.4 查询缺 schemeId / call.user / 池缓存隔离 | **全属实**（query_context 定义级、无 schemeId；前端只扫 headers；缓存键无池维度；后端 `step_auth_refs` 已含 `call.user` 可直接复用） | **采纳**（§7 四点全收） |
+| §3.5 缺失须 fail-closed + 同基础服务校验 | 原设计已是 409 拦截但措辞可致误读；`validate_binding_aliases` 存在且两校验齐（`:327-352`） | **采纳**——措辞改写（§6.3）+ 条目校验复用该闸（§5） |
+| §3.6 绑定与自动保存并发 | **属实**：2.5s 防抖全量 PUT（含 config）、last-write-wins、全仓无乐观锁 | **采纳（改道）**——服务端托管键（PUT 恒剥 + 保留存量），并发覆盖类整体消灭；expectedUpdateTime 不引入（不为此扩栈），列 §14 默认项 4 |
+| §3.7 版本 / 审计 / 项目治理 | **属实**（项目删除内容闸仅四表 `projects.py:473-495`） | **采纳**——`revision` + `updated_by_id` + 六审计事件 + 引用清单前置展示 + 内容闸五表 + 资源计数 |
+| §4.1 错误码 422/404 不一致 | **属实**（v1 稿 §4.2 与 §5 自相矛盾） | **采纳**——资源端点 404 / 场景引用闸 422（§5） |
+| §4.2 存为组合收敛直引丢信息 | **属实**（同服务多步骤直引不同身份，收敛必丢） | **采纳**——只快照方案层，直引服务显式列出（§8） |
+| §5 批次重构 | — | **采纳**——批 0-4 重排（批 0 = 本稿 v2） |
+| §6 验收补充 | — | **采纳**——并入 §11 测试面 |
+
+**评审稿勘误记录**（不影响其结论方向）：所引路径少 `app/` 层；`_service_scope_gate` 在 `routers/scenarios.py:411` 非 scenario_store；`runs.py:392` 的方案/请求合并在 `/runs/preview` 端点，执行端点 JWT 分支不做服务端方案合并（前端内联）、令牌分支为服务端整体覆写。
+
+---
+
+## 14. 待过目默认项（不反对即按此执行）
 
 1. **净路径已定**：新表 `account_combos`，旧表冻结——若要走快路径（复用 `exec_configs` 零迁移），须在批 1 前提出；
 2. **项目默认组合 = 预选不自动写**：新建场景预选默认组合，落不落地用户点一下——静默自动绑定不做；
-3. **生效预览模拟 = v2**：v1 的「应用」自带逐服务就绪报告。
+3. **生效预览模拟 = v2**：v1 的「应用」自带逐服务就绪报告；
+4. **服务端托管键替代乐观锁**（v2 新增）：`accountCombo` 唯一写通道 = 绑定端点，整稿 PUT 恒剥保留——若要改走 `expectedUpdateTime` 乐观锁须在批 1 前提出；
+5. **个人组合允许绑定项目场景**（v2 新增）：池后果由就绪报告 + 预检显形（与方案绑定同语义）；评审建议的硬限制不采纳——若要收紧为「个人组合仅私有场景、项目组合仅同项目场景」须在批 1 前提出。
