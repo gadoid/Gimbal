@@ -5794,6 +5794,18 @@
             "title": "Builtinauthshadowed",
             "type": "array"
           },
+          "comboMissing": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Combomissing"
+          },
           "danglingEntryIds": {
             "items": {
               "type": "string"

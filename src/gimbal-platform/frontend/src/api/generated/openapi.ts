@@ -1147,6 +1147,7 @@ export interface PrecheckItem {
 export interface PrecheckResult {
   ambiguousAuths?: Array<unknown>
   builtinAuthShadowed?: Array<unknown>
+  comboMissing?: Record<string, unknown> | null
   danglingEntryIds?: Array<unknown>
   deadDatasetIds?: Array<unknown>
   envContext?: Record<string, unknown> | null

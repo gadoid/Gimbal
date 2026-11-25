@@ -268,6 +268,30 @@ async def _audit(db, user, action: str, combo: AccountCombo,
         resource_id=str(combo.id), resource_name=combo.name, detail=detail)
 
 
+async def _revive_after_combo_fix(
+    row: AccountCombo | None = None, *, project_id: int | None = None,
+    user_id: int | None = None,
+) -> None:
+    """组合修复/重绑 → 暂停集成实例 best-effort 复活(§6.3,同
+    missing_credential 族既有暂停/复活模式):复活 = idle + 下拍重试,
+    实例若仍缺凭证,预检自会再暂停 —— 与凭证补齐复活同语义;失败不
+    阻断写面。传组合行时按 scope 定维(个人 → 属主,项目 → 项目池
+    实例);重绑面传场景所在区。"""
+    from loguru import logger
+
+    if row is not None:
+        if row.scope == "project":
+            project_id = row.scope_id
+        else:
+            user_id = row.scope_id
+    try:
+        from ..services.integration_runner import revive_paused_instances
+        await revive_paused_instances(
+            user_id=user_id, project_id=project_id)
+    except Exception as e:  # noqa: BLE001 — 复活是增强,失败不阻断写面
+        logger.warning("account_combos: 组合修复复活集成实例失败: {}", e)
+
+
 # ── 组合资源端点 ─────────────────────────────────────────────────
 
 async def _view_rows(
@@ -410,6 +434,10 @@ async def patch_account_combo(
     await _audit(db, user, "account_combo.write", row, {
         "op": "update", "entriesChanged": entries_changed,
         **({"revisionBumpedTo": row.revision} if entries_changed else {})})
+    if entries_changed:
+        # 条目修复 → 该组合名下暂停实例复活(§6.3;触发面 = 组合治理
+        # 写,凭证补齐先例的对称半边)
+        await _revive_after_combo_fix(row)
     return (await _view_rows(db, [row]))[0]
 
 
@@ -530,6 +558,11 @@ async def bind_scenario_combo(
             action="account_combo.bind", resource_type="scenario",
             resource_id=scenario_id,
             detail={"op": "unbind", "comboId": had})
+        # 解绑即修复(§6.3):该场景所在区的暂停实例 best-effort 复活
+        # —— 项目场景 → 项目池实例;私有场景 → 属主持有实例
+        await _revive_after_combo_fix(
+            project_id=row.project_id,
+            user_id=row.owner_id if row.project_id is None else None)
         return {"comboId": None}
     combo = await db.get(AccountCombo, body.comboId)
     if (combo is None
@@ -563,4 +596,8 @@ async def bind_scenario_combo(
         resource_id=scenario_id,
         detail={"op": "bind", "comboId": combo.id,
                 "comboName": combo.name, "comboRevision": combo.revision})
+    # 重绑即修复(§6.3):同解绑面的复活定维
+    await _revive_after_combo_fix(
+        project_id=row.project_id,
+        user_id=row.owner_id if row.project_id is None else None)
     return await _bind_view(db, combo)

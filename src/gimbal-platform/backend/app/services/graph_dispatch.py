@@ -118,16 +118,28 @@ async def resolve_graph_units(
                      if isinstance(e, dict) and e.get("id") == eid), None)
                 if entry is not None:
                     composed = compose_injection_scenario(composed, entry)
+        # 账户组合垫底(§3.2 Suite 图面):取方案处合并 —— 图/单元级覆盖
+        # 自然在上;**无方案时组合也生效**(垫底层不依赖方案存在)。
+        # 引用服务 fail-closed 闸在下方 validate 循环(与既有绑定校验
+        # 同点位);派发面(dispatch_target)幂等重垫。
+        from . import account_combo as _ac
+        combo = await _ac.combo_base(db, scen)
+        _combo_b = ({s: {"alias": a} for s, a in combo.entries.items()}
+                    if combo.bound else {})
         unit = u
-        if scheme and scheme.get("serviceBindings"):
+        _scheme_b = (scheme.get("serviceBindings")
+                     if scheme and scheme.get("serviceBindings") else None)
+        if _scheme_b is not None or _combo_b:
             # 方案的服务绑定随行合入(单元级覆盖同名;存量形态剥离退役字段)
             from ..schemas.scenario_composer import scrub_retired_bindings
             unit = {**u, "serviceBindings": {
-                **scrub_retired_bindings(scheme.get("serviceBindings")),
+                **_combo_b,
+                **scrub_retired_bindings(_scheme_b or {}),
                 **(u.get("serviceBindings") or {})}}
         resolved.append({
             "unit": unit,
             "scenario_row": scen,
+            "combo": combo,
             "composed": composed,
             # 方案不携带环境链位(§8.2):环境解析走标签链单源
         })
@@ -241,6 +253,18 @@ async def materialize_graph(
     # 压平:两个单元给同一服务选不同别名时压平会后写覆盖先写。
     # 选的别名须存在且同基础服务。
     for r in resolved:
+        # 账户组合引用服务 fail-closed(§6.3):先于面内绑定校验,组合条目
+        # 悬空/组合行缺失 → GraphDispatchError(identity_combo_missing,
+        # 携带 comboId/service/alias);未引用服务的悬空条目不拦。
+        from . import account_combo as _ac
+        try:
+            await _ac.referenced_combo_gate(
+                db, r["combo"],
+                referenced_services((r["composed"] or {}).get("steps") or []))
+        except _ac.ComboIdentityMissing as e:
+            raise GraphDispatchError(
+                f"identity_combo_missing: 单元 {r['unit'].get('ref')}: "
+                f"{e.message} ({e.detail()})") from None
         try:
             await service_aliases.validate_binding_aliases(
                 db, unit_merged_bindings(graph_req, r["unit"]))

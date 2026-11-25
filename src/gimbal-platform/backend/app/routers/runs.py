@@ -140,9 +140,17 @@ async def _apply_scheme_recipe(
             db, scen.scenario_id, None)
     payload = (scheme.payload if scheme is not None else {}) or {}
     from ..schemas.scenario_composer import scrub_retired_bindings
+    # 账户组合垫底(§3.2 令牌面):**装载时合并** —— 覆写源本身 =
+    # {**组合, **方案};不可在覆写前垫请求(整体覆写会把垫底冲掉,
+    # 评审 2 §5.1 钉)。引用服务 fail-closed 在派发面(dispatch_target
+    # 单点,本函数不重复挂闸);派发面的 pad 幂等吸收重复合并。
+    from ..services import account_combo as _ac
+    _combo = await _ac.combo_base(db, scen)
     body.service_bindings = {
         k: ServiceBinding(**v) for k, v in
-        scrub_retired_bindings(payload.get("serviceBindings")).items()
+        _ac.pad_bindings(
+            scrub_retired_bindings(payload.get("serviceBindings")),
+            _combo).items()
     }
     body.data_set_ids = [str(x) for x in (payload.get("dataSetIds") or [])]
     body.data_set_selection = [
@@ -404,6 +412,22 @@ async def preview_effective_config(
         raise HTTPException(422, detail={
             "code": e.code, "message": e.message,
             "service": e.service, "alias": e.alias}) from None
+    # 账户组合垫底(§3.2 预览面):组合 < 方案 < 请求;校验分层(§6.3)
+    # —— 面内绑定(请求/方案)照原序全量校验(上方),组合只过**引用
+    # 服务** fail-closed(409 identity_combo_missing),未引用服务的
+    # 悬空条目不阻断预览。
+    from ..services import account_combo as _ac
+    from ..services.run_materialize import referenced_services
+    _combo = await _ac.combo_base(db, scen)
+    try:
+        await _ac.referenced_combo_gate(
+            db, _combo, referenced_services(
+                definition_from_payload(scen.payload or {}).get("steps") or []))
+    except _ac.ComboIdentityMissing as e:
+        raise HTTPException(409, detail={
+            "code": "identity_combo_missing", "message": e.message,
+            **e.detail()}) from None
+    bindings = _ac.pad_bindings(bindings, _combo)
     # 分层②:执行配置(显式选定或默认行;预览与执行同源)。区规则与
     # dispatch 同款:项目区 carry 覆盖仅显式(决策 9);绑定仅显式。
     _exec_cfg = None

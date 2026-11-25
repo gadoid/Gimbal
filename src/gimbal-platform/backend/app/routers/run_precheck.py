@@ -56,6 +56,10 @@ GATE_LOGIN_MISSING = "login_missing"          # 账户可解但实例登录口�
 GATE_IDENTITY_MISSING = "identity_missing"    # 身份条目未登记/悬空
 GATE_ACCOUNT_MISSING = "account_missing"      # 条目在、凭证池无账户
 GATE_ACCOUNT_AMBIGUOUS = "account_ambiguous"  # 多候选账户无同标签唯一命中
+# 账户组合(§6.3):组合行缺失(删除竞态)/ 引用服务的组合条目悬空
+# —— fail-closed,携带 comboId/service/alias 定位;修复组合或重绑后
+# 自动恢复(同 missing_credential 族)。
+GATE_IDENTITY_COMBO_MISSING = "identity_combo_missing"
 # 决策 1 圈定即承诺(阶段 1):生效执行配置的圈定集非空 = 白名单生效,
 # 换用后取用集 ⊄ 圈定集 → 硬拦(派发 409 / 定时 precheck_config 暂停)。
 GATE_IDENTITY_NOT_CIRCLED = "identity_not_circled"
@@ -63,7 +67,8 @@ GATE_IDENTITY_NOT_CIRCLED = "identity_not_circled"
 #: 凭证域码(定时路径暂停沿用 missing_credential —— 复活钩子自动恢复)
 _GATE_CREDENTIAL_CODES = frozenset({
     GATE_IDENTITY_MISSING, GATE_ACCOUNT_MISSING,
-    GATE_LOGIN_MISSING, GATE_ACCOUNT_AMBIGUOUS})
+    GATE_LOGIN_MISSING, GATE_ACCOUNT_AMBIGUOUS,
+    GATE_IDENTITY_COMBO_MISSING})
 
 
 class PrecheckGateError(Exception):
@@ -114,6 +119,9 @@ class PrecheckResult(BaseModel):
     # webhook v4 §5.3:令牌范围缺项(按 §3.3 分类:未授权 / 已删除);
     # 令牌路径自动以当前令牌预检,JWT 可传 tokenId 预检自己可管理的令牌
     scope_missing: list[dict] = Field(default_factory=list, alias="scopeMissing")
+    # 账户组合(§6.3):场景绑定的组合行缺失 / 引用服务条目悬空 →
+    # 派发 409 identity_combo_missing;None = 组合可用或未绑定
+    combo_missing: "dict | None" = Field(default=None, alias="comboMissing")
     # S8 收口:身份条目在执行人**个人池**未装载(与派发 fail-fast 同源
     # pick_bindings 取用差集;空 = 全部可取用)。歧义单列(复核收口
     # 同引用多候选无同标签唯一命中,执行将 409
@@ -285,6 +293,12 @@ async def _precheck_one(
     selection = payload.get("dataSetSelection") or []
     entry_ids = payload.get("injectionEntryIds") or []
     bindings = payload.get("serviceBindings") or {}
+    # 账户组合垫底(§3.2 预检面):与执行同基础 —— 方案 bindings 单源
+    # 合并后再进身份/标签/凭证判定(§9「预检与执行同基础」钉);
+    # 引用服务 fail-closed 报告在下方 token 段前。
+    from ..services import account_combo as _ac
+    _combo = await _ac.combo_base(db, scen)
+    bindings = _ac.pad_bindings(bindings, _combo)
 
     # ── 数据集存在性(方案引用 × 本场景名下)─────────────────────
     ds_ids = sorted({s.get("datasetId") for s in selection
@@ -382,6 +396,18 @@ async def _precheck_one(
             f"身份 {w['alias']} 的账户标签 #{w['accountEnvId']} 与执行标签"
             f" #{_env.env_id} 不同(凭证解耦,不拦截;执行期 401 自然暴露)"
             for w in _cls["cross_tag"])
+
+    # ── 账户组合(§6.3 UI 预检报告面)───────────────────────────────
+    # 组合行缺失/引用服务条目悬空 → combo_missing 信号(派发侧同码
+    # 409 identity_combo_missing;硬门与派发漏斗在 dispatch_target
+    # 单点,这里只出报告,不翻转 scheme_valid —— 组合不是方案本体)。
+    try:
+        await _ac.referenced_combo_gate(
+            db, _combo, referenced_services(
+                (definition_from_payload(raw_payload) or {}).get("steps")
+                or []))
+    except _ac.ComboIdentityMissing as e:
+        result.combo_missing = {"message": e.message, **e.detail()}
 
     # ── webhook v4 §5.3:令牌范围预检(缺项分类 + 范围外目标)─────
     if token is not None:
@@ -506,6 +532,7 @@ async def precheck_hard_gate(
     cred_project_id: "int | None" = None,
     env=None,
     circled: "frozenset[str] | set[str] | None" = None,
+    combo: "object | None" = None,
 ) -> dict:
     """§8.5 预检硬门(三路径共用唯一实现;run_dispatcher「不开第二份」
     原则):UI/JWT、access token 经派发漏斗,webhook 定时路径在
@@ -539,6 +566,19 @@ async def precheck_hard_gate(
         except EnvMixed as e:
             raise PrecheckGateError(GATE_ENV_MIXED, str(e),
                                     {"identities": e.entries}) from None
+    # ①b 账户组合(§6.3,批 2):**先于**身份分类 —— 组合行缺失/引用
+    # 服务条目悬空的根因在「组合」,码要给到能定位修复动作的面
+    # (detail 携带 comboId/service/alias);未引用服务的悬空条目
+    # 不拦(校验分层);条目在 → 沿用 identity/account 分类精度。
+    if combo is not None and combo.bound:
+        from ..services.run_materialize import referenced_services
+        try:
+            from ..services import account_combo as _ac
+            await _ac.referenced_combo_gate(
+                db, combo, referenced_services(definition.get("steps") or []))
+        except _ac.ComboIdentityMissing as e:
+            raise PrecheckGateError(
+                GATE_IDENTITY_COMBO_MISSING, e.message, e.detail()) from None
     # ② 身份/账户/登录口(先于 env_unspecified:悬空条目的根因是
     # 「条目未登记」而不是「标签不可解析」,错误码不给表象)。登录口
     # 判定收窄到登录态面(token 裸引/call.user)—— 静态令牌形态

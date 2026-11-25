@@ -412,7 +412,7 @@ def _canonical_json(x) -> str:
 def consent_fingerprint_of(
     scen_payload: dict, scheme_payload: dict, row_dict: dict,
     cron: str, alias_urls: dict, *, alias_creds: dict | None = None,
-    slot_bindings: dict | None = None,
+    slot_bindings: dict | None = None, combo: "dict | None" = None,
 ) -> str:
     """订阅知情同意的内容指纹(小设计 §2.2.1)。
 
@@ -455,6 +455,11 @@ def consent_fingerprint_of(
         # S5(D4):默认命中集合的取用绑定 id(换绑不同账号 = 订阅
         # 者应知情;模板属主池口径,同模板同指纹不变量保持)
         "slot_bindings": dict(slot_bindings or {}),
+        # 账户组合(§6.5):id+name+revision 显式入指纹 —— 绑定或**条目
+        # 变化**都触发非 owner 订阅者重新确认(知情同意覆盖「身份映射
+        # 来源变了」本身,而不仅是合并终值巧合相同;组合条目被方案全
+        # 覆盖时终值不变但来源变了,同样须确认)。未绑 = None。
+        "account_combo": dict(combo) if combo else None,
     }
     return hashlib.sha256(
         _canonical_json(projection).encode("utf-8")).hexdigest()
@@ -470,12 +475,24 @@ async def _load_exec_shape(
 
     方案选择段改调 :func:`scheme_store.resolve_for_run`(M1 归一:入站
     调用取方案走同一实现,不再留两份) —— 回落语义(跨场景/已删 →
-    默认 → 首个 → None)由它承载。"""
+    默认 → 首个 → None)由它承载。
+
+    账户组合垫底(§3.2 集成面,2026-11-25 批 2):返回**规范化
+    scheme_payload** —— 组合垫底后的合并终值写回该视图,
+    ``_template_env``/``_slot_bindings_of``/consent 指纹三面读同一份,
+    不再各垫各的(环境标签解析自动含组合身份,指纹自动含组合绑定)。"""
+    from . import account_combo as _ac
     from .run_prepare import find_dataset_by_id
     from .scheme_store import resolve_for_run
 
     scheme = await resolve_for_run(db, scen.scenario_id, scheme_id)
     scheme_payload = (scheme.payload if scheme else {}) or {}
+    combo = await _ac.combo_base(db, scen)
+    if combo.bound:
+        scheme_payload = {
+            **scheme_payload,
+            "serviceBindings": _ac.pad_bindings(
+                scheme_payload.get("serviceBindings") or {}, combo)}
     bindings = dict(scheme_payload.get("serviceBindings") or {})
     # P1 取一行:首个选中数据集的首行;未选 = 裸基线
     row_dict: dict = {}
@@ -621,9 +638,11 @@ async def consent_fingerprint_now(
         bindings)
     slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload,
                                             row_dict)
+    from . import account_combo as _ac
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
-        alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
+        alias_urls, alias_creds=hits, slot_bindings=slot_bindings,
+        combo=(await _ac.combo_base(db, scen)).fingerprint())
 
 
 async def refresh_consent(
@@ -652,9 +671,11 @@ async def consent_fingerprint_now_shape(
         bindings)
     slot_bindings = await _slot_bindings_of(db, tpl, scen, scheme_payload,
                                             row_dict)
+    from . import account_combo as _ac
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
-        alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
+        alias_urls, alias_creds=hits, slot_bindings=slot_bindings,
+        combo=(await _ac.combo_base(db, scen)).fingerprint())
 
 
 async def subscription_view(db, tpl: IntegrationTask) -> dict:
@@ -992,6 +1013,19 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             scheme, scheme_payload, bindings, row_dict, _ds_name = \
                 await _load_exec_shape(db, tpl.scheme_id, scen)
 
+            # 账户组合 fail-closed(§6.3):组合行缺失(删除有 in-use 闸,
+            # 仅竞态可达)→ 暂停 missing_credential 族(重绑或修复后
+            # 复活钩子恢复),绝不以裸键继续执行;条目悬空由下方预检硬门
+            # 归 identity_missing(同族)暂停。
+            from . import account_combo as _ac
+            _combo = await _ac.combo_base(db, scen)
+            if _combo.missing:
+                return await _finish(
+                    db, inst, tpl, "auth",
+                    f"场景绑定的账户组合 {_combo.combo_id} 已不存在 —— "
+                    "请重新绑定或解除绑定(实例暂停,修好后自动恢复)",
+                    pause_reason="missing_credential", lease=lease)
+
             # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
             # 不计入入库标准的预览执行不进集成链。external 不受影响
             # (working_preview 只看锚点系统的钉定状态)。调度路径与手动
@@ -1141,11 +1175,13 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                 hits = await credential_alias_hits(
                     db, definition_from_payload(scen.payload).get("steps") or [],
                     bindings)
+                from . import account_combo as _ac
                 fp = consent_fingerprint_of(
                     scen.payload, scheme_payload, row_dict,
                     tpl.trigger_cron, alias_urls, alias_creds=hits,
                     slot_bindings=await _slot_bindings_of(
-                        db, tpl, scen, scheme_payload, row_dict))
+                        db, tpl, scen, scheme_payload, row_dict),
+                    combo=(await _ac.combo_base(db, scen)).fingerprint())
                 if (inst.consent_fingerprint or "") != fp:
                     return await _pause_consent_changed(
                         db, inst, tpl,
@@ -1173,7 +1209,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     user_id=holder or -1, bindings=bindings,
                     cred_project_id=await instance_cred_project_id(
                         db, inst, tpl),
-                    env=tpl_env)
+                    env=tpl_env, combo=_combo)
             except PrecheckGateError as e:
                 _reason = ("missing_credential"
                            if e.code in _GATE_CREDENTIAL_CODES

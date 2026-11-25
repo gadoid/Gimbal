@@ -935,6 +935,24 @@ async def _run_orchestration(
             "mode": suite.mode, "units": n_units, "estimatedRuns": est}
 
 
+async def _pad_combo_req(db, scen, req: "RunRequest") -> "RunRequest":
+    """账户组合垫底(§3.2 Suite 面):**调用方**合并 —— _req_from_scheme
+    纯函数无 db 会话、签名不动,垫底在调用面;派发面(dispatch_target)
+    幂等重垫,此处保证 fanout 估算与执行同基础。"""
+    from ..schemas.scenario_composer import ServiceBinding
+    from ..services import account_combo as _ac
+
+    combo = await _ac.combo_base(db, scen)
+    if not combo.bound:
+        return req
+    req.service_bindings = {
+        k: ServiceBinding(**v) for k, v in _ac.pad_bindings(
+            {k: b.model_dump(by_alias=True)
+             for k, b in (req.service_bindings or {}).items()},
+            combo).items()}
+    return req
+
+
 def _req_from_scheme(
     scenario_id: str, scheme: dict, batch_id: str,
     *, credential_source: str | None = None,
@@ -1052,17 +1070,21 @@ async def run_suite(
         raise _in_flight_409(in_flight)
 
     batch_id = f"suite-{suite_id}-{runner_id}-{uuid4().hex[:12]}"
+    # 账户组合垫底(§3.2 Suite 直跑面):**调用方**合并(_pad_combo_req);
+    # 无方案(裸 RunRequest)时组合同样生效。
+    async def _combo_req(sid: str) -> RunRequest:
+        return await _pad_combo_req(
+            db, scen_rows[sid],
+            (_req_from_scheme(sid, default_schemes[sid], batch_id,
+                              credential_source=_cred_src)
+             if default_schemes[sid] is not None
+             else RunRequest(scenarioId=sid, batchId=batch_id)))
+
     plain: list[dict] = [
         {"scenarioId": sid, "req": None, "skip_reason": "scenario_not_found"}
         for sid in stale_ids
     ] + [
-        {
-            "scenarioId": sid,
-            "req": (_req_from_scheme(sid, default_schemes[sid], batch_id,
-                                     credential_source=_cred_src)
-                    if default_schemes[sid] is not None
-                    else RunRequest(scenarioId=sid, batchId=batch_id)),
-        }
+        {"scenarioId": sid, "req": await _combo_req(sid)}
         for sid in scen_rows
     ]
 
@@ -1341,7 +1363,9 @@ async def validate_suite(
             try:
                 fd, inj, _se, _sd = await run_dispatcher.compute_run_fanout(
                     db, scen.scenario_id, scen.payload,
-                    _req_from_scheme(m.scenario_id, scheme, "precheck"))
+                    await _pad_combo_req(
+                        db, scen,
+                        _req_from_scheme(m.scenario_id, scheme, "precheck")))
                 est += run_dispatcher.fanout_total(fd, inj)
             except Exception as e:  # noqa: BLE001 — 总量估算失败不拦预检
                 logger.warning("suites: 预检 fanout 总量估算失败,按 1 保守计:{}", e)

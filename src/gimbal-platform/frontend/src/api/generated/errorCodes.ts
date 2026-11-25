@@ -86,6 +86,7 @@ export const ERROR_CODES = {
   "holder_not_project_admin": true,
   "identity_ambiguous": true,
   "identity_base_mismatch": true,
+  "identity_combo_missing": true,
   "identity_missing": true,
   "identity_not_circled": true,
   "identity_not_registered": true,

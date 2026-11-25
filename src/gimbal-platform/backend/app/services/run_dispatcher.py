@@ -941,6 +941,16 @@ async def dispatch_target(
     # authz M2a S6:绑定校验先行(§8.2 标签解析要吃有效身份集合)
     _bindings = await _validated_bindings(db, req)
 
+    # 账户组合垫底(§3.2 JWT/派发面,后端权威——不依赖前端拼全):
+    # merged = {**组合, **请求};校验分层(§6.3)——请求绑定照原序全量
+    # 校验(上方),组合的分类硬拦走 _dispatch_precheck_gate(硬门单点,
+    # 派发/定时同门);条目全量校验在保存面。令牌面已在
+    # _apply_scheme_recipe 装载时合并(垫底幂等)。
+    from . import account_combo as _ac
+    _combo = await _ac.combo_base(db, target)
+    if _combo.bound:
+        _bindings = _ac.pad_bindings(_bindings, _combo)
+
     # §8.2 标签解析链(三路分流)+ §6.3 环境告警 → _resolve_execution_env
     env_choice, env_warnings, _project_id = await _resolve_execution_env(
         db, req, target=target, scenario_payload=scenario_payload,
@@ -996,7 +1006,7 @@ async def dispatch_target(
         scenario_payload=scenario_payload, user_id=user_id,
         bindings=_bindings, auth_aliases=auth_aliases,
         slot_map=_slot_map, cred_project_id=cred_project_id,
-        env=env_choice, circled=_circled)
+        env=env_choice, circled=_circled, combo=_combo)
 
     # M2b Q3 行级 @slot 账号列 fail-fast(含令牌范围核对)→ _resolve_row_bindings
     row_bindings_cfg = await _resolve_row_bindings(
@@ -1024,7 +1034,7 @@ async def dispatch_target(
             env_warnings=env_warnings,
             skipped_while_degraded=skipped_while_degraded,
             params_mode=_params_mode, skip_carry=_skip_carry,
-            chain=chain, trace=trace))
+            chain=chain, trace=trace, combo=_combo))
 
     # 执行配方入队,worker 认领驱动(spawn 进程内 fanout 不是执行路径)。
     # 配方是 dispatch 校验后的完整快照（worker 不回查请求上下文）；
@@ -1413,6 +1423,7 @@ async def _dispatch_precheck_gate(
     project_id: int | None, scenario_payload: dict, user_id: int,
     bindings: dict, auth_aliases: list, slot_map: dict,
     cred_project_id: int | None, env, circled,
+    combo: "object | None" = None,
 ) -> None:
     """M3 §8.5 预检硬门:三路径统一 —— UI/JWT、access
     token 都经本漏斗;判定与 /run/precheck 共用一套分类(run_precheck
@@ -1432,7 +1443,7 @@ async def _dispatch_precheck_gate(
             auth_aliases=auth_aliases,
             slot_map=slot_map or None,
             cred_project_id=cred_project_id, env=env,
-            circled=circled or None)
+            circled=circled or None, combo=combo)
     except PrecheckGateError as e:
         raise Conflict(e.code, e.message, extra=e.detail) from None
 
@@ -1613,6 +1624,7 @@ def _dispatch_config_json(
     slot_map: dict, exec_carry, circled, req_exec_id, env_choice,
     env_warnings, skipped_while_degraded, params_mode: bool,
     skip_carry: bool, chain: str, trace: dict | None,
+    combo: "object | None" = None,
 ) -> dict:
     """config_json 台账配方(纯装配):dispatch 校验后的终值快照逐键
     落档 —— 重跑(rerun)按此回放,worker 不回查请求上下文。
@@ -1635,7 +1647,9 @@ def _dispatch_config_json(
            if cred_project_id is not None else {}),
         # M2b Q3:行级账号覆盖({datasetId:rowIndex: {槽: 绑定 id}})
         **({"rowBindings": row_bindings_cfg} if row_bindings_cfg else {}),
-        # 服务键 → {alias}(S6;重跑按此回放)
+        # 服务键 → {alias}(S6;重跑按此回放)—— 账户组合垫底后的
+        # **合并终值**(§6.4):重跑按既有原则吃快照终值,不随组合后续
+        # 修改漂移
         "serviceBindings": bindings,
         # 执行指令快照:RunOptions 生成物 dump(snake_case 内层,
         # 与 RunScheme.options 同形)。旧平铺键 stepTo/nRuns/parallel
@@ -1648,6 +1662,13 @@ def _dispatch_config_json(
         "injectionEntryIds": req.injection_entry_ids,
         # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
         "schemeId": req.scheme_id,
+        # 账户组合溯源快照(§6.4):id+名称+修订号——serviceBindings 已是
+        # 合并终值,组合后续修改不漂移重跑;此块只做「当次用了哪版组合」
+        # 的台账定位
+        **({"accountComboId": combo.combo_id,
+            "accountComboName": combo.name,
+            "accountComboRevision": combo.revision}
+           if combo is not None and combo.bound else {}),
         # 分层④:执行配置终值快照 —— 重跑回放的依据(空 dict =
         # 当时无覆盖,与旧行缺键=回落默认链解析可区分);execConfigId
         # 为链路溯源(回放不回查该行)
