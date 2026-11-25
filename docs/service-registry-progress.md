@@ -2581,6 +2581,15 @@ scope 过滤保留)· 5173 实测(条目 `e2e-ref1` 直出 + 复制引用)。
     造形(`test_migrations._create_retired_tables`)不回退 0063 的
     carry 唯一键 —— 全量零漂移比对只在 `check_migration_drift.py` 的
     真实增量路径成立。
+  - **main push 全绿收口(2026-11-25,run 45566770127,🟢)**:fix/
+    core-wrapup @ 876bd0e7(慢机缓解 + 设计定稿文档提交)ff 合入 main
+    → `3e71a998` 并 push,plate-ci **push 触发全绿**(07:15:53→
+    07:22:05 UTC,6m12s;gate 25/25 步 —— pip-audit 供应链审计门与
+    平台 API 文档守卫均在 push 面首跑绿;frontend 8/8)。11-24 红面
+    `workbench.assembly.test.ts:103` 慢机 5s 超时未复现,修复生效;
+    **A4 销条**(见 TRANSITIONAL-REGISTRY)。残留:dast job 按
+    `if: workflow_dispatch` 设计 skip,首跑冒烟留用户侧一次 dispatch
+    (本机无 gh 凭证)。
 - **批次 4 快赢池(2026-11-23,🟢)**:
   - **run_launch TODO 收口**:`.txt`/`.text` 改走内容嗅探(txt 装
     json/yaml 本就常见),`_parse_text` 占位转防御性显式报错(真文本
