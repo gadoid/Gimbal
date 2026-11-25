@@ -20292,6 +20292,38 @@
               ],
               "title": "Stepindex"
             }
+          },
+          {
+            "in": "query",
+            "name": "schemeId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schemeid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "credentialSource",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Credentialsource"
+            }
           }
         ],
         "responses": {

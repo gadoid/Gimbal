@@ -483,9 +483,9 @@
         ]
       ],
       "sites": [
-        "app/routers/query_views.py:107",
-        "app/routers/query_views.py:111",
-        "app/routers/query_views.py:118"
+        "app/routers/query_views.py:149",
+        "app/routers/query_views.py:153",
+        "app/routers/query_views.py:160"
       ],
       "statuses": [
         422
@@ -668,7 +668,7 @@
     },
     "circuit_open": {
       "sites": [
-        "app/services/query_view_runner.py:414"
+        "app/services/query_view_runner.py:426"
       ],
       "statuses": []
     },
@@ -706,10 +706,17 @@
         [
           "code",
           "message"
+        ],
+        [
+          "code",
+          "msg"
         ]
       ],
       "sites": [
         "app/routers/integration.py:952",
+        "app/routers/query_views.py:133",
+        "app/routers/query_views.py:137",
+        "app/routers/query_views.py:141",
         "app/routers/runs.py:479",
         "app/routers/runs.py:487",
         "app/routers/suites.py:857",
@@ -836,8 +843,8 @@
     },
     "deployment_url_missing": {
       "sites": [
-        "app/services/query_context.py:98",
-        "app/services/query_context.py:104"
+        "app/services/query_context.py:129",
+        "app/services/query_context.py:135"
       ],
       "statuses": []
     },
@@ -933,7 +940,7 @@
     },
     "environment_mixed": {
       "sites": [
-        "app/services/query_context.py:96"
+        "app/services/query_context.py:127"
       ],
       "statuses": [
         409
@@ -1426,7 +1433,7 @@
     },
     "missing_required_params": {
       "sites": [
-        "app/services/query_view_runner.py:378"
+        "app/services/query_view_runner.py:388"
       ],
       "statuses": [
         422
@@ -2132,8 +2139,8 @@
         ]
       ],
       "sites": [
-        "app/routers/query_views.py:83",
-        "app/services/query_context.py:76"
+        "app/routers/query_views.py:105",
+        "app/services/query_context.py:86"
       ],
       "statuses": [
         422
@@ -2141,9 +2148,18 @@
     },
     "query_credential_required": {
       "sites": [
-        "app/services/query_view_runner.py:230",
-        "app/services/query_view_runner.py:240",
-        "app/services/query_view_runner.py:258"
+        "app/services/query_view_runner.py:237",
+        "app/services/query_view_runner.py:249",
+        "app/services/query_view_runner.py:267"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "query_identity_ambiguous": {
+      "sites": [
+        "app/routers/query_views.py:51",
+        "app/services/query_context.py:114"
       ],
       "statuses": [
         422
@@ -2151,7 +2167,7 @@
     },
     "query_not_safe": {
       "sites": [
-        "app/services/query_view_runner.py:381"
+        "app/services/query_view_runner.py:391"
       ],
       "statuses": [
         422
@@ -2377,7 +2393,7 @@
         "app/routers/runs.py:628",
         "app/services/integration_runner.py:696",
         "app/services/integration_runner.py:1005",
-        "app/services/query_context.py:70",
+        "app/services/query_context.py:80",
         "app/services/run_dispatcher.py:882"
       ],
       "statuses": [
@@ -2492,7 +2508,7 @@
     },
     "service_mismatch": {
       "sites": [
-        "app/services/query_view_runner.py:365"
+        "app/services/query_view_runner.py:375"
       ],
       "statuses": [
         422
@@ -2566,13 +2582,13 @@
     },
     "service_url_invalid": {
       "sites": [
-        "app/services/query_context.py:108"
+        "app/services/query_context.py:139"
       ],
       "statuses": []
     },
     "service_url_required": {
       "sites": [
-        "app/services/query_view_runner.py:385"
+        "app/services/query_view_runner.py:395"
       ],
       "statuses": [
         422
@@ -2582,7 +2598,7 @@
       "sites": [
         "app/services/query_view_runner.py:130",
         "app/services/query_view_runner.py:135",
-        "app/services/query_view_runner.py:321"
+        "app/services/query_view_runner.py:330"
       ],
       "statuses": []
     },
@@ -2640,7 +2656,7 @@
     },
     "step_service_required": {
       "sites": [
-        "app/services/query_context.py:83"
+        "app/services/query_context.py:93"
       ],
       "statuses": []
     },
@@ -2838,25 +2854,25 @@
     },
     "sut_auth_expired": {
       "sites": [
-        "app/services/query_view_runner.py:236",
         "app/services/query_view_runner.py:245",
-        "app/services/query_view_runner.py:268",
-        "app/services/query_view_runner.py:273",
-        "app/services/query_view_runner.py:313",
-        "app/services/query_view_runner.py:335"
+        "app/services/query_view_runner.py:254",
+        "app/services/query_view_runner.py:277",
+        "app/services/query_view_runner.py:282",
+        "app/services/query_view_runner.py:322",
+        "app/services/query_view_runner.py:344"
       ],
       "statuses": []
     },
     "sut_error": {
       "sites": [
-        "app/services/query_view_runner.py:316",
-        "app/services/query_view_runner.py:338"
+        "app/services/query_view_runner.py:325",
+        "app/services/query_view_runner.py:347"
       ],
       "statuses": []
     },
     "sut_unreachable": {
       "sites": [
-        "app/services/query_view_runner.py:310"
+        "app/services/query_view_runner.py:319"
       ],
       "statuses": []
     },
@@ -3103,7 +3119,7 @@
     },
     "unknown_view": {
       "sites": [
-        "app/services/query_view_runner.py:358"
+        "app/services/query_view_runner.py:368"
       ],
       "statuses": [
         404
@@ -3150,8 +3166,8 @@
     "app/routers/integration.py:888": "e.code",
     "app/routers/project_credentials.py:198": "_code",
     "app/routers/project_credentials.py:270": "_code if _msg else 'update_conflict'",
-    "app/routers/query_views.py:131": "e.code",
-    "app/routers/query_views.py:94": "e.code",
+    "app/routers/query_views.py:116": "e.code",
+    "app/routers/query_views.py:174": "e.code",
     "app/routers/run_schemes.py:60": "e.code",
     "app/routers/runs.py:271": "e.code",
     "app/routers/runs.py:322": "e.code",
@@ -3181,7 +3197,7 @@
       "app/services/integration_runner.py:385 IntegrationRunError",
       "app/services/plate_client.py:60 PlateRejectedError",
       "app/services/project_promotion.py:33 PromotionError",
-      "app/services/query_context.py:33 QueryContextError",
+      "app/services/query_context.py:35 QueryContextError",
       "app/services/query_view_runner.py:46 QueryViewError",
       "app/services/run_dispatcher.py:4033 NotFound",
       "app/services/run_dispatcher.py:4040 Conflict",

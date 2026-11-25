@@ -195,13 +195,19 @@ def drop_credential(owner_id: int, alias: str) -> None:
     """凭证重存/删除的复活钩子(auth_sessions 路由调用,§7.5 引导闭环):
     清缓存会话与 401 拉黑,下次查询重装凭证冷启登录一次(§6.2 口径不变)。
     修订 11:同步逐凭证清 L1 行集——重存的可能是不同 SUT 账号,旧凭证名下
-    的行集可见性已作废(他凭证缓存不误伤,§5.1)。"""
+    的行集可见性已作废(他凭证缓存不误伤,§5.1)。
+    §7.4(批 3):凭证键含池维 (owner, alias, pool) —— 凭证变化按前两维
+    **清全部池**(个人池与项目池同名条目同源同失效)。"""
     key = (owner_id, alias)
-    _cred_sessions.pop(key, None)
-    _cred_dead.discard(key)
-    # M2:键形 (name, ref, cred) —— 修订分量在中间,凭证分量取末位
+    for k in [k for k in _cred_sessions if k[:2] == key]:
+        _cred_sessions.pop(k, None)
+    for k in [k for k in _cred_dead if k[:2] == key]:
+        _cred_dead.discard(k)
+    # M2:键形 (name, ref, cred) —— 修订分量在中间,凭证分量取末位;
+    # 凭证分量 = (owner, alias, pool),按前两维清全部池
     _cache.drop_where(lambda ck: isinstance(ck, tuple) and len(ck) == 3
-                      and ck[2] == key)
+                      and isinstance(ck[2], tuple) and len(ck[2]) >= 2
+                      and ck[2][:2] == key)
 
 
 def _bump_breaker(name: str) -> None:
@@ -215,7 +221,8 @@ def _bump_breaker(name: str) -> None:
 async def _resolve_auth_header(
     view: dict, owner_id: int, query_alias: "str | None",
     load_credential: "Callable[[int, str], AuthSession | None | Awaitable[AuthSession | None]] | None",
-) -> "tuple[str | None, AuthSession | None, tuple[int, str] | None]":
+    cred_pool: "int | None" = None,
+) -> "tuple[str | None, AuthSession | None, tuple[int, str, int | None] | None]":
     """凭证闸(L3):串行化凭证解析与登录(防并发自踢);查询不在闸内 ——
     §6.2 单 session SUT 允许并发 HTTP。锁序(§5.2)view 锁外层 → 此闸内层。
 
@@ -231,7 +238,9 @@ async def _resolve_auth_header(
             "query_credential_required",
             f"{view.get('endpoint_id')} 需要查询凭证而 query_alias 缺席",
             status=422)
-    cred_key = (owner_id, query_alias)
+    # §7.4:cred_key 含池维(与 L1 cred_id 同形)——会话缓存/拉黑/锁
+    # 按池隔离,个人池与项目池同名条目互不串台
+    cred_key = (owner_id, query_alias, cred_pool)
     if cred_key in _cred_dead:
         raise QueryViewError(
             "sut_auth_expired",
@@ -350,6 +359,7 @@ async def fetch_rows(
     click_params: "dict[str, Any] | None" = None,
     service: "str | None" = None,
     ref: "str | None" = None,
+    cred_pool: "int | None" = None,
 ) -> RowsResult:
     """取一行集:L1 缓存 → 熔断 → 单飞锁 → 凭证闸 → SUT 查询 → 缓存回填。"""
     index = await fetch_query_view_index()
@@ -387,8 +397,10 @@ async def fetch_rows(
     # 修订 11:L1/单飞键 = (view, 查询凭证)——同视图异凭证
     # 各自缓存/单飞,权限视角不在缓存层串台(A 先查、B 不吃 A 的行集);
     # auth=none 视图无凭证分量(可见性与凭证无关,全局共享,§5.1)。
-    cred_id: "tuple[int, str] | None" = (
-        (owner_id, query_alias)
+    # 账户组合 §7.4(批 3):凭证分量加**池**维(owner, alias, pool)——
+    # 个人池/项目池同名条目不串缓存与单飞(缺省 pool=None = 个人池)。
+    cred_id: "tuple[int, str, int | None] | None" = (
+        (owner_id, query_alias, cred_pool)
         if view.get("auth") != "none" and query_alias is not None else None)
     # M2/4.7(D-9):取数属编排期行为,按场景生效修订 —— 修订不可变,
     # 进缓存键;缺省 working(与旧键同形,存量调用零变化)。
@@ -432,7 +444,8 @@ async def fetch_rows(
                                   cached=True, stale=False)
         try:
             header, session, cred_key = await _resolve_auth_header(
-                view, owner_id, query_alias, load_credential)
+                view, owner_id, query_alias, load_credential,
+                cred_pool=cred_pool)
             rows, truncated = await _query_sut(view, service_url, header,
                                                session, cred_key,
                                                click_params=click_params)

@@ -167,6 +167,7 @@ export const ERROR_CODES = {
   "public_project_protected": true,
   "query_context_required": true,
   "query_credential_required": true,
+  "query_identity_ambiguous": true,
   "query_not_safe": true,
   "regenerate_required": true,
   "report_definition_invalid": true,

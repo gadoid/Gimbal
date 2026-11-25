@@ -198,7 +198,7 @@ async def test_rows_params_passes_click_params(client, monkeypatch):
 
     async def fake_fetch(name, *, refresh, service_url, owner_id,
                          query_alias, load_credential, click_params=None,
-                         service=None):
+                         service=None, cred_pool=None):
         captured["click"] = click_params
         captured["service"] = service
         return run.RowsResult(name, [], False, "t", False, False)

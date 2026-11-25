@@ -30,15 +30,29 @@ router = APIRouter(prefix="/query-views", tags=["query-views"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
-def _loader(db: DbSession):
+def _loader(db: DbSession, cred_project_id: int | None = None):
     """凭证装载闭包:runner 在凭证闸内按需调用(黑名单键在它之前
     已降级 —— 绝不急切装载,保持"401 拉黑不打 DB"语义)。
 
     重构 + §8.3:``alias`` = 身份条目名 → 条目 ref → 账户(取用不
     校验标签 —— 同标签优先 → system 唯一;解不到 = None,与旧缺行
-    同语义)。"""
+    同语义)。
+
+    账户组合 §7.4(批 3):``cred_project_id`` 池通道(缺省 = 执行
+    身份个人池;项目场景 + credentialSource=project 经成员闸 →
+    项目池)—— 与执行链 ``_pool_clause`` 同源互斥口径;多候选账户
+    无唯一命中 → 422 ``query_identity_ambiguous``(不猜测,旧口径
+    静默降级 None 会误导成「凭证未配置」)。"""
     async def load(owner_id: int, alias: str) -> AuthSession | None:
-        picked, _miss, _amb = await _resolve_identities(db, owner_id, [alias])
+        picked, _miss, amb = await _resolve_identities(
+            db, owner_id, [alias], cred_project_id=cred_project_id)
+        if amb:
+            from app.services.query_view_runner import QueryViewError
+            raise QueryViewError(
+                "query_identity_ambiguous",
+                f"查询凭证 {alias!r} 命中多候选账户(同引用多行且无同"
+                "标签唯一命中),请调整条目环境标签或清理同名账户",
+                status=422)
         if not picked:
             return None
         resolved = await _materialize_identities(db, picked)
@@ -75,9 +89,17 @@ async def get_rows(
     # 二选一;都不给 → query_context_required)
     scenario_id: Annotated[str | None, Query(alias="scenarioId")] = None,
     step_index: Annotated[int | None, Query(alias="stepIndex", ge=0)] = None,
+    # 账户组合 §7.1(批 3):方案感知 —— 前端传当前生效方案;缺省回落
+    # 默认方案(resolve_for_run 同款);**未保存编辑态不参与** —— 后端
+    # 只认库中方案行,方案 dirty 提示是前端面(§12.6 口径)。
+    scheme_id: Annotated[str | None, Query(alias="schemeId")] = None,
+    # 账户组合 §7.4:凭证池通道(与执行链 credentialSource 同形);
+    # project → 成员闸后走场景所属项目池,缺省个人池(执行身份名下)。
+    credential_source: Annotated[str | None,
+                                 Query(alias="credentialSource")] = None,
 ) -> dict:
     # ── 地址来源(01-04):显式覆盖优先,上下文解析兜底,双缺拒绝 ──
-    ctx_owner_id, ctx_service = user.id, service
+    ctx_owner_id, ctx_service, ctx_pool = user.id, service, None
     if not service_url:
         if scenario_id is None or step_index is None:
             raise HTTPException(status_code=422, detail={
@@ -87,7 +109,7 @@ async def get_rows(
         try:
             ctx = await query_context.resolve_query_context(
                 db, user=user, scenario_id=scenario_id,
-                step_index=step_index)
+                step_index=step_index, scheme_id=scheme_id)
         except query_context.QueryContextError as e:
             raise HTTPException(
                 status_code=e.status,
@@ -99,6 +121,26 @@ async def get_rows(
         # (headers ${auth.<tag>} 引用就是该步执行身份的声明,前端解析)
         if query_alias is None:
             query_alias = ctx.query_alias
+        # 池通道(§7.4):project → 成员闸(can_use_project_credentials,
+        # 同执行链 S8;非成员/公共项目 422,不静默回落个人池——回落会
+        # 让查询打到错误账号的数据面)
+        if credential_source == "project":
+            from app.services.zone import can_use_project_credentials
+
+            ctx_pool = ctx.project_id
+            if not await can_use_project_credentials(
+                    db, user.id, ctx_pool):
+                raise HTTPException(status_code=422, detail={
+                    "code": "credential_source_invalid",
+                    "msg": "项目凭证只能用于你所在普通项目的场景"})
+        elif credential_source not in (None, "personal"):
+            raise HTTPException(status_code=422, detail={
+                "code": "credential_source_invalid",
+                "msg": "credentialSource 只能是 personal / project"})
+    elif credential_source not in (None, "personal", "project"):
+        raise HTTPException(status_code=422, detail={
+            "code": "credential_source_invalid",
+            "msg": "credentialSource 只能是 personal / project"})
     click: dict[str, Any] | None = None
     if params:
         try:
@@ -125,7 +167,8 @@ async def get_rows(
             name, refresh=refresh, service_url=service_url,
             owner_id=ctx_owner_id, query_alias=query_alias,
             service=ctx_service,
-            load_credential=_loader(db), click_params=click)
+            load_credential=_loader(db, ctx_pool), click_params=click,
+            cred_pool=ctx_pool)
     except query_view_runner.QueryViewError as e:
         raise HTTPException(status_code=e.status,
                             detail={"code": e.code, "msg": e.message}) from e
