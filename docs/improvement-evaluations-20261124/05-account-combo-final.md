@@ -2,7 +2,7 @@
 
 > **日期**：2026-11-25
 > **状态**：**定稿**（01-02 讨论线 → 设计稿 v1→v3 → 两轮外部评审，全部主张经代码逐条核实后收敛；演化与评审档案见 `02-account-combo-design.md` / `03` / `04`，本文为开工唯一依据）
-> **代码基线**：`fix/core-wrapup` @ 63d36379（2026-11-25；正文 file:line 为该时点）
+> **代码基线**：`origin/fix/core-wrapup` @ `876bd0e7`（远端可解析；2026-11-25。本地分支其后至本定稿的提交均为纯文档（`src/` 零变化），正文 file:line 对 876bd0e7 这棵树有效、可直接复核）
 > **关联**：01-03 §5 三项（场景行菜单 / 导入到项目 / 项目集成）另行成批（批 5），不在本稿范围
 
 ---
@@ -119,7 +119,13 @@
 | 预检 | `routers/run_precheck.py:287`（直读方案绑定——独立装配面） | 方案级 | 该处垫底，与执行同基础 |
 | 查询取数 | `query_context.py:86-88`（**定义级**绑定、无 schemeId） | 定义级 | schemeId 解析 + 垫底（§7.1） |
 
-**统一实现取轻形态**：单点助手 `combo_base(db, scenario_row) -> dict`（读 `config.accountCombo` → 组合 `payload.entries` → 存活性校验），各面按上表接法一次合并；**不建大一统 resolver** 重排面内序。八面漂移风险由 §9 测试面的「装配面同基础断言」钉死。
+**统一实现取轻形态**：单点助手 `combo_base(db, scenario_row) -> dict`——**只负责读取与映射**：读 `config.accountCombo` → 取组合 `payload.entries` → 返回 `{service: alias}`；组合行缺失（删除竞态）返回缺失信号，由调用面归 `identity_combo_missing`；**自身不做条目校验**。各面按上表接法一次合并；**不建大一统 resolver** 重排面内序。八面漂移风险由 §9 测试面的「装配面同基础断言」钉死。
+
+**校验职责分层**（与 §6.3 一致）：
+
+- **全量校验**只在两处——组合**保存面**（PATCH，`validate_binding_aliases`）与**就绪页展示**（§6.6）；
+- **执行/预检面**只按本场景实际引用的服务校验合并后的生效身份（§6.3）；
+- `combo_base()` 两个都不做——它是纯读取层，校验归属上面的面。
 
 ### 3.3 池归属
 
@@ -246,6 +252,8 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 
 ### 6.3 校验分层 + fail-closed
 
+`combo_base()` 只读映射、不校验（§3.2 校验职责分层）；校验范围按面分层：
+
 | 层 | 校验范围 |
 |---|---|
 | **保存期**（PATCH 组合） | 全量条目：存在、形状、服务不重复、同基础服务（§5.1） |
@@ -272,7 +280,7 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 
 ## 7. 查询链（与执行同基础）
 
-1. **方案感知**：rows 上下文增 `schemeId` 参数（前端传当前生效方案；缺省回落默认方案——与执行面 `resolve_for_run` 同款回落）；`resolve_query_context` 的绑定基础从「定义级」改为「schemeId 解析 + 组合垫底」（查询视角 = 执行视角的既有裁定）。
+1. **方案感知**：rows 上下文增 `schemeId` 参数（前端传当前生效方案；缺省回落默认方案——与执行面 `resolve_for_run` 同款回落）；`resolve_query_context` 的绑定基础从「定义级」改为「schemeId 解析 + 组合垫底」（查询视角 = 执行视角的既有裁定）。**未保存编辑态不参与查询解析**：后端只认库中方案行（`schemeId` 解析到已保存内容；跨场景/已删回落默认方案）——方案修改未保存时，查询按该方案的**上一次保存内容**解析；编排器在方案 dirty 时提示「查询按已保存版本解析，未保存修改不生效」，**不强制先保存**（与运行入口的 dirty-flush 口径不同：运行是写动作故先 flush，查询是读动作故只提示；要「查询前必须保存方案」的强一致口径见 §12.6）。
 2. **步骤身份扫描补齐**：现前端只扫 headers `${auth.*}`（`CaseComposerCanvas.vue:1365-1371` `headerAuthTagOf`），不覆盖 `call.user` 直引；后端已有含 `call.user` 的扫描器 `auth_ref_scan.step_auth_refs`（`:39-41`）——查询链接线复用，前端 `headerAuthTagOf` 同步补 `call.user` 分支。
 3. **多身份不猜测**：同一步存在多个直接身份且无法唯一判定 → 422 `query_identity_ambiguous`，不取第一个。
 4. **池通道与缓存隔离**：查询凭证加载器 `_loader`（`query_views.py:40`）增 `cred_project_id` 通道（`_resolve_identities` 既有参数，现状查询链恒走个人池）；查询 L1 缓存键 `(name, ref, (owner_id, query_alias))`（`query_view_runner.py:390-395`）与单飞锁键增凭证池维度——个人池/项目池不串缓存。
@@ -366,7 +374,7 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 1. **引用语义**（非拷贝）——拷贝语义组合一拷即逝，场景不"使用"组合；
 2. **净路径新表** `account_combos`，旧 `exec_configs` 冻结——不混淆两代语义，零数据迁移；
 3. **sidecar 键 + 服务端托管**——零迁移且消灭自动保存并发覆盖类（不用乐观锁）；
-4. **组合永远垫底**——五装配面各有覆盖层且合并序不一（图级实为最低层），不建大一统 resolver 重排面内序；
+4. **组合永远垫底**——八装配面各有覆盖层且合并序不一（图级实为最低层），不建大一统 resolver 重排面内序；
 5. **组合零池规则**——scope 管治理、credentialSource 管取账户，两维正交；
 6. **v1 硬同区绑定**——个人对象不进项目资产；跨 scope 松绑留待后续五条规则成文；
 7. **fail-closed + 校验分层**——执行只校验引用服务；错误码沿用既有分类精度；
@@ -382,4 +390,5 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 2. **项目默认组合 = 预选不自动写**：新建场景预选默认组合，落不落地用户点一下——静默自动绑定不做；
 3. **管理页 v1 无「应用到场景」**：应用入口 v1 只在编排器；管理页保留引用清单 + 跳转；
 4. **服务端托管键替代乐观锁**：`accountCombo` 唯一写通道 = 绑定端点，整稿 PUT 恒剥保留——若要改走 `expectedUpdateTime` 乐观锁须在批 1 前提出；
-5. **v1 硬同区规则**：个人组合仅本人私有场景、项目组合仅同项目场景、公共场景/公共项目零组合——若要 v1 即开放跨 scope（需补五条规则），须在批 1 前提出。
+5. **v1 硬同区规则**：个人组合仅本人私有场景、项目组合仅同项目场景、公共场景/公共项目零组合——若要 v1 即开放跨 scope（需补五条规则），须在批 1 前提出；
+6. **查询按已保存方案解析**：未保存的方案编辑态不参与查询（§7.1；前端 dirty 提示，不强制先保存）——若要「查询前必须保存方案」的强一致口径，须在批 3 前提出。
