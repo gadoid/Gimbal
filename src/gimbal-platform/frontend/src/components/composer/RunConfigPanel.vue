@@ -261,7 +261,7 @@
     <EffectivePreviewDialog
       :open="previewOpen"
       :scenario-id="previewScenarioId || undefined"
-      :scheme-id="selected && !selected.isDefault ? selected.schemeId : undefined"
+      :scheme-id="selected?.schemeId"
       :service-bindings="previewBindings"
       :env-names="previewEnvNames"
       :credential-source="projectId != null ? credentialSource : undefined"
@@ -311,8 +311,11 @@ const props = withDefaults(defineProps<{
   /** authz M2a S8:场景所属普通项目(项目区运行入口传入;非空 = 显示
    *  凭证来源切换,可选项目凭证) */
   projectId?: number | null
+  /** v4:与组合期动态取数共用凭证池选择;缺省个人池。 */
+  credentialSource?: 'personal' | 'project'
 }>(), {
   projectId: null,
+  credentialSource: 'personal',
   footer: true,
   scenario: null,
   dataSets: () => [] as DataSetSummary[],
@@ -333,8 +336,21 @@ const aliasNames = computed(() => aliasRows.value.map((a) => a.aliasName))
 /** 环境名映射源(§8.2 后无运行时环境选择,仅供预览 envNames 透传);
  *  列表不可达 → 预览环境名降级为「环境 #id」 */
 const envRows = ref<Array<{ id: number; name: string }>>([])
-/** authz M2a S8:凭证来源(项目区场景;缺省个人凭证,可切项目凭证) */
-const credentialSource = ref<'personal' | 'project'>('personal')
+/** authz M2a S8:凭证来源(项目区场景;缺省个人凭证,可切项目凭证)。 */
+const localCredentialSource = ref<'personal' | 'project'>(props.credentialSource)
+watch(() => props.credentialSource, (value) => {
+  localCredentialSource.value = value
+})
+watch(() => props.projectId, (value) => {
+  if (value == null) localCredentialSource.value = 'personal'
+})
+const credentialSource = computed({
+  get: () => props.projectId == null ? 'personal' as const : localCredentialSource.value,
+  set: (value: 'personal' | 'project') => {
+    localCredentialSource.value = value
+    emit('update:credentialSource', value)
+  },
+})
 onMounted(() => {
   import('@/api/environments').then(({ listEnvironments }) =>
     listEnvironments()).then((rows) => {
@@ -374,6 +390,10 @@ const emit = defineEmits<{
   ]
   /** 另存为方案(仅默认方案态):当前绑定与参数存为自建方案 */
   saveAsScheme: [body: Omit<SchemeV2, 'schemeId' | 'isDefault'>]
+  /** 当前选中方案:供组合期查询复用同一方案上下文。 */
+  'update:schemeId': [schemeId: string | null]
+  /** 当前凭证池:供组合期动态取数与运行请求共用。 */
+  'update:credentialSource': [credentialSource: 'personal' | 'project']
 }>()
 
 // ── 方案选择(spec §7 两路径)──────────────────────────────────
@@ -384,6 +404,8 @@ const selected = computed<SchemeV2 | null>(() =>
   ?? props.schemes[0] ?? null)
 
 function selectScheme(id: string) { selectedId.value = id }
+
+watch(selected, (scheme) => emit('update:schemeId', scheme?.schemeId ?? null), { immediate: true })
 
 // 深链预选(工作台「▶ 运行此方案」):initialSchemeId 在列表中 → 预选;
 // 选中项被删(宿主整表回填收缩)→ 回默认方案。
@@ -480,6 +502,8 @@ function onSaveAsScheme() {
   if (name === '默认方案') { toast.warning('「默认方案」为保留名'); return }
   emit('saveAsScheme', {
     name, dataSetSelection: [], injectionEntryIds: [],
+    ...(selected.value?.accountComboId != null
+      ? { accountComboId: selected.value.accountComboId } : {}),
     serviceBindings: assembleExplicitBindings(bindings.value, props.serviceRows),
     options: { ...EMPTY_RUN_OPTIONS,
                step_to: stepTo.value, n_runs: nRuns.value,

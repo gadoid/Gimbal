@@ -31,10 +31,11 @@ from .scenario_store import definition_from_payload
 
 KIND_TEMPLATE = "template"
 KIND_SNAPSHOT = "snapshot"
+KIND_SCHEME = "scheme"
+KIND_COMBO = "combo"
 
-# 面板列表行的「N 场景」计数口径:模板引用(真依赖),快照不进计数、
-# 只在面板里按 kind 展示。
-COUNTED_KINDS = frozenset({KIND_TEMPLATE})
+# 模板、方案绑定与组合条目都是运行依赖;快照只是卫生信号。
+COUNTED_KINDS = frozenset({KIND_TEMPLATE, KIND_SCHEME, KIND_COMBO})
 
 
 @dataclass
@@ -53,7 +54,35 @@ async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
 
     config.users 的键集合就是快照引用面(键名 = 身份条目名)。
     """
+    from ..models.account_combo import AccountCombo
+    from ..models.composer_run_scheme import ComposerRunScheme
+
     scenarios = (await db.execute(select(ComposerScenario))).scalars().all()
+    schemes = (await db.execute(select(
+        ComposerRunScheme.scenario_id, ComposerRunScheme.payload
+    ))).all()
+    combos = (await db.execute(select(
+        AccountCombo.id, AccountCombo.payload
+    ))).all()
+    combo_aliases = {
+        combo_id: [entry.get("alias") for entry in (payload or {}).get(
+            "entries", []) if isinstance(entry, dict)]
+        for combo_id, payload in combos
+    }
+    scheme_refs: dict[str, dict[str, set[str]]] = {}
+    for scenario_id, payload in schemes:
+        payload = payload or {}
+        refs = scheme_refs.setdefault(
+            scenario_id, {KIND_SCHEME: set(), KIND_COMBO: set()})
+        for binding in (payload.get("serviceBindings") or {}).values():
+            if isinstance(binding, dict) and isinstance(
+                    binding.get("alias"), str):
+                refs[KIND_SCHEME].add(binding["alias"])
+        combo_id = payload.get("accountComboId")
+        if isinstance(combo_id, int):
+            refs[KIND_COMBO].update(
+                alias for alias in combo_aliases.get(combo_id, [])
+                if isinstance(alias, str) and alias)
 
     by_alias: dict[str, list[ScenarioRef]] = {}
     per_scenario: dict[tuple[str, str], ScenarioRef] = {}
@@ -78,8 +107,13 @@ async def _scan_scenario_refs(db: AsyncSession) -> dict[str, list[ScenarioRef]]:
         if isinstance(users, dict):
             snapshot_aliases = [str(k) for k in users]
 
-        for kind, aliases in ((KIND_TEMPLATE, template_aliases),
-                              (KIND_SNAPSHOT, snapshot_aliases)):
+        refs = scheme_refs.get(row.scenario_id, {})
+        for kind, aliases in (
+            (KIND_TEMPLATE, template_aliases),
+            (KIND_SNAPSHOT, snapshot_aliases),
+            (KIND_SCHEME, refs.get(KIND_SCHEME, set())),
+            (KIND_COMBO, refs.get(KIND_COMBO, set())),
+        ):
             for a in aliases:
                 ref = per_scenario.get((a, row.scenario_id))
                 if ref is None:
@@ -222,13 +256,22 @@ _counts_cache: dict = {"fingerprint": None, "value": None}
 
 
 async def _counts_fingerprint(db: AsyncSession) -> tuple:
+    from ..models.account_combo import AccountCombo
+    from ..models.composer_run_scheme import ComposerRunScheme
+
     scen = (await db.execute(select(
         func.count(), func.max(ComposerScenario.updated_at)
     ).select_from(ComposerScenario))).one()
     idents = (await db.execute(select(
         func.count(), func.max(ServiceIdentity.updated_at)
     ).select_from(ServiceIdentity))).one()
-    return (scen, idents)
+    schemes = (await db.execute(select(
+        func.count(), func.max(ComposerRunScheme.updated_at)
+    ).select_from(ComposerRunScheme))).one()
+    combos = (await db.execute(select(
+        func.count(), func.max(AccountCombo.updated_at)
+    ).select_from(AccountCombo))).one()
+    return (scen, idents, schemes, combos)
 
 
 def reset_counts_cache_for_tests() -> None:

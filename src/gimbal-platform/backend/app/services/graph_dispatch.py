@@ -60,10 +60,12 @@ async def resolve_graph_units(
         payload = dict(scen.payload or {})
 
         # ── 约束 5:方案 + 单行选择 ──────────────────────────────
+        from .run_params import RAW_SCHEME_ID
+
         scheme: dict | None = None
         scheme_id = u.get("schemeId")
         row_spec = u.get("row")
-        if scheme_id is not None or row_spec is not None:
+        if scheme_id != RAW_SCHEME_ID:
             schemes = await scheme_store.list_schemes(db, u["scenarioId"])
             if scheme_id is not None:
                 scheme = next(
@@ -118,14 +120,12 @@ async def resolve_graph_units(
                      if isinstance(e, dict) and e.get("id") == eid), None)
                 if entry is not None:
                     composed = compose_injection_scenario(composed, entry)
-        # 账户组合垫底(§3.2 Suite 图面):取方案处合并 —— 图/单元级覆盖
-        # 自然在上;**无方案时组合也生效**(垫底层不依赖方案存在)。
-        # 引用服务 fail-closed 闸在下方 validate 循环(与既有绑定校验
-        # 同点位);派发面(dispatch_target)幂等重垫。
+        # 账户组合垫底(v4 §3.2 Suite 图面):只取该单元所选方案的组合,
+        # raw 不取;图/单元级覆盖自然在上。引用服务 fail-closed 闸在
+        # 下方 validate 循环,派发面幂等重垫。
         from . import account_combo as _ac
-        combo = await _ac.combo_base(db, scen)
-        _combo_b = ({s: {"alias": a} for s, a in combo.entries.items()}
-                    if combo.bound else {})
+        combo = await _ac.scheme_combo(db, scheme)
+        _combo_b = _ac.pad_bindings({}, combo)
         unit = u
         _scheme_b = (scheme.get("serviceBindings")
                      if scheme and scheme.get("serviceBindings") else None)
@@ -253,14 +253,14 @@ async def materialize_graph(
     # 压平:两个单元给同一服务选不同别名时压平会后写覆盖先写。
     # 选的别名须存在且同基础服务。
     for r in resolved:
-        # 账户组合引用服务 fail-closed(§6.3):先于面内绑定校验,组合条目
-        # 悬空/组合行缺失 → GraphDispatchError(identity_combo_missing,
-        # 携带 comboId/service/alias);未引用服务的悬空条目不拦。
+        # 账户组合引用服务 fail-closed(§6.3):只校验最终仍由组合供号的
+        # 服务;图级/单元级覆盖不连坐,组合行缺失仍无条件拒绝。
         from . import account_combo as _ac
         try:
             await _ac.referenced_combo_gate(
                 db, r["combo"],
-                referenced_services((r["composed"] or {}).get("steps") or []))
+                referenced_services((r["composed"] or {}).get("steps") or []),
+                unit_merged_bindings(graph_req, r["unit"]))
         except _ac.ComboIdentityMissing as e:
             raise GraphDispatchError(
                 f"identity_combo_missing: 单元 {r['unit'].get('ref')}: "

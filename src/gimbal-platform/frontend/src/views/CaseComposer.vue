@@ -174,6 +174,8 @@
               v-model:orchestration="orchestration"
               v-model:field-states="uiFieldStates"
               :scenario-id="savedScenarioId"
+              :scheme-id="runSchemeId"
+              :credential-source="runProjectId != null ? runCredentialSource : undefined"
               :plate-ref-of="plateRefOf"
               :service-kinds="serviceKinds"
               :auth-drafts="authDrafts"
@@ -278,9 +280,12 @@
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
       :project-id="runProjectId"
+      :credential-source="runCredentialSource"
       @close="closeRunDialog"
       @confirm="onRunConfirm"
       @save-as-scheme="onSaveAsScheme"
+      @update:scheme-id="runSchemeId = $event"
+      @update:credential-source="runCredentialSource = $event"
     />
   </div>
 </template>
@@ -522,6 +527,13 @@ const projectReadOnly = computed<boolean>(() => {
 /** 深链预选(方案工作台「▶ 运行此方案」,阶段③):?runScheme=rs-xxx 传入;
  *  关窗即清 — 深链语义是一次性的,再次从「运行」入口打开不复活旧预选。 */
 const initialSchemeId = ref<string | null>(null)
+/** 组合期查询复用的方案上下文;由运行面板当前选中项同步。 */
+const runSchemeId = ref<string | null>(null)
+/** 动态取数与运行请求共用的凭证池;离开普通项目上下文时回个人池。 */
+const runCredentialSource = ref<'personal' | 'project'>('personal')
+watch(runProjectId, (projectId) => {
+  if (projectId == null) runCredentialSource.value = 'personal'
+})
 function closeRunDialog() {
   runDialogOpen.value = false
   initialSchemeId.value = null

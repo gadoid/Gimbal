@@ -936,13 +936,19 @@ async def _run_orchestration(
 
 
 async def _pad_combo_req(db, scen, req: "RunRequest") -> "RunRequest":
-    """账户组合垫底(§3.2 Suite 面):**调用方**合并 —— _req_from_scheme
-    纯函数无 db 会话、签名不动,垫底在调用面;派发面(dispatch_target)
-    幂等重垫,此处保证 fanout 估算与执行同基础。"""
+    """账户组合垫底(v4 §3.2 Suite 面):只取 req 所选方案的组合;
+    _req_from_scheme 保持纯函数,派发面幂等重垫。"""
     from ..schemas.scenario_composer import ServiceBinding
-    from ..services import account_combo as _ac
+    from ..services import account_combo as _ac, scheme_store
+    from ..services.run_params import RAW_SCHEME_ID
 
-    combo = await _ac.combo_base(db, scen)
+    if req.scheme_id == RAW_SCHEME_ID:
+        return req
+    scheme = await scheme_store.resolve_for_run(
+        db, scen.scenario_id, req.scheme_id)
+    if scheme is None:
+        return req
+    combo = await _ac.scheme_combo(db, scheme.payload)
     if not combo.bound:
         return req
     req.service_bindings = {
@@ -1070,8 +1076,7 @@ async def run_suite(
         raise _in_flight_409(in_flight)
 
     batch_id = f"suite-{suite_id}-{runner_id}-{uuid4().hex[:12]}"
-    # 账户组合垫底(§3.2 Suite 直跑面):**调用方**合并(_pad_combo_req);
-    # 无方案(裸 RunRequest)时组合同样生效。
+    # 账户组合垫底(v4 §3.2 Suite 直跑面):默认方案的组合随请求合入。
     async def _combo_req(sid: str) -> RunRequest:
         return await _pad_combo_req(
             db, scen_rows[sid],

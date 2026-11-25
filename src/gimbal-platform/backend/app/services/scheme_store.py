@@ -55,6 +55,8 @@ def normalized(payload: dict | None) -> dict:
     # 的方案 wire 形状不变(不补 null 键)
     if p.get("environmentId") is not None:
         out["environmentId"] = p["environmentId"]
+    if isinstance(p.get("accountComboId"), int):
+        out["accountComboId"] = p["accountComboId"]
     return out
 
 
@@ -238,10 +240,12 @@ async def copy_schemes(
         .where(ComposerRunScheme.scenario_id == src_scenario_id)
     )).scalars().all()
     for r in rows:
+        payload = dict(r.payload or {})
+        payload.pop("accountComboId", None)
         db.add(ComposerRunScheme(
             scheme_id=await _next_scheme_id(db),
             scenario_id=dst_scenario_id, name=r.name,
-            is_default=r.is_default, payload=dict(r.payload or {}),
+            is_default=r.is_default, payload=payload,
         ))
 
 

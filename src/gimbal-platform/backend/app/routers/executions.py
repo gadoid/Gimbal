@@ -1015,9 +1015,17 @@ async def rerun_execution(
         _env_replay = ({"environmentId": cfg.get("environmentId"),
                         "environmentSource": cfg.get("environmentSource")}
                        if cfg.get("environmentId") is not None else None)
+        from ..services.account_combo import ComboBase
+        _combo_replay = (
+            ComboBase(cfg["accountComboId"],
+                      cfg.get("accountComboName") or "",
+                      cfg.get("accountComboRevision") or 1)
+            if cfg.get("accountComboId") is not None
+            else ComboBase(None, "", 0))
         return await run_dispatcher.dispatch_run(
             session, user_id=user.id, req=req, preloaded_scenario=scen,
             exec_replay=_exec_replay, env_replay=_env_replay,
+            combo_replay=_combo_replay,
         )
     except NotFound as e:
         raise HTTPException(

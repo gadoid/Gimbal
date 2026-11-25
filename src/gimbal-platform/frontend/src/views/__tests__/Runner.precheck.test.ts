@@ -11,7 +11,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Runner from '@/views/Runner.vue'
-import { listScenarioOptions, precheckRun } from '@/api/scenario-composer'
+import { listScenarioOptions, precheckRun, runScenario } from '@/api/scenario-composer'
 import type { PrecheckResult } from '@/api/scenario-composer'
 
 vi.mock('@/api/scenario-composer', async (importOriginal) => {
@@ -109,6 +109,35 @@ describe('Runner 预检行 · 内置凭证告警', () => {
     vi.mocked(precheckRun).mockResolvedValue([{ ...pc(), builtinAuthShadowed: undefined }])
     const w2 = await mountAndQueue()
     expect(w2.find('[data-testid="precheck-shadowed-0"]').exists()).toBe(false)
+  })
+})
+
+describe('Runner 预检行 · 账户组合 fail-closed', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.mocked(precheckRun).mockReset()
+    vi.mocked(runScenario).mockClear()
+  })
+
+  it('comboMissing 展示修复定位并阻止启动', async () => {
+    vi.mocked(precheckRun).mockResolvedValue([pc({
+      schemeValid: false,
+      comboMissing: {
+        comboId: 7,
+        service: 'svc',
+        alias: 'gone',
+        message: '组合 7 中服务 svc 的身份条目 gone 已注销',
+      },
+    })])
+    const w = await mountAndQueue()
+    const fatal = w.get('[data-testid="runner-combo-missing"]')
+    expect(fatal.text()).toContain('gone 已注销')
+    expect(w.get('[data-testid="runner-combo-missing"] + a').attributes('href'))
+      .toBe('/account-combos')
+    const launch = w.get('[data-testid="runner-launch"]')
+    expect(launch.attributes('disabled')).toBeDefined()
+    await launch.trigger('click')
+    expect(runScenario).not.toHaveBeenCalled()
   })
 })
 

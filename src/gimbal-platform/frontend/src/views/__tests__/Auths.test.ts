@@ -321,8 +321,9 @@ describe('Auths — 被引用列与反查侧板(重构 §1)', () => {
     // sc-1 = 本人 template 引用 → 预警在场;sc-2 = 他人快照 → 不计入
     const warn = document.body.querySelector('[data-testid="refs-block-warn"]')
     expect(warn).toBeTruthy()
-    expect(warn!.textContent).toContain('仍有 1 个本人场景引用')
+    expect(warn!.textContent).toContain('仍有 1 个本人场景存在运行依赖')
     expect(warn!.textContent).toContain('先解除身份条目的 ref')
+    expect(warn!.textContent).toContain('清理方案绑定/组合条目引用')
     w.unmount()
   })
 })

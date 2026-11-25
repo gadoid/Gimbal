@@ -166,7 +166,11 @@
                   <span v-if="item.precheck.danglingEntryIds.length" class="pc-fatal">
                     {{ item.precheck.danglingEntryIds.length }} 条注入条目悬空;
                   </span>
+                  <span v-if="item.precheck.comboMissing" class="pc-fatal" data-testid="runner-combo-missing">
+                    {{ item.precheck.comboMissing.message }}
+                  </span>
                   <span v-if="!item.precheck.schemeFound" class="pc-fatal">方案已被删除。</span>
+                  <a v-if="item.precheck.comboMissing" class="pc-fix" @click.stop href="/account-combos">去账户组合修复 ↗</a>
                   <a class="pc-fix" @click.stop :href="scenarioSchemesUrl(item.scenarioId)">去方案工作台修复 ↗</a>
                 </template>
               </div>
@@ -226,8 +230,8 @@
           </div>
           <div class="launch-actions">
             <!-- 执行配置下拉已退役(账户组合 §8.3/ADR-0003 #26):运行期
-                 换用载体 0 使用判死;「以谁的身份跑」由场景绑定(组合/方案)
-                 决定,Runner 不再提供第三层身份选择 -->
+                 换用载体 0 使用判死;「以谁的身份跑」由方案绑定
+                 (账户组合/显式别名)决定,Runner 不再提供第三层身份选择 -->
             <Button v-if="queue.length" variant="outline" size="sm" :disabled="launching"
               data-testid="runner-clear" @click="clearQueue">清空</Button>
             <Button size="sm" data-testid="runner-launch"
@@ -458,8 +462,8 @@ function applyPayload(selection: DataSetSelection[], opts: RunConfirmOpts) {
 const launching = ref(false)
 const launchProgress = ref('')
 
-// 执行配置下拉已退役(账户组合 §8.3):「以谁的身份跑」由场景绑定
-// (组合/方案)决定;Runner 不再加载配置列表,发起载荷恒不带
+// 执行配置下拉已退役(账户组合 §8.3):「以谁的身份跑」由方案绑定
+// (账户组合/显式别名)决定;Runner 不再加载配置列表,发起载荷恒不带
 // execConfigId(默认链自动占位)。
 
 onMounted(() => {

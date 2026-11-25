@@ -1,9 +1,9 @@
-"""账户组合批 1 后端测试面(账户组合设计方案 §9 批 1 子集,定稿 05)。
+"""账户组合批 1 后端测试面(账户组合设计方案 v4 §9 批 1 子集)。
 
 覆盖:CRUD 门与角色矩阵(v1 硬同区写门 = WRITER_ROLES,Admin 不旁路)、
-条目校验复用 binding_alias 族、revision 仅条目 +1、服务端托管键
-(整稿 PUT 恒剥保留/create 不收)、copy 恒剥、绑定同区矩阵、删除
-in-use 409、项目内容闸五表与资源计数、审计行落账。
+条目校验复用 binding_alias 族、revision 仅条目 +1、方案 payload
+accountComboId 往返/解绑不落键、遗留场景键清理、copy 恒剥、绑定
+同区矩阵、删除 in-use 409 带方案清单、项目内容闸与审计行落账。
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from app.models import User
 from app.models.project import Project, ProjectMember
 from app.models.service_identity import ServiceIdentity
 
+from .conftest import seed_identity_fixture
 from .helpers import make_draft, register_and_login, role_headers
 
 
@@ -55,10 +56,38 @@ async def _mk_scenario(client, headers, sid: str) -> None:
     assert r.status_code == 201, r.text
 
 
-async def _bind(client, headers, sid: str, combo_id) -> dict:
-    r = await client.post(
-        f"/api/scenarios/{sid}/account-combo",
-        json={"comboId": combo_id}, headers=headers)
+async def _schemes(client, headers, sid: str) -> list[dict]:
+    r = await client.get(
+        f"/api/scenarios/{sid}/run-schemes", headers=headers)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _scheme_body(scheme: dict, combo_id) -> dict:
+    return {
+        "name": scheme["name"],
+        "dataSetIds": scheme.get("dataSetIds") or [],
+        "dataSetSelection": scheme.get("dataSetSelection") or [],
+        "injectionEntryIds": scheme.get("injectionEntryIds") or [],
+        "serviceBindings": scheme.get("serviceBindings") or {},
+        "options": scheme.get("options") or {},
+        **({"accountComboId": combo_id} if combo_id is not None else {}),
+    }
+
+
+async def _bind(client, headers, sid: str, combo_id,
+                scheme_id: str | None = None):
+    listed = await client.get(
+        f"/api/scenarios/{sid}/run-schemes", headers=headers)
+    if listed.status_code != 200:
+        return listed
+    schemes = listed.json()
+    scheme = next((s for s in schemes if s["schemeId"] == scheme_id), None)
+    if scheme is None:
+        scheme = next((s for s in schemes if s["isDefault"]), schemes[0])
+    r = await client.put(
+        f"/api/scenarios/{sid}/run-schemes/{scheme['schemeId']}",
+        json=_scheme_body(scheme, combo_id), headers=headers)
     return r
 
 
@@ -104,6 +133,93 @@ async def test_combo_crud_roundtrip(client, fresh_db) -> None:
         f"/api/account-combos/{cid}", headers=h)).status_code == 204
     assert (await client.get(
         f"/api/account-combos/{cid}", headers=h)).status_code == 404
+
+
+async def test_combo_readiness_personal_pool_and_dangling(
+        client, fresh_db) -> None:
+    h = await register_and_login(client, "ac_ready")
+    async with db_module.SessionLocal() as db:
+        uid = (await db.execute(sa.select(User.id).where(
+            User.username == "ac_ready"))).scalar_one()
+        account_id = await seed_identity_fixture(
+            db, alias="ready-face", username="ready-user", password="p",
+            service="ready-svc", owner_id=uid, env_name="就绪环境")
+    r = await client.post("/api/account-combos", json={
+        "name": "就绪", "entries": [{"service": "ready-svc",
+                                     "alias": "ready-face"}]}, headers=h)
+    cid = r.json()["id"]
+    r = await client.get(f"/api/account-combos/{cid}/readiness", headers=h)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["credentialSource"] == "personal"
+    assert out["ready"] is True
+    assert out["environmentName"] == "就绪环境"
+    assert out["entries"][0]["poolStatus"] == "ok"
+    assert out["entries"][0]["accountId"] == account_id
+    assert out["addresses"][0]["resolved"] is True
+    assert out["addresses"][0]["deploymentId"] is not None
+
+    from app.models import AuthAccount, ServiceIdentity
+    async with db_module.SessionLocal() as db:
+        await db.execute(sa.delete(AuthAccount).where(
+            AuthAccount.id == account_id))
+        await db.commit()
+    out = (await client.get(
+        f"/api/account-combos/{cid}/readiness", headers=h)).json()
+    assert out["ready"] is False
+    assert out["entries"][0]["poolStatus"] == "missing"
+
+    async with db_module.SessionLocal() as db:
+        await db.execute(sa.delete(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "ready-face"))
+        await db.commit()
+    out = (await client.get(
+        f"/api/account-combos/{cid}/readiness", headers=h)).json()
+    assert out["entries"][0]["poolStatus"] == "missing"
+    assert out["entries"][0]["system"] is None
+    assert (await client.get(
+        f"/api/account-combos/{cid}/readiness",
+        params={"credential_source": "project"}, headers=h)).status_code == 422
+
+
+async def test_combo_readiness_project_pool_is_explicit(client, fresh_db) -> None:
+    h = await register_and_login(client, "ac_ready_admin")
+    h_member = await register_and_login(client, "ac_ready_member")
+    pid = await _mk_project("就绪项目", members={
+        "ac_ready_admin": "admin", "ac_ready_member": "user"})
+    async with db_module.SessionLocal() as db:
+        uid = (await db.execute(sa.select(User.id).where(
+            User.username == "ac_ready_admin"))).scalar_one()
+        account_id = await seed_identity_fixture(
+            db, alias="project-ready-face", username="project-ready-user",
+            password="p", service="project-ready-svc", project_id=pid,
+            env_name="项目就绪环境")
+    r = await client.post("/api/account-combos", json={
+        "name": "项目就绪", "scope": "project", "projectId": pid,
+        "entries": [{"service": "project-ready-svc",
+                     "alias": "project-ready-face"}]}, headers=h)
+    assert r.status_code == 201, r.text
+    cid = r.json()["id"]
+    out = (await client.get(
+        f"/api/account-combos/{cid}/readiness", headers=h)).json()
+    assert out["credentialSource"] == "project"
+    assert out["projectId"] == pid
+    assert out["poolName"] == "就绪项目"
+    assert out["ready"] is True
+    assert out["entries"][0]["accountId"] == account_id
+    assert out["canProbeCredentials"] is True
+    out = (await client.get(
+        f"/api/account-combos/{cid}/readiness", headers=h,
+        params={"credential_source": "personal"})).json()
+    assert out["ready"] is False
+    assert out["entries"][0]["poolStatus"] == "missing"
+    r = await client.get(
+        f"/api/account-combos/{cid}/readiness", headers=h_member)
+    assert r.status_code == 200, r.text
+    member_out = r.json()
+    assert member_out["entries"][0]["poolStatus"] == "ok"
+    assert member_out["entries"][0]["accountUsername"] == "••••"
+    assert member_out["canProbeCredentials"] is False
 
 
 async def test_combo_entry_validation(client, fresh_db) -> None:
@@ -281,8 +397,9 @@ async def test_default_atomic_swap(client, fresh_db) -> None:
             if c["isDefault"]][0]["revision"] == 1
 
 
-async def test_bind_read_channel_and_managed_key(client, fresh_db) -> None:
-    """读取通道 + 服务端托管键(整稿 PUT 恒剥保留,§4.2)。"""
+async def test_scheme_binding_roundtrip_and_legacy_key_cleanup(
+        client, fresh_db) -> None:
+    """accountComboId 经方案写面往返;解绑不落 null;场景遗留键恒剥。"""
     h = await register_and_login(client, "ac_bind")
     await _seed_identity("fin-qa1", "fin")
     await _mk_scenario(client, h, "sc-bind")
@@ -291,47 +408,61 @@ async def test_bind_read_channel_and_managed_key(client, fresh_db) -> None:
                                      "alias": "fin-qa1"}]}, headers=h)
     cid = r.json()["id"]
 
-    # 未绑定时读取通道 → comboId null
-    r = await client.get("/api/scenarios/sc-bind/account-combo", headers=h)
-    assert r.status_code == 200 and r.json()["comboId"] is None
-
+    scheme = (await _schemes(client, h, "sc-bind"))[0]
+    assert "accountComboId" not in scheme
     r = await _bind(client, h, "sc-bind", cid)
     assert r.status_code == 200, r.text
-    assert r.json() == {"comboId": cid, "name": "组合A", "scope": "user",
-                        "revision": 1,
-                        "entries": [{"service": "fin", "alias": "fin-qa1"}]}
-    # 读取通道恢复显示(comboId + 名称/revision/条目摘要)
-    r = await client.get("/api/scenarios/sc-bind/account-combo", headers=h)
-    assert r.json()["comboId"] == cid and r.json()["name"] == "组合A"
+    assert r.json()["accountComboId"] == cid
+    assert (await _schemes(client, h, "sc-bind"))[0]["accountComboId"] == cid
 
-    # 模拟 auto-save 整稿 PUT(不带键)→ 绑定不被抹掉
+    # 场景 auto-save 物理上不碰方案绑定。
     r = await client.put("/api/scenarios/sc-bind",
                          json=make_draft("sc-bind"), headers=h)
     assert r.status_code == 200, r.text
-    r = await client.get("/api/scenarios/sc-bind/account-combo", headers=h)
-    assert r.json()["comboId"] == cid
+    assert (await _schemes(client, h, "sc-bind"))[0]["accountComboId"] == cid
 
-    # 整稿 PUT 带**异值** accountCombo → 恒剥,存量保留(§9 托管键钉)
+    # v3 遗留场景键在 create/update 两侧都被清理,不再形成第二引用面。
     draft = make_draft("sc-bind")
     draft["definition"]["config"]["accountCombo"] = 999999
     r = await client.put("/api/scenarios/sc-bind", json=draft, headers=h)
     assert r.status_code == 200, r.text
-    r = await client.get("/api/scenarios/sc-bind/account-combo", headers=h)
-    assert r.json()["comboId"] == cid
-
-    # create 面同样不收(导入/新建防走私)
+    saved = await client.get("/api/scenarios/sc-bind/draft", headers=h)
+    assert saved.status_code == 200, saved.text
+    assert "accountCombo" not in saved.json()["definition"]["config"]
     draft2 = make_draft("sc-smuggle")
     draft2["definition"]["config"]["accountCombo"] = cid
     r = await client.post("/api/scenarios", json=draft2, headers=h)
     assert r.status_code == 201, r.text
-    r = await client.get("/api/scenarios/sc-smuggle/account-combo", headers=h)
-    assert r.json()["comboId"] is None
+    saved = await client.get("/api/scenarios/sc-smuggle/draft", headers=h)
+    assert saved.status_code == 200, saved.text
+    assert "accountCombo" not in saved.json()["definition"]["config"]
 
-    # 解绑 → null(再解绑幂等)
     r = await _bind(client, h, "sc-bind", None)
-    assert r.status_code == 200 and r.json()["comboId"] is None
+    assert r.status_code == 200 and "accountComboId" not in r.json()
     r = await _bind(client, h, "sc-bind", None)
-    assert r.json()["comboId"] is None
+    assert r.status_code == 200 and "accountComboId" not in r.json()
+
+
+async def test_scheme_scoped_bindings(client, fresh_db) -> None:
+    """同一场景的 N 个方案各绑一个组合,复制/解绑互不影响。"""
+    h = await register_and_login(client, "ac_multi")
+    await _mk_scenario(client, h, "sc-multi")
+    ids = []
+    for name in ("开发组合", "测试组合"):
+        r = await client.post("/api/account-combos", json={
+            "name": name}, headers=h)
+        assert r.status_code == 201, r.text
+        ids.append(r.json()["id"])
+    default = next(s for s in await _schemes(client, h, "sc-multi")
+                   if s["isDefault"])
+    r = await client.post("/api/scenarios/sc-multi/run-schemes", headers=h,
+                          json={"name": "测试方案", "accountComboId": ids[1]})
+    assert r.status_code == 201, r.text
+    second = r.json()["schemeId"]
+    assert (await _bind(client, h, "sc-multi", ids[0])).status_code == 200
+    by_id = {s["schemeId"]: s for s in await _schemes(client, h, "sc-multi")}
+    assert by_id[default["schemeId"]]["accountComboId"] == ids[0]
+    assert by_id[second]["accountComboId"] == ids[1]
 
 
 async def test_bind_zone_matrix(client, fresh_db) -> None:
@@ -409,7 +540,7 @@ async def test_bind_zone_matrix(client, fresh_db) -> None:
 
 
 async def test_copy_strips_binding(client, fresh_db) -> None:
-    """copy 恒剥(§4.3):副本不携带组合引用;原件不动。"""
+    """copy_schemes 单点恒剥(§4.3):副本方案不带组合引用;原件不动。"""
     h = await register_and_login(client, "ac_copy")
     await _seed_identity("fin-qa1", "fin")
     await _mk_scenario(client, h, "sc-copy")
@@ -421,12 +552,9 @@ async def test_copy_strips_binding(client, fresh_db) -> None:
     r = await client.post("/api/scenarios/sc-copy/copy", headers=h)
     assert r.status_code == 201, r.text
     copy_sid = r.json()["meta"]["scenarioId"]
-    r = await client.get(f"/api/scenarios/{copy_sid}/account-combo",
-                         headers=h)
-    assert r.status_code == 200 and r.json()["comboId"] is None
-    # 原件绑定不动
-    r = await client.get("/api/scenarios/sc-copy/account-combo", headers=h)
-    assert r.json()["comboId"] == cid
+    copied = await _schemes(client, h, copy_sid)
+    assert copied and all("accountComboId" not in s for s in copied)
+    assert (await _schemes(client, h, "sc-copy"))[0]["accountComboId"] == cid
 
 
 async def test_delete_in_use_and_reference_count(client, fresh_db) -> None:
@@ -445,12 +573,14 @@ async def test_delete_in_use_and_reference_count(client, fresh_db) -> None:
     # 引用计数 1
     out = (await client.get("/api/account-combos", headers=h)).json()
     assert out["personal"][0]["referenceCount"] == 1
-    # 被引用删除 → 409 + 场景清单(§5.1 不解绑不给删)
+    # 被引用删除 → 409 + 方案及所属场景清单(§5.1 不解绑不给删)
     r = await client.delete(f"/api/account-combos/{cid}", headers=h)
     assert r.status_code == 409
     detail = r.json()["detail"]
     assert detail["code"] == "account_combo_in_use"
-    assert detail["scenarios"][0]["scenarioId"] == "sc-del"
+    assert detail["schemes"][0]["scenarioId"] == "sc-del"
+    assert detail["schemes"][0]["schemeId"] == (
+        await _schemes(client, h, "sc-del"))[0]["schemeId"]
     # 解绑后可删
     assert (await _bind(client, h, "sc-del", None)).status_code == 200
     assert (await client.delete(

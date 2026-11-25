@@ -152,11 +152,7 @@ def _now_iso() -> str:
 # Scenario Config(extra="forbid")不建模 —— 随 convert 输入过界即
 # extra_forbidden → 执行 plate_rejected(首例「订单创建
 # (call格式)(副本)」,服务范围重构起旁挂首次落进 config)。
-# accountCombo(账户组合 §4.2):场景侧组合引用(服务端托管键,读面 =
-# account_combos 场景绑定端点 + 执行链 combo_base),同族边界剥离。
-# 同款单点收口:只在 plate 边界剥,存储/解析面不动。
-_PLATFORM_SIDECAR_CONFIG_KEYS = ("var_locks", "service_scope",
-                                  "accountCombo")
+_PLATFORM_SIDECAR_CONFIG_KEYS = ("var_locks", "service_scope")
 
 async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     """POST /api/scenario/action/convert(consumer 固定 "gimbal")。

@@ -429,6 +429,14 @@
       @remove-instance="removeInstanceGroup"
     />
 
+    <div v-if="defaultComboLoaded" class="default-combo-line" data-testid="default-combo-line">
+      当前默认方案绑定：
+      <span v-if="defaultComboLoadFailed" class="muted">读取失败</span>
+      <span v-else>{{ defaultComboName || '无' }}</span>
+      <button type="button" class="c-add" data-testid="default-combo-workbench"
+        @click="goTestData">去方案查看</button>
+    </div>
+
     <!-- 断言管理纯展示列表(spec v3 §5)— 编辑入口搬家至测试数据页;
          每条「加入本次执行」预勾运行面板(Task 6 preset) -->
     <div class="c-card are-entry-card">
@@ -482,7 +490,8 @@ import { scenarioSchemesUrl } from '@/utils/links'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import type { AuthDraftView } from '@/types/scenario-composer'
-import { getServiceResolution, type ServiceResolution } from '@/api/scenario-composer'
+import { getServiceResolution, listRunSchemes, type ServiceResolution } from '@/api/scenario-composer'
+import { listAccountCombos, type AccountComboRow } from '@/api/accountCombos'
 import {
   listServiceInstanceOverview, putServiceInstance,
   type ScopedServiceInstanceView, type ServiceInstanceOverview,
@@ -615,6 +624,40 @@ const ENV_SOURCE_LABEL: Record<string, string> = {
 const overview = ref<ServiceInstanceOverview | null>(null)
 const overviewLoading = ref(false)
 const overviewFailed = ref(false)
+const defaultComboName = ref('')
+const defaultComboLoaded = ref(false)
+const defaultComboLoadFailed = ref(false)
+let defaultComboRequest = 0
+
+async function loadDefaultCombo(): Promise<void> {
+  const request = ++defaultComboRequest
+  defaultComboName.value = ''
+  defaultComboLoadFailed.value = false
+  defaultComboLoaded.value = false
+  if (!props.scenarioId || props.scenarioId === 'new') return
+  try {
+    const [schemes, combos] = await Promise.all([
+      listRunSchemes(props.scenarioId),
+      listAccountCombos(props.projectId ?? undefined),
+    ])
+    if (request !== defaultComboRequest) return
+    const comboId = schemes.find((scheme) => scheme.isDefault)?.accountComboId
+    const rows: AccountComboRow[] = [
+      ...combos.personal,
+      ...combos.projects.flatMap((group) => group.items),
+    ]
+    defaultComboName.value = comboId == null
+      ? '' : rows.find((combo) => combo.id === comboId)?.name ?? `组合 #${comboId}`,
+    defaultComboLoaded.value = true
+  } catch {
+    if (request !== defaultComboRequest) return
+    defaultComboLoadFailed.value = true
+    defaultComboLoaded.value = true
+  }
+}
+
+watch([() => props.scenarioId, () => props.projectId], () => void loadDefaultCombo(), { immediate: true })
+
 const envs = ref<EnvironmentRow[]>([])
 const factsReady = ref(false)
 let factsLoading: Promise<void> | null = null
@@ -663,7 +706,10 @@ onMounted(() => {
 
 // 缝 1:保存落库(saving→clean)后事实才在后端可见 → 重拉实例/身份事实。
 watch(() => props.saveState, (now, was) => {
-  if (was === 'saving' && now === 'clean') void reloadScopeFacts()
+  if (was === 'saving' && now === 'clean') {
+    void reloadScopeFacts()
+    void loadDefaultCombo()
+  }
 })
 
 // ── 实例分组(同 groupId 的若干环境 tag = 一个实例)────────────
@@ -1359,6 +1405,11 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 .c-ns-group .c-kv-row:last-child { margin-bottom: 0; }
 
 /* 断言管理入口卡:头行右侧跳转按钮(共享 .c-card-head flex) */
+.default-combo-line {
+  display: flex; align-items: center; gap: 0.375rem;
+  margin: -0.25rem 0 1rem; font-size: 0.8125rem; color: var(--sl-ink);
+}
+.default-combo-line .c-add { margin-left: 0.25rem; }
 .are-entry-card .c-card-head .c-add { margin-left: auto; align-self: center; }
 
 /* 断言管理纯展示列表(spec v3 §5) */

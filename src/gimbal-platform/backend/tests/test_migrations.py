@@ -2157,9 +2157,7 @@ def test_0066_incremental_model_align():
                     "WHERE alias_name = 't66-ident'"))
 
             command.upgrade(_cfg(sync_url), "head")
-            # head 钉随新头迁移前移(0067_account_combos 批;0066 自身
-            # 的终态断言在下方结构比对,不依赖 head 是谁)
-            assert _revision(sync_url) == "0067_account_combos"
+            assert _revision(sync_url) == _head()
 
             with eng.connect() as c:
                 assert _scope_fk_options(c) == {
@@ -2204,9 +2202,7 @@ def test_0066_fresh_chain_noop():
         command.upgrade(_cfg(sync_url), "0001_baseline")
         command.stamp(_cfg(sync_url), "0065_execution_row_run_error")
         command.upgrade(_cfg(sync_url), "head")
-        # head 钉随新头前移(0067 批):0066 在 fresh 链空转、0067 另建
-        # 新表 —— 下方三断言仍只验 0066 的空转形态
-        assert _revision(sync_url) == "0067_account_combos"
+        assert _revision(sync_url) == _head()
         eng = create_engine(sync_url)
         try:
             with eng.connect() as c:
@@ -2216,5 +2212,46 @@ def test_0066_fresh_chain_noop():
                     "auth_id": {"ondelete": "CASCADE"}}
                 assert _loose_columns(c) == []
                 assert _payload_udt(c) == "jsonb"
+        finally:
+            eng.dispose()
+
+
+def test_0068_account_combo_timestamp_defaults():
+    """0067 增量表漏建时间戳默认值 → 0068 补齐,插入不必显式给时间戳。"""
+    from alembic import command
+    from sqlalchemy import create_engine, inspect, text
+
+    with temp_schema() as (_schema, sync_url):
+        _upgrade_to(sync_url, "0067_account_combos")
+        eng = create_engine(sync_url)
+        try:
+            with eng.begin() as c:
+                for column in ("created_at", "updated_at"):
+                    c.exec_driver_sql(
+                        f"ALTER TABLE account_combos ALTER COLUMN {column} "
+                        "DROP DEFAULT")
+            command.upgrade(_cfg(sync_url), "head")
+            assert _revision(sync_url) == _head()
+            with eng.begin() as c:
+                defaults = {col["name"]: col["default"]
+                            for col in inspect(c).get_columns("account_combos")}
+                assert defaults["created_at"] is not None
+                assert defaults["updated_at"] is not None
+                c.execute(text(
+                    "INSERT INTO account_combos"
+                    " (scope, scope_id, name, description, is_default, payload,"
+                    "  revision) VALUES"
+                    " ('user', 1, 't68', '', false, '{\"entries\": []}', 1)"))
+                stamps = c.execute(text(
+                    "SELECT created_at, updated_at FROM account_combos"
+                    " WHERE name = 't68'")).one()
+                assert stamps.created_at is not None
+                assert stamps.updated_at is not None
+            command.downgrade(_cfg(sync_url), "0067_account_combos")
+            with eng.connect() as c:
+                defaults = {col["name"]: col["default"]
+                            for col in inspect(c).get_columns("account_combos")}
+                assert defaults["created_at"] is None
+                assert defaults["updated_at"] is None
         finally:
             eng.dispose()

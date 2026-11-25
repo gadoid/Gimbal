@@ -66,10 +66,10 @@ class IdentityRefItem(BaseModel):
 
 
 class ScenarioRefItem(BaseModel):
-    """反查面板 · 单条场景引用:kinds ⊆ {template, snapshot}。
+    """反查面板 · 单条场景引用:kinds ⊆ {template, snapshot, scheme, combo}。
 
     owner_id 供前端算「删除会被拦截」的预告(与 DELETE 409 同口径:
-    本人场景的 template 才阻断,schemas 见 auth_references)。
+    本人场景的运行依赖才阻断,schemas 见 auth_references)。
     """
 
     model_config = ConfigDict(populate_by_name=True)

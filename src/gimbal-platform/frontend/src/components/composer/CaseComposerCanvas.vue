@@ -612,9 +612,7 @@ import {
 } from '@/utils/declarations'
 import type { FieldTreeNode, ValueSourceGroup } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
-import { loadCatalogServiceNames, loadCatalogSystemByService } from '@/utils/catalog-services'
-import { listAll } from '@/api/auth_sessions'
-import { pickAccountLikeBackend } from '@/utils/identityResolve'
+import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import {
   endpointFullState, ensureEndpointFull, getEndpointFull,
 } from '@/composables/useEndpointFull'
@@ -638,6 +636,10 @@ const props = defineProps<{
   /** 已保存场景的 scenarioId(01-04 查询上下文通道);未保存草稿
    *  /composer/new 传 null —— 不带上下文,后端提示先保存再查。 */
   scenarioId?: string | null
+  /** v4:组合期查询按当前已保存方案解析;省略时后端回落默认方案。 */
+  schemeId?: string | null
+  /** v4:动态取数与运行面板共用当前凭证池选择。 */
+  credentialSource?: 'personal' | 'project'
   /** 场景服务声明 dict(config.services)—— 别名下拉/双写消费(spec §1.4) */
   services?: Record<string, string>
   /** 跨路由跳转消费(spec §5.3 期望列头→断言卡):挂载后一次性切步+定位 */
@@ -1330,67 +1332,26 @@ const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
 
 /**
- * 查询上下文(§7.2/§6.1;2c 换源;01-04 地址解析移交后端):
- * 地址不走 authored config.services 内嵌声明(ADR-0003 #13:地址面退役,
- * 新场景恒空 ⇒ 恒 service_url_required)—— 已保存场景带
- * scenarioId + stepIndex,由后端按执行链同款解析(步骤服务 → 生效
- * 身份 → 标签链 → 部署表);未保存草稿无稳定 scenarioId,不带上下文,
- * 后端 query_context_required 的文案即「先保存再查」提示。
- * 查询别名 = headers auth 引用首命中(修订 11)▸ 注册表条目 × 个人池
- * 装载(§3.6)。后端凭证闸把 alias=None 视作「无凭证」(bearer 视图
- * 422 query_credential_required)。
+ * 查询上下文(§7.2/§6.1;01-04 地址解析移交后端):
+ * 已保存场景带 scenarioId + stepIndex + schemeId,由后端按执行链同款
+ * 解析身份与地址。身份优先级完全由后端裁定,前端不发送推断别名,
+ * 避免覆盖方案绑定或方案所选账户组合。
  */
 function resolveQueryContext(step: StepView): {
   scenarioId?: string
   stepIndex: number
+  schemeId?: string
   service?: string
-  queryAlias: string | null
+  credentialSource?: 'personal' | 'project'
 } {
   const svc = stepService(step)
   return {
     ...(props.scenarioId ? { scenarioId: props.scenarioId } : {}),
     stepIndex: activeStepIdx.value,
+    ...(props.schemeId ? { schemeId: props.schemeId } : {}),
     ...(svc ? { service: svc } : {}),
-    queryAlias: headerAuthTagOf(step) ?? queryAliasOf(svc),
+    ...(props.credentialSource ? { credentialSource: props.credentialSource } : {}),
   }
-}
-
-/** 查询别名·首选(§6.1 修订 11,同域多用户裁定):当前 step
- *  headers 的 `${auth.<tag>.…}` 引用首命中 → 该 tag 即查询别名 —— headers
- *  引用就是该步执行身份的声明,查询视角 = 执行视角(构造消解恢复至每凭证
- *  粒度:为 B 的列查到的候选就是 B 能用的)。解析复用 utils/tpl-refs
- *  (悬空徽章同源);不校验域/存在性:悬空照发,后端诚实 422「未找到查询
- *  凭证」(悬空另有徽章显形,不回退猜测)。无引用 → null → 域内首键
- *  fallback(修订 10 行为,单用户场景零变化)。 */
-function headerAuthTagOf(step: StepView): string | null {
-  for (const v of Object.values(stepHeaders(step))) {
-    const ref = parseTplRefs(String(v ?? '')).find(r => r.domain === 'auth' && r.alias)
-    if (ref?.alias) return ref.alias
-  }
-  return null
-}
-
-/** 查询别名(凭证治理 §3.6 换源,2c):候选 = 步骤服务的注册表条目 ——
- *  步骤服务本身是已登记条目时优先自身(执行视角 = 查询视角,修订 11
- *  延伸),否则同基条目(aliasCandidates 同口径)。「装载」判定 =
- *  pickAccountLikeBackend(镜像后端 run_prepare._pick_account_
- *  deterministic 单源更名;§8.3 引用
- *  不校验标签)× 本人池 —— 与查询视图 loader「按 alias 从本人池取,
- *  不吃快照」同池同序,选中的候选执行时必查得到。无装载条目 → null
- *  诚实 422(不再回退 authored users 旧值:那是治理要清的陈旧凭证)。
- *  目录映射/池拉取失败 → 退首条目候选(服务侧诚实报,不本地猜)。 */
-function queryAliasOf(svc: string): string | null {
-  const base = deriveBase(svc, catalogNames.value) ?? svc
-  const self = registeredAliases.value.find((a) => a.aliasName === svc)
-  const candidates = self
-    ? [self]
-    : registeredAliases.value.filter((a) => a.baseService === base)
-  if (!candidates.length) return null
-  const system = systemByService.value.get(self ? self.baseService : base)
-  if (!system || myAccountsFailed) return candidates[0]!.aliasName
-  const loaded = candidates.filter(
-    (a) => !!pickAccountLikeBackend(myAccounts.value, system, a))
-  return loaded[0]?.aliasName ?? null
 }
 
 /** 行集首键 = label 列(后端投影列序:label 恒行首;空行集不进选择态)。 */
@@ -1506,8 +1467,6 @@ async function vsLoad(g: ValueSourceGroup, refresh: boolean, params: Record<stri
   vsPicker.columns = []
   vsPicker.label = ''
   try {
-    // 换源(2c):queryAlias 候选按本人池装载判定 — 池未载/失败先补一拍
-    await ensureMyAccounts()
     const ctx = resolveQueryContext(step)
     const res = await fetchQueryViewRows(g.view, {
       refresh, ...ctx,
@@ -1895,37 +1854,11 @@ const respTypeC = computed<TypeCField[]>(() => {
 
 /** plate 目录服务名全串集合(会话级,模块缓存由 loader 负责) */
 const catalogNames = ref<Set<string>>(new Set())
-/** 服务 → 系统(查询换源 2c:装载判定的 scope 键;失败 = 空表 → 退首
- *  条目,后端诚实 422,不本地猜) */
-const systemByService = ref<Map<string, string>>(new Map())
 onMounted(() => {
   loadCatalogServiceNames()
     .then((ns) => { catalogNames.value = new Set(ns) })
     .catch(() => { /* 目录不可达 → 派生降级裸声明黄警,不阻塞编排 */ })
-  loadCatalogSystemByService()
-    .then((m) => { systemByService.value = m })
-    .catch(() => { /* 同上:查询装载判定退首条目 */ })
 })
-
-// ── 查询视图换源(凭证治理 §3.6,2c)────────────────────────────
-// queryAlias 候选从 authored config.users 键域切到「注册表条目 × 个人池
-// 装载」— 与查询视图 loader(按 alias 从本人池取,不吃快照)同池同序。
-/** 本人池(懒加载单飞;失败不缓存 —— 下次取数重试,期间退首条目候选)。 */
-const myAccounts = ref<Awaited<ReturnType<typeof listAll>>>([])
-let myAccountsOnce: Promise<void> | null = null
-let myAccountsFailed = false
-function ensureMyAccounts(): Promise<void> {
-  myAccountsOnce ??= listAll()
-    .then((rows) => {
-      myAccounts.value = rows
-      myAccountsFailed = false
-    })
-    .catch(() => {
-      myAccountsFailed = true
-      myAccountsOnce = null   // 允许下次取数重试
-    })
-  return myAccountsOnce
-}
 
 // ── 步骤服务 → 身份条目(配套方案 §1.1 C3a;registry 条目口径)────
 // 步骤服务命中身份条目时,认证选择器预填该条目的凭证

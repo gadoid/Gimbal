@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { toast } from '@/utils/toast'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
+import * as comboApi from '@/api/accountCombos'
 import SchemeWorkbench from '@/views/SchemeWorkbench.vue'
 import SchemeListPanel from '@/components/schemes/SchemeListPanel.vue'
 import { composerUrl } from '@/utils/links'
@@ -66,6 +67,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
       assertion_registry: { entries: [] },
     } as never)
     vi.spyOn(api, 'listDataSets').mockResolvedValue([DS_0])
+    vi.spyOn(comboApi, 'listAccountCombos').mockResolvedValue({ personal: [], projects: [] })
     push.mockClear()
   })
   afterEach(() => vi.restoreAllMocks())
@@ -94,7 +96,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
   it('绑定选择写入 draft.serviceBindings(显式口径)→ 脏态', async () => {
     vi.spyOn(api, 'updateRunScheme').mockResolvedValue(SCHEME_DEFAULT)
     const w = await mountWb()
-    await w.findAll('select')[0].setValue('alias-1')   // svc-decl 行
+    await w.findAll('[data-testid="binding-alias"]')[0].setValue('alias-1')   // svc-decl 行
     expect(w.emitted()).toBeTruthy()
     const saveBtn = w.find('[data-testid="save-scheme"]').element as HTMLButtonElement
     expect(saveBtn.disabled).toBe(false)               // 深度 watch → dirty
@@ -114,7 +116,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     // ?step=1,故用 & 追加 runScheme)
     expect(push).toHaveBeenCalledWith(`${composerUrl('sc-wb')}&runScheme=rs-001`)
     // 绑定变更 → 脏 → 禁用(先保存再运行);禁用态再点不产生导航
-    await w.findAll('select')[0].setValue('alias-1')
+    await w.findAll('[data-testid="binding-alias"]')[0].setValue('alias-1')
     expect((btn.element as HTMLButtonElement).disabled).toBe(true)
     await btn.trigger('click')
     expect(push).toHaveBeenCalledTimes(1)
@@ -154,7 +156,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     const spy = vi.spyOn(api, 'createRunScheme').mockResolvedValue(SCHEME_COPY)
     const w = await mountWb()
     // 绑定变更 → 脏(运行配置区 default 亦可见,与上文 save 断言同款设置法)
-    await w.findAll('select')[0].setValue('alias-1')
+    await w.findAll('[data-testid="binding-alias"]')[0].setValue('alias-1')
     expect((w.find('[data-testid="save-scheme"]').element as HTMLButtonElement).disabled).toBe(false)
     await w.findComponent(SchemeListPanel).vm.$emit('create')
     await flushPromises()

@@ -474,8 +474,8 @@
           </p>
           <!-- 与反查侧板同源的数据:把 409 拦截预告内联进确认框 -->
           <div v-if="deleteBlocking.length" class="drawer-warn" data-testid="del-block-warn">
-            <p class="m-0 font-semibold">删除会被拦截:仍有 {{ deleteBlocking.length }} 个本人场景引用(模板)</p>
-            <p class="m-0 mt-0.5">先解除身份条目的 ref,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
+            <p class="m-0 font-semibold">删除会被拦截:仍有 {{ deleteBlocking.length }} 个本人场景存在运行依赖</p>
+            <p class="m-0 mt-0.5">先解除身份条目的 ref,或清理方案绑定/组合条目引用;他人场景与快照不会阻断删除。</p>
           </div>
           <p class="m-0 text-body">要继续请输入 <code class="font-mono">{{ deleteTarget.username }}</code> 确认：</p>
           <Input v-model="deleteConfirmInput" :placeholder="`输入 ${deleteTarget.username} 以确认`" data-testid="del-confirm" />
@@ -539,11 +539,9 @@
               data-testid="refs-hidden-count"
             >另有 {{ refsData.scenarioRefs.hidden_count }} 条不可见(他人私有场景,仅计数不显名)</p>
 
-            <!-- 原型 H-auths-v2 抽屉底部淡红预警:与 DELETE 409 同口径
-                 (本人场景的模板引用才拦截)提前告知,避免撞 409 -->
             <div v-if="drawerBlocking.length" class="drawer-warn" data-testid="refs-block-warn">
-              <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景引用(模板)</p>
-              <p class="m-0 mt-0.5">先解除身份条目的 ref,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
+              <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景存在运行依赖</p>
+              <p class="m-0 mt-0.5">先解除身份条目的 ref,或清理方案绑定/组合条目引用;他人场景与快照不会阻断删除。</p>
             </div>
           </template>
         </div>
@@ -582,9 +580,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const store = useAuthSessionsStore()
 
-/** 引用类型 → 徽标配色档:模板引用绿、快照(不拦截)灰。 */
+const BLOCKING_KINDS = new Set(['template', 'scheme', 'combo'])
+/** 引用类型 → 徽标配色档:运行依赖阻断,快照不阻断。 */
 const KIND_TONE: Record<string, string> = {
   template: 'green',
+  scheme: 'blue',
+  combo: 'ink',
   snapshot: 'ink',
 }
 /** token_type → 徽标配色档(与 .svc-flag 同族) */
@@ -1059,7 +1060,7 @@ const deleteBlocking = computed(() => {
   const me = auth.currentUser?.id
   if (!deleteRefs.value || me == null) return []
   return deleteRefs.value.scenarioRefs.visible.filter(
-    (v) => v.ownerId === me && v.kinds.includes('template'),
+    (v) => v.ownerId === me && v.kinds.some((k) => BLOCKING_KINDS.has(k)),
   )
 })
 
@@ -1070,13 +1071,12 @@ const refsTarget = ref<AuthSession | null>(null)
 const refsLoading = ref(false)
 const refsData = ref<AuthReferences | null>(null)
 
-/** 删除拦截预告(与后端 DELETE 409 同口径):可见引用里
- *  「本人场景 × template」的条数 — 抽屉底部淡红警示。 */
+/** 删除拦截预告(与后端 DELETE 409 同口径):本人场景的模板/方案/组合运行依赖。 */
 const drawerBlocking = computed(() => {
   const me = auth.currentUser?.id
   if (!refsData.value || me == null) return []
   return refsData.value.scenarioRefs.visible.filter(
-    (v) => v.ownerId === me && v.kinds.includes('template'),
+    (v) => v.ownerId === me && v.kinds.some((k) => BLOCKING_KINDS.has(k)),
   )
 })
 
@@ -1107,10 +1107,12 @@ async function loadRefs() {
 }
 
 const KIND_LABELS: Record<string, string> = {
-  template: '模板', snapshot: '快照',
+  template: '模板', scheme: '方案', combo: '组合', snapshot: '快照',
 }
 const KIND_TITLES: Record<string, string> = {
   template: 'steps 里的 ${auth.<条目名>.*} 模板 — 下次运行会用到',
+  scheme: '运行方案 serviceBindings 引用 — 下次执行会用到',
+  combo: '账户组合条目引用 — 组合改动会传播到引用方案',
   snapshot: 'config.users 的同名快照副本 — 自足,不随账户池轮换',
 }
 

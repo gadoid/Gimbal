@@ -106,6 +106,142 @@
         "title": "AccountComboProjectGroup",
         "type": "object"
       },
+      "AccountComboReadiness": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/ComboAddressRow"
+            },
+            "title": "Addresses",
+            "type": "array"
+          },
+          "canProbeCredentials": {
+            "title": "Canprobecredentials",
+            "type": "boolean"
+          },
+          "credentialSource": {
+            "enum": [
+              "personal",
+              "project"
+            ],
+            "title": "Credentialsource",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ComboReadinessEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "envError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enverror"
+          },
+          "environmentId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environmentid"
+          },
+          "environmentName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environmentname"
+          },
+          "environmentSource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environmentsource"
+          },
+          "poolName": {
+            "title": "Poolname",
+            "type": "string"
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projectid"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "credentialSource",
+          "poolName",
+          "canProbeCredentials",
+          "ready",
+          "entries",
+          "addresses"
+        ],
+        "title": "AccountComboReadiness",
+        "type": "object"
+      },
+      "AccountComboSchemeRef": {
+        "properties": {
+          "comboId": {
+            "title": "Comboid",
+            "type": "integer"
+          },
+          "scenarioId": {
+            "title": "Scenarioid",
+            "type": "string"
+          },
+          "scenarioName": {
+            "title": "Scenarioname",
+            "type": "string"
+          },
+          "schemeId": {
+            "title": "Schemeid",
+            "type": "string"
+          },
+          "schemeName": {
+            "title": "Schemename",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comboId",
+          "schemeId",
+          "schemeName",
+          "scenarioId",
+          "scenarioName"
+        ],
+        "title": "AccountComboSchemeRef",
+        "type": "object"
+      },
       "AccountComboUpdate": {
         "description": "整体替换式 PATCH。None = 不改;entries 显式给值(含 [])则\n整体替换 —— 替换后逐条过保存面校验,条目有实质变化 revision +1。",
         "properties": {
@@ -187,6 +323,13 @@
           "revision": {
             "title": "Revision",
             "type": "integer"
+          },
+          "schemes": {
+            "items": {
+              "$ref": "#/components/schemas/AccountComboSchemeRef"
+            },
+            "title": "Schemes",
+            "type": "array"
           },
           "scope": {
             "title": "Scope",
@@ -2384,22 +2527,53 @@
         "title": "CheckSelector",
         "type": "object"
       },
-      "ComboBindIn": {
+      "ComboAddressRow": {
         "properties": {
-          "comboId": {
+          "baseUrl": {
+            "default": "",
+            "title": "Baseurl",
+            "type": "string"
+          },
+          "deploymentId": {
             "anyOf": [
               {
-                "minimum": 1.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Comboid"
+            "title": "Deploymentid"
+          },
+          "envId": {
+            "title": "Envid",
+            "type": "integer"
+          },
+          "envName": {
+            "title": "Envname",
+            "type": "string"
+          },
+          "loginUrl": {
+            "default": "",
+            "title": "Loginurl",
+            "type": "string"
+          },
+          "resolved": {
+            "default": false,
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
           }
         },
-        "title": "ComboBindIn",
+        "required": [
+          "service",
+          "envId",
+          "envName"
+        ],
+        "title": "ComboAddressRow",
         "type": "object"
       },
       "ComboEntry": {
@@ -2423,6 +2597,115 @@
           "alias"
         ],
         "title": "ComboEntry",
+        "type": "object"
+      },
+      "ComboReadinessEntry": {
+        "properties": {
+          "accountEnvId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountenvid"
+          },
+          "accountId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountid"
+          },
+          "accountUsername": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountusername"
+          },
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "baseService": {
+            "title": "Baseservice",
+            "type": "string"
+          },
+          "envMismatch": {
+            "default": false,
+            "title": "Envmismatch",
+            "type": "boolean"
+          },
+          "identityEnvId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identityenvid"
+          },
+          "poolStatus": {
+            "enum": [
+              "ok",
+              "missing",
+              "ambiguous"
+            ],
+            "title": "Poolstatus",
+            "type": "string"
+          },
+          "refMode": {
+            "title": "Refmode",
+            "type": "string"
+          },
+          "refUsername": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusername"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          }
+        },
+        "required": [
+          "service",
+          "alias",
+          "baseService",
+          "refMode",
+          "poolStatus"
+        ],
+        "title": "ComboReadinessEntry",
         "type": "object"
       },
       "CompositionMemberIn": {
@@ -6993,6 +7276,18 @@
       "RunScheme": {
         "description": "场景级运行方案(工作台一等实体,plate 零感知,spec §4)。\n\n/run-schemes CRUD(方案唯一读写面)的请求/响应 wire 契约;\nisDefault/options(M10 RunOptions)为工作台键。",
         "properties": {
+          "accountComboId": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountcomboid"
+          },
           "dataSetIds": {
             "items": {
               "type": "string"
@@ -7588,7 +7883,7 @@
         "type": "object"
       },
       "ScenarioRefItem": {
-        "description": "反查面板 · 单条场景引用:kinds ⊆ {template, snapshot}。\n\nowner_id 供前端算「删除会被拦截」的预告(与 DELETE 409 同口径:\n本人场景的 template 才阻断,schemas 见 auth_references)。",
+        "description": "反查面板 · 单条场景引用:kinds ⊆ {template, snapshot, scheme, combo}。\n\nowner_id 供前端算「删除会被拦截」的预告(与 DELETE 409 同口径:\n本人场景的运行依赖才阻断,schemas 见 auth_references)。",
         "properties": {
           "kinds": {
             "items": {
@@ -10725,9 +11020,77 @@
         ]
       }
     },
+    "/api/account-combos/{combo_id}/readiness": {
+      "get": {
+        "description": "按执行人/项目池上下文诊断组合;凭证裁决复用执行单源。",
+        "operationId": "get_account_combo_readiness_api_account_combos__combo_id__readiness_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "combo_id",
+            "required": true,
+            "schema": {
+              "title": "Combo Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "credential_source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "personal",
+                    "project"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Credential Source"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountComboReadiness"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Account Combo Readiness",
+        "tags": [
+          "account-combos"
+        ]
+      }
+    },
     "/api/account-combos/{combo_id}/set-default": {
       "post": {
-        "description": "置为默认(语义 = 「推荐默认」:新建场景预选,不静默自动写入,\n§4.1)。原子切换:同事务先清旧默认再置新;partial unique 兜并发。",
+        "description": "置为默认(语义 = 「推荐默认」:新建/另存方案预选,不静默自动\n写入,§4.1)。原子切换:同事务先清旧默认再置新;partial unique 兜并发。",
         "operationId": "set_default_account_combo_api_account_combos__combo_id__set_default_post",
         "parameters": [
           {
@@ -21737,114 +22100,6 @@
         "summary": "Put Scenario",
         "tags": [
           "scenarios"
-        ]
-      }
-    },
-    "/api/scenarios/{scenario_id}/account-combo": {
-      "get": {
-        "description": "读取通道(表 B scenario.read):返回当前绑定(comboId + 名称/\nrevision/条目摘要)—— 编排器重载恢复显示(§5.1)。组合行已被并发\n删除(删除有 in-use 闸,仅竞态可达)→ comboMissing 标注。",
-        "operationId": "get_scenario_combo_api_scenarios__scenario_id__account_combo_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "scenario_id",
-            "required": true,
-            "schema": {
-              "title": "Scenario Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Scenario Combo Api Scenarios  Scenario Id  Account Combo Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Scenario Combo",
-        "tags": [
-          "account-combos"
-        ]
-      },
-      "post": {
-        "description": "v1 唯一应用入口 = 编排器(§8.1):``{comboId: int | null}``,\nnull = 解绑;一步改引用,不动方案绑定与步骤(§5.1)。门 = 场景\n写闸 ∧ 组合可读 ∧ **同区**(§5.3 范围矩阵)。",
-        "operationId": "bind_scenario_combo_api_scenarios__scenario_id__account_combo_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "scenario_id",
-            "required": true,
-            "schema": {
-              "title": "Scenario Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ComboBindIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Bind Scenario Combo Api Scenarios  Scenario Id  Account Combo Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Bind Scenario Combo",
-        "tags": [
-          "account-combos"
         ]
       }
     },

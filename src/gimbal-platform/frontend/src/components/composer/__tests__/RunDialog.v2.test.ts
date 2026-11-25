@@ -87,6 +87,17 @@ describe('RunDialog v2 — 两路径', () => {
     expect(opts).toMatchObject({ schemeId: 'rs-001', schemeName: '默认方案', nRuns: 2 })
   })
 
+  it('项目凭证选择上送宿主并进入运行请求', async () => {
+    const w = mountDialog({ projectId: 9 })
+    await w.find('[data-testid="credential-source"]').setValue('project')
+    expect(w.emitted('update:credentialSource')?.at(-1)).toEqual(['project'])
+    await w.find('[data-testid="run-confirm"]').trigger('click')
+    expect(w.emitted('confirm')!.at(-1)![1]).toMatchObject({
+      credentialSource: 'project',
+    })
+    w.unmount()
+  })
+
   it('默认方案态另存为方案 → saveAsScheme 带当前绑定/参数', async () => {
     const w = mountDialog()
     await w.find('[data-testid="scheme-name-input"]').setValue('新方案')

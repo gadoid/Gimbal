@@ -354,6 +354,8 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    account_combo_id: int | None = Field(default=None, alias="accountComboId",
+                                         ge=1)
     # §8.2(ADR-0003 #21):方案环境链位退役 —— 存量 payload
     # 里的 environmentId 键不再消费(数据保留,读侧忽略)。
     # RunOptions 形状(迁移完成,不再收旧平铺键)

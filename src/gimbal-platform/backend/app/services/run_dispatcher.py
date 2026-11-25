@@ -817,6 +817,9 @@ async def _check_env_consistency(
     return warnings
 
 
+_COMBO_REPLAY_UNSET = object()
+
+
 @dataclass(frozen=True)
 class RunTarget:
     """派发目标(P3 临时调用 §六:``dispatch_run`` 拆两段的第一段产物)。
@@ -846,6 +849,7 @@ async def dispatch_run(
     trace: "dict | None" = None,
     exec_replay: dict | None = None,
     env_replay: dict | None = None,
+    combo_replay: object = _COMBO_REPLAY_UNSET,
 ) -> RunResponse:
     """库中场景的派发入口 = 取场景 → :func:`dispatch_target`(P3 §六)。
 
@@ -857,6 +861,9 @@ async def dispatch_run(
     ``env_replay``(§8.2 快照兼容):重跑传入首发环境快照
     (``{environmentId, environmentSource}``)—— 直用不重解析;
     缺键旧行传 None = 按新链正常解析。
+    ``combo_replay``:重跑传入的首发组合溯源快照(未绑定 = 空
+    ``ComboBase``);只恢复台账,绑定终值由请求中的 ``serviceBindings``
+    快照承载。缺省哨兵才表示非重跑、需要解析当前方案。
 
     ``preloaded_scenario``: the runs router already loads the scenario
     row for the ownership check — pass it here to avoid querying
@@ -885,7 +892,8 @@ async def dispatch_run(
         RunTarget(scenario_id=scen.scenario_id,
                   payload=scen.payload or {}, kind="scenario"),
         token=token, trace=trace,
-        exec_replay=exec_replay, env_replay=env_replay)
+        exec_replay=exec_replay, env_replay=env_replay,
+        combo_replay=combo_replay)
 
 
 async def dispatch_target(
@@ -899,6 +907,7 @@ async def dispatch_target(
     trace: "dict | None" = None,
     exec_replay: dict | None = None,
     env_replay: dict | None = None,
+    combo_replay: object = _COMBO_REPLAY_UNSET,
 ) -> RunResponse:
     """Validate + 入队 + return runId（C11：执行配方进 execution_jobs，
     worker 认领驱动；本函数不再 spawn 进程内 fanout）。
@@ -941,15 +950,33 @@ async def dispatch_target(
     # authz M2a S6:绑定校验先行(§8.2 标签解析要吃有效身份集合)
     _bindings = await _validated_bindings(db, req)
 
-    # 账户组合垫底(§3.2 JWT/派发面,后端权威——不依赖前端拼全):
-    # merged = {**组合, **请求};校验分层(§6.3)——请求绑定照原序全量
-    # 校验(上方),组合的分类硬拦走 _dispatch_precheck_gate(硬门单点,
-    # 派发/定时同门);条目全量校验在保存面。令牌面已在
-    # _apply_scheme_recipe 装载时合并(垫底幂等)。
+    # 账户组合垫底(v4 §3.2):只取本次所选方案的组合;raw 与重跑快照
+    # 均不回查当前组合。重跑必须完全吃 config_json 终值,否则当前组合
+    # 新增服务会漂移进重跑、悬空组合会阻断历史快照。
     from . import account_combo as _ac
-    _combo = await _ac.combo_base(db, target)
-    if _combo.bound:
-        _bindings = _ac.pad_bindings(_bindings, _combo)
+    from . import scheme_store
+    from .run_params import RAW_SCHEME_ID
+
+    _combo = _ac.ComboBase(None, "", 0)
+    if combo_replay is _COMBO_REPLAY_UNSET:
+        if req.scheme_id != RAW_SCHEME_ID:
+            scheme = None
+            if req.scheme_id:
+                try:
+                    scheme = await scheme_store.get_row(
+                        db, target.scenario_id, req.scheme_id)
+                except KeyError:
+                    raise Conflict(
+                        "scheme_not_owned",
+                        f"执行方案不存在或不属于该场景: {req.scheme_id}")
+            else:
+                scheme = await scheme_store.resolve_for_run(
+                    db, target.scenario_id, None)
+            if scheme is not None:
+                _combo = await _ac.scheme_combo(db, scheme.payload)
+                _bindings = _ac.pad_bindings(_bindings, _combo)
+    else:
+        _combo = combo_replay or _ac.ComboBase(None, "", 0)
 
     # §8.2 标签解析链(三路分流)+ §6.3 环境告警 → _resolve_execution_env
     env_choice, env_warnings, _project_id = await _resolve_execution_env(

@@ -1,8 +1,8 @@
 /**
  * Runner.vue 执行配置选择器**退役钉**(账户组合 §8.3/ADR-0003 #26):
  * 运行期换用载体 0 使用判死 —— 下拉不再渲染、发起载荷恒不带
- * execConfigId(默认链自动占位);「以谁的身份跑」由场景绑定
- * (组合/方案)决定,Runner 不提供第三层身份选择。
+ * execConfigId(默认链自动占位);「以谁的身份跑」由所选方案绑定
+ * (组合/显式别名)决定,Runner 不提供第三层身份选择。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'

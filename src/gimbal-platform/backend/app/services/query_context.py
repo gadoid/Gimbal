@@ -16,8 +16,8 @@ rows 路由的前提(query_views.py 路由 docstring)——「service_url 由
   (``${auth.<tag>}`` 模板 ∪ ``call.user`` 直引,§7.2)单源优先,
   多个直接身份无法唯一判定 → 422 ``query_identity_ambiguous``
   (§7.3,不取第一个);显式 ``query_alias`` 在路由层先行覆盖;
-* ``owner_id`` = 场景属主:查询凭证按**执行身份**装载(与派发侧
-  prepare_exec 同视角 —— 成员查询项目场景,用的也是场景执行身份)。
+* ``owner_id`` = 当前查询执行人:个人凭证按调用者 ``user.id`` 装载,
+  与派发侧 ``prepare_exec`` 同口径;项目凭证另经成员闸走场景项目池。
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class QueryContext:
 
     service: str              # 步骤服务键(service_mismatch 校验面)
     service_url: str          # 当前执行标签的部署地址
-    owner_id: int             # 查询凭证装载按场景执行身份
+    owner_id: int             # 个人凭证池归属:当前查询执行人
     query_alias: str | None   # 缺省查询别名(显式 query_alias 优先)
     project_id: "int | None" = None  # §7.4 池通道:场景所属项目(credentialSource=project 消费)
 
@@ -60,6 +60,8 @@ class QueryContext:
 async def resolve_query_context(
     db: AsyncSession, *, user, scenario_id: str, step_index: int,
     scheme_id: str | None = None,
+    query_alias_override: str | None = None,
+    service_url_override: str | None = None,
 ) -> QueryContext:
     """已保存场景 + 步骤位 → 查询地址与身份(全链服务端解析)。
 
@@ -94,15 +96,18 @@ async def resolve_query_context(
             "step_service_required",
             f"步骤 #{step_index} 没有服务绑定(call.service 为空)")
     # 生效身份(§7.1):schemeId 解析 → 方案绑定 → 组合垫底 →
-    # effective_alias;垫底机械半边与执行面同源(pad_bindings)。
+    # effective_alias;raw 不吃任何方案配方。垫底机械半边与执行面同源。
     from . import account_combo as _ac
-    from .scheme_store import resolve_for_run
+    from .run_materialize import referenced_services
+    from .run_params import RAW_SCHEME_ID
+    from .scheme_store import normalized, resolve_for_run
 
-    scheme = await resolve_for_run(db, row.scenario_id, scheme_id)
-    scheme_bindings = ((scheme.payload or {}).get("serviceBindings")
-                        if scheme is not None else None) or {}
-    combo = await _ac.combo_base(db, row)
-    bindings = _ac.pad_bindings(scheme_bindings, combo)
+    scheme = (None if scheme_id == RAW_SCHEME_ID else
+              await resolve_for_run(db, row.scenario_id, scheme_id))
+    scheme_payload = normalized(scheme.payload if scheme is not None else {})
+    combo = await _ac.scheme_combo(db, scheme_payload)
+    bindings = _ac.pad_bindings(
+        scheme_payload.get("serviceBindings") or {}, combo)
     # 步骤直接身份声明(§7.2):${auth.*} 模板 ∪ call.user 直引,后端
     # 单源扫描器(执行面同款)—— 前端 headers-only 扫描补齐项;
     # 多个直接身份无法唯一判定 → 422 不猜测(§7.3,显式 query_alias
@@ -110,13 +115,32 @@ async def resolve_query_context(
     from .auth_ref_scan import step_auth_refs
 
     declared = step_auth_refs(step if isinstance(step, dict) else {})
-    if len(set(declared)) > 1:
+    if query_alias_override is not None:
+        alias = query_alias_override
+    else:
+        if len(set(declared)) > 1:
+            raise QueryContextError(
+                "query_identity_ambiguous",
+                f"步骤 #{step_index} 声明了多个直接身份"
+                f"({'、'.join(dict.fromkeys(declared))}),无法唯一判定"
+                "查询身份 —— 请显式指定 query_alias 或收敛步骤身份")
+        alias = declared[0] if declared else effective_alias(svc, bindings)
+    try:
+        await _ac.referenced_combo_gate(
+            db, combo, referenced_services([step]),
+            {**bindings, svc: {"alias": alias}})
+    except _ac.ComboIdentityMissing as e:
         raise QueryContextError(
-            "query_identity_ambiguous",
-            f"步骤 #{step_index} 声明了多个直接身份"
-            f"({'、'.join(dict.fromkeys(declared))}),无法唯一判定"
-            "查询身份 —— 请显式指定 query_alias 或收敛步骤身份")
-    alias = declared[0] if declared else effective_alias(svc, bindings)
+            "identity_combo_missing", e.message, status=409) from e
+    if service_url_override is not None:
+        if not service_url_override.startswith(("http://", "https://")):
+            raise QueryContextError(
+                "service_url_invalid",
+                f"显式查询地址不是 http(s): {service_url_override!r}")
+        return QueryContext(
+            service=svc, service_url=service_url_override,
+            owner_id=user.id, query_alias=alias,
+            project_id=row.project_id)
     # 执行标签:身份 > 项目默认 > 平台默认;条目缺行不参与标签判定
     try:
         tag = await resolve_execution_tag(
@@ -140,5 +164,5 @@ async def resolve_query_context(
             "service_url_invalid",
             f"服务 {svc} 的部署地址不是 http(s): {url!r}")
     return QueryContext(
-        service=svc, service_url=url, owner_id=row.owner_id,
+        service=svc, service_url=url, owner_id=user.id,
         query_alias=alias, project_id=row.project_id)

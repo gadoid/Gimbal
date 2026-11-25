@@ -180,6 +180,33 @@ class TestFetchRows:
                                owner_id=1, query_alias=None, load_credential=None)
         assert calls["n"] == 2 and not c.cached
 
+    async def test_cache_and_single_flight_are_endpoint_scoped(
+            self, index, monkeypatch):
+        calls = []
+        def fake_request(method, url, **kw):
+            calls.append(url)
+            return httpx.Response(200, json={"data": {"list": [
+                {"nm": url, "id": 1}]}})
+        monkeypatch.setattr(httpx, "request", fake_request)
+        first = await r.fetch_rows(
+            "v1", refresh=False, service_url="http://sut-a",
+            owner_id=1, query_alias=None, load_credential=None)
+        second = await r.fetch_rows(
+            "v1", refresh=False, service_url="http://sut-b",
+            owner_id=1, query_alias=None, load_credential=None)
+        assert len(calls) == 2
+        assert first.rows[0]["nm"] == "http://sut-a/api/a"
+        assert second.rows[0]["nm"] == "http://sut-b/api/a"
+        assert not second.cached
+
+        calls.clear()
+        await asyncio.gather(*[
+            r.fetch_rows(
+                "v1", refresh=True, service_url=url,
+                owner_id=1, query_alias=None, load_credential=None)
+            for url in ("http://sut-a", "http://sut-b")])
+        assert sorted(calls) == ["http://sut-a/api/a", "http://sut-b/api/a"]
+
     async def test_error_never_cached(self, index, monkeypatch):
         state = {"fail": True}
         def fake_request(method, url, **kw):
@@ -217,8 +244,8 @@ class TestFetchRows:
         monkeypatch.setattr(httpx, "request", ok)
         first = await r.fetch_rows("v1", refresh=False, service_url="http://sut",
                                    owner_id=1, query_alias=None, load_credential=None)
-        # 修订 11:L1 键 = (view, 凭证);v1 auth=none → 凭证分量 None
-        r._cache._data[("v1", None, None)].fetched_mono -= 400.0   # 人工老化过 TTL(仍在 stale 窗)
+        # L1 键 = (view, 修订, 凭证, 部署地址);v1 auth=none → 凭证分量 None
+        r._cache._data[("v1", None, None, "http://sut")].fetched_mono -= 400.0
         async def boom(m, u, **kw):
             raise httpx.ConnectError("down")
         monkeypatch.setattr(httpx, "request", boom)

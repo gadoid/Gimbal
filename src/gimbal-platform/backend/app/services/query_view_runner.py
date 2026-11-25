@@ -64,7 +64,7 @@ _index_state: dict[str, Any] = {"at": -1.0, "rows": [], "fails": 0, "open_until"
 _cache = TtlLruCache(ttl=300.0, max_entries=64, stale_max_window=86400.0)
 _view_locks: dict[str, asyncio.Lock] = {}
 _locks_guard = asyncio.Lock()
-_view_breaker: dict[str, dict[str, float]] = {}
+_view_breaker: dict[tuple[str, str], dict[str, float]] = {}
 _cred_locks: dict[tuple[int, str], asyncio.Lock] = {}
 _cred_sessions: dict[tuple[int, str], AuthSession] = {}
 _cred_dead: set[tuple[int, str]] = set()   # 401 拉黑:同 key 后续直接降级(§6.2)
@@ -203,19 +203,19 @@ def drop_credential(owner_id: int, alias: str) -> None:
         _cred_sessions.pop(k, None)
     for k in [k for k in _cred_dead if k[:2] == key]:
         _cred_dead.discard(k)
-    # M2:键形 (name, ref, cred) —— 修订分量在中间,凭证分量取末位;
-    # 凭证分量 = (owner, alias, pool),按前两维清全部池
-    _cache.drop_where(lambda ck: isinstance(ck, tuple) and len(ck) == 3
+    # M2:键形 (name, ref, cred, endpoint) —— 修订分量在中间,凭证分量
+    # 取第三位;凭证分量 = (owner, alias, pool),按前两维清全部池。
+    _cache.drop_where(lambda ck: isinstance(ck, tuple) and len(ck) == 4
                       and isinstance(ck[2], tuple) and len(ck[2]) >= 2
                       and ck[2][:2] == key)
 
 
-def _bump_breaker(name: str) -> None:
-    br = _view_breaker.get(name) or {"fails": 0, "open_until": 0.0}
+def _bump_breaker(key: tuple[str, str]) -> None:
+    br = _view_breaker.get(key) or {"fails": 0, "open_until": 0.0}
     br["fails"] += 1
     if br["fails"] >= VIEW_BREAKER_THRESHOLD:
         br["open_until"] = time.monotonic() + VIEW_BREAKER_WINDOW
-    _view_breaker[name] = br
+    _view_breaker[key] = br
 
 
 async def _resolve_auth_header(
@@ -394,17 +394,19 @@ async def fetch_rows(
     if not service_url or not service_url.startswith(("http://", "https://")):
         raise QueryViewError("service_url_required",
                              "service_url 缺失(服务绑定未解析)", status=422)
-    # 修订 11:L1/单飞键 = (view, 查询凭证)——同视图异凭证
-    # 各自缓存/单飞,权限视角不在缓存层串台(A 先查、B 不吃 A 的行集);
+    # 修订 11:L1/单飞键 = (view, 查询凭证, 部署地址)——同视图异凭证
+    # 或异地址各自缓存/单飞,权限视角与方案环境不在缓存层串台;
     # auth=none 视图无凭证分量(可见性与凭证无关,全局共享,§5.1)。
     # 账户组合 §7.4(批 3):凭证分量加**池**维(owner, alias, pool)——
     # 个人池/项目池同名条目不串缓存与单飞(缺省 pool=None = 个人池)。
     cred_id: "tuple[int, str, int | None] | None" = (
         (owner_id, query_alias, cred_pool)
         if view.get("auth") != "none" and query_alias is not None else None)
+    endpoint_key = service_url.rstrip("/")
     # M2/4.7(D-9):取数属编排期行为,按场景生效修订 —— 修订不可变,
     # 进缓存键;缺省 working(与旧键同形,存量调用零变化)。
-    cache_key = (name, ref, cred_id) if ref else (name, None, cred_id)
+    cache_key = (name, ref if ref else None, cred_id, endpoint_key)
+    breaker_key = (name, endpoint_key)
     stale_entry, fresh = None, False
     if not bypass_cache:              # §13.3 参数随表单变,按 view 键必破 → 不进键就不缓存
         stale_entry, fresh = _cache.lookup(cache_key)
@@ -416,7 +418,7 @@ async def fetch_rows(
             return RowsResult(name, rows_c, trunc_c,
                               stale_entry.fetched_wall, cached=True, stale=False)
     # 熔断窗内:有 stale 回退 stale,否则降级(§5.2);refresh 也不豁免
-    br = _view_breaker.get(name)
+    br = _view_breaker.get(breaker_key)
     if br and br["fails"] >= VIEW_BREAKER_THRESHOLD and \
             time.monotonic() < br["open_until"]:
         if stale_entry is not None:
@@ -424,9 +426,9 @@ async def fetch_rows(
             return RowsResult(name, rows_c, trunc_c,
                               stale_entry.fetched_wall, cached=False, stale=True)
         raise QueryViewError("circuit_open", f"视图 {name} 熔断窗内")
-    # §13.3/§5.1 单飞键:(view, 凭证)[:: 点击期 params canonical]
+    # §13.3/§5.1 单飞键:(view, 凭证, 部署地址)[:: 点击期 params canonical]
     arrived = time.monotonic()
-    lock_key = f"{name}::{cred_id!r}"
+    lock_key = f"{name}::{cred_id!r}::{endpoint_key!r}"
     if bypass_cache:
         lock_key = f"{lock_key}::{json.dumps(click_params, sort_keys=True, ensure_ascii=False)}"
     lock = await _view_lock(lock_key)
@@ -454,7 +456,7 @@ async def fetch_rows(
                 # 投影后行 + 截断标记同载荷入缓存(§5.1/§5.3;truncated 是
                 # 行集自有语义,known-issue truncated-dead-field 收口)
                 _cache.put(cache_key, (rows, truncated), wall)
-            _view_breaker.pop(name, None)  # 成功清零
+            _view_breaker.pop(breaker_key, None)  # 成功清零
             result = RowsResult(name, rows, truncated, wall,
                                 cached=False, stale=False)
             if bypass_cache:
@@ -465,7 +467,7 @@ async def fetch_rows(
             # 不污健康信号(否则 3 次配置错会把 query_credential_required
             # 错误地翻译成 circuit_open)
             if e.status >= 500:
-                _bump_breaker(name)
+                _bump_breaker(breaker_key)
             if stale_entry is not None:    # stale-while-error(§5.1)
                 rows_c, trunc_c = stale_entry.payload
                 return RowsResult(name, rows_c, trunc_c,

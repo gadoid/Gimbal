@@ -10,7 +10,8 @@
   剩余 = hidden_count(只给数不泄露标题);
 * DELETE 409 仅本人场景的 template;他人场景(即使 public
   我能跑)与快照不阻断 — 名字引用按执行者池解析;
-* 存量方案 serviceBindings.authAlias 不在扫描面(S6 沿革)。
+* 方案 serviceBindings.alias 与方案所选组合条目都是运行依赖;
+  存量 serviceBindings.authAlias 仍不在扫描面(S6 沿革)。
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ def _tpl_step(endpoint: str, header_value: str) -> dict:
 async def _seed(owner_ids: dict[str, int]) -> None:
     """六场景 × 引用形状:
     sc-own-tpl   本人私有,模板引用 → 阻断 + member 可见
-    sc-own-sch   本人私有,存量方案带 authAlias(无模板)→ 不算引用
+    sc-own-sch   本人私有,方案 alias 绑定 → scheme 依赖(旧 authAlias 不算)
     sc-own-snap  本人私有,仅 config.users 快照 → 不阻断,kind=snapshot
     sc-other-pub 他人 public,模板 → member 可见,不阻断(能跑但名字引用)
     sc-other-prv 他人 private,模板 → 行主不可见(hidden_count)
@@ -100,6 +101,22 @@ async def _seed(owner_ids: dict[str, int]) -> None:
             is_default=False, payload={"serviceBindings": {
                 "fin-service": {"authAlias": ALIAS}}},
         ))
+        s.add(ComposerRunScheme(
+            scheme_id="rs-own-2", scenario_id="sc-own-sch", name="方案三",
+            is_default=False, payload={"serviceBindings": {
+                "fin-service": {"alias": ALIAS}}},
+        ))
+        from app.models.account_combo import AccountCombo
+        combo = AccountCombo(
+            scope="user", scope_id=owner_ids["own_user"], name="引用组合",
+            payload={"entries": [{"service": "fin-service", "alias": ALIAS}]})
+        s.add(combo)
+        await s.flush()
+        snap_scheme = (await s.execute(sa.select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-own-snap",
+            ComposerRunScheme.is_default.is_(True)))).scalar_one()
+        snap_scheme.payload = {
+            **(snap_scheme.payload or {}), "accountComboId": combo.id}
         await s.commit()
 
 
@@ -138,11 +155,12 @@ async def test_references_kinds_and_visibility(client):
          "refMode": "username", "refUsername": ACCOUNT_USER}]
     visible = {v["scenarioId"]: v["kinds"]
                for v in body["scenarioRefs"]["visible"]}
-    # member:本人 2 + 他人 public 1 可见;他人 private → hidden;
-    # sc-own-sch 的方案 authAlias 不算引用(扫描面不读方案)
+    # 本人 3 + 他人 public 1 可见;他人 private → hidden。方案 alias 与
+    # 组合条目分别标记为 scheme/combo,旧 authAlias 不计。
     assert visible == {
         "sc-own-tpl": ["template"],
-        "sc-own-snap": ["snapshot"],
+        "sc-own-sch": ["scheme"],
+        "sc-own-snap": ["combo", "snapshot"],
         "sc-other-pub": ["template"],
     }
     assert body["scenarioRefs"]["hidden_count"] == 1
@@ -165,25 +183,27 @@ async def test_list_carries_counts_snapshot_not_counted(client):
     r = await client.get("/api/auths", headers=own)
     row = next(a for a in r.json()["items"]
                if a["username"] == ACCOUNT_USER)
-    # N 条目 = 1(qa1);N 场景 = 条目名模板引用去重
-    # = sc-own-tpl + sc-other-pub + sc-other-prv = 3(快照/方案不计)
+    # N 条目 = 1(qa1);N 场景 = 模板/方案/组合运行依赖去重;
+    # 快照单独出现但不额外增加场景数。
     assert row["identityRefCount"] == 1
-    assert row["scenarioRefCount"] == 3
+    assert row["scenarioRefCount"] == 5
 
 
-async def test_delete_blocked_only_by_own_template(client):
+async def test_delete_blocked_by_own_runtime_refs(client):
     own, _ = await _setup(client)
     aid = await _own_account_id(client, own)
 
-    # 本人模板引用 → 409 + 摘要(sc-other-* 与快照不在阻断集)
+    # 本人模板/方案/组合引用 → 409 + 摘要(他人引用与纯快照不阻断)
     r = await client.delete(f"/api/auths/{aid}", headers=own)
     assert r.status_code == 409, r.text
     detail = r.json()["detail"]
-    assert detail["ownScenarioIds"] == ["sc-own-tpl"]
+    assert detail["ownScenarioIds"] == [
+        "sc-own-sch", "sc-own-snap", "sc-own-tpl"]
 
-    # 清掉本人模板引用(场景删除)后 → 快照/他人引用不再阻断,可删
+    # 清掉本人运行依赖后 → 快照/他人引用不再阻断,可删
     async with db_module.SessionLocal() as s:
-        await scenario_store.delete(s, "sc-own-tpl")
+        for sid in ("sc-own-tpl", "sc-own-sch", "sc-own-snap"):
+            await scenario_store.delete(s, sid)
         await s.commit()
     r = await client.delete(f"/api/auths/{aid}", headers=own)
     assert r.status_code == 204, r.text

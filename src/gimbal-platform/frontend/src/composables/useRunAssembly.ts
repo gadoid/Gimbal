@@ -37,6 +37,7 @@ import type { AssertionRegistry } from '@/types/assertion-registry'
 import { normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { stepService } from '@/types/plate'
+import { parseTplRefs } from '@/utils/tpl-refs'
 
 /** confirm 上送形状(RunDialog 面板 emit 的 opts,与 RunRequest 对齐) */
 export interface RunConfirmOpts {
@@ -92,6 +93,38 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
   /** 绑定下拉选项(owner 凭证池 ∪ 场景内置 users)已随 authz M2a S6 绑定
    *  瘦身退役 — 绑定选注册表别名,不再选凭证;别名候选/降级判定见
    *  utils/run-bindings.aliasCandidates / degradedAlias(面板自取注册表)。 */
+
+  /** 步骤直引身份按服务聚合;存为组合时只展示,不自动收敛。 */
+  const stepIdentityRefs = computed(() => {
+    const grouped = new Map<string, { service: string; aliases: string[] }>()
+    const scan = (node: unknown, add: (alias: string) => void) => {
+      if (typeof node === 'string') {
+        for (const ref of parseTplRefs(node)) {
+          if (ref.domain === 'auth' && ref.alias) add(ref.alias)
+        }
+      } else if (Array.isArray(node)) {
+        for (const item of node) scan(item, add)
+      } else if (node && typeof node === 'object') {
+        for (const value of Object.values(node)) scan(value, add)
+      }
+    }
+    for (const step of steps.value) {
+      const service = stepService(step)
+      const key = service || '__template__'
+      const add = (alias: string) => {
+        let row = grouped.get(key)
+        if (!row) {
+          row = { service, aliases: [] }
+          grouped.set(key, row)
+        }
+        if (!row.aliases.includes(alias)) row.aliases.push(alias)
+      }
+      const call = step.call as { user?: unknown } | undefined
+      if (typeof call?.user === 'string' && call.user) add(call.user)
+      scan(step, add)
+    }
+    return [...grouped.values()]
+  })
 
   /** stepTo 下拉展示名:平台编排态 orchestration.steps[].name(plate 无 name) */
   const stepNames = computed<string[]>(() =>
@@ -187,7 +220,7 @@ export function useRunAssembly(scenarioId: Ref<string | null | undefined>) {
     scenario, draft, dataSets, schemes, registry,
     loading, loaded, loadError,
     // 派生
-    serviceRows, stepNames, stepCount, steps,
+    serviceRows, stepIdentityRefs, stepNames, stepCount, steps,
     surface,
     // 动作
     load, refreshSchemes, saveAsScheme, dispatch,

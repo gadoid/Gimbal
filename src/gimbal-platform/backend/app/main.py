@@ -288,11 +288,9 @@ def create_app() -> FastAPI:
     app.include_router(scenario_filter_groups.router, prefix="/api")
     # 场景导入流水线(v2.3):/scenarios/import 两端点,先于 catch-all 注册
     app.include_router(scenario_import.router, prefix="/api")
-    # 账户组合(账户组合设计方案 §5):组合资源端点 + 场景绑定/读取
-    # 通道(/scenarios/{id}/account-combo,static 后缀,须先于 scenarios
-    # 的 /{scenario_id} catch-all 注册,同 data_sets.create_router 先例)
+    # 账户组合(账户组合设计方案 v4 §5):只管理组合资源;方案级绑定
+    # 复用上方已注册的 run-schemes CRUD。
     app.include_router(account_combos.router, prefix="/api")
-    app.include_router(account_combos.scenario_combo_router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
     app.include_router(report_definitions_router, prefix="/api")
 

@@ -42,6 +42,7 @@
 | 23 | legacy `run launch` 子进程执行链(`--cancel-file` 信号文件通道 / launch 信号量 / stdout 兜底面) | 2026-11-23 | server 链唯一:`execution_jobs` + worker 循环,取消走会话,取消落启动窗恒收敛,降级态由 `error` 字段承载 | 自举批(登记册 B6/C3 行;`EXEC_CHAIN` 配置键一并退役) |
 | 24 | steps 的 api 形态归一化(后端归一 + 前端双读) | v2.1 F-2a(2026-09) | 存储即终态:call 形态直接返回,前端 `stepCall()` 单读 `call`,后端零归一化 | spec《GIMBAL执行器重构-v2.1-融合实施案》F-2a |
 | 25 | 运行弹窗方案侧车的 prefix / mergePolicy / preset / auths 多选 chips | 2026-08-27 | 执行认证走条目引用链统一(注入清单 = 模板扫描 ∪ 绑定;认证选择器),方案不再携带凭证策略/前缀/预设与多选 chips(spec §10) | `770eea04` |
+| 26 | 场景级账户组合引用(`definition.config.accountCombo`)、场景绑定端点与执行配置管理入口 | 2026-11-25 | 组合引用唯一来源 = 运行方案 payload `accountComboId`;管理入口 = `/account-combos` 四区,Runner 不再选执行配置,方案区改指组合;换环境通过换方案完成 | 定稿 v4(account-combo-spec-v4-scheme-bound) |
 
 ## 各条详情
 
@@ -127,6 +128,12 @@
 - **现语义**:编排侧不做扰动标记;权威扰动点列表 = **断言管理条目的 `path`**(其语义即注入地址)。容器模板态保留 `.node-tpl-badge`,文案**回退**为「引用变量」—— 它只说「这是模板串,不是字面量」,该事实独立成立且不 over-claim。
 - **存量处置**:无 —— 纯呈现层,零持久化、零 wire 面。`${var.x}` 值本身照旧显示在控件里,`☰` 菜单的变量入口不动(删的是**标记**,不是能力)。
 - **涉及面**:`components/composer/FieldForm.vue`(`isPerturb` 已删;三处 `node-tpl-badge` 文案回退)、`components/composer/StrategyForm.vue`(「同步骤扰动位」列表 + `siblingPerturbs` prop + `isAssertion` 已删)、`components/composer/CaseComposerCanvas.vue`(`siblingPerturbs` 推导已删,随之失去唯一用途的 `TPL_FULL_RE` import 一并删)。
+
+### 26. 场景级账户组合引用与执行配置入口(2026-11-25,定稿 v4)
+
+- **原语义**:场景 `definition.config.accountCombo` 保存默认组合引用,场景级绑定端点负责读写,场景与组合形成 1:1 关系;组合治理沿用执行配置三页签,Runner 可选执行配置,方案区指引去执行配置,slot-map 换用仍在执行配置面维护。
+- **现语义**:运行方案 payload 的 `accountComboId` 是唯一组合引用来源;一个场景可有多个方案,各方案分别绑定组合。执行、预检、预览、查询与令牌范围统一按所选方案解析,组合条目只垫底,不改变面内覆盖序;`raw` 不吃方案配方。治理入口改为 `/account-combos` 四区(列表/编辑/就绪度/引用方案),Runner 执行配置选择器移除,方案区改指账户组合,slot-map 换用面随执行配置入口退役。
+- **存量处置**:场景保存时剥离旧 `accountCombo` 键;跨场景复制方案时剥离 `accountComboId`,同场景另存保留。既有场景不自动迁移组合绑定,由用户在方案工作台重新选择。旧 `/exec-configs` 深链重定向到 `/account-combos`;执行配置表/端点/链路冻结保留,历史执行重放仍读原快照。
 
 ## 维护约定
 

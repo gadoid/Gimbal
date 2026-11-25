@@ -1,37 +1,21 @@
-"""combo_base 单点助手(账户组合设计方案 §3.2/§6.3,定稿 05)。
+"""账户组合方案级读取、垫底合并与绑定闸(设计方案 v4 §3/§5)。
 
-组合条目在各执行装配面做**垫底合并**(``merged = {**组合条目,
-**该面既有合并结果}``——组合永远垫底,不重排任何面内覆盖序);
-本模块只提供两件小事:
-
-* :func:`combo_base` —— **纯读取映射层**:读场景
-  ``definition.config.accountCombo`` → 组合 ``payload.entries`` →
-  ``{service: alias}``。**自身不做条目校验**(校验职责分层:全量校验
-  只在组合保存面与就绪页;执行/预检只按引用服务校验,由调用面归
-  ``identity_combo_missing``,§6.3 fail-closed);
-* :func:`pad_bindings` —— 面内一次合并的机械半边(垫底,不改内层)。
-
-八装配面各自按其接法合并(令牌面装载时合并防覆写、集成面规范化
-scheme_payload、Suite 直跑调用方合并等,§3.2 表)——**不建大一统
-resolver**;面间漂移由测试面的「装配面同基础断言」钉死。
+组合引用唯一来源是运行方案 payload 的 ``accountComboId``。本模块只
+负责纯读取、机械垫底和绑定权限/同区校验;条目全量校验仍归组合保存面,
+执行面只按实际引用服务 fail-closed。
 """
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @dataclass
 class ComboBase:
-    """combo_base 的返回形态:条目映射 + 溯源四件套 + 缺失信号。
-
-    ``missing`` = 场景绑定了组合但组合行已被并发删除 —— 删除有
-    in-use 闸,正常不可达;调用面须 fail-closed 归
-    ``identity_combo_missing``,**绝不以裸键继续执行**(§6.3)。
-    ``combo_id is None`` = 未绑定(组合不参与解析,一切照旧)。
-    """
+    """组合条目映射、溯源与缺失信号。"""
 
     combo_id: int | None
     name: str
@@ -44,56 +28,62 @@ class ComboBase:
         return self.combo_id is not None
 
     def fingerprint(self) -> dict | None:
-        """订阅指纹投影形态(§6.5):id+name+revision;未绑 = None。"""
         if not self.bound:
             return None
-        return {"id": self.combo_id, "name": self.name,
-                "revision": self.revision}
+        return {"id": self.combo_id, "revision": self.revision}
 
 
-async def combo_base(db: AsyncSession, scenario_row) -> ComboBase:
-    """纯读取映射(§3.2):场景行 → 组合条目 ``{service: alias}``。"""
+async def combo_base(db: AsyncSession, combo_id: int | None) -> ComboBase:
+    """按方案 payload 中的组合 id 纯读取条目映射。"""
     from ..models import AccountCombo
-    from .scenario_store import ACCOUNT_COMBO_REF_KEY
 
-    cfg = ((scenario_row.payload or {}).get("definition") or {}).get("config")
-    cid = cfg.get(ACCOUNT_COMBO_REF_KEY) if isinstance(cfg, dict) else None
-    if not isinstance(cid, int):
+    if not isinstance(combo_id, int):
         return ComboBase(None, "", 0)
-    combo = await db.get(AccountCombo, cid)
+    combo = await db.get(AccountCombo, combo_id)
     if combo is None:
-        return ComboBase(cid, "", 0, missing=True)
+        return ComboBase(combo_id, "", 0, missing=True)
     entries: dict[str, str] = {}
-    for e in (combo.payload or {}).get("entries") or []:
-        if not isinstance(e, dict):
+    for entry in (combo.payload or {}).get("entries") or []:
+        if not isinstance(entry, dict):
             continue
-        svc, alias = e.get("service"), e.get("alias")
-        if isinstance(svc, str) and svc and isinstance(alias, str) and alias:
-            entries[svc] = alias
+        service, alias = entry.get("service"), entry.get("alias")
+        if (isinstance(service, str) and service
+                and isinstance(alias, str) and alias):
+            entries[service] = alias
     return ComboBase(combo.id, combo.name, combo.revision or 1, entries)
 
 
-def pad_bindings(bindings: dict | None, combo: ComboBase) -> dict:
-    """垫底合并的机械半边:``{**组合条目, **面既有合并结果}`` —— 面内
-    已有的服务键原样胜出(覆盖序不动),组合只补面内没有的服务。
+async def scheme_combo(
+    db: AsyncSession, scheme_payload: dict | None,
+) -> ComboBase:
+    payload = scheme_payload or {}
+    return await combo_base(db, payload.get("accountComboId"))
 
-    返回新 dict,不改入参(面既有合并结果可能是共享对象);值域同
-    ``serviceBindings`` 现行形态 ``{service: {"alias": name}}``。
-    """
+
+def pad_bindings(bindings: dict | None, combo: ComboBase) -> dict:
+    """组合垫底,面内既有服务键原样胜出。"""
     out = dict(bindings or {})
     if not combo.bound:
         return out
-    for svc, alias in combo.entries.items():
-        if svc not in out:
-            out[svc] = {"alias": alias}
+    for service, alias in combo.entries.items():
+        if service not in out:
+            out[service] = {"alias": alias}
     return out
 
 
+async def scheme_bindings_with_combo(
+    db: AsyncSession, scheme_payload: dict | None,
+) -> dict:
+    from ..schemas.scenario_composer import scrub_retired_bindings
+
+    payload = scheme_payload or {}
+    combo = await scheme_combo(db, payload)
+    return pad_bindings(
+        scrub_retired_bindings(payload.get("serviceBindings")), combo)
+
+
 class ComboIdentityMissing(ValueError):
-    """引用服务的组合条目不可用(§6.3 fail-closed):组合行被并发删除,
-    或引用服务的条目别名已注销。``code`` 恒 ``identity_combo_missing``;
-    各执行面按自己的传输形态透传(Conflict / HTTPException 409 /
-    PrecheckGateError / GraphDispatchError),detail 携带定位三件套。"""
+    """引用服务的组合条目不可用,执行面统一映射 409。"""
 
     def __init__(self, message: str, *, combo_id: int,
                  service: str | None = None,
@@ -115,39 +105,105 @@ class ComboIdentityMissing(ValueError):
 
 async def referenced_combo_gate(
     db: AsyncSession, combo: ComboBase, services: Iterable[str],
+    bindings: dict | None = None,
+    slot_map: "dict[str, str] | None" = None,
 ) -> None:
-    """执行/预检面 fail-closed(§6.3):**只校验本场景实际引用的服务**
-    的组合条目——未引用服务的悬空条目不阻断执行。
-
-    * 组合行缺失(``combo.missing``,删除竞态)→ :class:`ComboIdentityMissing`
-      (调用面映射 409);
-    * 引用服务的条目别名已注销 → 同码(携带 comboId/service/alias,
-      修复组合或重新绑定后自动恢复,同 missing_credential 族语义);
-    * 条目在、当前池无账户 / 多候选 —— **不在此判**,沿用既有
-      ``account_missing`` / ``account_ambiguous`` 分类(§5.2)。
-    """
+    """只校验仍由组合供号的引用服务;面内覆盖与换用覆盖不连坐。"""
     if not combo.bound:
         return
     if combo.missing:
         raise ComboIdentityMissing(
-            f"场景绑定的账户组合 {combo.combo_id} 已不存在"
+            f"方案绑定的账户组合 {combo.combo_id} 已不存在"
             " —— 请重新绑定或解除绑定", combo_id=combo.combo_id)
-    wanted = {s for s in services if s in combo.entries}
-    if not wanted:
-        return
-    from sqlalchemy import select
+    from ..services.service_aliases import effective_alias
 
+    lookup = slot_map or {}
+    effective: dict[str, str] = {}
+    for service in services:
+        alias = combo.entries.get(service)
+        if alias is None:
+            continue
+        selected = (effective_alias(service, bindings)
+                    if service in (bindings or {}) else alias)
+        if lookup.get(selected, selected) != selected:
+            continue
+        if selected == alias:
+            effective[service] = alias
+    if not effective:
+        return
     from ..models.service_identity import ServiceIdentity
 
     rows = set((await db.execute(
         select(ServiceIdentity.alias_name).where(
-            ServiceIdentity.alias_name.in_(
-                [combo.entries[s] for s in wanted])))).scalars())
-    for s in sorted(wanted):
-        alias = combo.entries[s]
+            ServiceIdentity.alias_name.in_(effective.values()))
+    )).scalars())
+    for service in sorted(effective):
+        alias = effective[service]
         if alias in rows:
             continue
         raise ComboIdentityMissing(
-            f"组合 {combo.combo_id}({combo.name})中服务 {s!r}"
+            f"组合 {combo.combo_id}({combo.name})中服务 {service!r}"
             f"的身份条目 {alias!r} 已注销 —— 请修复组合或解除绑定",
-            combo_id=combo.combo_id, service=s, alias=alias)
+            combo_id=combo.combo_id, service=service, alias=alias)
+
+
+class ComboBindingError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+    def detail(self) -> dict:
+        return {"code": self.code, "message": self.message}
+
+
+async def require_combo_bindable(
+    db: AsyncSession, user, scenario_row, combo_id: int | None, *,
+    lock: bool = True,
+):
+    """方案绑定闸:存在、可读、同区;可选锁组合行串行化删除。"""
+    from ..models import AccountCombo
+    from ..services.zone import (
+        ensure_member_same_zone, my_project_roles, public_project_id,
+    )
+
+    if combo_id is None:
+        return None
+    stmt = select(AccountCombo).where(AccountCombo.id == combo_id)
+    if lock:
+        stmt = stmt.with_for_update()
+    combo = (await db.execute(stmt)).scalar_one_or_none()
+    if combo is None:
+        raise ComboBindingError(
+            "account_combo_not_found", f"组合不存在或不可读: {combo_id}")
+    if combo.scope == "user":
+        readable = combo.scope_id == user.id
+    else:
+        readable = combo.scope_id in await my_project_roles(db, user.id)
+    if not readable:
+        raise ComboBindingError(
+            "account_combo_not_found", f"组合不存在或不可读: {combo_id}")
+
+    public_id = await public_project_id(db)
+    if scenario_row.project_id == public_id:
+        raise ComboBindingError(
+            "account_combo_scope_mismatch", "公共场景不绑定账户组合")
+    if combo.scope == "user":
+        if scenario_row.project_id is not None:
+            raise ComboBindingError(
+                "account_combo_scope_mismatch",
+                "个人组合只能绑定本人私有场景(v1 硬同区)")
+        try:
+            ensure_member_same_zone(
+                suite_project_id=None, suite_owner_id=scenario_row.owner_id,
+                scen_project_id=None, scen_owner_id=combo.scope_id,
+                scenario_id=scenario_row.scenario_id)
+        except ValueError:
+            raise ComboBindingError(
+                "account_combo_scope_mismatch",
+                "个人组合只能绑定本人私有场景(v1 硬同区)") from None
+    elif scenario_row.project_id != combo.scope_id:
+        raise ComboBindingError(
+            "account_combo_scope_mismatch",
+            "项目组合只能绑定同一项目的场景(v1 硬同区)")
+    return combo

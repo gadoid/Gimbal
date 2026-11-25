@@ -486,6 +486,8 @@ export interface SchemeV2 {
   dataSetSelection: { datasetId: string; rowIndexes?: number[] }[]
   injectionEntryIds: string[]
   serviceBindings: Record<string, ServiceBinding>
+  /** 账户组合引用;未绑定不落键,解绑时删除而非写 null。 */
+  accountComboId?: number
   options: RunOptions
   /** §8.2:方案不携带环境链位(ADR-0003 #21;存量 payload 键后端停读,读侧忽略) */
 }
@@ -638,6 +640,13 @@ export interface PrecheckResult {
   schemeValid: boolean
   /** 方案引用但已删的数据集 */
   deadDatasetIds: string[]
+  /** 组合行缺失或最终仍由组合供号的身份条目悬空;非空即不可跑 */
+  comboMissing?: {
+    message: string
+    comboId: number
+    service?: string
+    alias?: string
+  } | null
   /** dispatch 侧同口径判死的注入条目 id(执行时会被跳过) */
   danglingEntryIds: string[]
   /** steps 引用了、但声明 URL 与绑定 URL 双缺的 service */

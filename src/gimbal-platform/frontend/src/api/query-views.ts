@@ -45,11 +45,15 @@ export async function fetchQueryViewRows(
      * 同款解析地址(身份/标签链/部署表);与 serviceUrl 显式覆盖二选一。 */
     scenarioId?: string | null
     stepIndex?: number
-    /** 显式覆盖通道(调试/私有 SUT 直连);给定时后端跳过上下文解析 */
+    /** v4:查询身份按当前已保存方案解析;省略时后端回落默认方案。 */
+    schemeId?: string | null
+    /** 显式覆盖通道(调试/私有 SUT 直连);只覆盖地址,不绕过方案/组合身份判定 */
     serviceUrl?: string
     queryAlias?: string | null
     /** 调用步骤的服务名(同源兜底:与视图声明的 service 不符 → 后端 422) */
     service?: string | null
+    /** v4:个人/项目凭证池;项目池仅用于当前成员可达的普通项目场景。 */
+    credentialSource?: 'personal' | 'project'
     /** §13.5 点击期参数(序列化为 JSON-object 字符串查询参;空对象不携带) */
     params?: Record<string, unknown>
   } = {},
@@ -59,9 +63,11 @@ export async function fetchQueryViewRows(
       refresh: opts.refresh ? 1 : 0,
       ...(opts.scenarioId ? { scenarioId: opts.scenarioId } : {}),
       ...(opts.stepIndex !== undefined ? { stepIndex: opts.stepIndex } : {}),
+      ...(opts.schemeId ? { schemeId: opts.schemeId } : {}),
       ...(opts.serviceUrl ? { service_url: opts.serviceUrl } : {}),
       ...(opts.queryAlias ? { query_alias: opts.queryAlias } : {}),
       ...(opts.service ? { service: opts.service } : {}),
+      ...(opts.credentialSource ? { credentialSource: opts.credentialSource } : {}),
       ...(opts.params && Object.keys(opts.params).length
         ? { params: JSON.stringify(opts.params) } : {}),
     },

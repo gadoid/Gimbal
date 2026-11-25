@@ -1,17 +1,14 @@
 /**
- * SchemeRunConfigSection — 运行配置区(authz M2a S6「别名瘦身」后口径)
+ * SchemeRunConfigSection — 运行配置区(v4 方案级账户组合口径)
  *
- * 绑定语义 = 「服务键 → 用哪个别名」({svc:{alias}}),URL/凭证字段退役:
- * - 别名 select 只列与服务键同基的注册表别名(条目带在选项文案里)
- * - 选中 → update:serviceBindings 只落显式条目;清空 → 键移除
- * - binding-url 输入已退役,不再渲染
- * - 存量别名已删 → 行标红(binding-degraded-warn)+ disabled option 保值
- * - 运行参数钳位/总量预览/stepTo 原生 select 行为保持
+ * 方案显式绑定覆盖组合,组合垫底服务键;来源徽标可见。
+ * URL/凭证字段已退役,运行参数钳位与 stepTo 原生 select 行为保持。
  */
 import { describe, it, expect, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import SchemeRunConfigSection from '../SchemeRunConfigSection.vue'
+import SchemeRunConfigSection, { type AccountComboOption } from '../SchemeRunConfigSection.vue'
 import type { ServiceAliasRow } from '@/api/service-aliases'
+import type { AccountComboRow } from '@/api/accountCombos'
 
 const listAllAliasesMock = vi.hoisted(() => vi.fn())
 vi.mock('@/api/service-aliases', async (importOriginal) => {
@@ -32,10 +29,18 @@ const BASE = {
   stepTo: null as number | null, nRuns: 1, parallel: 1,
   stepCount: 3,
   environments: [] as Array<{ id: number; name: string; is_default: boolean }>,
+  accountCombos: [] as AccountComboOption[], comboScopeLabel: '个人',
+  comboScope: 'user' as 'user' | 'project',
+  comboProjectId: undefined as number | undefined,
+  stepIdentityRefs: [] as { service: string; aliases: string[] }[],
 }
 
 function mountSection(
-  props: Partial<typeof BASE> & { stepNames?: string[] } = {},
+  props: Partial<typeof BASE> & {
+    stepNames?: string[]
+    accountComboId?: number | null
+    schemeName?: string
+  } = {},
 ) {
   const w = mount(SchemeRunConfigSection, {
     props: { ...BASE, ...props }, global: { plugins: [] },
@@ -51,7 +56,6 @@ describe('SchemeRunConfigSection', () => {
       aliasRow('svc-b', 'svc-b'),
       aliasRow('svc-b-ro', 'svc-b', 'ro'),
     ])
-    // 分层⑤:存量绑定在场才出选择器(空方案指到执行配置)
     const w = mountSection({
       serviceBindings: { 'svc-a': { alias: 'svc-a' } } })
     await flushPromises()
@@ -62,18 +66,87 @@ describe('SchemeRunConfigSection', () => {
     })
   })
 
-  it('分层⑤:空方案(无绑定)→ 指引卡指到执行配置,不出选择器(§8.2 后无环境位)', async () => {
+  it('空方案仍显示方案级组合选择器;旧执行配置指引卡已退役', async () => {
     listAllAliasesMock.mockResolvedValue([aliasRow('svc-a-uat', 'svc-a')])
     const w = mountSection()
     await flushPromises()
-    expect(w.find('[data-testid="binding-pointer"]').exists()).toBe(true)
-    expect(w.find('[data-testid="binding-pointer-link"]').attributes('href'))
-      .toBe('/exec-configs')
-    expect(w.findAll('[data-testid="binding-alias"]').length).toBe(0)
-    // §8.2 方案环境整体退役:不再渲染 param-env / env-pointer
+    expect(w.find('[data-testid="account-combo-select"]').exists()).toBe(true)
+    expect(w.find('[data-testid="binding-pointer"]').exists()).toBe(false)
+    expect(w.find('[data-testid="binding-pointer-link"]').exists()).toBe(false)
+    expect(w.findAll('[data-testid="binding-alias"]').length).toBe(1)
     expect(w.find('[data-testid="env-pointer"]').exists()).toBe(false)
     expect(w.find('[data-testid="param-env"]').exists()).toBe(false)
-    expect(w.find('[data-testid="env-pointer-link"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('组合提供垫底别名,方案显式绑定优先并标注来源', async () => {
+    listAllAliasesMock.mockResolvedValue([
+      aliasRow('svc-a', 'svc-a'), aliasRow('svc-a-uat', 'svc-a'),
+      aliasRow('svc-b', 'svc-b'), aliasRow('svc-b-ro', 'svc-b', 'ro'),
+    ])
+    const w = mountSection({
+      accountComboId: 7,
+      accountCombos: [{
+        id: 7, name: '测试组合', scope: 'user', scopeLabel: '个人', isDefault: true,
+        entries: [
+          { service: 'svc-a', alias: 'svc-a-uat' },
+          { service: 'svc-b', alias: 'svc-b-ro' },
+        ],
+      }],
+      serviceBindings: { 'svc-a': { alias: 'svc-a' } },
+    })
+    await flushPromises()
+    expect(w.get('[data-testid="binding-source-svc-a"]').text()).toBe('方案覆盖')
+    expect(w.get('[data-testid="binding-source-svc-b"]').text()).toBe('组合')
+    expect(w.get('[data-testid="binding-source-svc-bare"]').text()).toBe('服务键')
+    expect(w.findAll('[data-testid="binding-alias"]')[0].attributes('value')).toBe('svc-a')
+    expect(w.findAll('[data-testid="binding-alias"]')[1].attributes('value')).toBe('svc-b-ro')
+    w.unmount()
+  })
+
+  it('存为组合只快照方案显式绑定,创建成功后绑定新组合', async () => {
+    listAllAliasesMock.mockResolvedValue([aliasRow('svc-a', 'svc-a')])
+    const w = mountSection({
+      schemeName: '冒烟', serviceBindings: { 'svc-a': { alias: 'svc-a' } },
+      stepIdentityRefs: [
+        { service: 'svc-a', aliases: ['step-user'] },
+        { service: '', aliases: ['template-user'] },
+      ],
+    })
+    await flushPromises()
+    await w.get('[data-testid="scheme-save-as-combo"]').trigger('click')
+    const scopeSelect = w.get('[data-testid="scheme-combo-scope"]')
+    expect(scopeSelect.element).toHaveProperty('value', 'user')
+    expect(scopeSelect.findAll('option').map((o) => o.text())).toEqual(['个人', '项目'])
+    expect(w.get('[data-testid="scheme-step-direct-refs"]').text())
+      .toContain('svc-a → step-user')
+    expect(w.get('[data-testid="scheme-step-direct-refs"]').text())
+      .toContain('模板引用 → template-user')
+    await w.get('[data-testid="scheme-combo-save"]').trigger('click')
+    const event = w.emitted('save-as-combo')!.at(-1)!
+    expect(event[0]).toEqual({
+      name: '冒烟 组合', entries: [{ service: 'svc-a', alias: 'svc-a' }],
+      scope: 'user',
+    })
+    ;(event[1] as (row: AccountComboRow | null) => void)({ id: 11 } as AccountComboRow)
+    await flushPromises()
+    expect(w.emitted('update:accountComboId')!.at(-1)![0]).toBe(11)
+    expect(w.find('[data-testid="scheme-combo-form"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('项目场景显式带出项目 scope 与 projectId', async () => {
+    listAllAliasesMock.mockResolvedValue([])
+    const w = mountSection({
+      comboScope: 'project', comboProjectId: 9, comboScopeLabel: '项目甲',
+    })
+    await flushPromises()
+    await w.get('[data-testid="scheme-new-combo"]').trigger('click')
+    await w.get('[data-testid="scheme-combo-name"]').setValue('项目组合')
+    await w.get('[data-testid="scheme-combo-save"]').trigger('click')
+    expect(w.emitted('create-combo')!.at(-1)![0]).toEqual({
+      name: '项目组合', entries: [], scope: 'project', projectId: 9,
+    })
     w.unmount()
   })
 
@@ -87,7 +160,6 @@ describe('SchemeRunConfigSection', () => {
 
   it('binding-url 输入已退役(M2a S6);无同基候选行显示静默说明代替下拉', async () => {
     listAllAliasesMock.mockResolvedValue([aliasRow('svc-a-uat', 'svc-a')])
-    // 分层⑤:存量绑定在场(svc-a 已绑非降级别名)→ bind-list 渲染全部服务行
     const w = mountSection({
       serviceBindings: { 'svc-a': { alias: 'svc-a-uat' } } })
     await flushPromises()
@@ -105,13 +177,12 @@ describe('SchemeRunConfigSection', () => {
       aliasRow('svc-a-maker', 'svc-a', 'maker'),
       aliasRow('other', 'other-sys'),
     ])
-    // 分层⑤:存量绑定在场驱动(空方案不出选择器)
     const w = mountSection({
       serviceBindings: { 'svc-a': { alias: 'svc-a' } } })
     await flushPromises()
     const sel = w.findAll('[data-testid="binding-alias"]')[0]
     const opts = sel.findAll('option').map((o) => o.text())
-    expect(opts[0]).toContain('用服务键本身')
+    expect(opts[0]).toContain('用服务键')
     expect(opts.some((t) => t === 'svc-a-uat')).toBe(true)
     expect(opts.some((t) => t.includes('svc-a-maker(条目 maker)'))).toBe(true)
     expect(opts.some((t) => t.includes('other'))).toBe(false)   // 跨基不列

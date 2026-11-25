@@ -17,7 +17,8 @@ import { defineComponent, h, ref } from 'vue'
 import { mount, DOMWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
-import { getServiceResolution } from '@/api/scenario-composer'
+import { getServiceResolution, listRunSchemes } from '@/api/scenario-composer'
+import { listAccountCombos } from '@/api/accountCombos'
 import {
   listServiceInstanceOverview, putServiceInstance,
 } from '@/api/services'
@@ -30,6 +31,10 @@ import type { ConfigView } from '@/types/plate'
 // 服务引用解析端点 mock(执行环境横幅)
 vi.mock('@/api/scenario-composer', () => ({
   getServiceResolution: vi.fn(),
+  listRunSchemes: vi.fn(),
+}))
+vi.mock('@/api/accountCombos', () => ({
+  listAccountCombos: vi.fn(),
 }))
 // 实例组合读模型 + 创建用例
 vi.mock('@/api/services', () => ({
@@ -117,6 +122,8 @@ beforeEach(() => {
     envMixed: null,
     services: [],
   })
+  vi.mocked(listRunSchemes).mockResolvedValue([])
+  vi.mocked(listAccountCombos).mockResolvedValue({ personal: [], projects: [] })
   vi.mocked(listServiceInstanceOverview).mockResolvedValue(overviewFixture())
   vi.mocked(listEnvironments).mockResolvedValue([
     { id: 1, name: '测试', description: '', lines: {},
@@ -293,6 +300,28 @@ describe('CaseComposerConfig — 变量锁(var-lock spec §2)', () => {
     const { config } = mountWithParent(LOCKED_CFG())
     await flush()
     expect(config.value.vars).toEqual({ 'fin.env': 'qa', 'fin.amount': 100 })
+  })
+})
+
+describe('CaseComposerConfig — 默认方案账户组合(v4)', () => {
+  it('UsersCard 区域只读展示默认方案绑定的组合名称并跳工作台', async () => {
+    vi.mocked(listRunSchemes).mockResolvedValue([{
+      schemeId: 'rs-def', name: '默认方案', isDefault: true,
+      dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
+      options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
+      accountComboId: 17,
+    }])
+    vi.mocked(listAccountCombos).mockResolvedValue({
+      personal: [{ id: 17, name: '测试组合' } as any],
+      projects: [],
+    })
+    const { w } = mountWithParent(makeConfig())
+    await flush()
+    const line = w.find('[data-testid="default-combo-line"]')
+    expect(line.text().replace(/\s+/g, '')).toContain('当前默认方案绑定：测试组合')
+    await line.find('[data-testid="default-combo-workbench"]').trigger('click')
+    expect(routerMocks.push).toHaveBeenCalledWith('/scenarios/sc-cfg-test/schemes')
+    w.unmount()
   })
 })
 

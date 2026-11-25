@@ -31,11 +31,29 @@ async def _mk_combo(client, headers, name: str, entries: list[dict],
     return r.json()["id"]
 
 
-async def _bind(client, headers, sid: str, combo_id) -> None:
-    r = await client.post(
-        f"/api/scenarios/{sid}/account-combo",
-        json={"comboId": combo_id}, headers=headers)
+async def _bind(client, headers, sid: str, combo_id,
+                scheme_id: str | None = None) -> dict:
+    listed = await client.get(
+        f"/api/scenarios/{sid}/run-schemes", headers=headers)
+    assert listed.status_code == 200, listed.text
+    schemes = listed.json()
+    scheme = next((s for s in schemes if s["schemeId"] == scheme_id), None)
+    if scheme is None:
+        scheme = next((s for s in schemes if s["isDefault"]), schemes[0])
+    body = {
+        "name": scheme["name"],
+        "dataSetIds": scheme.get("dataSetIds") or [],
+        "dataSetSelection": scheme.get("dataSetSelection") or [],
+        "injectionEntryIds": scheme.get("injectionEntryIds") or [],
+        "serviceBindings": scheme.get("serviceBindings") or {},
+        "options": scheme.get("options") or {},
+        **({"accountComboId": combo_id} if combo_id is not None else {}),
+    }
+    r = await client.put(
+        f"/api/scenarios/{sid}/run-schemes/{scheme['schemeId']}",
+        json=body, headers=headers)
     assert r.status_code == 200, r.text
+    return r.json()
 
 
 async def _delete_identity(alias: str) -> None:
@@ -52,6 +70,13 @@ async def _last_config_json() -> dict:
         ex = (await s.execute(sa.select(Execution).order_by(
             Execution.id.desc()))).scalars().first()
         return ex.config_json
+
+
+async def _last_execution_id() -> int:
+    from app.models import Execution
+    async with db_module.SessionLocal() as s:
+        return (await s.execute(sa.select(Execution.id).order_by(
+            Execution.id.desc()))).scalars().first()
 
 
 async def _seed_combo_identity(alias: str, base: str) -> None:
@@ -143,6 +168,77 @@ async def test_run_combo_dangling_alias_409(client, plate_mock: PlateMock):
     assert detail["alias"] == "fin-service-maker"
 
 
+async def test_token_combo_dangling_uses_combo_error_code(
+        client, plate_mock: PlateMock):
+    """令牌面在范围闸前归位组合悬空,不误报普通绑定/范围错误。"""
+    from .inbound_fixtures import mk_token
+
+    bob = await _member(client, "bob_token_combo")
+    await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob_token_combo", "qa1")
+    await _seed_deployment()
+    cid = await _mk_combo(client, bob, "令牌悬空组合", [
+        {"service": "fin-service", "alias": "qa1"}])
+    scheme = await _bind(client, bob, "sc-test", cid)
+    await _delete_identity("qa1")
+    _, plain = await mk_token(user_id=await _uid_of("bob_token_combo"))
+    r = await client.post(
+        "/api/runs", headers={"Authorization": f"Bearer {plain}"},
+        json={"scenarioId": "sc-test", "schemeId": scheme["schemeId"]})
+    assert r.status_code == 409, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "identity_combo_missing"
+    assert detail["comboId"] == cid
+    assert detail["service"] == "fin-service"
+    assert detail["alias"] == "qa1"
+
+
+async def test_combo_dangling_shadowed_by_face_or_scheme(
+        client, plate_mock: PlateMock, monkeypatch):
+    """合法面内覆盖不被悬空组合条目阻断;无覆盖的预检仍 fail-closed。"""
+    plate_mock.behaviour = "echo"
+    bob = await _member(client, "bob_shadow")
+    await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob_shadow", "qa1")
+    await _seed_pool_auth("bob_shadow", "fin-service-maker")
+    await _seed_deployment()
+    cid = await _mk_combo(client, bob, "覆盖组合", [
+        {"service": "fin-service", "alias": "fin-service-maker"}])
+    default_scheme = await _bind(client, bob, "sc-test", cid)
+    await _delete_identity("fin-service-maker")
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob, json=_run_payload(
+        dataSetIds=[], serviceBindings={"fin-service": {"alias": "qa1"}}))
+    assert r.status_code == 201, r.text
+    r = await client.post("/api/runs/preview", headers=bob, json={
+        "scenarioId": "sc-test",
+        "serviceBindings": {"fin-service": {"alias": "qa1"}}})
+    assert r.status_code == 200, r.text
+
+    r = await client.post("/api/run/precheck", headers=bob, json=[{
+        "scenarioId": "sc-test", "schemeId": default_scheme["schemeId"]}])
+    assert r.status_code == 200, r.text
+    assert r.json()[0]["schemeValid"] is False
+    assert r.json()[0]["comboMissing"]["alias"] == "fin-service-maker"
+
+    r = await client.post("/api/scenarios/sc-test/run-schemes", headers=bob,
+                          json={"name": "覆盖方案", "dataSetSelection": [],
+                                "injectionEntryIds": [],
+                                "serviceBindings": {
+                                    "fin-service": {"alias": "qa1"}},
+                                "options": {}})
+    assert r.status_code == 201, r.text
+    scheme_id = r.json()["schemeId"]
+    await _bind(client, bob, "sc-test", cid, scheme_id)
+    r = await client.post("/api/run/precheck", headers=bob, json=[{
+        "scenarioId": "sc-test", "schemeId": scheme_id}])
+    assert r.status_code == 200, r.text
+    assert r.json()[0]["comboMissing"] is None
+    assert r.json()[0]["schemeValid"] is True
+
+
 async def test_run_combo_row_missing_409(client, plate_mock: PlateMock):
     """组合行被并发删除(直删绕过 in-use 闸模拟竞态)→ 409 同码。"""
     from app.models import AccountCombo
@@ -214,6 +310,96 @@ async def test_run_combo_account_missing_not_combo_code(
     assert "fin-bare" in detail.get("aliases", [])
 
 
+async def test_raw_skips_bound_combo(client, plate_mock: PlateMock,
+                                     monkeypatch):
+    """raw 不取任何方案配方:默认方案组合即使悬空也不阻断运行/预检。"""
+    from app.models import AccountCombo
+    plate_mock.behaviour = "echo"
+    bob = await _member(client, "bob_raw")
+    await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob_raw", "qa1")
+    await _seed_deployment()
+    cid = await _mk_combo(client, bob, "raw-组合", [
+        {"service": "fin-service", "alias": "qa1"}])
+    await _bind(client, bob, "sc-test", cid)
+    async with db_module.SessionLocal() as s:
+        await s.execute(sa.delete(AccountCombo).where(
+            AccountCombo.id == cid))
+        await s.commit()
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob, json=_run_payload(
+        dataSetIds=[], schemeId="raw"))
+    assert r.status_code == 201, r.text
+    config_json = await _last_config_json()
+    assert config_json["serviceBindings"] == {}
+    assert "accountComboId" not in config_json
+
+    r = await client.post("/api/run/precheck", headers=bob, json=[{
+        "scenarioId": "sc-test", "schemeId": "raw"}])
+    assert r.status_code == 200, r.text
+    assert r.json()[0]["schemeFound"] is True
+    assert r.json()[0]["comboMissing"] is None
+
+
+async def test_rerun_replays_combo_terminal_binding(client, plate_mock: PlateMock):
+    """重跑只吃首发快照:当前组合行删除后,重跑仍按原合并终值执行。"""
+    from app.models import AccountCombo
+    plate_mock.behaviour = "echo"
+    bob = await _member(client, "bob_rerun")
+    await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob_rerun", "qa1")
+    await _seed_pool_auth("bob_rerun", "fin-service-maker")
+    await _seed_deployment()
+    cid = await _mk_combo(client, bob, "rerun-组合", [
+        {"service": "fin-service", "alias": "fin-service-maker"}])
+    await _bind(client, bob, "sc-test", cid)
+    r = await client.post("/api/runs", headers=bob,
+                          json=_run_payload(dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    origin = await _last_execution_id()
+    async with db_module.SessionLocal() as s:
+        await s.execute(sa.delete(AccountCombo).where(
+            AccountCombo.id == cid))
+        await s.commit()
+
+    r = await client.post(f"/api/executions/{origin}/rerun", headers=bob)
+    assert r.status_code == 201, r.text
+    config_json = await _last_config_json()
+    assert config_json["serviceBindings"] == {
+        "fin-service": {"alias": "fin-service-maker"}}
+    assert config_json["accountComboId"] == cid
+    assert config_json["accountComboRevision"] == 1
+
+
+async def test_rerun_keeps_unbound_combo_snapshot(client, plate_mock: PlateMock):
+    """首发未绑组合时,重跑不得回查首发后新绑定的当前组合。"""
+    plate_mock.behaviour = "echo"
+    bob = await _member(client, "bob_rerun_unbound")
+    await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob_rerun_unbound", "qa1")
+    await _seed_pool_auth("bob_rerun_unbound", "fin-service-maker")
+    await _seed_deployment()
+    r = await client.post("/api/runs", headers=bob,
+                          json=_run_payload(dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    origin = await _last_execution_id()
+    assert (await _last_config_json())["serviceBindings"] == {}
+
+    cid = await _mk_combo(client, bob, "后绑组合", [
+        {"service": "fin-service", "alias": "fin-service-maker"}])
+    await _bind(client, bob, "sc-test", cid)
+
+    r = await client.post(f"/api/executions/{origin}/rerun", headers=bob)
+    assert r.status_code == 201, r.text
+    config_json = await _last_config_json()
+    assert config_json["serviceBindings"] == {}
+    assert "accountComboId" not in config_json
+    assert "accountComboName" not in config_json
+    assert "accountComboRevision" not in config_json
+
+
 # ── 令牌面:装载时合并(覆写不冲掉,评审 2 真 bug 回归钉)──────────
 
 async def test_token_face_merge_survives_overwrite(client, fresh_db):
@@ -242,7 +428,7 @@ async def test_token_face_merge_survives_overwrite(client, fresh_db):
     cid = await _mk_combo(client, bob, "组合G", [
         {"service": "fin-service", "alias": "fin-service-maker"},
         {"service": "logi-service", "alias": "logi-maker"}])
-    await _bind(client, bob, "sc-test", cid)
+    await _bind(client, bob, "sc-test", cid, scheme_id)
 
     async with db_module.SessionLocal() as db:
         from app.services.scenario_store import get_row
@@ -312,7 +498,7 @@ async def test_precheck_report_combo_missing(client, plate_mock: PlateMock):
     scheme_id = r.json()["schemeId"]
     cid = await _mk_combo(client, bob, "组合I", [
         {"service": "fin-service", "alias": "qa1"}])
-    await _bind(client, bob, "sc-test", cid)
+    await _bind(client, bob, "sc-test", cid, scheme_id)
 
     async def _precheck() -> dict:
         r = await client.post("/api/run/precheck", headers=bob,
@@ -329,6 +515,36 @@ async def test_precheck_report_combo_missing(client, plate_mock: PlateMock):
     out = await _precheck()
     assert out["comboMissing"] is not None
     assert out["comboMissing"]["comboId"] == cid
+    assert out["schemeValid"] is False
+
+
+async def test_token_task_scope_uses_combo_bindings(client, fresh_db):
+    """令牌任务缺项统计与执行前复核同源:组合别名进入范围集合。"""
+    from app.models import IntegrationTask
+    from app.routers.access_tokens import _task_bindings
+    from app.services.scenario_store import get_row
+
+    bob = await _member(client, "bob_task_scope")
+    await _seed_scenario(client, bob)
+    await _seed_pool_auth("bob_task_scope", "qa1")
+    r = await client.post("/api/scenarios/sc-test/run-schemes", headers=bob,
+                          json={"name": "令牌方案", "dataSetSelection": [],
+                                "injectionEntryIds": [],
+                                "serviceBindings": {}, "options": {}})
+    assert r.status_code == 201, r.text
+    scheme_id = r.json()["schemeId"]
+    cid = await _mk_combo(client, bob, "令牌组合", [
+        {"service": "fin-service", "alias": "qa1"}])
+    await _bind(client, bob, "sc-test", cid, scheme_id)
+
+    async with db_module.SessionLocal() as db:
+        scen = await get_row(db, "sc-test")
+        tpl = IntegrationTask(name="token-scope", scenario_id="sc-test",
+                              owner_id=scen.owner_id, scheme_id=scheme_id)
+        bindings = await _task_bindings(db, tpl, scen)
+        assert bindings == {"fin-service": {"alias": "qa1"}}
+        tpl.scheme_id = "raw"
+        assert await _task_bindings(db, tpl, scen) == {}
 
 
 # ── 集成面:规范化 payload + 指纹含组合修订 ────────────────────────
@@ -354,7 +570,7 @@ async def test_integration_shape_and_fingerprint(client, fresh_db):
     scheme_id = r.json()["schemeId"]
     cid = await _mk_combo(client, bob, "组合J", [
         {"service": "logi-service", "alias": "logi-maker"}])
-    await _bind(client, bob, "sc-test", cid)
+    await _bind(client, bob, "sc-test", cid, scheme_id)
 
     # 每阶段新会话:路由侧写发生在别的会话,长持会话的 identity map
     # 会读到陈旧行(组合修订/解绑不可见)。
@@ -394,9 +610,7 @@ async def test_integration_shape_and_fingerprint(client, fresh_db):
     fp1 = await _fp()
     assert fp1 != fp0
     # 解绑 → 指纹再变(来源消失本身入投影)
-    r3 = await client.post("/api/scenarios/sc-test/account-combo",
-                           json={"comboId": None}, headers=bob)
-    assert r3.status_code == 200
+    await _bind(client, bob, "sc-test", None, scheme_id)
     fp2 = await _fp()
     assert fp2 != fp1
 
@@ -479,9 +693,7 @@ async def test_revive_triggers(client, fresh_db, monkeypatch):
 
     calls.clear()
     # 解绑 → 触发
-    r = await client.post("/api/scenarios/sc-test/account-combo",
-                          json={"comboId": None}, headers=bob)
-    assert r.status_code == 200
+    await _bind(client, bob, "sc-test", None)
     assert calls and calls[-1]["user_id"] == uid
 
 
@@ -526,19 +738,32 @@ async def test_suite_pad_combo_req(client, fresh_db):
         assert out2.service_bindings["fin-service"].model_dump(
             by_alias=True) == {"alias": "scheme-x"}
         # 未绑 = 原样
+        await _bind(client, bob, "sc-test", None)
+        await db.rollback()
+        scen = await get_row(db, "sc-test")
         req3 = _req_from_scheme(
             "sc-test", {"serviceBindings": {}, "dataSetIds": [],
                         "dataSetSelection": [], "injectionEntryIds": [],
                         "options": {}}, "batch-1")
-        scen.payload["definition"]["config"].pop("accountCombo")
         out3 = await _pad_combo_req(db, scen, req3)
         assert not out3.service_bindings
+        # raw 不吃默认方案组合
+        await _bind(client, bob, "sc-test", cid)
+        await db.rollback()
+        scen = await get_row(db, "sc-test")
+        req_raw = _req_from_scheme(
+            "sc-test", {"serviceBindings": {}, "dataSetIds": [],
+                        "dataSetSelection": [], "injectionEntryIds": [],
+                        "options": {}}, "batch-1")
+        req_raw.scheme_id = "raw"
+        out_raw = await _pad_combo_req(db, scen, req_raw)
+        assert not out_raw.service_bindings
 
 
 # 引用服务集合单源与 combo gate 的分码半边(单元级)
-async def test_referenced_gate_only_checks_referenced(fresh_db) -> None:
-    """referenced_combo_gate 只看传入服务集(引用服务),悬空条目在
-    未引用服务上不抛。"""
+async def test_referenced_gate_only_checks_effective_combo_entries(
+        fresh_db) -> None:
+    """未引用、面内覆盖或换用覆盖的悬空组合条目不连坐。"""
     from app.services import account_combo as ac
 
     async with db_module.SessionLocal() as db:
@@ -549,9 +774,12 @@ async def test_referenced_gate_only_checks_referenced(fresh_db) -> None:
         await db.commit()
         combo = ac.ComboBase(7, "c", 1, {"fin-service": "ghost",
                                          "logi-service": "ok"})
-        # 引用集不含 fin-service → 不抛(即使 ghost 悬空)
         await ac.referenced_combo_gate(db, combo, ["logi-service"])
-        # 引用集含 fin-service 且 ghost 未登记 → 抛
+        await ac.referenced_combo_gate(
+            db, combo, ["fin-service"],
+            {"fin-service": {"alias": "face-override"}})
+        await ac.referenced_combo_gate(
+            db, combo, ["fin-service"], slot_map={"ghost": "slot-override"})
         try:
             await ac.referenced_combo_gate(db, combo, ["fin-service"])
         except ac.ComboIdentityMissing as e:
@@ -561,3 +789,12 @@ async def test_referenced_gate_only_checks_referenced(fresh_db) -> None:
                                   "alias": "ghost"}
         else:
             raise AssertionError("悬空条目应 fail-closed")
+        missing = ac.ComboBase(8, "gone", 1, missing=True)
+        try:
+            await ac.referenced_combo_gate(
+                db, missing, ["fin-service"],
+                {"fin-service": {"alias": "face-override"}})
+        except ac.ComboIdentityMissing as e:
+            assert e.combo_id == 8
+        else:
+            raise AssertionError("组合行缺失应无条件 fail-closed")

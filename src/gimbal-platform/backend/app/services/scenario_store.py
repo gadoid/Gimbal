@@ -48,25 +48,18 @@ from . import scheme_store
 # /convert extra_forbidden 拒收(执行 plate_rejected)。
 _USER_VIEW_KEYS = ("is_authenticated", "remaining_seconds")
 
-# 账户组合引用键(账户组合设计方案 §4.2,服务端托管):场景侧引用 =
-# ``definition.config.accountCombo: <combo_id>``。**不进草稿面** ——
-# 编排器 draft 不携带(组合选择单独 ref 走绑定端点),整稿 PUT 恒剥
-# 保留存量,create/copy 一律不收;唯一写通道 =
-# account_combos.scenario_combo_router 的 POST /scenarios/{id}/
-# account-combo。plate 边界另剥(plate_client sidecar 清单)。
-ACCOUNT_COMBO_REF_KEY = "accountCombo"
+# v3 场景级组合引用的遗留清理键;v4 起引用只允许存在于方案 payload。
+_LEGACY_ACCOUNT_COMBO_REF_KEY = "accountCombo"
 
 
-def _strip_account_combo(definition: dict) -> dict:
-    """剥 ``config.accountCombo``(服务端托管键):返回新 dict,不原地改
-    入站 definition(内层 config 可能与调用方草稿共享)。create/update
-    的 stored_definition 构造链末位调用;副本/导入走 create 即被收口。"""
+def _strip_legacy_account_combo(definition: dict) -> dict:
+    """创建/更新/复制时清理 v3 场景级遗留键,避免新旧语义并存。"""
     cfg = definition.get("config") if isinstance(definition, dict) else None
-    if not isinstance(cfg, dict) or ACCOUNT_COMBO_REF_KEY not in cfg:
+    if not isinstance(cfg, dict) or _LEGACY_ACCOUNT_COMBO_REF_KEY not in cfg:
         return definition
     return {**definition,
             "config": {k: v for k, v in cfg.items()
-                       if k != ACCOUNT_COMBO_REF_KEY}}
+                       if k != _LEGACY_ACCOUNT_COMBO_REF_KEY}}
 
 
 def _strip_user_view_keys(definition: dict) -> dict:
@@ -263,9 +256,8 @@ async def create_in_transaction(
     # 顶层 scenarioId（M2 必填身份字段）由行写入。读侧 _meta_from_row
     # 从行的列组装展示 meta（createTime/updateTime/scenarioId/owner）。
     # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
-    # 服务端托管键:新建不收 accountCombo(绑定唯一写通道 = 绑定端点,
-    # §4.2)—— 导入面同走 create 即被收口(导入后请重新绑定)。
-    stored_definition = _strip_account_combo(_strip_user_view_keys(
+    # v4 起组合只绑方案;场景创建/导入顺带清理 v3 遗留键。
+    stored_definition = _strip_legacy_account_combo(_strip_user_view_keys(
         strip_binding_fields({
             **draft.definition,
             "scenarioId": server_owned.scenario_id,
@@ -427,24 +419,14 @@ async def update(
     server_owned = ScenarioMeta.model_validate({
         **def_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
-    # 服务端托管键(账户组合 §4.2):整稿 PUT 恒剥 incoming 的
-    # accountCombo 并保留存量(先例 param_slots 缺键保留 + users
-    # 「不许新增、保留存量」)—— 2.5s 防抖全量 PUT 无论何时触发都
-    # 抹不掉绑定;唯一写通道 = POST /scenarios/{id}/account-combo。
-    _old_combo = (((row.payload or {}).get("definition") or {})
-                  .get("config") or {}).get(ACCOUNT_COMBO_REF_KEY)
     # 同 create —— 平台元数据出定义，定义即纯 M2 实例。
     # Release 6.2：锚点步骤 call 的 binding 派生字段出存储（6.2）。
-    stored_definition = _strip_account_combo(_strip_user_view_keys(
+    stored_definition = _strip_legacy_account_combo(_strip_user_view_keys(
         strip_binding_fields({
             **draft.definition,
             "scenarioId": server_owned.scenario_id,
             "meta": _strip_platform_meta(def_meta),
         })))
-    if isinstance(_old_combo, int):
-        _cfg = dict(stored_definition.get("config") or {})
-        _cfg[ACCOUNT_COMBO_REF_KEY] = _old_combo
-        stored_definition = {**stored_definition, "config": _cfg}
     row.owner_name = effective_owner
     # 方案不经 payload(阶段④:runSchemes sidecar 键下线)— 编排容器
     # 原样落库,方案读写唯一面是 /run-schemes CRUD(scheme_store)。
@@ -757,15 +739,12 @@ async def copy_scenario(
     cross_owner = src.owner_id != new_owner_id
     if cross_owner or strip in ("users", "always"):
         strip_builtin_credentials(payload)
-    # 账户组合引用恒剥(账户组合 §4.3:copy 恒剥,先例 users「副本 =
-    # 新建」):副本不携带组合引用、重新绑定 —— 七个复制路径(复制到
-    # 我的 / 发布 / 分享拷贝 / suite fork / 项目晋升 / 引用转副本 /
-    # 变更适配副本)单点在此;payload 为上方 deepcopy,原地 pop 安全。
+    # 清理 v3 场景级组合遗留键;v4 方案级引用由 copy_schemes 单点剥离。
     _copy_def = payload.get("definition")
     if isinstance(_copy_def, dict):
         _copy_cfg = _copy_def.get("config")
         if isinstance(_copy_cfg, dict):
-            _copy_cfg.pop(ACCOUNT_COMBO_REF_KEY, None)
+            _copy_cfg.pop(_LEGACY_ACCOUNT_COMBO_REF_KEY, None)
     copied_name = new_name or ""
     definition = payload.get("definition")
     if isinstance(definition, dict):

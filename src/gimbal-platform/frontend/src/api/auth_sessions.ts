@@ -44,12 +44,12 @@ export interface IdentityRefItem {
   refUsername: string | null
 }
 
-/** kinds ⊆ {template, snapshot}(snake 契约对齐后端 auth schema)。 */
+/** kinds ⊆ {template, scheme, combo, snapshot}(与后端 auth schema 对齐)。 */
 export interface ScenarioRefItem {
   scenarioId: string
   name: string
   kinds: string[]
-  /** 与 DELETE 409 同口径的拦截预告:本人场景的 template/scheme 才阻断。 */
+  /** 与 DELETE 409 同口径的拦截预告:本人场景的 template/scheme/combo 才阻断。 */
   ownerId: number
 }
 

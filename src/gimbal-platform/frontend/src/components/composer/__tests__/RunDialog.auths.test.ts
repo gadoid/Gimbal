@@ -40,6 +40,7 @@ const DEFAULT_SCHEME: SchemeV2 = {
 }
 
 const BASE_PROPS = {
+  scenario: { meta: { scenarioId: 'sc-run', name: '运行场景' }, stepCount: 1 } as any,
   dataSets: [],
   schemes: [DEFAULT_SCHEME],
   serviceRows: [
@@ -56,7 +57,13 @@ function mountDlg(props: Partial<typeof BASE_PROPS> & {
 } = {}) {
   return mount(RunDialog, {
     props: { visible: true, ...BASE_PROPS, ...props },
-    global: { stubs: { teleport: true } },
+    global: { stubs: {
+      teleport: true,
+      EffectivePreviewDialog: {
+        props: ['open', 'schemeId'],
+        template: '<div v-if="open" class="preview-stub" :data-scheme-id="schemeId" />',
+      },
+    } },
   })
 }
 
@@ -190,6 +197,36 @@ describe('默认方案存量绑定预填 + 降级(M2a S6)', () => {
   })
 })
 
+
+describe('账户组合方案级引用(v4)', () => {
+  it('默认方案预览携带 schemeId,生效预览按该方案解析组合', async () => {
+    seedAliases([])
+    const w = mountDlg()
+    await flushPromises()
+    await w.find('[data-testid="run-preview-open"]').trigger('click')
+    expect(w.find('.preview-stub').attributes('data-scheme-id')).toBe('rs-def')
+  })
+
+  it('另存保留默认方案的 accountComboId', async () => {
+    seedAliases([])
+    const w = mountDlg({ schemes: [{ ...DEFAULT_SCHEME, accountComboId: 17 }] })
+    await flushPromises()
+    await w.find('[data-testid="scheme-name-input"]').setValue('组合快照')
+    await w.find('[data-testid="save-as-scheme"]').trigger('click')
+    expect(w.emitted('saveAsScheme')![0][0]).toMatchObject({ accountComboId: 17 })
+  })
+
+  it('选中方案变化向宿主同步,供组合期查询复用', async () => {
+    seedAliases([])
+    const w = mountDlg({ schemes: [
+      DEFAULT_SCHEME,
+      { ...DEFAULT_SCHEME, schemeId: 'rs-combo', name: '组合方案', isDefault: false },
+    ] })
+    await flushPromises()
+    await w.find('[data-testid="scheme-chip-rs-combo"]').trigger('click')
+    expect(w.emitted('update:schemeId')?.at(-1)?.[0]).toBe('rs-combo')
+  })
+})
 
 describe('S8 凭证来源切换(项目区)', () => {
   it('projectId 非空 → 选择器出现;选项目凭证随 confirm 下发;缺省不发字段', async () => {

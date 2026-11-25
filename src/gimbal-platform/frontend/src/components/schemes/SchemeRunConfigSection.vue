@@ -1,39 +1,54 @@
 <script setup lang="ts">
-/** 方案工作台 · 运行配置区(spec §6):① 服务绑定(声明∪引用行 × 显式
- *  绑定口径)② 运行参数(钳位 + 总量预览)。纯展示组件:数据进 props、
- *  变更出事件;serviceRows 派生与持久化归壳。绑定口径 = utils/run-bindings
- *  的 explicitBindingOf / degradedAlias / aliasCandidates(单源,M2a S6
- *  后绑定语义 = 「服务键 → 别名」;地址按身份环境标签取部署表)。
- *  ③ 预埋区(plugins/logSub 自由文本)已随 M10/Q15 下线 —— wire 不再
- *  收这两个键(plugins 删除、logSub→subscribe 结构化),自由文本 UI 写
- *  的是死键,整区移除。 */
 import { computed, onMounted, ref } from 'vue'
 import type { ServiceBinding } from '@/api/scenario-composer'
+import type {
+  AccountComboRow, ComboEntry,
+} from '@/api/accountCombos'
 import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
 import {
   aliasCandidates, degradedAlias, explicitBindingOf,
 } from '@/utils/run-bindings'
-
+import { confirmAction } from '@/utils/confirmAction'
 import { Input } from '@/components/ui/input'
 import EffectivePreviewDialog from '@/components/runs/EffectivePreviewDialog.vue'
+import EntriesEditor from '@/components/account-combos/EntriesEditor.vue'
+
+export interface AccountComboOption {
+  id: number
+  name: string
+  scope: 'user' | 'project'
+  scopeLabel: string
+  isDefault: boolean
+  entries: ComboEntry[]
+}
+
+interface ComboFormInput {
+  name: string
+  entries: ComboEntry[]
+  scope: 'user' | 'project'
+  projectId?: number
+}
 
 const props = defineProps<{
   serviceBindings: Record<string, ServiceBinding>
-  /** 声明 ∪ 引用并集行(spec D3,RunDialog ServiceRow 同款);壳从 draft 派生 */
   serviceRows: { service: string; declaredUrl: string | null }[]
-  /** 0-based 含端点;null = 全量 */
+  stepIdentityRefs?: { service: string; aliases: string[] }[]
   stepTo: number | null
   nRuns: number
   parallel: number
-  /** stepTo 钳位上限(0..stepCount) */
   stepCount: number
-  /** 平台编排态步骤名(orchestration.steps[].name;缺名时选项不带名) */
   stepNames?: string[]
-  /** 环境名映射源(§8.2:方案不携带环境,ADR-0003 #21;仅供预览 envNames 透传) */
   environments?: { id: number; name: string; is_default: boolean }[]
-  /** S7.3 生效预览:宿主透传场景/方案 id(缺省 = 宿主无预览上下文,不显入口) */
   scenarioId?: string
   schemeId?: string
+  schemeName?: string
+  accountComboId?: number | null
+  accountCombos: AccountComboOption[]
+  comboPreselected?: boolean
+  comboScopeLabel: string
+  comboScope?: 'user' | 'project'
+  comboProjectId?: number
+  comboDisabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -41,31 +56,48 @@ const emit = defineEmits<{
   'update:stepTo': [v: number | null]
   'update:nRuns': [v: number]
   'update:parallel': [v: number]
+  'update:accountComboId': [v: number | null]
+  'create-combo': [v: ComboFormInput, done: (row: AccountComboRow | null) => void]
+  'save-as-combo': [v: ComboFormInput, done: (row: AccountComboRow | null) => void]
 }>()
 
-// ── ① 服务绑定 ─────────────────────────────────────────────────────
-/** authz M2a S6:别名注册表自取(候选/降级判定面);不可达 → 候选空,
- *  降级不误报(注册表读全员)。 */
 const aliasRows = ref<ServiceAliasRow[]>([])
 const aliasNames = computed(() => aliasRows.value.map((a) => a.aliasName))
-/** 分层⑤:方案是否还带着存量绑定(在场 → 照常编辑;空 → 指到执行配置) */
-const hasBindings = computed(() => Object.keys(props.serviceBindings).length > 0)
 onMounted(() => {
-  // 同步抛兜底:http 层在无适配器/被 mock 环境可能同步炸(拿不到 Promise,
-  // .catch 挂不上)— 包 try 后注册表不可达只是候选为空,不阻塞编辑。
   try {
     listAllAliases()
       .then((rows) => { aliasRows.value = rows })
-      .catch(() => { /* 注册表不可达 → 候选空,不阻塞编辑 */ })
-  } catch { /* 同上:同步抛同样静默 */ }
+      .catch(() => { aliasRows.value = [] })
+  } catch { aliasRows.value = [] }
 })
+
+const selectedCombo = computed(() => props.accountCombos.find(
+  (c) => c.id === props.accountComboId) ?? null)
+const comboMissing = computed(() =>
+  props.accountComboId != null && selectedCombo.value == null)
 
 function candidatesOf(svc: string): ServiceAliasRow[] {
   return aliasCandidates(svc, aliasRows.value)
 }
 
-/** 行内变更 → 重装配整个绑定对象(受控口径:只显式条目落键,清空即移除;
- *  显式判定 = utils/run-bindings.explicitBindingOf 单源)。 */
+function comboAliasOf(svc: string): string {
+  return selectedCombo.value?.entries.find((e) => e.service === svc)?.alias ?? ''
+}
+
+function effectiveAliasOf(svc: string): string {
+  return props.serviceBindings[svc]?.alias || comboAliasOf(svc)
+}
+
+function sourceOf(svc: string): '方案覆盖' | '组合' | '服务键' {
+  if (props.serviceBindings[svc]?.alias) return '方案覆盖'
+  if (comboAliasOf(svc)) return '组合'
+  return '服务键'
+}
+
+function degraded(svc: string): boolean {
+  return degradedAlias(effectiveAliasOf(svc), aliasNames.value)
+}
+
 function setRowBinding(svc: string, patch: ServiceBinding) {
   const next: Record<string, ServiceBinding> = { ...props.serviceBindings }
   const eb = explicitBindingOf({ ...props.serviceBindings[svc], ...patch })
@@ -74,18 +106,71 @@ function setRowBinding(svc: string, patch: ServiceBinding) {
   emit('update:serviceBindings', next)
 }
 
-/** 降级(spec §9,口径 = utils/run-bindings.degradedAlias):存量 alias
- *  非空且已不在注册表(别名被删)→ 行标红警示;select 为该 alias 渲染
- *  disabled option,保住值可见可存,用户重选即恢复。 */
-function degraded(svc: string): boolean {
-  return degradedAlias(props.serviceBindings[svc]?.alias, aliasNames.value)
+async function onComboChange(raw: string) {
+  const next = raw === '' ? null : Number(raw)
+  if (next === props.accountComboId) return
+  if (next === null && props.accountComboId != null) {
+    const overridden = props.serviceRows.filter(
+      (r) => props.serviceBindings[r.service]?.alias).length
+    const ok = await confirmAction(
+      `解除组合后,${overridden} 个服务仍由方案绑定覆盖;步骤直引不受影响。其余服务将回落到服务键自身。`,
+      '解除账户组合',
+      { type: 'warning', confirmButtonText: '解除绑定', cancelButtonText: '取消' },
+    )
+    if (!ok) return
+  }
+  emit('update:accountComboId', next)
 }
 
-// ── ② 运行参数(钳位与后端 schema 上限一致,防 422)─────────────────
-/** 总量闸口径同 utils/run-bindings.MAX_TOTAL_RUNS(后端 app/core/config.py
- *  MAX_RUNS_PER_EXECUTION);此处是预览告警,真正拦截在发起运行侧。 */
-const MAX_TOTAL_RUNS = 200
+const comboFormMode = ref<'create' | 'save-as' | null>(null)
+const comboFormName = ref('')
+const comboFormEntries = ref<ComboEntry[]>([])
+const comboSaving = ref(false)
 
+function openComboForm(mode: 'create' | 'save-as') {
+  comboFormMode.value = mode
+  comboFormName.value = mode === 'save-as' && props.schemeName
+    ? `${props.schemeName} 组合` : ''
+  comboFormEntries.value = mode === 'save-as'
+    ? Object.entries(props.serviceBindings)
+      .filter(([, b]) => !!b.alias)
+      .map(([service, b]) => ({ service, alias: b.alias ?? '' }))
+    : []
+}
+
+function closeComboForm() {
+  if (comboSaving.value) return
+  comboFormMode.value = null
+  comboFormName.value = ''
+  comboFormEntries.value = []
+}
+
+function submitComboForm() {
+  if (!comboFormMode.value || comboSaving.value) return
+  const name = comboFormName.value.trim()
+  const entries = comboFormEntries.value.filter(
+    (e) => e.service.trim() && e.alias.trim())
+  if (!name) return
+  comboSaving.value = true
+  const done = (row: AccountComboRow | null) => {
+    comboSaving.value = false
+    if (!row) return
+    comboFormMode.value = null
+    comboFormName.value = ''
+    comboFormEntries.value = []
+    emit('update:accountComboId', row.id)
+  }
+  const scope = props.comboScope ?? 'user'
+  const input: ComboFormInput = {
+    name, entries, scope,
+    ...(scope === 'project' && props.comboProjectId != null
+      ? { projectId: props.comboProjectId } : {}),
+  }
+  if (comboFormMode.value === 'create') emit('create-combo', input, done)
+  else emit('save-as-combo', input, done)
+}
+
+const MAX_TOTAL_RUNS = 200
 function clampInt(v: number | null | undefined, min: number, max: number): number {
   const n = Math.floor(Number(v ?? min))
   return Math.min(max, Math.max(min, Number.isFinite(n) ? n : min))
@@ -96,7 +181,6 @@ const stepToModel = computed<number | null | undefined>({
   set: (v) => emit('update:stepTo',
     v == null ? null : clampInt(v, 0, Math.max(0, props.stepCount))),
 })
-/** select 原生 option 值是字符串:空串哨兵 = null(全量),数字串 → 钳位索引 */
 function onStepToChange(raw: string) {
   stepToModel.value = raw === '' ? null : Number(raw)
 }
@@ -108,12 +192,10 @@ const parallelModel = computed<number | undefined>({
   get: () => props.parallel,
   set: (v) => emit('update:parallel', clampInt(v, 1, 64)),
 })
-
 const totalRuns = computed(() =>
   clampInt(props.nRuns, 1, 64) * clampInt(props.parallel, 1, 64))
 const overLimit = computed(() => totalRuns.value > MAX_TOTAL_RUNS)
 
-// ── S7.3 生效预览:方案的绑定逐值解析(环境随身份标签链;alias 空条目不送)─────
 const previewOpen = ref(false)
 const previewBindings = computed<Record<string, { alias: string }>>(() => {
   const out: Record<string, { alias: string }> = {}
@@ -124,32 +206,82 @@ const previewBindings = computed<Record<string, { alias: string }>>(() => {
 })
 const previewEnvNames = computed<Record<number, string>>(() =>
   Object.fromEntries((props.environments ?? []).map((e) => [e.id, e.name])))
-
 </script>
 
 <template>
   <div class="run-config">
-    <!-- ① 用户与服务(authz M2a S6;分层⑤:方案不再承载新绑定) -->
     <section class="wb-section">
       <header class="zone-head">
         <span class="zone-name">用户与服务</span>
         <span class="zone-spacer"></span>
-        <span class="zone-hint">地址由执行环境的部署地址给出;身份选择由「执行配置」承载</span>
+        <span class="zone-hint">组合垫底 · 方案覆盖 · 步骤直引优先</span>
       </header>
-      <!-- 分层⑤:空方案(新建)指到执行配置 —— 方案字段保留兼容,存量
-           绑定照常编辑(方案遗留链位),清空后回到指引态 -->
-      <div v-if="!hasBindings" class="exec-pointer" data-testid="binding-pointer">
-        <p class="hint">
-          绑定已改由「执行配置」承载:在那里按系统维护 身份面 → 条目 与
-          carry 业务参数,执行时选定配置即注入。方案只管内容侧(数据/步段/强度)。
+
+      <div class="combo-panel" :class="{ 'is-preselected': comboPreselected }">
+        <label class="combo-label" for="scheme-account-combo">账户组合</label>
+        <select id="scheme-account-combo" class="bind-alias combo-select"
+          data-testid="account-combo-select"
+          :value="accountComboId ?? ''" :disabled="comboDisabled"
+          @change="onComboChange(($event.target as HTMLSelectElement).value)">
+          <option value="">不绑定</option>
+          <option v-for="c in accountCombos" :key="c.id" :value="c.id">
+            {{ c.name }} · {{ c.scopeLabel }}{{ c.isDefault ? ' · 默认' : '' }}
+          </option>
+          <option v-if="comboMissing" :value="accountComboId ?? ''">
+            已绑定组合不可用 #{{ accountComboId }}
+          </option>
+        </select>
+        <button type="button" class="combo-action" data-testid="scheme-new-combo"
+          :disabled="comboDisabled || comboSaving" @click="openComboForm('create')">新建组合</button>
+        <button type="button" class="combo-action" data-testid="scheme-save-as-combo"
+          :disabled="comboDisabled || comboSaving" @click="openComboForm('save-as')">存为组合</button>
+        <span v-if="comboPreselected" class="combo-badge" data-testid="combo-preselected">默认预选</span>
+        <span v-else-if="comboMissing" class="combo-badge is-warn">组合缺失</span>
+        <p class="combo-hint">
+          {{ comboDisabled ? '公共场景不绑定账户组合。' : `范围:${comboScopeLabel};选择随方案「保存」生效。` }}
         </p>
-        <a class="pointer-link" href="/exec-configs" data-testid="binding-pointer-link">去执行配置 ↗</a>
       </div>
-      <template v-else>
-        <p class="hint legacy-note">
-          存量方案绑定 —— 按方案遗留链位生效;新增绑定请改在「执行配置」维护。
-        </p>
-        <div v-if="serviceRows.length" class="bind-list">
+
+      <div v-if="comboFormMode" class="combo-form" data-testid="scheme-combo-form">
+        <strong>{{ comboFormMode === 'create' ? '新建账户组合' : '将方案绑定存为组合' }}</strong>
+        <label>
+          <span>名称</span>
+          <input v-model="comboFormName" maxlength="64" data-testid="scheme-combo-name"
+            :placeholder="comboFormMode === 'save-as' ? '如:测试环境组合' : '如:测试组合'" />
+        </label>
+        <label>
+          <span>范围(按场景硬同区)</span>
+          <select class="bind-alias" data-testid="scheme-combo-scope"
+            :value="comboScope ?? 'user'" disabled>
+            <option value="user">个人</option>
+            <option value="project">{{ comboScope === 'project' ? comboScopeLabel : '项目' }}</option>
+          </select>
+        </label>
+        <EntriesEditor v-model="comboFormEntries" :alias-names="aliasNames" />
+        <div v-if="comboFormMode === 'save-as'" class="direct-refs"
+          data-testid="scheme-step-direct-refs">
+          <strong>步骤直引服务</strong>
+          <span v-if="!stepIdentityRefs?.length" class="combo-hint">无</span>
+          <ul v-else>
+            <li v-for="row in stepIdentityRefs" :key="row.service || '__template__'">
+              {{ row.service || '模板引用' }} → {{ row.aliases.join('、') }}
+            </li>
+          </ul>
+          <p class="combo-hint">
+            只快照方案 serviceBindings;步骤级直引不会自动收进组合,可在此手工补入。
+          </p>
+        </div>
+        <div class="combo-form-actions">
+          <button type="button" class="combo-action" data-testid="scheme-combo-cancel"
+            :disabled="comboSaving" @click="closeComboForm">取消</button>
+          <button type="button" class="combo-action is-primary" data-testid="scheme-combo-save"
+            :disabled="comboSaving || !comboFormName.trim()" @click="submitComboForm">
+            {{ comboSaving ? '创建中…' : '创建并绑定' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="serviceRows.length" class="bind-list">
         <div v-for="r in serviceRows" :key="r.service" class="bind-row"
           :class="{ 'is-degraded': degraded(r.service) }">
           <div class="bind-svc">
@@ -157,44 +289,37 @@ const previewEnvNames = computed<Record<number, string>>(() =>
             <span v-if="r.declaredUrl" class="svc-declared" :title="r.declaredUrl">{{ r.declaredUrl }}</span>
             <span v-if="degraded(r.service)" class="svc-degraded" data-testid="binding-degraded-warn">别名已删,请重选</span>
           </div>
-          <!-- 原生 select(与数据区/注入区原生控件约定一致,测试直驱) -->
           <select v-if="candidatesOf(r.service).length || degraded(r.service)"
             class="bind-alias" data-testid="binding-alias"
-            :value="serviceBindings[r.service]?.alias ?? ''"
+            :value="effectiveAliasOf(r.service)"
             @change="setRowBinding(r.service, { alias: ($event.target as HTMLSelectElement).value })">
-            <option value="">— 用服务键本身 —</option>
+            <option value="">— 继承组合 / 用服务键 —</option>
             <option v-for="c in candidatesOf(r.service)" :key="c.aliasName" :value="c.aliasName">
               {{ c.slot ? `${c.aliasName}(条目 ${c.slot})` : c.aliasName }}
             </option>
-            <!-- 已删别名:disabled option 显示原别名 — 值不丢(可见可存),不可再选 -->
-            <option v-if="degraded(r.service)" :value="serviceBindings[r.service]!.alias" disabled>
-              {{ serviceBindings[r.service]!.alias }}(已删)
+            <option v-if="degraded(r.service)" :value="effectiveAliasOf(r.service)" disabled>
+              {{ effectiveAliasOf(r.service) }}(已删)
             </option>
           </select>
           <span v-else class="svc-noalias">该服务暂无同基别名 — 用服务键本身</span>
+          <span class="binding-source" :class="`source-${sourceOf(r.service)}`"
+            :data-testid="`binding-source-${r.service}`">{{ sourceOf(r.service) }}</span>
         </div>
       </div>
       <p v-else class="hint">场景内暂无声明/引用的服务。</p>
-      </template>
     </section>
 
-    <!-- ② 运行参数 -->
     <section class="wb-section">
       <header class="zone-head">
         <span class="zone-name">运行参数</span>
         <span class="zone-spacer"></span>
         <span class="zone-hint">总量预览:<span data-testid="total-preview" class="total-chip"
           :class="{ 'total-over': overLimit }">{{ nRuns }} × {{ parallel }} = {{ totalRuns }}</span></span>
-        <button
-          v-if="scenarioId" type="button" class="preview-btn"
-          data-testid="scheme-preview-open" @click="previewOpen = true"
-        >生效预览</button>
+        <button v-if="scenarioId" type="button" class="preview-btn"
+          data-testid="scheme-preview-open" @click="previewOpen = true">生效预览</button>
       </header>
       <div class="param-row">
         <label>截断步骤(stepTo)</label>
-        <!-- 原生 select(非 el-input-number):空值(null=全量)不能被
-             spinner 误写 0 — element-plus 空 displayValue 点 ▼/▲ 会发射
-             min(0),把「全量」静默改成「第1步后停止」;下拉里 0 只能显式选 -->
         <select class="bind-alias stepto-select" data-testid="param-stepto"
           :value="stepTo === null ? '' : String(stepTo)"
           @change="onStepToChange(($event.target as HTMLSelectElement).value)">
@@ -218,7 +343,6 @@ const previewEnvNames = computed<Record<number, string>>(() =>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
     </section>
 
-    <!-- S7.3 生效预览(宿主透传 scenarioId/schemeId 才有入口) -->
     <EffectivePreviewDialog
       :open="previewOpen"
       :scenario-id="scenarioId"
@@ -231,20 +355,12 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 </template>
 
 <style scoped>
-/* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
 .wb-section {
   background: var(--c-surface); border: 1px solid var(--color-border-tertiary);
   border-radius: 0.5rem; padding: 0.75rem 1rem;
   display: flex; flex-direction: column; gap: 0.625rem;
 }
-/* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 弹性空位 + note */
 .zone-head { display: flex; align-items: center; gap: 0.625rem; }
-/* S7.3 生效预览入口(zone-head 行尾小按钮) */
-.preview-btn {
-  border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; background: var(--c-surface);
-  padding: 0.125rem 0.75rem; font-size: 0.75rem; cursor: pointer; color: #334155;
-}
-.preview-btn:hover { border-color: #2563eb; color: #2563eb; }
 .zone-name {
   font-size: 0.875rem; font-weight: 700; color: var(--color-text-primary);
   padding-left: 0.625rem; border-left: 3px solid var(--accent);
@@ -252,12 +368,60 @@ const previewEnvNames = computed<Record<number, string>>(() =>
 .zone-spacer { flex: 1; }
 .zone-hint { font-size: 0.6875rem; color: var(--color-text-secondary); }
 .run-config { display: flex; flex-direction: column; gap: 1rem; }
+.preview-btn {
+  border: 1px solid var(--color-border-secondary); border-radius: 0.375rem; background: var(--c-surface);
+  padding: 0.125rem 0.75rem; font-size: 0.75rem; cursor: pointer; color: var(--color-text-primary);
+}
+.preview-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-/* ① 绑定行:列表行语言(分隔线 + 行距,atbl td 同款);
-   M2a S6 后两列(服务 + 别名选择),URL 列已退役 */
+.combo-panel {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem;
+  padding: 0.625rem 0.75rem; border: 1px solid var(--color-border-tertiary);
+  border-radius: 0.5rem; background: var(--surface-raised);
+}
+.combo-panel.is-preselected { border-style: dashed; border-color: var(--accent); }
+.combo-label { font-size: 0.75rem; font-weight: 600; color: var(--color-text-primary); }
+.combo-select { min-width: 15rem; flex: 1; max-width: 25rem; }
+.combo-action {
+  border: 1px solid var(--color-border-secondary); border-radius: 0.375rem;
+  background: var(--c-surface); color: var(--color-text-primary);
+  padding: 0.25rem 0.625rem; font-size: 0.75rem; cursor: pointer;
+}
+.combo-action:hover { border-color: var(--accent); color: var(--accent); }
+.combo-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.combo-action.is-primary { background: var(--accent); color: white; border-color: var(--accent); }
+.combo-badge {
+  font-size: 0.6875rem; color: var(--accent); background: var(--accent-soft);
+  border-radius: 0.25rem; padding: 0.0625rem 0.375rem;
+}
+.combo-badge.is-warn { color: var(--sl-warn); background: var(--soft-warn-bg); }
+.combo-hint { flex-basis: 100%; margin: 0; font-size: 0.6875rem; color: var(--color-text-secondary); }
+.combo-form {
+  display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;
+  border: 1px solid var(--color-border-secondary); border-radius: 0.5rem;
+  background: var(--c-surface);
+}
+.combo-form > strong { font-size: 0.8125rem; color: var(--color-text-primary); }
+.combo-form > label { display: grid; gap: 0.25rem; max-width: 26rem; }
+.combo-form > label span { font-size: 0.6875rem; color: var(--color-text-secondary); }
+.combo-form > label input {
+  padding: 0.3125rem 0.5rem; font-size: 0.8125rem;
+  border: 1px solid var(--color-border-secondary); border-radius: 0.375rem;
+  background: var(--c-surface); color: var(--color-text-primary);
+}
+.combo-form > label select { width: 15rem; }
+.combo-form > label select:disabled { opacity: 0.7; }
+.direct-refs {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.5rem 0.625rem; border-radius: 0.375rem;
+  background: var(--soft-neutral-bg); font-size: 0.75rem;
+}
+.direct-refs ul { margin: 0; padding-left: 1.25rem; }
+.combo-form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
 .bind-list { display: flex; flex-direction: column; }
 .bind-row {
-  display: grid; grid-template-columns: minmax(7.5rem, 1fr) minmax(10rem, 13.75rem);
+  display: grid; grid-template-columns: minmax(7.5rem, 1fr) minmax(10rem, 13.75rem) 4.5rem;
   gap: 0.5rem; align-items: center; padding: 0.5rem 0;
   border-bottom: 1px solid var(--soft-neutral-bg);
 }
@@ -271,47 +435,31 @@ const previewEnvNames = computed<Record<number, string>>(() =>
   font-family: var(--font-mono); font-size: 0.6875rem; color: var(--color-text-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.svc-degraded { font-size: 0.6875rem; color: #b91c1c; }
-/* 无同基候选 → 静默说明代替下拉(用服务键本身) */
+.svc-degraded { font-size: 0.6875rem; color: var(--sl-warn); }
 .svc-noalias { font-size: 0.6875rem; color: var(--color-text-secondary); }
-/* 降级行(spec §9,M2a S6):别名已删 — 底色微红 + 警示文案(与 RunConfigPanel .is-degraded 同口径) */
-.bind-row.is-degraded { background: #fef2f2; }
-.bind-row.is-degraded .bind-alias { border-color: #fca5a5; }
+.bind-row.is-degraded { background: var(--soft-warn-bg); }
+.bind-row.is-degraded .bind-alias { border-color: var(--sl-warn); }
 .bind-alias {
   border: 1px solid var(--color-border-secondary); border-radius: 0.25rem;
   padding: 0.25rem 0.5rem; font-size: 0.8125rem; min-width: 0;
   background: var(--c-surface); color: var(--color-text-primary);
 }
-.bind-alias:focus {
-  border-color: var(--accent); outline: none;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
-}
+.bind-alias:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
+.binding-source { font-size: 0.6875rem; text-align: center; color: var(--color-text-secondary); }
+.binding-source.source-组合 { color: var(--accent); }
+.binding-source.source-方案覆盖 { color: var(--sl-success); }
 
-/* ② 参数行:行距节奏(8px 行高步进) */
 .param-row { display: flex; align-items: center; gap: 0.625rem; padding: 0.1875rem 0; }
-/* stepTo 下拉:选项文案较长,给足最小宽防抖动 */
 .stepto-select { min-width: 12.5rem; }
 .param-row label { width: 9.375rem; flex: none; font-size: 0.8125rem; color: var(--color-text-primary); }
 .param-hint { font-size: 0.6875rem; color: var(--color-text-secondary); }
-/* 总量预览 chip:平台摘要 chip 形制(row-count/zone-count 同族,mono 数字) */
 .total-chip {
   font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 600;
   padding: 0.0625rem 0.375rem; border-radius: 0.1875rem;
   color: var(--color-text-secondary); background: var(--soft-neutral-bg);
 }
-.total-chip.total-over { color: #b91c1c; background: #fef2f2; }
-.total-warn { margin: 0; color: #b91c1c; font-size: 0.75rem; }
-
+.total-chip.total-over { color: var(--sl-warn); background: var(--soft-warn-bg); }
+.total-warn { margin: 0; color: var(--sl-warn); font-size: 0.75rem; }
 .hint { color: var(--color-text-secondary); }
-/* 分层⑤:改指执行配置的指引卡(空方案)与存量提示 */
-.exec-pointer {
-  display: flex; flex-direction: column; gap: 0.375rem;
-  padding: 0.625rem 0.75rem; border: 1px dashed var(--color-border-tertiary);
-  border-radius: 0.5rem; background: #F6F8FC;
-}
-.exec-pointer .hint { margin: 0; }
-.pointer-link { color: var(--sl-accent); font-size: 0.75rem; text-decoration: none; width: fit-content; }
-.pointer-link:hover { text-decoration: underline; }
-.legacy-note { margin: 0; font-size: 0.71875rem; }
 @media (max-width: 1280px) { .bind-row { grid-template-columns: 1fr; } }
 </style>

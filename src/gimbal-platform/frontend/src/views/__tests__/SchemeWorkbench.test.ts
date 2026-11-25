@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
+import * as comboApi from '@/api/accountCombos'
 import SchemeWorkbench from '@/views/SchemeWorkbench.vue'
 
 const push = vi.hoisted(() => vi.fn())
@@ -37,6 +38,7 @@ describe('SchemeWorkbench', () => {
       assertionRegistry: { entries: [] },
     } as never)
     vi.spyOn(api, 'listDataSets').mockResolvedValue([])
+    vi.spyOn(comboApi, 'listAccountCombos').mockResolvedValue({ personal: [], projects: [] })
     push.mockClear()
   })
   afterEach(() => vi.restoreAllMocks())

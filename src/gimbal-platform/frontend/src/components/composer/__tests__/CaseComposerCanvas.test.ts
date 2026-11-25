@@ -265,7 +265,6 @@ vi.mock('@/api/scenario-composer', () => ({
 }))
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 }),
-  listAll: vi.fn().mockResolvedValue([]),
 }))
 // F4 别名注册表默认空(与未 mock 时拉取失败 → registeredAliases=[] 行为
 // 一致);注入用例内 mockResolvedValueOnce 喂已登记行
@@ -280,11 +279,8 @@ vi.mock('@/api/carry', () => ({
 }))
 // 目录服务名加载器 mock(别名派生 deriveBase 的唯一外部输入)—— 用例
 // 不碰 /plate 网络;catalog miss 时锚点回落 deriveBase(当前 api.service)。
-// 2c:systemByService 映射(查询换源的装载判定 scope 键)默认空 —
-// 映射缺席时 queryAliasOf 退首条目候选(后端诚实 422),用例内覆写。
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceNames: vi.fn(async () => ['fin-service', 'order-svc']),
-  loadCatalogSystemByService: vi.fn(async () => new Map<string, string>()),
 }))
 vi.mock('@/api/constants', () => ({
   list: vi.fn().mockResolvedValue([]),
@@ -363,6 +359,10 @@ type CanvasMountOpts = {
   steps: StepView[]
   /** 01-04:已保存场景的 scenarioId(上下文通道);不传 = 未保存草稿 */
   scenarioId?: string
+  /** v4:当前已保存方案;不传 = 后端回落默认方案 */
+  schemeId?: string
+  /** v4:与运行面板共用的凭证池选择 */
+  credentialSource?: 'personal' | 'project'
   services?: Record<string, string>
   /** 三级收敛:存储范围(config.service_scope)—— 实例引用 */
   serviceScope?: ServiceScopeRef[]
@@ -404,6 +404,8 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
         steps: steps,
         orchestration: orch.value,
         scenarioId: opts.scenarioId,
+        schemeId: opts.schemeId,
+        credentialSource: opts.credentialSource,
         services: services,
         serviceScope: opts.serviceScope,
         plateRefOf: opts.plateRefOf,
@@ -2433,26 +2435,11 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       },
       request: { kind: 'request', body: {} },
     })]
-    // 01-04:resolveQueryContext 不再消费 services 内嵌地址(地址面已随
-    // D2 退役)—— 钉的是上下文通道形状(stepIndex + service + queryAlias;
-    // mountCanvas 未传 scenarioId → 不带该键)
-    // 2c 换源:queryAlias 候选 = 注册表条目 × 本人池装载(§3.6)——
-    // registry:query-qa(base fin,default-ref);池有默认账户 → 装载命中
-    const { listAllAliases } = await import('@/api/service-aliases')
-    ;(listAllAliases as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { aliasName: 'query-qa', baseService: 'fin', slot: '', kind: 'plate',
-        envId: 1, refMode: 'default', refUsername: null, display: '',
-        createdAt: '', updatedAt: '' },
-    ] as any)
-    const { loadCatalogSystemByService } = await import('@/utils/catalog-services')
-    ;(loadCatalogSystemByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Map([['fin', 'fin-sys']]))
-    const { listAll } = await import('@/api/auth_sessions')
-    ;(listAll as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { id: 1, source: 'personal', system: 'fin-sys', envId: 1,
-        username: 'ua', isDefault: true },
-    ] as any)
-    const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
+    // 地址与身份均由后端按已保存方案解析,前端不发送 authored URL 或推断别名。
+    const { w } = mountCanvas({
+      steps, scenarioId: 'sc-query', schemeId: 'rs-combo',
+      credentialSource: 'project', services: { fin: 'http://fin.example' },
+    })
     await flushPromises()
     ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
       view: 'v',
@@ -2461,11 +2448,10 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     await w.find('.vs-query-btn').trigger('click')   // $.a 查钮 → fieldQuery → picker 开
     await flushPromises()
-    // 取数上下文钉死:view 名 + authored services URL + 注册表×池装载条目
-    // + 非刷新 — alias=null 会被后端凭证闸 422(query_credential_required),
-    // 此钉即凭证链防回归
+    // 当前方案与凭证池随查询上送;身份别名只由后端按步骤/方案/组合优先级裁定。
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'query-qa',
+      refresh: false, scenarioId: 'sc-query', schemeId: 'rs-combo',
+      credentialSource: 'project', stepIndex: 0, service: 'fin',
     })
     await w.find('tr.vsp-row').trigger('click')      // 选第一行
     expect(steps[0].request!.body).toMatchObject({ a: '1', b: '2' })   // 组内扇出全落
@@ -2498,10 +2484,9 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     await w.find('.vs-query-btn').trigger('click')   // 实例叶 $.fees[0].cost_id 的查钮
     await flushPromises()
-    // beforeEach draft 无 config.users → queryAlias 诚实 null
-    // (bearer 视图将 422 提示配置,§7.5 降级态)
+    // 未选方案时省略 schemeId,由后端回落默认方案;不发送前端推断别名。
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v2', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: null,
+      refresh: false, stepIndex: 0, service: 'fin',
     })
     await w.find('tr.vsp-row').trigger('click')      // 选行 → 扇出
     const body = steps[0].request!.body as {
@@ -2519,148 +2504,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     w.unmount()
   })
 
-  it('查询换源装载判定(2c):池里装得上的候选优先,未装载不取', async () => {
-    // 候选 = 步骤服务同基注册表条目;「装载」= pickAccountLikeBackend
-    // (镜像 run_prepare._pick_one)× 本人池 —— 与查询视图 loader 同池
-    // 同序,选中的候选执行时必查得到。同基两候选,池只装了 pangyan
-    // (username-ref 认用户名)→ 取 pangyan 而非首条目。
-    const { listAllAliases } = await import('@/api/service-aliases')
-    ;(listAllAliases as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { aliasName: 'pangyan', baseService: 'fin', slot: '', kind: 'plate',
-        envId: 1, refMode: 'username', refUsername: 'pangyan', display: '',
-        createdAt: '', updatedAt: '' },
-      { aliasName: 'backup', baseService: 'fin', slot: '', kind: 'plate',
-        envId: 1, refMode: 'username', refUsername: 'backup', display: '',
-        createdAt: '', updatedAt: '' },
-    ] as any)
-    const { loadCatalogSystemByService } = await import('@/utils/catalog-services')
-    ;(loadCatalogSystemByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Map([['fin', 'fin-sys']]))
-    const { listAll } = await import('@/api/auth_sessions')
-    ;(listAll as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { id: 1, source: 'personal', system: 'fin-sys', envId: 1,
-        username: 'pangyan', isDefault: false },
-    ] as any)
-    const steps = [mkStep({
-      call: {
-        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
-        headers: {}, view_hints: { endpoint_id: 'ep-vs' },
-      },
-      request: { kind: 'request', body: {} },
-    })]
-    const { w } = mountCanvas(steps)
-    await flushPromises()
-    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
-      view: 'v',
-      rows: [{ x: '1', nm: 'r1' }],
-      truncated: false, fetched_at: 'T', cached: false, stale: false,
-    })
-    await w.find('.vs-query-btn').trigger('click')
-    await flushPromises()
-    // 装载命中 pangyan;backup 池里没装 → 不取
-    expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'pangyan',
-    })
-    w.unmount()
-  })
-
-  it('查询换源零装载(2c):同基条目池里全没装 → queryAlias 诚实 null', async () => {
-    // 不再回退 authored users 旧值(§7 那是治理要清的陈旧凭证);
-    // null → 后端凭证闸 422 query_credential_required,缺配置显形
-    const { listAllAliases } = await import('@/api/service-aliases')
-    ;(listAllAliases as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { aliasName: 'pangyan', baseService: 'fin', slot: '', kind: 'plate',
-        envId: 1, refMode: 'username', refUsername: 'pangyan', display: '',
-        createdAt: '', updatedAt: '' },
-    ] as any)
-    const { loadCatalogSystemByService } = await import('@/utils/catalog-services')
-    ;(loadCatalogSystemByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Map([['fin', 'fin-sys']]))
-    const { listAll } = await import('@/api/auth_sessions')
-    ;(listAll as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { id: 1, source: 'personal', system: 'fin-sys', envId: 1,
-        username: 'someone-else', isDefault: true },
-    ] as any)
-    const steps = [mkStep({
-      call: {
-        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
-        headers: {}, view_hints: { endpoint_id: 'ep-vs' },
-      },
-      request: { kind: 'request', body: {} },
-    })]
-    const { w } = mountCanvas(steps)
-    await flushPromises()
-    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
-      view: 'v',
-      rows: [{ x: '1', nm: 'r1' }],
-      truncated: false, fetched_at: 'T', cached: false, stale: false,
-    })
-    await w.find('.vs-query-btn').trigger('click')
-    await flushPromises()
-    expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: null,
-    })
-    w.unmount()
-  })
-
-  it('多服务混编(2c 换源):查询别名随当前 step 服务的条目切换;未装载侧诚实 null', async () => {
-    // 混编:step1 走 fin,step2 走 sysY —— 候选锚定**当前 step 的服务条目**;
-    // 池只装了 fin 侧账户(finUser default-ref 命中),sysY 侧候选未装载 →
-    // null 诚实 422(错域 token 必被 SUT 拒且 401/407 拉黑污染本域,§13.8)。
-    const { listAllAliases } = await import('@/api/service-aliases')
-    ;(listAllAliases as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { aliasName: 'finUser', baseService: 'fin', slot: '', kind: 'plate',
-        envId: 1, refMode: 'default', refUsername: null, display: '',
-        createdAt: '', updatedAt: '' },
-      { aliasName: 'yUser', baseService: 'sysY', slot: '', kind: 'plate',
-        envId: 1, refMode: 'default', refUsername: null, display: '',
-        createdAt: '', updatedAt: '' },
-    ] as any)
-    const { loadCatalogSystemByService } = await import('@/utils/catalog-services')
-    ;(loadCatalogSystemByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Map([['fin', 'fin-sys'], ['sysY', 'y-sys']]))
-    const { listAll } = await import('@/api/auth_sessions')
-    ;(listAll as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { id: 1, source: 'personal', system: 'fin-sys', envId: 1,
-        username: 'ua', isDefault: true },
-    ] as any)
-    const steps = [mkStep({
-      call: { kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
-             headers: {}, view_hints: { endpoint_id: 'ep-vs' } },
-      request: { kind: 'request', body: {} },
-    }), mkStep({
-      call: { kind: 'call', protocol: 'http', service: 'sysY', method: 'POST', path: '/other',
-             headers: {}, view_hints: { endpoint_id: 'ep-vs' } },
-      request: { kind: 'request', body: {} },
-    })]
-    const { w } = mountCanvas({
-      steps, services: { fin: 'http://fin.example', sysY: 'http://y.example' },
-    })
-    await flushPromises()
-    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
-      view: 'v', rows: [{ x: '1', nm: 'r1' }],
-      truncated: false, fetched_at: 'T', cached: false, stale: false,
-    })
-    await w.find('.vs-query-btn').trigger('click')       // step1(fin)查
-    await flushPromises()
-    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'finUser',
-    })
-    await w.findAll('.step-row')[1].trigger('click')     // 切到 step2(sysY)
-    await flushPromises()
-    await w.find('.vs-query-btn').trigger('click')
-    await flushPromises()
-    // yUser 池里没装 → null(不回退他侧条目)
-    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, stepIndex: 1, service: 'sysY', queryAlias: null,
-    })
-    w.unmount()
-  })
-
-  it('查询别名锚 headers auth 引用首命中(修订 11):同域双用户取引用 tag 非首键', async () => {
-    // headers ${auth.userB.token} = 该步执行身份的声明 → 查询视角 = 执行视角
-    // (为 B 的列查到的候选就是 B 能用的,构造消解 per-凭证);域内首键
-    // userA 只是 fallback,有引用时不得吞掉引用
+  it('查询身份不被前端推断覆盖:步骤直接引用也由后端单源判定', async () => {
     const steps = [mkStep({
       call: {
         kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
@@ -2669,70 +2513,21 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       },
       request: { kind: 'request', body: {} },
     })]
-    const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
+    const { w } = mountCanvas({ steps, scenarioId: 'sc-query', schemeId: 'rs-combo' })
     await flushPromises()
-    const draft = useScenarioDraftStore()
-    draft.draft = {
-      ...draft.draft!,
-      definition: {
-        ...draft.draft!.definition,
-        config: {
-          ...draft.draft!.definition.config,
-          users: {   // 键序 userA 在前(域内首键)— headers 引用 userB 优先
-            userA: { url: 'http://fin.example', token: 'tA' } as any,
-            userB: { url: 'http://fin.example', token: 'tB' } as any,
-          },
-        } as any,
-      },
-    }
-    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(fetchQueryViewRows).mockResolvedValue({
       view: 'v', rows: [{ x: '1', nm: 'r1' }],
       truncated: false, fetched_at: 'T', cached: false, stale: false,
     })
     await w.find('.vs-query-btn').trigger('click')
     await flushPromises()
-    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'userB',
+    expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
+      refresh: false, scenarioId: 'sc-query', schemeId: 'rs-combo',
+      stepIndex: 0, service: 'fin',
     })
-    w.unmount()
-  })
-
-  it('悬空 auth 引用照发不猜(后端 422 显形);headers 无引用走域内首键 fallback', async () => {
-    // 悬空引用不回退猜测:别名照发 'ghost',凭证池无此别名 → 后端诚实 422
-    // 「未找到查询凭证」(悬空徽章另有显形)—— 回退到域内首键反而是静默错身份
-    const withHeaders = (headers: Record<string, string>) => mkStep({
-      call: {
-        kind: 'call', protocol: 'http', service: 'fin', method: 'POST', path: '/order',
-        headers,
-      },
-      endpoint: 'ep-vs',
-      request: { kind: 'request', body: {} },
-    })
-    const { w } = mountCanvas({
-      steps: [withHeaders({ Authorization: '${auth.ghost.token}' })],
-      services: { fin: 'http://fin.example' },
-    })
-    await flushPromises()
-    const draft = useScenarioDraftStore()
-    draft.draft = {
-      ...draft.draft!,
-      definition: {
-        ...draft.draft!.definition,
-        config: {
-          ...draft.draft!.definition.config,
-          users: { 'query-qa': { url: 'http://fin.example', token: 't' } as any },
-        } as any,
-      },
-    }
-    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
-      view: 'v', rows: [{ x: '1', nm: 'r1' }],
-      truncated: false, fetched_at: 'T', cached: false, stale: false,
-    })
-    await w.find('.vs-query-btn').trigger('click')
-    await flushPromises()
-    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: 'ghost',
-    })
+    const opts = vi.mocked(fetchQueryViewRows).mock.calls.at(-1)![1]
+    expect(opts).not.toHaveProperty('queryAlias')
+    expect(opts).not.toHaveProperty('serviceUrl')
     w.unmount()
   })
 
@@ -2795,7 +2590,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await flushPromises()
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
       refresh: false, scenarioId: 'sc-ctx-1', stepIndex: 0,
-      service: 'fin', queryAlias: null,
+      service: 'fin',
     })
     saved.w.unmount()
 
@@ -2839,7 +2634,7 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await w.find('.vsp-param-query').trigger('click')      // 确认 → 携参拉行集
     await flushPromises()
     expect(fetchQueryViewRows).toHaveBeenCalledWith('customer_part', {
-      refresh: false, stepIndex: 0, service: 'fin', queryAlias: null,
+      refresh: false, stepIndex: 0, service: 'fin',
       params: { customer_id: 'C1' },
     })
     // 单对象行点选 → 点列扇出(扁平键经 onVsSelect 既有通路直写 body)

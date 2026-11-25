@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
+import * as comboApi from '@/api/accountCombos'
 import SchemeWorkbench from '@/views/SchemeWorkbench.vue'
 import { confirmAction } from '@/utils/confirmAction'
 
@@ -47,6 +48,7 @@ describe('SchemeWorkbench 保存链路', () => {
     // tile[0] = ds-000(未被 SCHEME_A 选中 → 初始未勾选,setValue(true) 才会派发 change)
     vi.spyOn(api, 'listDataSets').mockResolvedValue([DS_0, DS_1])
     vi.spyOn(api, 'updateRunScheme').mockResolvedValue(SCHEME_A)
+    vi.spyOn(comboApi, 'listAccountCombos').mockResolvedValue({ personal: [], projects: [] })
     push.mockClear()
   })
   afterEach(() => vi.restoreAllMocks())

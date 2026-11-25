@@ -22,6 +22,28 @@ export interface AccountComboProjectGroup {
   projectName: unknown
 }
 
+export interface AccountComboReadiness {
+  addresses: Array<ComboAddressRow>
+  canProbeCredentials: boolean
+  credentialSource: "personal" | "project"
+  entries: Array<ComboReadinessEntry>
+  envError?: unknown | null
+  environmentId?: number | null
+  environmentName?: unknown | null
+  environmentSource?: unknown | null
+  poolName: unknown
+  projectId?: number | null
+  ready: boolean
+}
+
+export interface AccountComboSchemeRef {
+  comboId: number
+  scenarioId: unknown
+  scenarioName: unknown
+  schemeId: unknown
+  schemeName: unknown
+}
+
 // 整体替换式 PATCH。None = 不改;entries 显式给值(含 [])则
 // 整体替换 —— 替换后逐条过保存面校验,条目有实质变化 revision +1。
 export interface AccountComboUpdate {
@@ -38,6 +60,7 @@ export interface AccountComboView {
   name: unknown
   referenceCount?: number
   revision: number
+  schemes?: Array<AccountComboSchemeRef>
   scope: unknown
   scopeId: number
   updatedAt?: unknown | null
@@ -450,14 +473,35 @@ export interface CheckSelector {
   tags?: Array<unknown>
 }
 
-export interface ComboBindIn {
-  comboId?: number | null
+export interface ComboAddressRow {
+  baseUrl?: unknown
+  deploymentId?: number | null
+  envId: number
+  envName: unknown
+  loginUrl?: unknown
+  resolved?: boolean
+  service: unknown
 }
 
 // 组合条目:服务键 → 身份条目名(一条一服务,§2.1)。
 export interface ComboEntry {
   alias: unknown
   service: unknown
+}
+
+export interface ComboReadinessEntry {
+  accountEnvId?: number | null
+  accountId?: number | null
+  accountUsername?: unknown | null
+  alias: unknown
+  baseService: unknown
+  envMismatch?: boolean
+  identityEnvId?: number | null
+  poolStatus: "ok" | "missing" | "ambiguous"
+  refMode: unknown
+  refUsername?: unknown | null
+  service: unknown
+  system?: unknown | null
 }
 
 // composition 的成员行:顺序即列表顺序(聚合发起序/串联链路序/
@@ -1379,6 +1423,7 @@ export interface RunResponse {
 // /run-schemes CRUD(方案唯一读写面)的请求/响应 wire 契约;
 // isDefault/options(M10 RunOptions)为工作台键。
 export interface RunScheme {
+  accountComboId?: number | null
   dataSetIds?: Array<unknown>
   dataSetSelection?: Array<DataSetSelection>
   injectionEntryIds?: Array<unknown>
@@ -1519,10 +1564,10 @@ export interface ScenarioOptionsOut {
   total: number
 }
 
-// 反查面板 · 单条场景引用:kinds ⊆ {template, snapshot}。
+// 反查面板 · 单条场景引用:kinds ⊆ {template, snapshot, scheme, combo}。
 // 
 // owner_id 供前端算「删除会被拦截」的预告(与 DELETE 409 同口径:
-// 本人场景的 template 才阻断,schemas 见 auth_references)。
+// 本人场景的运行依赖才阻断,schemas 见 auth_references)。
 export interface ScenarioRefItem {
   kinds: Array<unknown>
   name: unknown

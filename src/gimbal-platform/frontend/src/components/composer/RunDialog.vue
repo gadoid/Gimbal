@@ -26,6 +26,8 @@
             @cancel="$emit('close')"
             @confirm="(sel, opts) => $emit('confirm', sel, opts)"
             @save-as-scheme="(body) => $emit('saveAsScheme', body)"
+            @update:scheme-id="(id) => $emit('update:schemeId', id)"
+            @update:credential-source="(source) => $emit('update:credentialSource', source)"
           />
         </div>
       </div>
@@ -61,6 +63,8 @@ const props = withDefaults(defineProps<{
   assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
   /** authz M2a S8:场景所属普通项目(面板据此显示凭证来源切换) */
   projectId?: number | null
+  /** v4:受控凭证池选择,与编排器动态取数共用。 */
+  credentialSource?: 'personal' | 'project'
   /** 死条目(悬空)id — 宿主预计算(useInjectableSurface 分组),失效判定沿用 */
   deadEntryIds?: string[]
 }>(), {
@@ -71,6 +75,7 @@ const props = withDefaults(defineProps<{
   lastRunId: null,
   lastRunError: null,
   initialSchemeId: null,
+  credentialSource: 'personal',
   stepOrchestrationNames: () => [] as string[],
   assertionEntries: () => [] as AssertionEntry[],
   deadEntryIds: () => [] as string[],
@@ -95,6 +100,10 @@ const emit = defineEmits<{
   ]
   /** 另存为方案(仅默认方案态):当前绑定与参数存为自建方案 */
   saveAsScheme: [body: Omit<SchemeV2, 'schemeId' | 'isDefault'>]
+  /** 当前选中方案:供组合期查询复用同一方案上下文。 */
+  'update:schemeId': [schemeId: string | null]
+  /** 当前凭证池:供组合期动态取数复用。 */
+  'update:credentialSource': [credentialSource: 'personal' | 'project']
 }>()
 
 /** 面板 props = 壳 props 去掉 visible(visible 是弹层概念,面板没有) */

@@ -61,6 +61,39 @@ async def _require_env(db, body: RunScheme) -> None:
             "service": e.service, "alias": e.alias}) from None
 
 
+async def _require_combo(db, user, row, combo_id: int | None):
+    from ..services.account_combo import (ComboBindingError,
+                                           require_combo_bindable)
+    try:
+        return await require_combo_bindable(db, user, row, combo_id)
+    except ComboBindingError as e:
+        raise HTTPException(status_code=422, detail=e.detail()) from None
+
+
+async def _record_combo_binding(
+    db, user, row, scheme_id: str, old_id: int | None,
+    new_id: int | None, combo,
+) -> None:
+    if old_id == new_id:
+        return
+    from ..services import audit as audit_svc
+
+    detail = {"op": "unbind" if new_id is None else "bind",
+              "schemeId": scheme_id, "comboId": new_id or old_id}
+    if combo is not None:
+        detail.update(comboName=combo.name, comboRevision=combo.revision)
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="account_combo.bind", resource_type="scenario",
+        resource_id=row.scenario_id, detail=detail)
+    if new_id is not None or old_id is not None:
+        from .account_combos import _revive_after_combo_fix
+        await _revive_after_combo_fix(
+            project_id=row.project_id,
+            user_id=row.owner_id if row.project_id is None else None)
+
+
 @router.get("/{scenario_id}/run-schemes")
 async def list_run_schemes(
     user: CurrentUser, db: DbSession, scenario_id: str,
@@ -82,8 +115,9 @@ async def create_run_scheme(
     row = await _load_row(db, scenario_id)
     await _require_owner(db, user, row)
     await _require_env(db, body)
+    combo = await _require_combo(db, user, row, body.account_combo_id)
     try:
-        return await scheme_store.create_scheme(db, scenario_id,
+        created = await scheme_store.create_scheme(db, scenario_id,
             name=body.name, payload=_to_payload(body))
     except ValueError as e:
         if str(e) == "name_conflict":
@@ -91,6 +125,10 @@ async def create_run_scheme(
                 "code": "run_scheme_name_conflict",
                 "message": "方案名场景内唯一(「默认方案」为保留名)"})
         raise
+    await _record_combo_binding(
+        db, user, row, created["schemeId"], None,
+        body.account_combo_id, combo)
+    return created
 
 
 @router.put("/{scenario_id}/run-schemes/{scheme_id}")
@@ -101,8 +139,12 @@ async def update_run_scheme(
     row = await _load_row(db, scenario_id)
     await _require_owner(db, user, row)
     await _require_env(db, body)
+    combo = await _require_combo(db, user, row, body.account_combo_id)
     try:
-        return await scheme_store.update_scheme(db, scenario_id, scheme_id,
+        existing = await scheme_store.get_row(db, scenario_id, scheme_id)
+        old_id = (existing.payload or {}).get("accountComboId")
+        updated = await scheme_store.update_scheme(
+            db, scenario_id, scheme_id,
             name=body.name, payload=_to_payload(body))
     except KeyError:
         raise HTTPException(status_code=404, detail={
@@ -114,6 +156,9 @@ async def update_run_scheme(
                 "code": "run_scheme_name_conflict",
                 "message": "方案名场景内唯一(「默认方案」为保留名)"})
         raise
+    await _record_combo_binding(
+        db, user, row, scheme_id, old_id, body.account_combo_id, combo)
+    return updated
 
 
 @router.delete("/{scenario_id}/run-schemes/{scheme_id}", status_code=204)

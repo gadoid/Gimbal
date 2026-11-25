@@ -48,16 +48,22 @@ async def _execution_config_json(execution_id: int) -> dict:
 
 async def test_config_json_carries_scheme_trace(client, monkeypatch):
     h, sid = await _setup(client)
+    made = await client.post(f"/api/scenarios/{sid}/run-schemes", headers=h,
+                             json={"name": "冒烟方案", "dataSetSelection": [],
+                                   "injectionEntryIds": [], "serviceBindings": {},
+                                   "options": {}})
+    assert made.status_code == 201, made.text
+    scheme_id = made.json()["schemeId"]
     cases = _mock_fanout(monkeypatch)
     r = await client.post("/api/runs", headers=h, json={
         "scenarioId": sid, "dataSetIds": [], "dataSetSelection": [],
         "injectionEntryIds": [], "serviceBindings": {},
-        "schemeId": "rs-042", "schemeName": "冒烟方案",
+        "schemeId": scheme_id, "schemeName": "冒烟方案",
     })
     assert r.status_code == 201, r.text
     await wait_until(lambda: len(cases) >= 1)
     config_json = await _execution_config_json(r.json()["executionId"])
-    assert config_json.get("schemeId") == "rs-042"
+    assert config_json.get("schemeId") == scheme_id
     assert config_json.get("schemeName") == "冒烟方案"
 
 

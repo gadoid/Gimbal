@@ -365,6 +365,7 @@ const RECIPE_HIDDEN_KEYS = new Set([
   'injectionEntryIds', 'chain', 'ingest_stats', 'outputs',
   'execSlotMap', 'execCarryOverrides', 'execConfigId',
   'credentialSource', 'credentialProjectId',
+  'accountComboId', 'accountComboName', 'accountComboRevision',
   'resolvedServices', 'builtinAuths', 'token', 'outOfScope',
 ])
 // 环境来源枚举(S2.1 环境链 env_chain.py)→ 中文

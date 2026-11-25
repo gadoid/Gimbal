@@ -1,30 +1,12 @@
-"""账户组合 API(账户组合设计方案 §5,定稿 05)。
+"""账户组合资源 API(设计方案 v4 §5)。
 
-组合 = 服务 → 已登记身份条目的引用集(``payload.entries``,一条一
-服务):跨场景复用的**基础默认**身份映射层。场景经
-``POST /api/scenarios/{sid}/account-combo`` 绑定(引用语义,改动传播);
-``definition.config.accountCombo`` 为**服务端托管键** —— 整稿 PUT 恒剥
-保留存量,唯一写通道 = 绑定端点(scenario_store 侧单点,§4.2)。
+组合 = 服务 → 已登记身份条目的引用集。运行方案通过自身 payload 的
+``accountComboId`` 绑定组合;本 router 只管理组合资源,不再提供场景级
+绑定端点。引用计数、删除清单均按方案统计。
 
-两个 scope 同构(``exec_configs`` 的 (scope, scope_id) 维度先例,无 FK):
-* ``user`` —— 个人面:全员可建、属主单判;
-* ``project`` —— 项目面:读 = 成员任一角色,写 = WRITER_ROLES
-  (**按成员关系判,平台 Admin 不旁路** —— §5.3 范围矩阵,同 zone
-  D1 语义);公共项目不建组合(422,不把环境与凭证引用发布成公共
-  模板)。
-
-范围矩阵(v1 硬同区,§5.3):个人组合仅绑本人私有场景;项目组合仅绑
-同一普通项目场景(跨项目双成员也拒);公共场景不绑(发布恒剥)。
-跨 scope 绑定 → 422 ``account_combo_scope_mismatch``。
-
-条目校验分层(§3.2/§6.3):**全量校验只在保存面** —— 创建/PATCH 逐条
-过 ``validate_binding_aliases``(别名存在 ∧ 同基础服务,复用既有码族
-``binding_alias_unknown`` / ``binding_alias_mismatch``),形状/重复服务
-→ 422 ``account_combo_entry_invalid``;执行/预检只按引用服务校验
-(批 2 接入)。``revision`` 仅条目变化 +1(元数据只动 updated_at+审计)。
-
-``scenario_combo_router`` 挂 ``/scenarios/{id}/account-combo`` 两端点,
-必须先于 scenarios 的 ``/{scenario_id}`` catch-all 注册(main.py 注记)。
+个人组合仅属主可读可写;项目组合成员可读、WRITER_ROLES 可写,平台
+Admin 不旁路。公共项目不创建组合。条目全量校验只在组合保存面,
+``revision`` 仅条目变化时递增。
 """
 from __future__ import annotations
 
@@ -33,27 +15,28 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import Integer, cast, func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..models import AccountCombo
+from ..models import (
+    AccountCombo, Deployment, Environment, Service, ServiceIdentity,
+    SystemEnvInstance,
+)
+from ..models.composer_run_scheme import ComposerRunScheme
 from ..models.composer_scenario import ComposerScenario
 from ..models.project import Project, ProjectMember
 from ..models.user import User
 from ..services import audit as audit_svc
-from ..services.scenario_store import ACCOUNT_COMBO_REF_KEY
+from ..services.env_chain import EnvMixed, resolve_execution_tag
+from ..services.run_prepare import pick_bindings_full
 from ..services.zone import (
     ProjectCreateDenied, ensure_can_create_in_project, my_project_roles,
-    public_project_id,
 )
 
 router = APIRouter(prefix="/account-combos", tags=["account-combos"])
-# 场景侧绑定/读取通道:static 后缀 account-combo,须先于 scenarios
-# catch-all 注册(同 data_sets.create_router 先例)。
-scenario_combo_router = APIRouter(prefix="/scenarios", tags=["account-combos"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
@@ -72,22 +55,6 @@ def _combo_not_found(combo_id: int) -> HTTPException:
         status.HTTP_404_NOT_FOUND,
         detail={"code": "account_combo_not_found",
                 "message": f"账户组合不存在: {combo_id}"})
-
-
-def _combo_not_found_422(combo_id: int) -> HTTPException:
-    """场景侧绑定闸:422(§5.2 同码双态 —— 引用了不存在或不可读的
-    组合,face 决定 status)。"""
-    return HTTPException(
-        status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail={"code": "account_combo_not_found",
-                "message": f"组合不存在或不可读: {combo_id}"})
-
-
-def _scope_mismatch(message: str) -> HTTPException:
-    return HTTPException(
-        status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail={"code": "account_combo_scope_mismatch",
-                "message": message})
 
 
 def _entry_invalid(message: str) -> HTTPException:
@@ -129,6 +96,14 @@ class AccountComboUpdate(BaseModel):
     entries: list[ComboEntry] | None = Field(default=None, max_length=64)
 
 
+class AccountComboSchemeRef(BaseModel):
+    comboId: int
+    schemeId: str
+    schemeName: str
+    scenarioId: str
+    scenarioName: str
+
+
 class AccountComboView(BaseModel):
     id: int
     scope: str
@@ -139,6 +114,7 @@ class AccountComboView(BaseModel):
     revision: int
     entries: list[ComboEntry]
     referenceCount: int = 0
+    schemes: list[AccountComboSchemeRef] = Field(default_factory=list)
     updatedAt: datetime | None = None
     updatedByName: str | None = None
 
@@ -154,8 +130,43 @@ class AccountComboListOut(BaseModel):
     projects: list[AccountComboProjectGroup]
 
 
-class ComboBindIn(BaseModel):
-    comboId: int | None = Field(default=None, ge=1)
+class ComboReadinessEntry(BaseModel):
+    service: str
+    alias: str
+    baseService: str
+    system: str | None = None
+    identityEnvId: int | None = None
+    refMode: str
+    refUsername: str | None = None
+    poolStatus: Literal["ok", "missing", "ambiguous"]
+    accountId: int | None = None
+    accountUsername: str | None = None
+    accountEnvId: int | None = None
+    envMismatch: bool = False
+
+
+class ComboAddressRow(BaseModel):
+    service: str
+    envId: int
+    envName: str
+    baseUrl: str = ""
+    loginUrl: str = ""
+    deploymentId: int | None = None
+    resolved: bool = False
+
+
+class AccountComboReadiness(BaseModel):
+    credentialSource: Literal["personal", "project"]
+    projectId: int | None = None
+    poolName: str
+    canProbeCredentials: bool
+    environmentId: int | None = None
+    environmentName: str | None = None
+    environmentSource: str | None = None
+    envError: str | None = None
+    ready: bool
+    entries: list[ComboReadinessEntry]
+    addresses: list[ComboAddressRow]
 
 
 # ── 保存面条目校验(§3.2 校验职责分层:全量校验只在保存面)────
@@ -191,36 +202,40 @@ def _payload_entries(entries: list[ComboEntry]) -> dict:
     return {"entries": [e.model_dump() for e in entries]}
 
 
-# ── 引用计数 / in-use 清单(definition.config.accountCombo 引用)──
+# ── 引用计数 / in-use 清单(方案 payload.accountComboId)────────────
 
-def _combo_ref_column():
-    """``payload->definition->config->accountCombo`` 的 int 投影
-    (JSONB 路径;storage 单点 = scenario_store 托管键写入)。"""
-    return cast(
-        ComposerScenario.payload["definition"]["config"]["accountCombo"]
-        .as_string(), Integer)
-
-
-async def _reference_counts(db: AsyncSession, ids: list[int]) -> dict[int, int]:
-    if not ids:
-        return {}
-    ref = _combo_ref_column()
-    rows = (await db.execute(
-        select(ref, func.count()).where(ref.in_(ids)).group_by(ref)
-    )).all()
-    return {int(k): int(v) for k, v in rows}
-
-
-async def _referencing_scenarios(
-    db: AsyncSession, combo_id: int, *, limit: int = 20
+async def _scheme_references(
+    db: AsyncSession, *, combo_ids: set[int] | None = None,
 ) -> list[dict]:
-    ref = _combo_ref_column()
     rows = (await db.execute(
-        select(ComposerScenario.scenario_id, ComposerScenario.name)
-        .where(ref == combo_id)
-        .order_by(ComposerScenario.id).limit(limit)
+        select(ComposerRunScheme, ComposerScenario.scenario_id,
+               ComposerScenario.name)
+        .join(ComposerScenario,
+              ComposerScenario.scenario_id == ComposerRunScheme.scenario_id)
+        .order_by(ComposerScenario.id, ComposerRunScheme.id)
     )).all()
-    return [{"scenarioId": sid, "name": name or sid} for sid, name in rows]
+    out: list[dict] = []
+    for scheme, scenario_id, scenario_name in rows:
+        combo_id = (scheme.payload or {}).get("accountComboId")
+        if not isinstance(combo_id, int):
+            continue
+        if combo_ids is not None and combo_id not in combo_ids:
+            continue
+        out.append({
+            "comboId": combo_id,
+            "schemeId": scheme.scheme_id,
+            "schemeName": scheme.name,
+            "scenarioId": scenario_id,
+            "scenarioName": scenario_name or scenario_id,
+        })
+    return out
+
+
+async def _referencing_schemes(
+    db: AsyncSession, combo_id: int,
+) -> list[dict]:
+    return [ref for ref in await _scheme_references(db)
+            if ref["comboId"] == combo_id]
 
 
 # ── 访问门(§5.3 范围矩阵:按成员关系判,Admin 不旁路)──────────
@@ -231,7 +246,10 @@ async def _access(
     """读:user 行 = 本人 ∨ project 行 = 成员任一角色;写:user 行 =
     本人 ∨ project 行 = WRITER_ROLES。完全不可见 → 404(不泄露存在性,
     同 D1:项目对象权限只看项目角色,平台 Admin 不旁路)。"""
-    row = await db.get(AccountCombo, combo_id)
+    stmt = select(AccountCombo).where(AccountCombo.id == combo_id)
+    if write:
+        stmt = stmt.with_for_update()
+    row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
         raise _combo_not_found(combo_id)
     if row.scope == "user":
@@ -248,15 +266,6 @@ async def _access(
                     "message": "项目用户只能读和执行项目内容,不能修改账户"
                                "组合"})
     return row
-
-
-async def _combo_readable_for_bind(db: AsyncSession, combo: AccountCombo,
-                                   user) -> bool:
-    """绑定闸的可读判定(§5.2 场景侧 422 双态的「不可读」半边):
-    个人组合仅属主可读;项目组合成员任一角色可读。"""
-    if combo.scope == "user":
-        return combo.scope_id == user.id
-    return combo.scope_id in await my_project_roles(db, user.id)
 
 
 async def _audit(db, user, action: str, combo: AccountCombo,
@@ -297,8 +306,11 @@ async def _revive_after_combo_fix(
 async def _view_rows(
     db: AsyncSession, rows: list[AccountCombo]
 ) -> list[AccountComboView]:
-    """行 → 视图(引用计数 + updatedByName 一次聚合,不在循环内打库)。"""
-    counts = await _reference_counts(db, [r.id for r in rows])
+    """行 → 视图(引用计数/清单 + updatedByName 一次聚合,不在循环内打库)。"""
+    refs = await _scheme_references(db, combo_ids={r.id for r in rows})
+    by_combo: dict[int, list[dict]] = {}
+    for ref in refs:
+        by_combo.setdefault(ref["comboId"], []).append(ref)
     uids = {r.updated_by_id for r in rows if r.updated_by_id}
     users = (await db.execute(
         select(User.id, User.display_name, User.username)
@@ -311,7 +323,8 @@ async def _view_rows(
             revision=r.revision,
             entries=[ComboEntry(**e) for e in (r.payload or {}).get(
                 "entries", [])],
-            referenceCount=counts.get(r.id, 0),
+            referenceCount=len(by_combo.get(r.id, [])),
+            schemes=by_combo.get(r.id, []),
             updatedAt=r.updated_at,
             updatedByName=names.get(r.updated_by_id))
         for r in rows
@@ -395,6 +408,120 @@ async def create_account_combo(
     return (await _view_rows(db, [row]))[0]
 
 
+@router.get("/{combo_id}/readiness", response_model=AccountComboReadiness)
+async def get_account_combo_readiness(
+    combo_id: int, user: CurrentUser, db: DbSession,
+    credential_source: Literal["personal", "project"] | None = None,
+) -> AccountComboReadiness:
+    """按执行人/项目池上下文诊断组合;凭证裁决复用执行单源。"""
+    row = await _access(db, combo_id, user, write=False)
+    source = credential_source or (
+        "project" if row.scope == "project" else "personal")
+    project_id = row.scope_id if row.scope == "project" else None
+    if source == "project" and project_id is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "account_combo_scope_mismatch",
+                    "message": "个人组合没有项目凭证池,只能按当前用户个人池诊断"})
+    entries = [ComboEntry(**e) for e in (row.payload or {}).get(
+        "entries", [])]
+    aliases = [e.alias for e in entries]
+    identity_rows = (await db.execute(
+        select(ServiceIdentity).where(
+            ServiceIdentity.alias_name.in_(aliases)))).scalars().all() \
+        if aliases else []
+    identities = {i.alias_name: i for i in identity_rows}
+    systems = dict((await db.execute(
+        select(Service.name, Service.system).where(
+            Service.name.in_({i.base_service for i in identities.values()}))
+    )).all()) if identities else {}
+    picked, missing, ambiguous = await pick_bindings_full(
+        db, user.id, aliases,
+        cred_project_id=project_id if source == "project" else None)
+    picked_by_alias = {p.slot: p for p in picked}
+    missing_set, ambiguous_set = set(missing), set(ambiguous)
+    role = (await my_project_roles(db, user.id)).get(project_id) \
+        if project_id is not None else None
+    can_probe = source == "personal" or role in ProjectMember.WRITER_ROLES
+
+    env_error = None
+    try:
+        env = await resolve_execution_tag(
+            db, identity_names=aliases, project_id=project_id)
+    except EnvMixed as e:
+        env, env_error = None, str(e)
+    env_names = dict((await db.execute(select(Environment.id, Environment.name)))
+                     .all())
+
+    readiness_entries: list[ComboReadinessEntry] = []
+    for entry in entries:
+        ident = identities.get(entry.alias)
+        base = ident.base_service if ident else entry.service
+        system = systems.get(base)
+        account = picked_by_alias.get(entry.alias)
+        pool_status = ("ambiguous" if entry.alias in ambiguous_set else
+                       "missing" if entry.alias in missing_set else
+                       "ok" if account else "missing")
+        readiness_entries.append(ComboReadinessEntry(
+            service=entry.service, alias=entry.alias, baseService=base,
+            system=system, identityEnvId=ident.env_id if ident else None,
+            refMode=ident.ref_mode if ident else "",
+            refUsername=ident.ref_username if ident else None,
+            poolStatus=pool_status,
+            accountId=account.account_id if account else None,
+            accountUsername=(account.account_username
+                             if account and (source == "personal" or can_probe)
+                             else "••••" if account else None),
+            accountEnvId=account.env_id if account else None,
+            envMismatch=bool(account and ident
+                             and account.env_id != ident.env_id)))
+
+    bases = {r.baseService for r in readiness_entries}
+    known_systems = {r.system for r in readiness_entries if r.system}
+    deployments = (await db.execute(select(Deployment).where(
+        Deployment.base_service.in_(bases)))).scalars().all() if bases else []
+    instances = (await db.execute(select(SystemEnvInstance).where(
+        SystemEnvInstance.system.in_(known_systems)))).scalars().all() \
+        if known_systems else []
+    dep_by_key = {(d.base_service, d.env_id): d for d in deployments}
+    instance_by_key = {(i.system, i.env_id): i for i in instances}
+    addresses: list[ComboAddressRow] = []
+    resolved_services: set[str] = set()
+    for item in readiness_entries:
+        env_ids = {d.env_id for d in deployments
+                   if d.base_service == item.baseService}
+        if item.system:
+            env_ids.update(i.env_id for i in instances
+                           if i.system == item.system)
+        for env_id in sorted(env_ids):
+            dep = dep_by_key.get((item.baseService, env_id))
+            instance = instance_by_key.get((item.system, env_id))
+            resolved = bool(env and env.env_id == env_id and dep)
+            if resolved:
+                resolved_services.add(item.service)
+            addresses.append(ComboAddressRow(
+                service=item.service, envId=env_id,
+                envName=env_names.get(env_id, f"环境 #{env_id}"),
+                baseUrl=dep.base_url if dep else "",
+                loginUrl=instance.login_url if instance else "",
+                deploymentId=dep.id if dep else None, resolved=resolved))
+    ready = bool(readiness_entries) and not env_error and all(
+        r.poolStatus == "ok" for r in readiness_entries) and \
+        resolved_services == {r.service for r in readiness_entries}
+    project_name = (await db.execute(select(Project.name).where(
+        Project.id == project_id))).scalar() if project_id is not None else None
+    return AccountComboReadiness(
+        credentialSource=source, projectId=project_id,
+        poolName=(project_name or f"项目 #{project_id}") if project_id
+        else (user.display_name or user.username),
+        canProbeCredentials=can_probe,
+        environmentId=env.env_id if env else None,
+        environmentName=env_names.get(env.env_id) if env and env.env_id else None,
+        environmentSource=env.source if env else None,
+        envError=env_error, ready=ready, entries=readiness_entries,
+        addresses=addresses)
+
+
 @router.get("/{combo_id}", response_model=AccountComboView)
 async def get_account_combo(
     combo_id: int, user: CurrentUser, db: DbSession
@@ -452,8 +579,8 @@ async def _clear_default(db: AsyncSession, scope: str, scope_id: int) -> None:
 async def set_default_account_combo(
     combo_id: int, user: CurrentUser, db: DbSession
 ) -> AccountComboView:
-    """置为默认(语义 = 「推荐默认」:新建场景预选,不静默自动写入,
-    §4.1)。原子切换:同事务先清旧默认再置新;partial unique 兜并发。"""
+    """置为默认(语义 = 「推荐默认」:新建/另存方案预选,不静默自动
+    写入,§4.1)。原子切换:同事务先清旧默认再置新;partial unique 兜并发。"""
     row = await _access(db, combo_id, user, write=True)
     await _clear_default(db, row.scope, row.scope_id)
     row.is_default = True
@@ -477,127 +604,15 @@ async def delete_account_combo(
     """被引用时 409 拒删(in-use 复核与删除同事务,§5.1)—— 不静默
     悬空;不解绑不给删。"""
     row = await _access(db, combo_id, user, write=True)
-    refs = await _referencing_scenarios(db, row.id)
+    refs = await _referencing_schemes(db, row.id)
     if refs:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={"code": "account_combo_in_use",
-                    "message": "组合仍被场景引用,请先在场景内解除绑定",
-                    "scenarios": refs})
+                    "message": "组合仍被运行方案引用,请先在方案内解除绑定",
+                    "schemes": refs})
     name_snapshot = row.name
     await db.delete(row)
     await db.commit()
     await _audit(db, user, "account_combo.write", row, {
         "op": "delete", "name": name_snapshot})
-
-
-# ── 场景侧绑定/读取通道(服务端托管键的唯一写入口,§4.2)──────
-
-def _bound_combo_id(row: ComposerScenario) -> int | None:
-    cfg = ((row.payload or {}).get("definition") or {}).get("config")
-    if not isinstance(cfg, dict):
-        return None
-    v = cfg.get(ACCOUNT_COMBO_REF_KEY)
-    return v if isinstance(v, int) else None
-
-
-async def _bind_view(db: AsyncSession, combo: AccountCombo) -> dict:
-    return {"comboId": combo.id, "name": combo.name, "scope": combo.scope,
-            "revision": combo.revision,
-            "entries": (combo.payload or {}).get("entries", [])}
-
-
-@scenario_combo_router.get("/{scenario_id}/account-combo")
-async def get_scenario_combo(
-    scenario_id: str, user: CurrentUser, db: DbSession
-) -> dict:
-    """读取通道(表 B scenario.read):返回当前绑定(comboId + 名称/
-    revision/条目摘要)—— 编排器重载恢复显示(§5.1)。组合行已被并发
-    删除(删除有 in-use 闸,仅竞态可达)→ comboMissing 标注。"""
-    from .scenarios import _load_row, _require_reader_async
-
-    row = await _load_row(db, scenario_id)
-    await _require_reader_async(db, user, row)
-    combo_id = _bound_combo_id(row)
-    if combo_id is None:
-        return {"comboId": None}
-    combo = await db.get(AccountCombo, combo_id)
-    if combo is None:
-        return {"comboId": combo_id, "comboMissing": True}
-    return await _bind_view(db, combo)
-
-
-@scenario_combo_router.post("/{scenario_id}/account-combo")
-async def bind_scenario_combo(
-    scenario_id: str, body: ComboBindIn,
-    user: CurrentUser, db: DbSession,
-) -> dict:
-    """v1 唯一应用入口 = 编排器(§8.1):``{comboId: int | null}``,
-    null = 解绑;一步改引用,不动方案绑定与步骤(§5.1)。门 = 场景
-    写闸 ∧ 组合可读 ∧ **同区**(§5.3 范围矩阵)。"""
-    from .scenarios import _load_row, _require_owner
-
-    row = await _load_row(db, scenario_id)
-    await _require_owner(db, user, row)
-    payload = dict(row.payload or {})
-    definition = dict(payload.get("definition") or {})
-    cfg = dict(definition.get("config") or {})
-    if body.comboId is None:
-        # 解绑:仅摘引用;覆盖服务自然回落方案绑定/步骤直引(§8.1
-        # 解除提示的「哪些服务仍有覆盖」由前端按生效预览展示)
-        had = cfg.pop(ACCOUNT_COMBO_REF_KEY, None)
-        if had is None:
-            return {"comboId": None}
-        definition["config"] = cfg
-        payload["definition"] = definition
-        row.payload = payload  # JSON 列需整体赋值触发变更
-        await db.commit()
-        await audit_svc.record(
-            db, actor_id=user.id,
-            actor_name=user.display_name or user.username,
-            action="account_combo.bind", resource_type="scenario",
-            resource_id=scenario_id,
-            detail={"op": "unbind", "comboId": had})
-        # 解绑即修复(§6.3):该场景所在区的暂停实例 best-effort 复活
-        # —— 项目场景 → 项目池实例;私有场景 → 属主持有实例
-        await _revive_after_combo_fix(
-            project_id=row.project_id,
-            user_id=row.owner_id if row.project_id is None else None)
-        return {"comboId": None}
-    combo = await db.get(AccountCombo, body.comboId)
-    if (combo is None
-            or not await _combo_readable_for_bind(db, combo, user)):
-        raise _combo_not_found_422(body.comboId)
-    # v1 硬同区(§5.3):个人组合仅本人私有场景;项目组合仅同项目
-    # 场景;公共项目场景不绑(发布恒剥,此处防御)。
-    if combo.scope == "user":
-        if row.project_id is not None:
-            raise _scope_mismatch(
-                "个人组合只能绑定本人私有场景(v1 硬同区)")
-        if row.owner_id != combo.scope_id:
-            raise _scope_mismatch(
-                "个人组合只能绑定本人私有场景(v1 硬同区)")
-    else:
-        if row.project_id != combo.scope_id:
-            raise _scope_mismatch(
-                "项目组合只能绑定同一项目的场景(v1 硬同区)")
-    pub = await public_project_id(db)
-    if row.project_id is not None and row.project_id == pub:
-        raise _scope_mismatch("公共场景不绑定账户组合")
-    cfg[ACCOUNT_COMBO_REF_KEY] = combo.id
-    definition["config"] = cfg
-    payload["definition"] = definition
-    row.payload = payload
-    await db.commit()
-    await audit_svc.record(
-        db, actor_id=user.id,
-        actor_name=user.display_name or user.username,
-        action="account_combo.bind", resource_type="scenario",
-        resource_id=scenario_id,
-        detail={"op": "bind", "comboId": combo.id,
-                "comboName": combo.name, "comboRevision": combo.revision})
-    # 重绑即修复(§6.3):同解绑面的复活定维
-    await _revive_after_combo_fix(
-        project_id=row.project_id,
-        user_id=row.owner_id if row.project_id is None else None)
-    return await _bind_view(db, combo)

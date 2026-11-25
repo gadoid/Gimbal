@@ -1,6 +1,7 @@
 """query-views rows 路由 —— 组合期取数解释器入口(spec §4.1)。
 
-CurrentUser 鉴权(查询身份是场景执行账号,不是平台用户自己)。
+CurrentUser 鉴权(个人凭证属于当前查询人,不是场景作者;项目凭证
+另经场景所属普通项目的成员闸)。
 
 地址来源双通道二选一:
 * **上下文通道**(推荐,前端默认):``scenarioId + stepIndex`` →
@@ -94,22 +95,39 @@ async def get_rows(
     # 只认库中方案行,方案 dirty 提示是前端面(§12.6 口径)。
     scheme_id: Annotated[str | None, Query(alias="schemeId")] = None,
     # 账户组合 §7.4:凭证池通道(与执行链 credentialSource 同形);
-    # project → 成员闸后走场景所属项目池,缺省个人池(执行身份名下)。
+    # project → 成员闸后走场景所属项目池,缺省个人池(当前查询人名下)。
     credential_source: Annotated[str | None,
                                  Query(alias="credentialSource")] = None,
 ) -> dict:
-    # ── 地址来源(01-04):显式覆盖优先,上下文解析兜底,双缺拒绝 ──
+    # ── 上下文与地址覆盖:有场景上下文就解析身份/方案/池;显式 URL
+    # 只覆盖地址,不绕过组合 fail-closed 与项目池成员闸。────────────
+    if credential_source not in (None, "personal", "project"):
+        raise HTTPException(status_code=422, detail={
+            "code": "credential_source_invalid",
+            "msg": "credentialSource 只能是 personal / project"})
+    has_context = scenario_id is not None or step_index is not None
+    if has_context and (scenario_id is None or step_index is None):
+        raise HTTPException(status_code=422, detail={
+            "code": "query_context_required",
+            "msg": "场景上下文须同时传 scenarioId + stepIndex"})
+    if not has_context and not service_url:
+        raise HTTPException(status_code=422, detail={
+            "code": "query_context_required",
+            "msg": "缺少查询上下文:请传 scenarioId + stepIndex"
+                   "(前端已保存场景),或显式 service_url(直连覆盖)"})
+    if credential_source == "project" and not has_context:
+        raise HTTPException(status_code=422, detail={
+            "code": "credential_source_invalid",
+            "msg": "项目凭证须提供场景上下文(scenarioId + stepIndex)"})
+
     ctx_owner_id, ctx_service, ctx_pool = user.id, service, None
-    if not service_url:
-        if scenario_id is None or step_index is None:
-            raise HTTPException(status_code=422, detail={
-                "code": "query_context_required",
-                "msg": "缺少查询上下文:请传 scenarioId + stepIndex"
-                       "(前端已保存场景),或显式 service_url(直连覆盖)"})
+    if has_context:
         try:
             ctx = await query_context.resolve_query_context(
                 db, user=user, scenario_id=scenario_id,
-                step_index=step_index, scheme_id=scheme_id)
+                step_index=step_index, scheme_id=scheme_id,
+                query_alias_override=query_alias,
+                service_url_override=service_url or None)
         except query_context.QueryContextError as e:
             raise HTTPException(
                 status_code=e.status,
@@ -117,13 +135,7 @@ async def get_rows(
         service_url = ctx.service_url
         ctx_owner_id = ctx.owner_id
         ctx_service = ctx.service
-        # 查询身份缺省 = 步骤生效别名(执行视角);显式 query_alias 优先
-        # (headers ${auth.<tag>} 引用就是该步执行身份的声明,前端解析)
-        if query_alias is None:
-            query_alias = ctx.query_alias
-        # 池通道(§7.4):project → 成员闸(can_use_project_credentials,
-        # 同执行链 S8;非成员/公共项目 422,不静默回落个人池——回落会
-        # 让查询打到错误账号的数据面)
+        query_alias = ctx.query_alias
         if credential_source == "project":
             from app.services.zone import can_use_project_credentials
 
@@ -133,14 +145,6 @@ async def get_rows(
                 raise HTTPException(status_code=422, detail={
                     "code": "credential_source_invalid",
                     "msg": "项目凭证只能用于你所在普通项目的场景"})
-        elif credential_source not in (None, "personal"):
-            raise HTTPException(status_code=422, detail={
-                "code": "credential_source_invalid",
-                "msg": "credentialSource 只能是 personal / project"})
-    elif credential_source not in (None, "personal", "project"):
-        raise HTTPException(status_code=422, detail={
-            "code": "credential_source_invalid",
-            "msg": "credentialSource 只能是 personal / project"})
     click: dict[str, Any] | None = None
     if params:
         try:

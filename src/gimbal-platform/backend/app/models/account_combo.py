@@ -1,10 +1,10 @@
-"""AccountCombo model —— 账户组合(账户组合设计方案 §4.1,定稿 05)。
+"""AccountCombo model —— 账户组合(账户组合设计方案 v4 §4.1)。
 
 组合 = 一组**服务 → 已登记身份条目**的映射(``payload.entries``:
 ``[{service, alias}]``,alias = ``ServiceIdentity.alias_name``,一条一
-服务),跨场景复用的**基础默认**身份层:场景经 ``definition.config.
-accountCombo`` 引用(服务端托管键,§4.2),执行时各装配面把组合条目
-垫底进既有绑定合并(组合永远垫底,不重排任何面内覆盖序)。
+服务),跨场景、跨方案复用的**基础默认**身份层:运行方案经 payload
+``accountComboId`` 引用,执行时各装配面把组合条目垫底进既有绑定合并
+(组合永远垫底,不重排任何面内覆盖序)。
 
 **组合是注册表的纯引用集**:不存 envId(条目自带环境)、不存账户
 (条目引用账户)、不存地址与明文、不存凭证池 —— 池仍由
@@ -14,7 +14,7 @@ accountCombo`` 引用(服务端托管键,§4.2),执行时各装配面把组合�
 scope 两型同构:``'user' | 'project'``;(scope, scope_id) 同
 ``exec_configs`` 的通用维度口径(无 FK)。同 scope 内 name 唯一;默认
 组合每 (scope, scope_id) 至多一行(部分唯一索引,语义 = 「推荐默认」
-—— 新建场景预选,不静默自动写入)。
+—— 新建/另存方案预选,不静默自动写入)。
 
 ``revision`` 仅条目(entries)变化 +1(改名/描述等元数据只动
 updated_at + 审计)—— 执行快照与订阅指纹记录 id+name+revision 溯源。
@@ -47,7 +47,7 @@ class AccountCombo(Base):
     __table_args__ = (
         UniqueConstraint("scope", "scope_id", "name",
                          name="uq_account_combos_scope_name"),
-        # 默认组合每 scope 至多一行(「推荐默认」:新建场景预选用,
+        # 默认组合每 scope 至多一行(「推荐默认」:新建/另存方案预选用,
         # 不静默自动写入绑定 —— 置默认由路由原子切换)
         Index("uq_account_combos_default", "scope", "scope_id", unique=True,
               postgresql_where=text("is_default")),

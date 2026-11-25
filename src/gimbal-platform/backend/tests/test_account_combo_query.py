@@ -3,7 +3,8 @@
 覆盖:schemeId 方案感知(非默认方案身份正确;跨场景/未给回落默认)、
 组合垫底进查询、call.user 直引(后端单源扫描)、多直接身份 → 422
 query_identity_ambiguous(不取第一个)、凭证池通道(成员闸)与
-个人/项目池 L1 缓存隔离(§7.4 键含池维)。
+个人/项目池 L1 缓存隔离(§7.4 键含池维),以及共享场景按查询人
+隔离个人凭证与缓存。
 """
 from __future__ import annotations
 
@@ -12,12 +13,19 @@ import pytest
 import sqlalchemy as sa
 
 from app.core import db as db_module
-from app.models import User
+from app.models import AuthAccount, ServiceIdentity, User
 from app.services import query_context, query_view_runner as run
 from .helpers import make_draft
 from .conftest import seed_identity_fixture
 from .test_query_views_route import _IDX, _install_plate
 from .test_scenario_visibility_and_copy import _member
+
+
+@pytest.fixture(autouse=True)
+def _reset_query_runner():
+    run.reset_state_for_tests()
+    yield
+    run.reset_state_for_tests()
 
 
 def _q_step(service: str = "svc", *, headers: dict | None = None,
@@ -65,7 +73,7 @@ async def _resolve(sid: str, *, scheme_id: str | None = None,
 
 
 async def _mk_scheme(client, headers, sid: str, name: str,
-                     bindings: dict) -> str:
+                     bindings: dict, combo_id: int | None = None) -> str:
     # 先 GET 触发 ensure_default_scheme(默认方案空行落库),再建命名方案
     assert (await client.get(
         f"/api/scenarios/{sid}/run-schemes", headers=headers)).status_code == 200
@@ -73,9 +81,30 @@ async def _mk_scheme(client, headers, sid: str, name: str,
                           json={"name": name, "dataSetSelection": [],
                                 "injectionEntryIds": [],
                                 "serviceBindings": bindings,
+                                **({"accountComboId": combo_id}
+                                   if combo_id is not None else {}),
                                 "options": {}})
     assert r.status_code == 201, r.text
     return r.json()["schemeId"]
+
+
+async def _bind_default(client, headers, sid: str, combo_id) -> None:
+    listed = await client.get(
+        f"/api/scenarios/{sid}/run-schemes", headers=headers)
+    assert listed.status_code == 200, listed.text
+    scheme = next(s for s in listed.json() if s["isDefault"])
+    body = {
+        "name": scheme["name"],
+        "dataSetSelection": scheme.get("dataSetSelection") or [],
+        "injectionEntryIds": scheme.get("injectionEntryIds") or [],
+        "serviceBindings": scheme.get("serviceBindings") or {},
+        "options": scheme.get("options") or {},
+        **({"accountComboId": combo_id} if combo_id is not None else {}),
+    }
+    r = await client.put(
+        f"/api/scenarios/{sid}/run-schemes/{scheme['schemeId']}",
+        headers=headers, json=body)
+    assert r.status_code == 200, r.text
 
 
 async def _mk_combo(client, headers, entries: list[dict]) -> int:
@@ -111,13 +140,69 @@ async def test_query_scheme_and_combo_resolution(client, fresh_db) -> None:
     # 组合垫底:默认方案空 → 组合补位;方案键胜出组合
     cid = await _mk_combo(client, h, [{"service": "svc",
                                        "alias": "aliasB"}])
-    r = await client.post("/api/scenarios/sc-q1/account-combo",
-                          json={"comboId": cid}, headers=h)
-    assert r.status_code == 200, r.text
+    await _bind_default(client, h, "sc-q1", cid)
     ctx = await _resolve("sc-q1")
     assert ctx.query_alias == "aliasB"
     ctx = await _resolve("sc-q1", scheme_id=scheme_a)
     assert ctx.query_alias == "aliasA"
+    # raw 不吃默认方案组合
+    ctx = await _resolve("sc-q1", scheme_id="raw")
+    assert ctx.query_alias == "svc"
+
+
+async def test_query_combo_missing_fail_closed_even_with_url_override(
+        client, fresh_db) -> None:
+    """显式 service_url 只覆盖地址,不绕过方案组合的 fail-closed。"""
+    from app.models import AccountCombo
+    h = await _member(client, "quser_missing")
+    await _seed(client, h, "sc-q-missing", [_q_step("svc")])
+    cid = await _mk_combo(client, h, [])
+    await _bind_default(client, h, "sc-q-missing", cid)
+    async with db_module.SessionLocal() as db:
+        await db.execute(sa.delete(AccountCombo).where(
+            AccountCombo.id == cid))
+        await db.commit()
+    async with db_module.SessionLocal() as db:
+        u = (await db.execute(sa.select(User).where(
+            User.username == "quser_missing"))).scalar_one()
+        with pytest.raises(query_context.QueryContextError) as ei:
+            await query_context.resolve_query_context(
+                db, user=u, scenario_id="sc-q-missing", step_index=0,
+                service_url_override="http://private-sut")
+        assert ei.value.code == "identity_combo_missing"
+        assert ei.value.status == 409
+
+
+async def test_query_combo_dangling_shadowed_by_scheme_or_override(
+        client, fresh_db) -> None:
+    """方案、步骤直引或显式 query_alias 覆盖组合时不校验被覆盖条目。"""
+    from app.models import AccountCombo
+    h = await _member(client, "quser_shadow")
+    uid = await _uid("quser_shadow")
+    await _seed_alias("query-good", uid)
+    await _seed_alias("query-other", uid)
+    await _seed(client, h, "sc-q-shadow", [_q_step("svc")])
+    cid = await _mk_combo(client, h, [{"service": "svc",
+                                       "alias": "query-good"}])
+    await _bind_default(client, h, "sc-q-shadow", cid)
+    scheme = await _mk_scheme(client, h, "sc-q-shadow", "覆盖方案", {
+        "svc": {"alias": "query-other"}})
+    async with db_module.SessionLocal() as db:
+        await db.execute(sa.delete(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "query-good"))
+        await db.commit()
+    async with db_module.SessionLocal() as db:
+        u = (await db.execute(sa.select(User).where(
+            User.username == "quser_shadow"))).scalar_one()
+        ctx = await query_context.resolve_query_context(
+            db, user=u, scenario_id="sc-q-shadow", step_index=0,
+            scheme_id=scheme, service_url_override="http://private-sut")
+        assert ctx.query_alias == "query-other"
+        ctx = await query_context.resolve_query_context(
+            db, user=u, scenario_id="sc-q-shadow", step_index=0,
+            query_alias_override="query-other",
+            service_url_override="http://private-sut")
+        assert ctx.query_alias == "query-other"
 
 
 async def test_query_call_user_direct_ref(client, fresh_db) -> None:
@@ -151,6 +236,13 @@ async def test_query_multi_identity_ambiguous(client, fresh_db,
     with pytest.raises(query_context.QueryContextError) as ei:
         await _resolve("sc-q4", username="quser3")
     assert ei.value.code == "query_identity_ambiguous"
+    async with db_module.SessionLocal() as db:
+        u = (await db.execute(sa.select(User).where(
+            User.username == "quser3"))).scalar_one()
+        ctx = await query_context.resolve_query_context(
+            db, user=u, scenario_id="sc-q4", step_index=0,
+            query_alias_override="hA", service_url_override="http://sut")
+        assert ctx.query_alias == "hA"
 
     # 路由面:rows 端点同码 422(查询族 detail 形态 {code, msg});
     # 422 在上下文解析段即拒,不触 SUT
@@ -202,6 +294,19 @@ async def test_query_pool_channel_member_gate(client, fresh_db,
         params={"scenarioId": "sc-q5", "stepIndex": 0,
                 "credentialSource": "project"}, headers=h_mem)
     assert r.status_code == 200, r.text
+    # 显式 URL 仍保留场景身份/池上下文,成员闸不被绕过。
+    r = await client.get(
+        "/api/query-views/v1/rows",
+        params={"scenarioId": "sc-q5", "stepIndex": 0,
+                "credentialSource": "project", "service_url": "http://sut"},
+        headers=h_mem)
+    assert r.status_code == 200, r.text
+    r = await client.get(
+        "/api/query-views/v1/rows",
+        params={"credentialSource": "project", "service_url": "http://sut"},
+        headers=h_mem)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "credential_source_invalid"
     # 非成员读者均止步于读闸(场景不可读 → 404;平台 Admin 对项目场景
     # 同样无读旁路)——「可读但非成员」面(ref 读者)由 422 池闸防御,
     # 此处记录读闸先行的实际序
@@ -221,6 +326,70 @@ async def test_query_pool_channel_member_gate(client, fresh_db,
         params={"scenarioId": "sc-q5", "stepIndex": 0,
                 "credentialSource": "weird"}, headers=h_mem)
     assert r.status_code == 422
+
+
+async def test_shared_scenario_uses_reader_credentials_and_cache(
+        client, fresh_db, monkeypatch) -> None:
+    """公共场景的作者与读者同名身份条目各取自己的个人凭证;查询缓存
+    按执行人隔离,读者不能命中作者先前写入的行集。"""
+    from app.core.security import fernet_encrypt
+
+    _install_plate(monkeypatch, [dict(_IDX[0], auth="bearer")])
+    h_author = await _member(client, "qshared_author")
+    h_reader = await _member(client, "qshared_reader")
+    author_id = await _uid("qshared_author")
+    reader_id = await _uid("qshared_reader")
+    await _seed_alias("svc", author_id)
+    async with db_module.SessionLocal() as db:
+        ident = (await db.execute(sa.select(ServiceIdentity).where(
+            ServiceIdentity.alias_name == "svc"))).scalar_one()
+        db.add(AuthAccount(
+            owner_id=reader_id, system="svc", env_id=ident.env_id,
+            username=ident.ref_username,
+            password_enc=fernet_encrypt("reader-pass"), token_type="Bearer",
+            expires_in=7200, account_fields={}, is_default=False))
+        await db.commit()
+    await _seed(client, h_author, "sc-q-shared", [_q_step("svc")])
+    published = await client.post(
+        "/api/scenarios/sc-q-shared/publish", headers=h_author)
+    assert published.status_code == 200, published.text
+    public_sid = "sc-q-shared-public"
+    assert published.json()["meta"]["scenarioId"] == public_sid
+
+    def fake_auth(session, why):
+        session.apply_token(f"tok-{session.password}", 3600)
+    monkeypatch.setattr(run, "_AUTHENTICATE", fake_auth)
+
+    hits: list[str] = []
+
+    def fake_request(method, url, **kw):
+        token = kw["headers"]["Authorization"]
+        hits.append(token)
+        return httpx.Response(200, json={"d": [{"nm": token}]})
+    monkeypatch.setattr(httpx, "request", fake_request)
+
+    params = {"scenarioId": public_sid, "stepIndex": 0}
+    author_first = await client.get(
+        "/api/query-views/v1/rows", params=params, headers=h_author)
+    assert author_first.status_code == 200, author_first.text
+    assert author_first.json()["rows"] == [{"nm": "tok-p"}]
+    assert not author_first.json()["cached"]
+
+    reader_first = await client.get(
+        "/api/query-views/v1/rows", params=params, headers=h_reader)
+    assert reader_first.status_code == 200, reader_first.text
+    assert reader_first.json()["rows"] == [{"nm": "tok-reader-pass"}]
+    assert not reader_first.json()["cached"]
+
+    author_again = await client.get(
+        "/api/query-views/v1/rows", params=params, headers=h_author)
+    reader_again = await client.get(
+        "/api/query-views/v1/rows", params=params, headers=h_reader)
+    assert author_again.json()["cached"] is True
+    assert reader_again.json()["cached"] is True
+    assert author_again.json()["rows"] == [{"nm": "tok-p"}]
+    assert reader_again.json()["rows"] == [{"nm": "tok-reader-pass"}]
+    assert hits == ["tok-p", "tok-reader-pass"]
 
 
 async def test_pool_cache_isolation(monkeypatch) -> None:

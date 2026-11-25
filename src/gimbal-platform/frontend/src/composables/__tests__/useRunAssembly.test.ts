@@ -29,7 +29,11 @@ const DRAFT = {
   definition: {
     kind: 'scenario', scenarioId: 'sc-asm',
     config: { services: { 'svc-decl': 'http://decl' }, users: { shared: {}, builtin: {} } },
-    steps: [{ call: { service: 'svc-ref' } }, { call: { service: 'svc-decl' } }],
+    steps: [
+      { call: { service: 'svc-ref', user: 'direct-user',
+        headers: { Authorization: '${auth.template-user.token}' } } },
+      { call: { service: 'svc-decl' } },
+    ],
   },
   orchestration: { steps: [{ name: '下单' }, { name: '查单' }], resourceMeta: {} },
   assertion_registry: { entries: [] },
@@ -72,6 +76,9 @@ describe('useRunAssembly — 取数与派生(执行设计 §1.5)', () => {
     expect(asm.serviceRows.value).toEqual([
       { service: 'svc-decl', declaredUrl: 'http://decl' },
       { service: 'svc-ref', declaredUrl: null },
+    ])
+    expect(asm.stepIdentityRefs.value).toEqual([
+      { service: 'svc-ref', aliases: ['direct-user', 'template-user'] },
     ])
     expect(asm.stepNames.value).toEqual(['下单', '查单'])
     expect(asm.stepCount.value).toBe(2)

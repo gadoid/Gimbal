@@ -3,8 +3,8 @@
 > **日期**：2026-11-25
 > **状态**：**定稿 v4**——取代 `05-account-combo-final.md`（v3）。本轮唯一改道：**组合引用从场景层（`config.accountCombo`）迁到运行方案层（方案 payload `accountComboId`）**，其余主张沿用 v3（两轮评审核实过的装配面、池规则、fail-closed、指纹、治理条目不撤回）。
 > **改道动因**（用户裁定，2026-11-25）：一个场景要能**通过多个组合在不同环境上跑**，而方案本来就是「同一场景的不同运行配方」的载体。绑在场景层会让「场景 ↔ 组合」退化成 1:1，把方案的多环境语义吃掉。
-> **代码基线**：当前工作树（`fix/ci-main-green`，Alembic head `0066`）。全仓 `accountCombo` / `account_combo` **零命中**——本设计尚未落地任何一行，正文 file:line 均为**现状实测**，可直接复核。
-> **开工唯一依据**：本文件。v3 及其评审档案（`02-account-combo-design-review.md` / `03-account-combo-v2-review.md`）留档，只作演化证据。
+> **实现基线**：`fix/core-wrapup` 当前工作树（2026-11-26 核对）。组合对象、表与执行面由 v3 实现先行落地;本分支将组合引用迁到运行方案 payload，并补齐查询、重跑快照、方案工作台与组合就绪诊断。正文 file:line 为 v4 设计时实测，后续实现以当前代码为准。
+> **开工唯一依据**：本文件。v3 及其评审档案（`03-account-combo-design-review.md` / `04-account-combo-v2-review.md`）留档，只作演化证据。
 
 ---
 
@@ -158,7 +158,7 @@ async def scheme_bindings_with_combo(db, scheme_payload: dict) -> dict:
 
 ### 4.1 新表 `account_combos`（Alembic 0067）
 
-现状 head = `0066_incremental_model_align`（`src/gimbal-platform/backend/alembic/versions/`），新迁移号 **0067**。表形状与 v3 一致：
+v4 设计时 head = `0066_incremental_model_align`（`src/gimbal-platform/backend/alembic/versions/`），组合表新增迁移 **0067**；当前落地 head = **0068**（0068 补齐组合时间戳默认值）。表形状与 v3 一致：
 
 ```python
 id            PK
@@ -204,13 +204,14 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 | 端点 | 门 | 说明 |
 |---|---|---|
 | `GET /api/account-combos[?projectId]` | 个人 = 本人；项目 = 成员任一角色 | 按 scope 分组返回，含**引用方案数与所属场景清单**（编辑/删除前差异确认） |
+| `GET /api/account-combos/{id}/readiness?credential_source=personal\|project` | 同组合读门 | 执行单源解析凭证池、执行环境与地址矩阵；个人组合仅个人池，项目组合可切换两种上下文 |
 | `POST`（个人） | 任意登录用户 | |
 | `POST`（项目） | 项目可写角色（WRITER_ROLES）∧ **目标为普通项目**（公共项目 → 422：不把环境与凭证引用发布成公共模板） | |
 | `PATCH /{id}` | 同上写门 | 改名/描述/条目；条目逐条过 `validate_binding_aliases`；形状/重复服务 → 422 `account_combo_entry_invalid`；**仅条目变化 `revision` +1**；记 `updated_by_id` |
 | `POST /{id}/set-default` | 写门 | 换默认（旧默认自动摘除）；默认只用于管理页预选提示 |
 | `DELETE /{id}` | 写门 | **被引用时 409 `account_combo_in_use` + 引用方案（含所属场景）清单**；不解绑不给删；in-use 复核与删除**同事务** |
 
-引用计数实现：`account_combos` 无外键可反查，须扫 `composer_run_schemes.payload`。既有范式 = `auth_references` 的**全表 Python 扫描 + 指纹缓存**（`_scan_scenario_refs` [auth_references.py:51-96](file:///D:/Gimbal/Gimbal/src/gimbal-platform/backend/app/services/auth_references.py#L51)，`cached_scenario_refs` [:239-251](file:///D:/Gimbal/Gimbal/src/gimbal-platform/backend/app/services/auth_references.py#L239)）——不用 `@>`（SQLite/PG 双方言，测试面跑 SQLite；仓内 JSON 引用面一律 Python 扫）。顺带补该扫描器的一个**既有缺口**：它现在只扫步骤 `${auth.*}` 与 `config.users` 键集，**不扫方案 `serviceBindings`**，所以删身份条目的引用提示本就漏掉方案级绑定；v4 把「方案绑定」与「组合条目」一并纳入扫描面（同一处收口，避免两套口径）。
+引用计数实现：`account_combos` 无外键可反查，须扫 `composer_run_schemes.payload`。既有范式 = `auth_references` 的**全表 Python 扫描 + 指纹缓存**（`_scan_scenario_refs` [auth_references.py:51-96](file:///D:/Gimbal/Gimbal/src/gimbal-platform/backend/app/services/auth_references.py#L51)，`cached_scenario_refs` [:239-251](file:///D:/Gimbal/Gimbal/src/gimbal-platform/backend/app/services/auth_references.py#L239)）。运行时与测试均为 PostgreSQL（2026-10-14 起 SQLite 退场）；保留 Python 扫是沿用仓内 JSON 引用面单源，不再以双方言为由。顺带补该扫描器的一个**既有缺口**：它现在只扫步骤 `${auth.*}` 与 `config.users` 键集，**不扫方案 `serviceBindings`**，所以删身份条目的引用提示本就漏掉方案级绑定；v4 把「方案绑定」与「组合条目」一并纳入扫描面（同一处收口，避免两套口径）。
 
 ### 5.2 方案侧绑定（**复用既有端点，无新端点**）
 
@@ -301,7 +302,7 @@ created_at / updated_at  (UtcDateTime,test_metadata_invariants 钉)
 
 ### 8.2 管理页（壳保留、语义旋转，v1 四区）
 
-`ExecConfigsView` 壳改绑组合端点；现状三页签「编辑配置 / 关联与就绪度 / 生效预览」（[ExecConfigsView.vue:201-207](file:///D:/Gimbal/Gimbal/src/gimbal-platform/frontend/src/views/ExecConfigsView.vue#L201)）旋转为：
+`ExecConfigsView` 壳改绑组合端点并旋转为 `AccountCombosView`（[AccountCombosView.vue](file:///D:/Gimbal/Gimbal/src/gimbal-platform/frontend/src/views/AccountCombosView.vue)）；原执行配置页仅保留历史代码，不再是组合管理入口。管理页四区：
 
 | 区 | 内容 |
 |---|---|

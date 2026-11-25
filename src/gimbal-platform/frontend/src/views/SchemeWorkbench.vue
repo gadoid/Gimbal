@@ -2,7 +2,7 @@
 /** 方案工作台壳:左右分栏、取数编排、选中态;编辑区 = 数据区(Task 5)+ 后续任务区。
  *  装配取数与派生(serviceRows / stepNames)收编在
  *  useRunAssembly(执行设计 §1.5)— 本页不再持有派生副本。 */
-import { computed, onMounted, ref, toRaw, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
@@ -21,7 +21,13 @@ import { composerUrl, scenarioAssertionsUrl } from '@/utils/links'
 import SchemeListPanel from '@/components/schemes/SchemeListPanel.vue'
 import SchemeDataSection from '@/components/schemes/SchemeDataSection.vue'
 import SchemeInjectionSection from '@/components/schemes/SchemeInjectionSection.vue'
-import SchemeRunConfigSection from '@/components/schemes/SchemeRunConfigSection.vue'
+import SchemeRunConfigSection, {
+  type AccountComboOption,
+} from '@/components/schemes/SchemeRunConfigSection.vue'
+import {
+  createAccountCombo, listAccountCombos,
+  type AccountComboList, type AccountComboRow, type ComboEntry,
+} from '@/api/accountCombos'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,10 +39,12 @@ const scenarioId = route.params.scenarioId as string
  *  装配体的 registry/draft ref — 同一份状态,无第二落点)。 */
 const {
   draft: scenarioDraft,
+  scenario,
   registry,
   dataSets,
   schemes,
   serviceRows,
+  stepIdentityRefs,
   stepNames,
   stepCount,
   steps,
@@ -84,6 +92,84 @@ const draftParallel = computed<number>({
   get: () => draft.value?.options.parallel ?? 1,
   set: (v) => { if (draft.value) draft.value.options.parallel = v },
 })
+
+const accountComboList = ref<AccountComboList>({ personal: [], projects: [] })
+const projectId = computed(() => scenario.value?.projectId ?? null)
+const publicScenario = computed(() => scenario.value?.visibility === 'public')
+const allowedCombos = computed<AccountComboOption[]>(() => {
+  if (publicScenario.value) return []
+  if (projectId.value != null) {
+    const group = accountComboList.value.projects.find(
+      (g) => g.projectId === projectId.value)
+    return (group?.items ?? []).map((c) => ({
+      id: c.id, name: c.name, scope: c.scope, scopeLabel: group!.projectName,
+      isDefault: c.isDefault, entries: c.entries,
+    }))
+  }
+  return accountComboList.value.personal.map((c) => ({
+    id: c.id, name: c.name, scope: c.scope, scopeLabel: '个人',
+    isDefault: c.isDefault, entries: c.entries,
+  }))
+})
+const defaultComboId = computed(() => allowedCombos.value.find(
+  (c) => c.isDefault)?.id ?? null)
+const comboScope = computed<'user' | 'project'>(() =>
+  projectId.value == null ? 'user' : 'project')
+const comboScopeLabel = computed(() => {
+  if (publicScenario.value) return '公共场景'
+  if (projectId.value != null) {
+    return accountComboList.value.projects.find(
+      (g) => g.projectId === projectId.value)?.projectName ?? `项目 #${projectId.value}`
+  }
+  return '个人'
+})
+const draftAccountComboId = computed<number | null>({
+  get: () => draft.value?.accountComboId ?? null,
+  set: (v) => {
+    if (!draft.value) return
+    if (v == null) delete draft.value.accountComboId
+    else draft.value.accountComboId = v
+  },
+})
+const comboPreselected = computed(() => dirty.value
+  && draftAccountComboId.value != null
+  && draftAccountComboId.value !== (selected.value?.accountComboId ?? null)
+  && draftAccountComboId.value === defaultComboId.value)
+
+async function loadAccountCombos() {
+  try {
+    accountComboList.value = await listAccountCombos()
+  } catch (e) {
+    toast.error(`加载账户组合失败:${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
+async function createComboForScheme(
+  input: { name: string; entries: ComboEntry[] },
+  done: (row: AccountComboRow | null) => void,
+) {
+  try {
+    const row = await createAccountCombo({
+      ...input,
+      scope: projectId.value == null ? 'user' : 'project',
+      ...(projectId.value == null ? {} : { projectId: projectId.value }),
+    })
+    await loadAccountCombos()
+    toast.success('组合已创建并绑定到当前方案草稿')
+    done(row)
+  } catch (e) {
+    toast.error(`创建组合失败:${e instanceof Error ? e.message : String(e)}`)
+    done(null)
+  }
+}
+
+async function preselectDefaultCombo() {
+  await nextTick()
+  const current = draft.value
+  if (current && current.accountComboId == null && defaultComboId.value != null) {
+    current.accountComboId = defaultComboId.value
+  }
+}
 
 async function saveScheme() {
   if (!draft.value || saving.value) return
@@ -205,6 +291,7 @@ async function onDuplicate(s: SchemeV2) {
     const made = await createRunScheme(scenarioId, { ...body, name: `${s.name} 副本` })
     await refresh()
     selectedId.value = made.schemeId
+    if (made.accountComboId == null) await preselectDefaultCombo()
     toast.success('已复制派生方案')
   } catch (e) {
     toast.error(`复制派生失败:${e instanceof Error ? e.message : String(e)}`)
@@ -264,6 +351,7 @@ async function onCreate() {
     })
     await refresh()
     selectedId.value = made.schemeId
+    await preselectDefaultCombo()
   } catch (e) {
     toast.error(`新建方案失败:${e instanceof Error ? e.message : String(e)}`)
   }
@@ -277,6 +365,7 @@ onMounted(async () => {
   // 初始选中:深链 scheme 优先,否则置顶(default)
   if (!selectedId.value && schemes.value.length)
     selectedId.value = (route.query.scheme as string) || schemes.value[0].schemeId
+  await loadAccountCombos()
 })
 
 /** 数据区内联维护(新建/编辑)落库后刷新列表(D1 能力承接) */
@@ -335,6 +424,9 @@ async function onDeleteDataSet(datasetId: string) {
               <span class="save-state" :class="dirty ? 'is-dirty' : 'is-clean'">
                 {{ dirty ? '未保存' : '已保存' }}
               </span>
+              <span v-if="dirty" class="dirty-hint" data-testid="scheme-dirty-hint">
+                执行/查询仍按已保存版本
+              </span>
             </div>
             <div class="editor-ops">
               <Button data-testid="save-scheme" size="sm"
@@ -379,10 +471,21 @@ async function onDeleteDataSet(datasetId: string) {
             v-model:n-runs="draftNRuns"
             v-model:parallel="draftParallel"
             :service-rows="serviceRows"
+            :step-identity-refs="stepIdentityRefs"
             :step-count="stepCount"
             :step-names="stepNames"
             :scenario-id="scenarioId"
             :scheme-id="draft.isDefault ? undefined : draft.schemeId"
+            :scheme-name="draft.name"
+            v-model:account-combo-id="draftAccountComboId"
+            :account-combos="allowedCombos"
+            :combo-preselected="comboPreselected"
+            :combo-scope-label="comboScopeLabel"
+            :combo-scope="comboScope"
+            :combo-project-id="projectId ?? undefined"
+            :combo-disabled="publicScenario"
+            @create-combo="createComboForScheme"
+            @save-as-combo="createComboForScheme"
           />
         </template>
         <div v-else class="wb-empty">
@@ -446,6 +549,7 @@ async function onDeleteDataSet(datasetId: string) {
 }
 .save-state.is-dirty { color: var(--sl-warn); background: #fef3c7; }
 .save-state.is-clean { color: var(--color-text-secondary); background: var(--soft-neutral-bg); }
+.dirty-hint { font-size: 0.6875rem; color: var(--sl-warn); }
 .editor-ops { display: flex; gap: 0.5rem; flex: none; }
 
 .hint { margin: 0; padding: 0.5rem 0.75rem; font-size: 0.75rem; color: var(--color-text-secondary); background: var(--surface-raised); border-radius: 0.375rem; }

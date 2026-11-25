@@ -140,10 +140,14 @@ async def _task_missing(
 
 
 async def _task_bindings(db: AsyncSession, tpl, scen) -> dict:
+    from ..services.account_combo import scheme_bindings_with_combo
+    from ..services.run_params import RAW_SCHEME_ID
     from ..services.scheme_store import resolve_for_run
+    if tpl.scheme_id == RAW_SCHEME_ID:
+        return {}
     scheme = await resolve_for_run(db, scen.scenario_id, tpl.scheme_id)
     payload = (scheme.payload if scheme else {}) or {}
-    return dict(payload.get("serviceBindings") or {})
+    return await scheme_bindings_with_combo(db, payload)
 
 
 def _token_out(

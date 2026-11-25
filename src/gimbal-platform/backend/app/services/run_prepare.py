@@ -158,6 +158,7 @@ class PickedIdentity:
     account_id: int    # 命中账户(绑定标识)
     env_id: int        # **账户标签**(登录口坐标;§8.3 不变式:密码与登录口同源)
     system: str        # 条目系统(base_service → services.system 派生)
+    account_username: str
     base_service: str
     # 条目标签(执行标签链 identity 位的取值依据;§8.2)
     identity_env_id: int
@@ -249,7 +250,8 @@ async def _resolve_identities(
             continue
         picked[name] = PickedIdentity(
             slot=name, account_id=acc.id, env_id=acc.env_id,
-            system=sysname, base_service=i.base_service,
+            system=sysname, account_username=acc.username,
+            base_service=i.base_service,
             identity_env_id=i.env_id, is_default=acc.is_default)
     return picked, sorted(missing), sorted(ambiguous)
 
