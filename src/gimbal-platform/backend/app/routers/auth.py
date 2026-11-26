@@ -152,6 +152,11 @@ async def register(
         )).scalar_one()
         if earlier:
             user.role = "user"
+    # UPC §4 用户初始化事务:注册即创建默认私有空间(与用户行同一事务,
+    # 延迟约束触发器在提交时校验「非系统用户至少一个默认空间」)
+    from ..services.project_space import ensure_default_private_project
+
+    await ensure_default_private_project(db, user.id)
     await db.commit()
     await db.refresh(user)
     return _token_out(user)
@@ -309,26 +314,27 @@ async def refresh(
 async def me(user: CurrentUser,
              db: Annotated[AsyncSession, Depends(get_db)]) -> MeOut:
     # capabilities 按表 A 求值(前端 can() 的依据);
-    # projects 与 GET /projects 同口径 —— 公共项目置顶(role=None:
-    # 公共项目无成员行,全员可读是表 B 派生)+ 我所在的普通项目;
-    # Admin+ 全量。
-    from sqlalchemy import or_, select
-
-    from ._ownership import capabilities_of, has_capability
+    # projects 与 GET /projects 同口径 —— UPC M1 统一可见性谓词
+    # (services.project_access.visible_projects_clause):公共项目 +
+    # 我所在的普通项目 + 我的私有空间;Admin+ 不旁路,平台管理员枚举
+    # 不了他人私有空间(§6/AC-51)。
+    from ._ownership import capabilities_of
     from ..models.project import Project, ProjectMember
+    from ..services import project_access
 
     roles = {pid: role for pid, role in (await db.execute(
         select(ProjectMember.project_id, ProjectMember.role).where(
             ProjectMember.user_id == user.id))).all()}
-    stmt = (select(Project) if has_capability(user, "ops.write")
-            else select(Project).where(or_(
-                Project.kind == "public",
-                Project.id.in_(roles))))
-    projs = (await db.execute(stmt.order_by(
-        (Project.kind != "public"), Project.id))).scalars().all()
+    projs = (await db.execute(
+        select(Project).where(
+            project_access.visible_projects_clause(user.id))
+        .order_by((Project.kind != Project.KIND_PUBLIC), Project.id))
+    ).scalars().all()
     return MeOut(user=_user_public(user),
                  capabilities=capabilities_of(user.role),
                  must_change_password=bool(user.must_change_password),
                  projects=[{"id": p.id, "name": p.name, "kind": p.kind,
-                            "role": roles.get(p.id)}
+                            "role": roles.get(p.id),
+                            "isDefault": p.is_default,
+                            "status": p.status}
                            for p in projs])

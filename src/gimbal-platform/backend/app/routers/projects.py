@@ -1,15 +1,22 @@
-"""项目区管理面(M2a S1.4,s1-detail §六)。
+"""项目区管理面(UPC M1:v2.10 §4、§6、§9)。
 
-* **建项目 = Admin+**(S1-g:`ops.write`),创建时指定首个项目管理员
-  (受让人须在职、非系统用户;不需要确认,与删用户「转让」同口径)。
-* **项目管理员**(`project_members.role` 取 `ROLE_ADMIN`,padmin)管理本项目
-  成员:增删、改角色;**末位项目管理员保护** —— 最后一个 admin 不能被
-  移除或降级(与末位 Super Admin 同口径,项目不能无人可管)。
-* **删项目 = 仅 Admin+**,且项目内有内容(场景/suite/集成模板/报告
-  定义)时 409 `project_not_empty` —— 不做级联删除,先清空或迁走;
-  **公共项目不可删不可改 kind**(部分唯一索引钉死恰一行)。
-* 普通成员行只增不改权限边界:读面由表 B / zone_read_clause 派生,
-  本路由只管成员关系本身。审计:建/删/成员变更入审计(admin 面)。
+* **创建**:private = 所有人可建自己的空间(§4 额外空间授权创建);
+  normal = Admin+(``ops.write``,§4 授权创建)并指定首个项目管理员
+  (受让人须在职、非系统用户);public 不可建(部分唯一索引钉死)。
+* **可见性**:列表/详情/context 与对象读取共用
+  ``services.project_access.visible_projects_clause`` —— 私有空间仅
+  所有者可见,**Admin+ 不旁路**(AC-51;§6「Private 其他用户(含
+  平台管理员)」全否)。不可见统一 404,不泄露存在性。
+* **管理面**:private = 所有者(owner_id,无成员行);normal = 项目
+  管理员 ∨ Admin+;public = 仅 Admin+(系统治理)。项目管理员
+  (role=admin)管理本项目成员;**末位项目管理员保护** —— 最后一个
+  admin 不能被移除或降级(DB 延迟约束触发器兜底)。
+* **删除**:private = 所有者,默认空间受专门闸保护(§4);normal =
+  Admin+ 且有内容 409 ``project_not_empty``(不做级联删除);公共项目
+  不可删不可改 kind。
+* **成员关系**:private/public 不落成员行(触发器钉死);普通成员行
+  只增不改权限边界:读面由表 B / zone_read_clause 派生。审计:建/删/
+  成员变更入审计(admin 面)。
 """
 from __future__ import annotations
 
@@ -25,6 +32,11 @@ from ..core.db import get_db
 from ..core.deps import CurrentUser, MemberUser
 from ..models.project import Project, ProjectMember
 from ..models.user import User
+from ..policies import capabilities_of_kind
+from ..services import project_access
+from ..services.project_space import (
+    create_private_space, dispose_private_containers,
+)
 from ._ownership import has_capability
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -35,13 +47,17 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 class ProjectCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str = Field(default="", max_length=2000)
-    firstAdminUserId: int = Field(ge=1)
+    # UPC §4:private(自己的空间,所有人可建)| normal(Admin+)
+    kind: Literal["private", "normal"] = "normal"
+    # normal 必填:首个项目管理员;private 不适用(所有者即治理者)
+    firstAdminUserId: int | None = Field(default=None, ge=1)
 
 
 class ProjectPatchIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
-    # S2.2 环境链第三位;显式传 null = 清空(未传 = 不动)
+    # S2.2 环境链第二位(§11:身份标签 > 项目默认 > 平台默认);显式传
+    # null = 清空(未传 = 不动)
     defaultEnvironmentId: int | None = Field(default=None, ge=1)
 
 
@@ -57,20 +73,25 @@ class MemberPatchIn(BaseModel):
 
 class ProjectOut(BaseModel):
     id: int
+    uid: str = ""
     name: str
     kind: str
     description: str
+    # UPC §4:默认私有空间标记(仅 private)
+    isDefault: bool = False
+    status: str = Project.STATUS_ACTIVE
     memberCount: int = 0
     # 请求者在本项目的角色(admin = 项目管理员;None = 非成员 ——
-    # Admin+ 的管理视图可见非成员项目)
+    # 私有空间所有者不是成员行,治理由 owner_id 表达)
     myRole: str | None = None
-    # S2.2:项目默认环境(环境链第三位;None = 未设置)
+    # S2.2:项目默认环境(环境链第二位;None = 未设置)
     defaultEnvironmentId: int | None = None
-    # S7.0:请求者能否管理(项目管理员 ∨ Admin+;公共项目 = Admin+)——
-    # 前端据此显隐成员管理 / 配置编辑,不再自己拼角色判定
+    # 请求者能否管理(私有 = 所有者;普通 = 项目管理员 ∨ Admin+;
+    # 公共 = Admin+)—— 前端据此显隐成员管理 / 配置编辑
     canManage: bool = False
-    # M2b Q1:请求者能否在项目内新建 / 修改内容(项目管理员 ∨ 项目成员;
-    # 项目用户只读 + 执行)—— 前端据此显隐写入口,后端仍是权威
+    # M2b Q1:请求者能否在项目内新建 / 修改内容(私有 = 所有者;
+    # 普通项目 = 项目管理员 ∨ 项目成员;公共 = 恒 False,内容进公共
+    # 项目只有「发布」一条路)—— 前端据此显隐写入口,后端仍是权威
     canWrite: bool = False
     # S7.0 读面:默认环境名 + 各类内容计数(页签徽标数据源)。
     # 列表端点也批量补齐(项目卡片统计行;待审批计数仅详情端点填)
@@ -79,6 +100,32 @@ class ProjectOut(BaseModel):
     suiteCount: int = 0
     taskCount: int = 0
     pendingPromotions: int = 0
+
+
+class ProjectConfigurationSummary(BaseModel):
+    """§9 ProjectConfigurationSummary:非秘密配置摘要(不返回秘密)。"""
+
+    defaultEnvironmentId: int | None = None
+    defaultEnvironmentName: str | None = None
+
+
+class ProjectContextOut(BaseModel):
+    """§9 ProjectContext:前端 ProjectLayout 的统一上下文入口。
+
+    effectivePermissions = 主体关系求值(§6);capabilities = 容器
+    能力矩阵(§7)。不返回秘密或全部对象级权限;对象状态约束由资源
+    接口及后端实时判断。
+    """
+
+    id: int
+    uid: str
+    kind: str
+    name: str
+    isDefault: bool
+    status: str
+    effectivePermissions: dict[str, bool]
+    capabilities: dict[str, bool]
+    configuration: ProjectConfigurationSummary
 
 
 class MemberOut(BaseModel):
@@ -103,6 +150,21 @@ async def _load_project(db: AsyncSession, project_id: int) -> Project:
     return proj
 
 
+async def _load_visible_project(
+    db: AsyncSession, user, project_id: int,
+) -> tuple[Project, str | None]:
+    """加载并按统一可见性判定(§6;AC-51 与列表同源):不可见统一 404,
+    不泄露私有空间存在性。返回 (project, my_role)。"""
+    proj = await _load_project(db, project_id)
+    my_role = await _my_role(db, user, project_id)
+    if not await project_access.can_view_project(db, user.id, proj):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found",
+                    "message": f"project not found: {project_id}"})
+    return proj, my_role
+
+
 async def _my_role(db: AsyncSession, user, project_id: int) -> str | None:
     return (await db.execute(select(ProjectMember.role).where(
         ProjectMember.project_id == project_id,
@@ -112,12 +174,20 @@ async def _my_role(db: AsyncSession, user, project_id: int) -> str | None:
 async def _require_manage(
     db: AsyncSession, user, project: Project,
 ) -> None:
-    """管理面门(S1.4):项目管理员 ∨ Admin+(ops.write)。非成员 404
-    (不泄露存在性);成员但非项目管理员 403(项目可见,无管理权)。"""
+    """管理面门:私有 = 所有者(Admin+ 不旁路,他人不可见 → 404);
+    普通 = 项目管理员 ∨ Admin+;公共 = Admin+。成员但非项目管理员 403
+    (项目可见,无管理权)。"""
+    if project.kind == Project.KIND_PRIVATE:
+        if project.owner_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "not_found",
+                        "message": f"project not found: {project.id}"})
+        return
     if has_capability(user, "ops.write"):
         return
     my_role = await _my_role(db, user, project.id)
-    if my_role == "admin":
+    if my_role == ProjectMember.ROLE_ADMIN:
         return
     if my_role is None:
         raise HTTPException(
@@ -147,12 +217,61 @@ async def _audit(db, user, action: str, project: Project, detail: dict):
         detail=detail)
 
 
+async def _env_name(db: AsyncSession, env_id: int | None) -> str | None:
+    if env_id is None:
+        return None
+    from ..models.environment import Environment
+
+    row = await db.get(Environment, env_id)
+    return row.name if row is not None else None
+
+
 # ── 项目 CRUD ──────────────────────────────────────────────────────
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 async def create_project(
-    user: MemberUser, db: DbSession, body: ProjectCreateIn,
+    user: CurrentUser, db: DbSession, body: ProjectCreateIn,
 ) -> ProjectOut:
-    """建项目(S1-g:Admin+ / ops.write),指定首个项目管理员。"""
+    """建项目(§4):private = 自己的空间(所有人);normal = Admin+,
+    指定首个项目管理员;public 不可建(uq_projects_public_kind 钉死)。"""
+    if body.kind == Project.KIND_PRIVATE:
+        if body.firstAdminUserId is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "private_space_no_admin_member",
+                        "message": "私有空间不落成员行,无需指定管理员"
+                                   "(所有者即治理者)"})
+        # 名称所有者域内唯一(uq_projects_name_private):flush 与 commit
+        # 任一阶段的违例都归一为 409
+        try:
+            proj = await create_private_space(
+                db, owner_id=user.id, name=body.name,
+                description=body.description)
+            await db.commit()
+        except IntegrityError as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "project_name_taken",
+                        "message": f"空间名已被使用:{body.name}"}) from e
+        await db.refresh(proj)
+        return ProjectOut(
+            id=proj.id, uid=str(proj.project_uid), name=proj.name,
+            kind=proj.kind, description=proj.description,
+            isDefault=proj.is_default, status=proj.status,
+            defaultEnvironmentId=proj.default_environment_id,
+            myRole=None, canManage=True, canWrite=True)
+
+    # normal:Admin+(§4 授权创建)
+    if not has_capability(user, "ops.write"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "capability_forbidden",
+                    "message": "需要技术运营权限(Admin+)"})
+    if body.firstAdminUserId is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "first_admin_required",
+                    "message": "普通项目须指定首个项目管理员"})
     admin = await db.get(User, body.firstAdminUserId)
     if (admin is None or not admin.is_active or admin.is_system):
         raise HTTPException(
@@ -176,23 +295,33 @@ async def create_project(
     await db.refresh(proj)
     await _audit(db, user, "project.created", proj,
                  {"name": proj.name, "firstAdminId": admin.id})
-    return ProjectOut(id=proj.id, name=proj.name, kind=proj.kind,
-                      description=proj.description, memberCount=1,
+    return ProjectOut(id=proj.id, uid=str(proj.project_uid), name=proj.name,
+                      kind=proj.kind, description=proj.description,
+                      isDefault=proj.is_default, status=proj.status,
+                      memberCount=1,
                       myRole=(await _my_role(db, user, proj.id)),
                       defaultEnvironmentId=proj.default_environment_id)
 
 
 def _can_manage(user, proj: Project, my_role: str | None) -> bool:
-    """管理权(与 ``_require_manage`` 同口径):Admin+ ∨ 项目管理员;
-    公共项目无成员行 → 只有 Admin+。"""
-    return has_capability(user, "ops.write") or (
-        proj.kind != "public" and my_role == "admin")
+    """管理权(与 ``_require_manage`` 同口径):私有 = 所有者;
+    普通 = 项目管理员 ∨ Admin+;公共 = Admin+。"""
+    if proj.kind == Project.KIND_PRIVATE:
+        return proj.owner_id == user.id
+    if has_capability(user, "ops.write"):
+        return True
+    return proj.kind != Project.KIND_PUBLIC and my_role == "admin"
 
 
-def _can_write(proj: Project, my_role: str | None) -> bool:
-    """项目内写权(M2b Q1,与表 B contributor 同口径):普通项目的项目
-    管理员 ∨ 项目成员;公共项目只走「发布」,恒 False。"""
-    return proj.kind != "public" and my_role in ProjectMember.WRITER_ROLES
+def _can_write(user, proj: Project, my_role: str | None) -> bool:
+    """项目内写权(M2b Q1,与表 B contributor 同口径):私有 = 所有者;
+    普通项目 = 项目管理员 ∨ 项目成员(项目用户只读 + 执行);
+    公共项目只走「发布」,恒 False。"""
+    if proj.kind == Project.KIND_PRIVATE:
+        return proj.owner_id == user.id
+    if proj.kind == Project.KIND_PUBLIC:
+        return False
+    return my_role in ProjectMember.WRITER_ROLES
 
 
 async def _detail_counts(db: AsyncSession, proj: Project) -> dict:
@@ -322,19 +451,17 @@ async def project_slot_status(
 
 @router.get("", response_model=list[ProjectOut])
 async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
-    """项目列表(S7.0 项目页数据源):公共项目(全员,置顶)+ 我所在的
-    项目;Admin+ 管理视图全量。列表也批量补内容计数与默认环境名
-    (项目卡片统计行;group_by 批查,不做 N+1)。"""
+    """项目列表(统一可见性谓词,AC-51 与 /auth/me、详情、context 同源):
+    公共项目 + 我所在的普通项目 + **我的私有空间**。Admin+ 不旁路 ——
+    平台管理员看不见他人私有空间(§6 授权矩阵)。"""
     roles = {pid: role for pid, role in (await db.execute(
         select(ProjectMember.project_id, ProjectMember.role).where(
             ProjectMember.user_id == user.id))).all()}
-    from sqlalchemy import or_ as _or
-    stmt = select(Project) if has_capability(user, "ops.write") else (
-        select(Project).where(_or(
-            Project.kind == "public",
-            Project.id.in_(roles) if roles else False)))
-    projs = (await db.execute(stmt.order_by(
-        (Project.kind != "public"), Project.id))).scalars().all()
+    projs = (await db.execute(
+        select(Project).where(
+            project_access.visible_projects_clause(user.id))
+        .order_by((Project.kind != Project.KIND_PUBLIC), Project.id))
+    ).scalars().all()
     counts = {pid: n for pid, n in (await db.execute(
         select(ProjectMember.project_id, func.count()).group_by(
             ProjectMember.project_id))).all()}
@@ -377,12 +504,13 @@ async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
                 .where(Environment.id.in_(env_ids)))).all()}
 
     return [ProjectOut(
-        id=p.id, name=p.name, kind=p.kind, description=p.description,
+        id=p.id, uid=str(p.project_uid), name=p.name, kind=p.kind,
+        description=p.description, isDefault=p.is_default, status=p.status,
         memberCount=counts.get(p.id, 0),
         myRole=roles.get(p.id),
         defaultEnvironmentId=p.default_environment_id,
         canManage=_can_manage(user, p, roles.get(p.id)),
-        canWrite=_can_write(p, roles.get(p.id)),
+        canWrite=_can_write(user, p, roles.get(p.id)),
         defaultEnvironmentName=env_names.get(p.default_environment_id)
         if p.default_environment_id is not None else None,
         scenarioCount=scenario_n.get(p.id, 0),
@@ -390,36 +518,51 @@ async def list_projects(user: CurrentUser, db: DbSession) -> list[ProjectOut]:
         taskCount=task_n.get(p.id, 0)) for p in projs]
 
 
+@router.get("/{project_id}/context", response_model=ProjectContextOut)
+async def project_context(
+    user: CurrentUser, db: DbSession, project_id: int,
+) -> ProjectContextOut:
+    """§9 ProjectContext:ProjectLayout 的统一上下文(可见性与列表同源,
+    不可见 404;不返回秘密与全部对象级权限)。"""
+    proj, my_role = await _load_visible_project(db, user, project_id)
+    return ProjectContextOut(
+        id=proj.id, uid=str(proj.project_uid), kind=proj.kind,
+        name=proj.name, isDefault=proj.is_default, status=proj.status,
+        effectivePermissions=project_access.effective_permissions(
+            user, proj, my_role),
+        capabilities=capabilities_of_kind(proj.kind),
+        configuration=ProjectConfigurationSummary(
+            defaultEnvironmentId=proj.default_environment_id,
+            defaultEnvironmentName=await _env_name(
+                db, proj.default_environment_id)))
+
+
 @router.get("/{project_id}", response_model=ProjectOut)
 async def get_project(
     user: CurrentUser, db: DbSession, project_id: int,
 ) -> ProjectOut:
-    proj = await _load_project(db, project_id)
-    my_role = await _my_role(db, user, project_id)
-    # 公共项目全员可读(S7.0 项目页);普通项目非成员 404(Admin+ 管理视图)
-    if (my_role is None and proj.kind != "public"
-            and not has_capability(user, "ops.write")):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found",
-                    "message": f"project not found: {project_id}"})
-    return ProjectOut(id=proj.id, name=proj.name, kind=proj.kind,
-                      description=proj.description,
-                      memberCount=await _member_count(db, project_id),
-                      myRole=my_role,
-                      defaultEnvironmentId=proj.default_environment_id,
-                      canManage=_can_manage(user, proj, my_role),
-                      canWrite=_can_write(proj, my_role),
-                      **await _detail_counts(db, proj))
+    """项目详情(可见性与列表同源,AC-51):不可见统一 404 ——
+    私有空间对他者(含 Admin+)不存在;公共项目全员可读。"""
+    proj, my_role = await _load_visible_project(db, user, project_id)
+    return ProjectOut(
+        id=proj.id, uid=str(proj.project_uid), name=proj.name,
+        kind=proj.kind, description=proj.description,
+        isDefault=proj.is_default, status=proj.status,
+        memberCount=await _member_count(db, project_id),
+        myRole=my_role,
+        defaultEnvironmentId=proj.default_environment_id,
+        canManage=_can_manage(user, proj, my_role),
+        canWrite=_can_write(user, proj, my_role),
+        **await _detail_counts(db, proj))
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
 async def patch_project(
     user: CurrentUser, db: DbSession, project_id: int, body: ProjectPatchIn,
 ) -> ProjectOut:
-    proj = await _load_project(db, project_id)
+    proj, _ = await _load_visible_project(db, user, project_id)
     await _require_manage(db, user, proj)
-    if proj.kind == "public":
+    if proj.kind == Project.KIND_PUBLIC:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "public_project_protected",
@@ -451,25 +594,48 @@ async def patch_project(
     await _audit(db, user, "project.patched", proj,
                  {"defaultEnvironmentId": proj.default_environment_id}
                  if "defaultEnvironmentId" in body.model_fields_set else {})
-    return ProjectOut(id=proj.id, name=proj.name, kind=proj.kind,
-                      description=proj.description,
-                      memberCount=await _member_count(db, project_id),
-                      myRole=await _my_role(db, user, project_id),
-                      defaultEnvironmentId=proj.default_environment_id)
+    return ProjectOut(
+        id=proj.id, uid=str(proj.project_uid), name=proj.name,
+        kind=proj.kind, description=proj.description,
+        isDefault=proj.is_default, status=proj.status,
+        memberCount=await _member_count(db, project_id),
+        myRole=await _my_role(db, user, project_id),
+        defaultEnvironmentId=proj.default_environment_id)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
-    user: MemberUser, db: DbSession, project_id: int,
+    user: CurrentUser, db: DbSession, project_id: int,
 ) -> None:
-    """删项目 = 仅 Admin+(ops.write);有内容 409(先清空或迁走);
-    公共项目 409。成员行随 CASCADE 消失(项目没了,成员关系无意义)。"""
+    """删项目(§4/§13):private = 所有者,默认空间专门闸保护
+    (default_space_protected);normal = Admin+(§4 授权删除);公共项目
+    409。有内容 409(project_not_empty,不做级联删除,先清空或迁走);
+    成员行随 CASCADE 消失(项目没了,成员关系无意义)。"""
     proj = await _load_project(db, project_id)
-    if proj.kind == "public":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "public_project_protected",
-                    "message": "公共项目不可删除"})
+    if proj.kind == Project.KIND_PRIVATE:
+        # 不可见统一 404(与列表/详情同源)
+        if proj.owner_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "not_found",
+                        "message": f"project not found: {project_id}"})
+        if proj.is_default:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "default_space_protected",
+                        "message": "默认私有空间不可删除;须先原子切换默认"
+                                   "空间或走用户处置流程(§4/§13)"})
+    else:
+        if not has_capability(user, "ops.write"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "capability_forbidden",
+                        "message": "删除普通项目需要技术运营权限(Admin+)"})
+        if proj.kind == Project.KIND_PUBLIC:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "public_project_protected",
+                        "message": "公共项目不可删除"})
     # 内容闸:四张对象表任一挂靠即拒
     from sqlalchemy import select as _sel
 
@@ -563,12 +729,14 @@ async def instance_credential_matches(
     from ..models.system_env_instance import SystemEnvInstance
 
     proj = await _load_project(db, project_id)
-    if proj.kind == "public":
+    # §7 矩阵:项目凭证池仅 normal 开放(private/public API 同样拒绝)
+    if proj.kind != Project.KIND_NORMAL:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "public_project_no_credentials",
-                    "message": "公共项目没有项目凭证(公共内容由订阅者用"
-                               "自己的凭证执行)"})
+            detail={"code": "project_kind_no_credentials",
+                    "message": "私有/公共项目没有项目凭证池"
+                               "(公共内容由订阅者用自己的凭证执行;私有"
+                               "空间凭证为个人池)"})
     role = await _my_role(db, user, project_id)
     if role is None:
         # Admin+ 非成员同 404(读面不因平台角色放宽,与凭证列表一致)
@@ -670,15 +838,13 @@ async def add_member(
 ) -> MemberOut:
     proj = await _load_project(db, project_id)
     await _require_manage(db, user, proj)
-    # 公共项目成员守卫:不变量「公共项目无成员行」
-    # —— can_run_scenario 项目分支纯查成员表,落行即可执行公共副本,
-    # 击穿「公共副本对所有人不可执行」(_ownership.py 不变量 7);
-    # 与 patch_project/delete_project 同闸同码。
-    if proj.kind == "public":
+    # 成员行守卫:不变量「private/public 不落成员行」(§4/§20,触发器
+    # 兜底直插绕过应用层的写)—— 只有 normal 有成员概念
+    if proj.kind != Project.KIND_NORMAL:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "public_project_protected",
-                    "message": "公共项目无成员概念,不可添加成员"})
+            detail={"code": "project_kind_no_members",
+                    "message": "私有/公共项目无成员概念,不可添加成员"})
     target = await db.get(User, body.userId)
     if target is None or not target.is_active or target.is_system:
         raise HTTPException(
@@ -712,12 +878,12 @@ async def patch_member(
 ) -> MemberOut:
     proj = await _load_project(db, project_id)
     await _require_manage(db, user, proj)
-    # 公共项目成员守卫(与 add/remove 同闸同码)
-    if proj.kind == "public":
+    # 成员行守卫(与 add_member 同闸同码;private/public 不落成员行)
+    if proj.kind != Project.KIND_NORMAL:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "public_project_protected",
-                    "message": "公共项目无成员概念,不可修改成员"})
+            detail={"code": "project_kind_no_members",
+                    "message": "私有/公共项目无成员概念,不可修改成员"})
     m = (await db.execute(select(ProjectMember).where(
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == member_user_id))).scalar_one_or_none()

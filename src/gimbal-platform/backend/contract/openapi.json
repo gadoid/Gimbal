@@ -5861,6 +5861,94 @@
         "title": "PreviewPlateResponse",
         "type": "object"
       },
+      "ProjectConfigurationSummary": {
+        "description": "§9 ProjectConfigurationSummary:非秘密配置摘要(不返回秘密)。",
+        "properties": {
+          "defaultEnvironmentId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defaultenvironmentid"
+          },
+          "defaultEnvironmentName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defaultenvironmentname"
+          }
+        },
+        "title": "ProjectConfigurationSummary",
+        "type": "object"
+      },
+      "ProjectContextOut": {
+        "description": "§9 ProjectContext:前端 ProjectLayout 的统一上下文入口。\n\neffectivePermissions = 主体关系求值(§6);capabilities = 容器\n能力矩阵(§7)。不返回秘密或全部对象级权限;对象状态约束由资源\n接口及后端实时判断。",
+        "properties": {
+          "capabilities": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/ProjectConfigurationSummary"
+          },
+          "effectivePermissions": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Effectivepermissions",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "isDefault": {
+            "title": "Isdefault",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "uid",
+          "kind",
+          "name",
+          "isDefault",
+          "status",
+          "effectivePermissions",
+          "capabilities",
+          "configuration"
+        ],
+        "title": "ProjectContextOut",
+        "type": "object"
+      },
       "ProjectCreateIn": {
         "properties": {
           "description": {
@@ -5870,9 +5958,25 @@
             "type": "string"
           },
           "firstAdminUserId": {
-            "minimum": 1.0,
-            "title": "Firstadminuserid",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firstadminuserid"
+          },
+          "kind": {
+            "default": "normal",
+            "enum": [
+              "private",
+              "normal"
+            ],
+            "title": "Kind",
+            "type": "string"
           },
           "name": {
             "maxLength": 128,
@@ -5882,8 +5986,7 @@
           }
         },
         "required": [
-          "name",
-          "firstAdminUserId"
+          "name"
         ],
         "title": "ProjectCreateIn",
         "type": "object"
@@ -5948,6 +6051,11 @@
             "title": "Id",
             "type": "integer"
           },
+          "isDefault": {
+            "default": false,
+            "title": "Isdefault",
+            "type": "boolean"
+          },
           "kind": {
             "title": "Kind",
             "type": "string"
@@ -5982,6 +6090,11 @@
             "title": "Scenariocount",
             "type": "integer"
           },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
           "suiteCount": {
             "default": 0,
             "title": "Suitecount",
@@ -5991,6 +6104,11 @@
             "default": 0,
             "title": "Taskcount",
             "type": "integer"
+          },
+          "uid": {
+            "default": "",
+            "title": "Uid",
+            "type": "string"
           }
         },
         "required": [
@@ -17725,7 +17843,7 @@
     },
     "/api/projects": {
       "get": {
-        "description": "项目列表(S7.0 项目页数据源):公共项目(全员,置顶)+ 我所在的\n项目;Admin+ 管理视图全量。列表也批量补内容计数与默认环境名\n(项目卡片统计行;group_by 批查,不做 N+1)。",
+        "description": "项目列表(统一可见性谓词,AC-51 与 /auth/me、详情、context 同源):\n公共项目 + 我所在的普通项目 + **我的私有空间**。Admin+ 不旁路 ——\n平台管理员看不见他人私有空间(§6 授权矩阵)。",
         "operationId": "list_projects_api_projects_get",
         "responses": {
           "200": {
@@ -17754,7 +17872,7 @@
         ]
       },
       "post": {
-        "description": "建项目(S1-g:Admin+ / ops.write),指定首个项目管理员。",
+        "description": "建项目(§4):private = 自己的空间(所有人);normal = Admin+,\n指定首个项目管理员;public 不可建(uq_projects_public_kind 钉死)。",
         "operationId": "create_project_api_projects_post",
         "requestBody": {
           "content": {
@@ -17801,7 +17919,7 @@
     },
     "/api/projects/{project_id}": {
       "delete": {
-        "description": "删项目 = 仅 Admin+(ops.write);有内容 409(先清空或迁走);\n公共项目 409。成员行随 CASCADE 消失(项目没了,成员关系无意义)。",
+        "description": "删项目(§4/§13):private = 所有者,默认空间专门闸保护\n(default_space_protected);normal = Admin+(§4 授权删除);公共项目\n409。有内容 409(project_not_empty,不做级联删除,先清空或迁走);\n成员行随 CASCADE 消失(项目没了,成员关系无意义)。",
         "operationId": "delete_project_api_projects__project_id__delete",
         "parameters": [
           {
@@ -17840,6 +17958,7 @@
         ]
       },
       "get": {
+        "description": "项目详情(可见性与列表同源,AC-51):不可见统一 404 ——\n私有空间对他者(含 Admin+)不存在;公共项目全员可读。",
         "operationId": "get_project_api_projects__project_id__get",
         "parameters": [
           {
@@ -17935,6 +18054,54 @@
           }
         ],
         "summary": "Patch Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/context": {
+      "get": {
+        "description": "§9 ProjectContext:ProjectLayout 的统一上下文(可见性与列表同源,\n不可见 404;不返回秘密与全部对象级权限)。",
+        "operationId": "project_context_api_projects__project_id__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Project Context",
         "tags": [
           "projects"
         ]

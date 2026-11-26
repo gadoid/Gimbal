@@ -66,9 +66,22 @@ def ensure_schema_sync(async_url: str) -> None:
             # service_meta 模型后,0006 等历史 DDL 引用的表在当前模型里
             # 已不存在,重放链对空库自相矛盾。fresh 语义 = 模型即形态;
             # 存量库(有 alembic_version)仍走完整增量链,不受影响。
+            #
+            # §20.4 正式新库初始化 = create_all + 附加 DDL + stamp head:
+            # 触发器/函数不在模型元数据里,历史链由各 revision 挂,fresh
+            # 路径在此以同一单源补挂(zone 同区触发器 + UPC 容器不变量),
+            # 保证双路径结构一致(此前 fresh 库缺 suite 触发器即该缺口)。
             cfg = _alembic_config(engine.url.render_as_string(hide_password=False))
-            logger.info("schema: 空库 → baseline fresh 建表 + stamp head")
+            logger.info("schema: 空库 → baseline fresh 建表 + 附加 DDL + stamp head")
             command.upgrade(cfg, "0001_baseline")
+            from sqlalchemy import text as _sa_text
+
+            from ..models.project import PROJECT_CONTAINER_DDL
+            from ..services.zone import SUITE_ZONE_TRIGGER_DDL
+
+            with engine.begin() as conn:
+                for stmt in (*SUITE_ZONE_TRIGGER_DDL, *PROJECT_CONTAINER_DDL):
+                    conn.execute(_sa_text(stmt))
             command.stamp(cfg, "head")
             return
 

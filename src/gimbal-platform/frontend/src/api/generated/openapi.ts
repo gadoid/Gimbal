@@ -1173,9 +1173,33 @@ export interface PreviewPlateResponse {
   ok: boolean
 }
 
+// §9 ProjectConfigurationSummary:非秘密配置摘要(不返回秘密)。
+export interface ProjectConfigurationSummary {
+  defaultEnvironmentId?: number | null
+  defaultEnvironmentName?: unknown | null
+}
+
+// §9 ProjectContext:前端 ProjectLayout 的统一上下文入口。
+// 
+// effectivePermissions = 主体关系求值(§6);capabilities = 容器
+// 能力矩阵(§7)。不返回秘密或全部对象级权限;对象状态约束由资源
+// 接口及后端实时判断。
+export interface ProjectContextOut {
+  capabilities: Record<string, boolean>
+  configuration: ProjectConfigurationSummary
+  effectivePermissions: Record<string, boolean>
+  id: number
+  isDefault: boolean
+  kind: unknown
+  name: unknown
+  status: unknown
+  uid: unknown
+}
+
 export interface ProjectCreateIn {
   description?: unknown
-  firstAdminUserId: number
+  firstAdminUserId?: number | null
+  kind?: "private" | "normal"
   name: unknown
 }
 
@@ -1191,14 +1215,17 @@ export interface ProjectOut {
   defaultEnvironmentName?: unknown | null
   description: unknown
   id: number
+  isDefault?: boolean
   kind: unknown
   memberCount?: number
   myRole?: unknown | null
   name: unknown
   pendingPromotions?: number
   scenarioCount?: number
+  status?: unknown
   suiteCount?: number
   taskCount?: number
+  uid?: unknown
 }
 
 export interface ProjectPatchIn {

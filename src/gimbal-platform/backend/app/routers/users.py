@@ -199,6 +199,11 @@ async def create_user(
         is_active=True,
     )
     db.add(new_user)
+    await db.flush()
+    # UPC §4 用户初始化事务:管理员开号同事务创建默认私有空间
+    from ..services.project_space import ensure_default_private_project
+
+    await ensure_default_private_project(db, new_user.id)
     await db.commit()
     await db.refresh(new_user)
     from ..services import audit as audit_svc
@@ -309,6 +314,22 @@ async def patch_user(
             logger.warning("users: 角色变更通知失败,继续权限写面:{}", e)
     revoked_tokens = 0
     if "is_active" in data:
+        # UPC §13:停用用户前,若其为某些活跃普通项目的最后一个有效
+        # 管理员 → 409(须先交接或归档;DB 延迟约束触发器兜底)
+        if prev_active and not data["is_active"]:
+            from ..services.project_space import projects_where_sole_valid_admin
+
+            sole_admin_of = await projects_where_sole_valid_admin(
+                db, target.id)
+            if sole_admin_of:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "user_last_project_admin",
+                            "message": "该用户是普通项目的最后一个有效"
+                                       f"管理员(项目 {sole_admin_of}),"
+                                       "须先交接管理员权限或归档项目",
+                            "projectIds": sole_admin_of},
+                )
         target.is_active = data["is_active"]
         # webhook v4 §3.6(D13):停用 → 本人全部个人令牌落库失效
         # (原因 deactivated;平台令牌属 __platform__,不受影响)——
@@ -544,6 +565,21 @@ async def delete_user(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=code_detail(LAST_ADMIN, "不能删除最后一个管理员"),
             )
+
+    # UPC §13:普通项目最后一个有效管理员离职前必须交接管理员权限
+    # 或归档 —— DB 延迟约束触发器兜底,这里先给人话 409
+    from ..services.project_space import projects_where_sole_valid_admin
+
+    sole_admin_of = await projects_where_sole_valid_admin(db, target.id)
+    if sole_admin_of:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "user_last_project_admin",
+                    "message": "该用户是普通项目的最后一个有效管理员"
+                               f"(项目 {sole_admin_of}),须先交接管理员"
+                               "权限或归档项目",
+                    "projectIds": sole_admin_of},
+        )
 
     # 受让人校验(transfer):在场且非目标本人
     transferee = None
@@ -889,6 +925,13 @@ async def delete_user(
         sa_delete(AuthAccount).where(AuthAccount.owner_id == user_id))
     await db.execute(
         sa_delete(ConstantEntry).where(ConstantEntry.owner_id == user_id))
+
+    # UPC §13 用户处置:私有容器随账号一并处置(M1 期为空容器;对象
+    # 资源迁入 project_id 后升级为依赖处置计划)。owner_id 无 ON DELETE
+    # —— 不处置则删用户行被 FK 拒绝,顺序不可倒。
+    from ..services.project_space import dispose_private_containers
+
+    await dispose_private_containers(db, user_id)
 
     await db.delete(target)
     await db.commit()
