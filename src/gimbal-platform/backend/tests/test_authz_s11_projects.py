@@ -14,25 +14,11 @@ from tests.helpers import make_draft, role_headers
 
 
 async def _mk_project(name: str, *, members: dict[str, str]) -> int:
-    """直插普通项目 + 成员 {username: role};返回项目 id(普通项目
-    不经 API 创建 —— S1.4 才有项目管理端点)。"""
-    from sqlalchemy import select as sa_select
+    """直插普通项目 + 成员(UPC §20 布景守卫单点:无 admin 自动补
+    守夜人 —— 活跃普通项目 ≥1 有效 admin 的库层不变量)。"""
+    from tests.helpers import mk_normal_project
 
-    from app.core import db as db_module
-    from app.models.project import Project, ProjectMember
-    from app.models.user import User
-
-    async with db_module.SessionLocal() as db:
-        proj = Project(name=name, kind="normal", description="")
-        db.add(proj)
-        await db.flush()
-        for uname, role in members.items():
-            uid = (await db.execute(sa_select(User.id).where(
-                User.username == uname))).scalar_one()
-            db.add(ProjectMember(project_id=proj.id, user_id=uid,
-                                 role=role))
-        await db.commit()
-        return proj.id
+    return await mk_normal_project(name, members)
 
 
 async def _uid(username: str) -> int:
@@ -244,16 +230,25 @@ class TestMeProjects:
         r = await client.get("/api/auth/me", headers=h)
         assert r.status_code == 200, r.text
         projects = r.json()["projects"]
-        # S7.0:与 GET /projects 同口径 —— 公共项目置顶(role=None)
+        # S7.0 + UPC M1:与 GET /projects 同口径 —— 公共置顶(role=None)
+        # + 我的普通项目 + 我的默认私有空间(§4;私有空间 role=None,
+        # 治理由 owner_id 表达,无成员行)
         assert projects[0]["kind"] == "public"
         assert projects[0]["role"] is None
-        assert projects[1:] == [{"id": pid, "name": "s11-me-proj",
-                                 "kind": "normal", "role": "admin"}]
+        # 公共之后按 id 序:默认空间先于普通项目(布景顺序决定)
+        rest = projects[1:]
+        assert [(p_["kind"], p_["isDefault"]) for p_ in rest] == [
+            ("private", True), ("normal", False)]
+        normal = next(p_ for p_ in rest if p_["kind"] == "normal")
+        assert normal["id"] == pid and normal["role"] == "admin"
 
         h2 = await role_headers(client, "s11_nobody", role="user")
-        assert [p_ for p_ in (
+        # 非成员者只剩公共项目与自己的默认私有空间(不再看见他人项目)
+        others = [p_ for p_ in (
             await client.get("/api/auth/me", headers=h2)
-        ).json()["projects"] if p_["kind"] != "public"] == []
+        ).json()["projects"] if p_["kind"] != "public"]
+        assert [(p_["kind"], p_["isDefault"]) for p_ in others] == [
+            ("private", True)]
 
 
 class TestShadowWrite:
@@ -716,7 +711,7 @@ class TestPublicProjectMemberGuard:
         r = await client.post(f"/api/projects/{pid}/members", headers=h,
                               json={"userId": 999999, "role": "member"})
         assert r.status_code == 409, r.text
-        assert r.json()["detail"]["code"] == "public_project_protected"
+        assert r.json()["detail"]["code"] == "project_kind_no_members"
         # 守卫先行:不存在的用户也到不了 member_invalid 校验
         from sqlalchemy import select as sa_select
 
@@ -735,34 +730,32 @@ class TestPublicProjectMemberGuard:
         r = await client.patch(f"/api/projects/{pid}/members/1", headers=h,
                                json={"role": "member"})
         assert r.status_code == 409, r.text
-        assert r.json()["detail"]["code"] == "public_project_protected"
+        assert r.json()["detail"]["code"] == "project_kind_no_members"
 
 
-async def test_remove_member_public_is_remediation_channel(
-        client: AsyncClient):
-    """fresh-eyes 复核收口(2026-11-22):remove_member 对公共项目放行 ——
-    它是 B1 窗口期遗留成员行的唯一 API 补救通道(全闸会把病害锁进库:
-    can_run_scenario 纯查成员表,残留行即活越权面)。add/patch 保持 409;
-    remove 朝不变量收敛(删行即恢复「公共项目无成员行」)。"""
+async def test_public_member_row_physically_rejected(client: AsyncClient):
+    """UPC §20 收口:private/public 不落成员行由**库层触发器**钉死
+    (0067 project_member_kind_guard)—— B1 窗口期的「API 补救通道」
+    (remove_member 对公共放行删行)随触发器落地失去前提:残留行物理上
+    无法产生,不再需要补救通道。负向:直插被拒,公共项目成员行恒空。"""
+    import pytest
     from sqlalchemy import select as sa_select
+    from sqlalchemy.exc import IntegrityError
 
     from app.core import db as db_module
     from app.models.project import Project, ProjectMember
     from app.models.user import User
 
-    h = await role_headers(client, "s11_pubadm3", role="admin")
+    await role_headers(client, "s11_pubadm3", role="admin")
     async with db_module.SessionLocal() as db:
         pid = (await db.execute(sa_select(Project.id).where(
             Project.kind == "public"))).scalar_one()
         uid = (await db.execute(sa_select(User.id).where(
             User.username == "s11_pubadm3"))).scalar_one()
-        # 直插一行 B1 窗口期形态的残留成员行
-        db.add(ProjectMember(project_id=pid, user_id=uid, role="member"))
-        await db.commit()
-    # 删除成功(204)= 补救通道开放
-    r = await client.delete(f"/api/projects/{pid}/members/{uid}", headers=h)
-    assert r.status_code == 204, r.text
-    async with db_module.SessionLocal() as db:
+        with pytest.raises(IntegrityError):
+            db.add(ProjectMember(project_id=pid, user_id=uid, role="member"))
+            await db.commit()
+        await db.rollback()
         rows = (await db.execute(sa_select(ProjectMember).where(
             ProjectMember.project_id == pid))).scalars().all()
-        assert rows == []   # 不变量收敛:公共项目成员行归零
+        assert rows == []   # 不变量:公共项目成员行恒空

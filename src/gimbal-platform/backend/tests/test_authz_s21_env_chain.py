@@ -106,6 +106,8 @@ async def test_chain_identity_project_default(fresh_db):
         proj = Project(name="s21-proj", default_environment_id=dev)
         s.add(proj)
         await s.flush()
+        from tests.helpers import add_project_admin
+        await add_project_admin(s, proj.id)   # UPC §20:出生即有 admin
         # 条目挂 sit:身份位胜出(项目默认 dev 不抢)
         s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
                               env_id=sit, ref_mode="default"))
@@ -313,6 +315,9 @@ async def test_template_env_by_identity_and_fingerprint_tracks(
         sit = await _env(s, "s21-fp-sit")
         proj = Project(name="s21-fp-proj", default_environment_id=sit)
         s.add(proj)
+        await s.flush()
+        from tests.helpers import add_project_admin
+        await add_project_admin(s, proj.id)   # UPC §20:出生即有 admin
         await s.flush()
         s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
                               env_id=dev, ref_mode="default"))

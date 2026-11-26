@@ -17,24 +17,11 @@ from tests.helpers import make_draft, role_headers
 
 
 async def _mk_project(name: str, *, members: dict[str, str]) -> int:
-    """直插普通项目 + 成员 {username: role}(不经管理端点)。"""
-    from sqlalchemy import select as sa_select
+    """直插普通项目 + 成员(UPC §20 布景守卫单点:无 admin 自动补
+    守夜人 —— 活跃普通项目 ≥1 有效 admin 的库层不变量)。"""
+    from tests.helpers import mk_normal_project
 
-    from app.core import db as db_module
-    from app.models.project import Project, ProjectMember
-    from app.models.user import User
-
-    async with db_module.SessionLocal() as db:
-        proj = Project(name=name, kind="normal", description="")
-        db.add(proj)
-        await db.flush()
-        for uname, role in members.items():
-            uid = (await db.execute(sa_select(User.id).where(
-                User.username == uname))).scalar_one()
-            db.add(ProjectMember(project_id=proj.id, user_id=uid,
-                                 role=role))
-        await db.commit()
-        return proj.id
+    return await mk_normal_project(name, members)
 
 
 async def _public_project_id() -> int:
@@ -49,7 +36,8 @@ async def _public_project_id() -> int:
 
 
 class TestProjectsReadFace:
-    """GET /projects(公共置顶 + 我所在;Admin+ 全量)与详情读面。"""
+    """GET /projects 统一可见性(UPC M1:公共置顶 + 我所在 + 我的私有
+    空间;Admin+ 不旁路,AC-51)与详情读面。"""
 
     async def test_list_public_pinned_plus_mine(self, client: AsyncClient):
         h_u = await role_headers(client, "s70_lu", role="user")
@@ -59,24 +47,32 @@ class TestProjectsReadFace:
         r = await client.get("/api/projects", headers=h_u)
         assert r.status_code == 200, r.text
         items = r.json()
-        # 公共项目恒置顶;我所在项目在列;别人的普通项目不可见
+        # 公共项目恒置顶;我的默认私有空间在列;别人的普通项目不可见
         assert items[0]["kind"] == "public"
         assert items[0]["myRole"] is None
         assert items[0]["canManage"] is False
-        assert [it["name"] for it in items[1:]] == ["s70-mine"]
+        assert [it["name"] for it in items[1:]] == ["默认空间", "s70-mine"]
         assert q_id not in [it["id"] for it in items]
         mine = next(it for it in items if it["name"] == "s70-mine")
         assert mine["myRole"] == "member" and mine["canManage"] is False
 
-    async def test_list_admin_sees_all(self, client: AsyncClient):
+    async def test_list_admin_no_bypass_ac51(self, client: AsyncClient):
+        """AC-51:Admin+ 不旁路 —— 他人普通项目/私有空间均不可枚举;
+        自己的空间可管理(公共项目 = Admin+ 治理位)。"""
         h_admin = await role_headers(client, "s70_adm", role="admin")
         await role_headers(client, "s70_x1", role="user")
-        await _mk_project("s70-other", members={"s70_x1": "member"})
+        other_pid = await _mk_project("s70-other", members={"s70_x1": "member"})
         r = await client.get("/api/projects", headers=h_admin)
         assert r.status_code == 200, r.text
         names = [it["name"] for it in r.json()]
-        assert "s70-other" in names and names[0] == "公共"
-        assert all(it["canManage"] for it in r.json())
+        assert "s70-other" not in names and names[0] == "公共"
+        assert other_pid not in [it["id"] for it in r.json()]
+        mine = next(it for it in r.json() if it["kind"] == "private")
+        assert mine["canManage"] is True  # 自己的空间
+        pub = r.json()[0]
+        assert pub["canManage"] is True   # 公共项目 = Admin+ 治理位
+        assert all(it["canManage"] is False for it in r.json()[1:]
+                   if it["kind"] == "normal")
 
     async def test_project_admin_can_manage_member_cannot(
             self, client: AsyncClient):

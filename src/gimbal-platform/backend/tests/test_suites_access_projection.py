@@ -18,16 +18,11 @@ from tests.helpers import register_and_login, role_headers
 
 
 async def _mk_project(name: str, *, members: dict[str, str]) -> int:
-    async with db_module.SessionLocal() as db:
-        proj = Project(name=name, kind="normal", description="")
-        db.add(proj)
-        await db.flush()
-        for uname, role in members.items():
-            uid = (await db.execute(select(User.id).where(
-                User.username == uname))).scalar_one()
-            db.add(ProjectMember(project_id=proj.id, user_id=uid, role=role))
-        await db.commit()
-        return proj.id
+    """直插普通项目 + 成员(UPC §20 布景守卫单点:无 admin 自动补
+    守夜人 —— 活跃普通项目 ≥1 有效 admin 的库层不变量)。"""
+    from tests.helpers import mk_normal_project
+
+    return await mk_normal_project(name, members)
 
 
 async def _mk_project_suite(client, *, project: str, owner: str) -> tuple[int, int]:

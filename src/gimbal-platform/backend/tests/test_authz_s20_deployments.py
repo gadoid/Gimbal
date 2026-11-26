@@ -33,6 +33,9 @@ async def test_env_delete_cascades_deployments_and_nulls_project_default(
                          base_url="http://fin-dev"))
         proj = Project(name="s20-proj", default_environment_id=env_id)
         s.add(proj)
+        await s.flush()
+        from tests.helpers import add_project_admin
+        await add_project_admin(s, proj.id)   # UPC §20:出生即有 admin
         await s.commit()
         pid = proj.id
 

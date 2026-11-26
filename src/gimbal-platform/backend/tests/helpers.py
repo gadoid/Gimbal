@@ -218,6 +218,13 @@ async def ensure_fk_users(db: Any, *ids: int, make_admin: int | None = None) -> 
             role="super_admin" if admin else "user",
             is_active=True,
         ))
+        # UPC §4:垫底用户同事务配默认私有空间(库层延迟约束钉死
+        # 「非系统用户至少一个默认空间」)
+        from app.services.project_space import (
+            ensure_default_private_project,
+        )
+
+        await ensure_default_private_project(db, uid)
     await db.commit()
     if db.get_bind().dialect.name == "postgresql":
         await db.execute(text(
@@ -279,3 +286,63 @@ async def seed_service_runtime(
         await seed_deployment(db, service, url, env_id=env)
         await db.commit()
         return env
+
+
+# ── UPC M1 布景守卫(v2.10 §4/§20)─────────────────────────────────────
+
+NIGHT_ADMIN = "upc_night_admin"
+"""布景专用项目管理员:库层不变量「活跃普通项目 ≥1 有效 admin」要求
+项目出生即有管理员;测试主角保持原角色,守夜人只满足不变量。"""
+
+
+async def mk_user_with_space(username: str, *, role: str = "user") -> int:
+    """直插用户 + 默认私有空间(§4:非系统用户须有默认空间,延迟约束
+    触发器在提交时兜底)。经 inbound_fixtures.mk_user 单点。"""
+    from .inbound_fixtures import mk_user
+
+    return await mk_user(username, role=role)
+
+
+async def mk_normal_project(name: str, members: dict[str, str]) -> int:
+    """直插普通项目 + 成员 {username: role}。
+
+    UPC §20 布景守卫:活跃普通项目须至少一名有效 admin(延迟约束触发
+    器在提交时钉死)—— 成员表无 admin 时自动补守夜人,不改变测试
+    主角的角色与断言。项目与首名成员同一事务提交(顺序无关)。"""
+    from sqlalchemy import select as sa_select
+
+    from app.core import db as db_module
+    from app.models.project import Project, ProjectMember
+    from app.models.user import User
+
+    members = dict(members)
+    if not any(r == ProjectMember.ROLE_ADMIN for r in members.values()):
+        await mk_user_with_space(NIGHT_ADMIN)
+        members.setdefault(NIGHT_ADMIN, ProjectMember.ROLE_ADMIN)
+    async with db_module.SessionLocal() as db:
+        proj = Project(name=name, kind="normal", description="")
+        db.add(proj)
+        await db.flush()
+        for uname, role in members.items():
+            uid = (await db.execute(sa_select(User.id).where(
+                User.username == uname))).scalar_one()
+            db.add(ProjectMember(project_id=proj.id, user_id=uid,
+                                 role=role))
+        await db.commit()
+        return proj.id
+
+
+async def add_project_admin(db, project_id: int) -> None:
+    """在**同一提交内**给刚建的普通项目补守夜人 admin(§20 延迟约束:
+    活跃普通项目出生即须有有效 admin —— 先建项目再补的布景会被提交
+    拒绝,须与项目行同事务)。守夜人经独立会话先就位,不干扰当前事务。"""
+    from sqlalchemy import select as sa_select
+
+    from app.models.project import ProjectMember
+    from app.models.user import User
+
+    await mk_user_with_space(NIGHT_ADMIN)
+    uid = (await db.execute(sa_select(User.id).where(
+        User.username == NIGHT_ADMIN))).scalar_one()
+    db.add(ProjectMember(project_id=project_id, user_id=uid,
+                         role=ProjectMember.ROLE_ADMIN))

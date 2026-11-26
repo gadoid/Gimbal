@@ -93,7 +93,10 @@ async def publish_scenario(scenario_id: str) -> str:
 
 
 async def mk_user(username: str, *, role: str = "admin") -> int:
-    """直插一个活跃真人用户(幂等;不经注册接口,免 admin 提权副作用)。"""
+    """直插一个活跃真人用户(幂等;不经注册接口,免 admin 提权副作用)。
+
+    UPC M1:同事务创建默认私有空间 —— 库层延迟约束触发器要求每个非
+    系统用户至少一个默认空间(§4),直插原语与注册/建号入口同口径。"""
     async with db_module.SessionLocal() as s:
         uid = (await s.execute(sa.select(User.id).where(
             User.username == username))).scalar_one_or_none()
@@ -102,6 +105,10 @@ async def mk_user(username: str, *, role: str = "admin") -> int:
         u = User(username=username, display_name=username,
                  password_hash=hash_password("x"), role=role)
         s.add(u)
+        await s.flush()
+        from app.services.project_space import ensure_default_private_project
+
+        await ensure_default_private_project(s, u.id)
         await s.commit()
         return u.id
 
@@ -165,6 +172,13 @@ async def mk_task_pair(*, name="w-task", token_id=None,
                 u = User(username="w_owner", display_name="o",
                          password_hash=hash_password("x"), role="admin")
                 s.add(u)
+                await s.flush()
+                # UPC §4:垫底用户同事务配默认私有空间
+                from app.services.project_space import (
+                    ensure_default_private_project,
+                )
+
+                await ensure_default_private_project(s, u.id)
                 await s.commit()
                 owner = u.id
             owner_id = owner

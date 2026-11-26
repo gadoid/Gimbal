@@ -690,9 +690,13 @@ def test_0039_drop_identity_mode():
             "AND table_schema = current_schema()"))}
 
     def _ck(c) -> int:
+        # connamespace 限定当前 schema:xdist 并行时其他 worker 的临时
+        # schema 同名约束会串数(全库扫是既有缺陷,UPC 链路加大了并发
+        # 窗口才暴露;与 _cols 的 current_schema() 口径对齐)
         return c.execute(text(
             "SELECT count(*) FROM pg_constraint "
-            "WHERE conname = 'ck_integration_identity_personal'")).scalar()
+            "WHERE conname = 'ck_integration_identity_personal' "
+            "AND connamespace = current_schema()::regnamespace")).scalar()
 
     with temp_schema() as (_schema, sync_url):
         eng = create_engine(sync_url)
@@ -2157,7 +2161,7 @@ def test_0066_incremental_model_align():
                     "WHERE alias_name = 't66-ident'"))
 
             command.upgrade(_cfg(sync_url), "head")
-            assert _revision(sync_url) == "0066_incremental_model_align"
+            assert _revision(sync_url) == _head()
 
             with eng.connect() as c:
                 assert _scope_fk_options(c) == {
@@ -2202,7 +2206,7 @@ def test_0066_fresh_chain_noop():
         command.upgrade(_cfg(sync_url), "0001_baseline")
         command.stamp(_cfg(sync_url), "0065_execution_row_run_error")
         command.upgrade(_cfg(sync_url), "head")
-        assert _revision(sync_url) == "0066_incremental_model_align"
+        assert _revision(sync_url) == _head()
         eng = create_engine(sync_url)
         try:
             with eng.connect() as c:

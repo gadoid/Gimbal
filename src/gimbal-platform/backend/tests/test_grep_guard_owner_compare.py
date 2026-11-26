@@ -18,7 +18,8 @@
   引用面(S7 退役)、suites 同属主成员约束(S1.5 换同区触发器)。
 
 豁免:``_ownership.py``(表 B / 谓词求值单点)、``zone.py``
-(zone_read_clause / apply_* 三区谓词单点)。全部待收编行删空即终点。
+(zone_read_clause / apply_* 三区谓词单点)、``project_access.py``
+(UPC M1 项目可见性/关系解析单点 —— AC-51 同源谓词的家)。全部待收编行删空即终点。
 """
 from __future__ import annotations
 import pytest  # noqa: E402
@@ -70,6 +71,14 @@ _ALLOWLIST: dict[str, int] = {
     'routers/me.py:AuthAccount).where(AuthAccount.owner_id == user.id))).scalar_one())': 1,
     # A 级批次(2026-11-18):实例×凭证聚合端点的个人池计数(本人镜头)
     'routers/projects.py:.where(AuthAccount.owner_id == user.id,': 1,
+    # UPC M1(§4/§6):私有空间治理 = 所有者关系(owner_id)判定 —— private
+    # 不落成员行,所有者即治理者,与对象属主单判同类终态(delete/管理闸/
+    # canManage/canWrite 徽标);个人默认空间处置是个人数据终态
+    'routers/projects.py:if proj.owner_id != user.id:': 1,
+    'routers/projects.py:if project.owner_id != user.id:': 1,
+    'routers/projects.py:return proj.owner_id == user.id': 2,
+    'services/project_space.py:Project.owner_id == user_id))': 1,
+    'services/project_space.py:Project.owner_id == user_id,': 1,
     'routers/me.py:ComposerScenario.owner_id == user.id,': 1,
     'routers/me.py:Execution.owner_id == user.id,': 2,
     'routers/me.py:IntegrationTask.holder_id == user.id))': 1,
@@ -155,7 +164,7 @@ def _scan() -> Counter:
     hits: Counter = Counter()
     for sub in ("routers", "services"):
         for py in sorted((_APP / sub).rglob("*.py")):
-            if py.name in ("_ownership.py", "zone.py"):
+            if py.name in ("_ownership.py", "zone.py", "project_access.py"):
                 continue
             for line in py.read_text(encoding="utf-8").splitlines():
                 if any(rx.search(line) for rx in SHAPES):

@@ -60,16 +60,19 @@ class TestProjectCrud:
         pa_uid = await _uid(client, h_admin, "s14_lpa")
         out = await _create_project(client, h_admin, "s14-lproj", pa_uid)
 
-        # Admin+ 管理视图全量(含公共项目行);普通用户 = 公共项目置顶
-        # + 我所在的(S7.0);路人只见公共项目
+        # UPC M1 统一可见性(AC-51):Admin+ 不旁路 —— 他人项目不可见,
+        # 只见公共 + 自己的默认空间;普通用户 = 公共 + 我所在的 + 自己
+        # 的默认空间;路人只见公共 + 自己的默认空间
         r = await client.get("/api/projects", headers=h_admin)
         names = {p["name"] for p in r.json()}
-        assert "s14-lproj" in names and "公共" in names
+        assert "s14-lproj" not in names and "公共" in names
         r = await client.get("/api/projects", headers=h_pa)
-        assert [p["name"] for p in r.json()] == ["公共", "s14-lproj"]
-        assert r.json()[1]["myRole"] == "admin"
+        # UPC M1:含本人默认私有空间(id 序:空间先于后建的项目)
+        assert [p["name"] for p in r.json()] == [
+            "公共", "默认空间", "s14-lproj"]
+        assert r.json()[2]["myRole"] == "admin"
         r = await client.get("/api/projects", headers=h_out)
-        assert [p["name"] for p in r.json()] == ["公共"]
+        assert [p["kind"] for p in r.json()] == ["public", "private"]
 
         # 详情:成员 200(myRole);路人 404
         r = await client.get(f"/api/projects/{out['id']}", headers=h_pa)
@@ -195,10 +198,15 @@ class TestMemberManagement:
 
         # /auth/me.projects 联动
         r = await client.get("/api/auth/me", headers=h_mb)
-        # S7.0:公共项目置顶(role=None)+ 我所在项目
-        assert r.json()["projects"][1:] == [
-            {"id": pid, "name": "s14m1-proj",
-             "kind": "normal", "role": "member"}]
+        # S7.0 + UPC M1:公共置顶(role=None)+ 本人默认空间 + 我所在项目
+        assert [(p_["kind"], p_["isDefault"]) for p_ in
+                r.json()["projects"][1:]] == [
+            ("private", True), ("normal", False)]
+        mine = next(p_ for p_ in r.json()["projects"]
+                    if p_["name"] == "s14m1-proj")
+        assert mine == {"id": pid, "name": "s14m1-proj",
+                        "kind": "normal", "role": "member",
+                        "isDefault": False, "status": "active"}
 
         # 普通成员(非 padmin)不能管理:403
         r = await client.post(f"/api/projects/{pid}/members", headers=h_mb,
@@ -218,10 +226,12 @@ class TestMemberManagement:
         r = await client.delete(
             f"/api/projects/{pid}/members/{mb_uid}", headers=h_pa)
         assert r.status_code == 204, r.text
-        # 移除后 me.projects 只剩公共项目(S7.0 同口径)
-        assert [p_ for p_ in (await client.get(
+        # 移除后 me.projects 只剩公共 + 本人默认空间(UPC M1 同口径)
+        others = [p_ for p_ in (await client.get(
             "/api/auth/me", headers=h_mb)).json()["projects"]
-            if p_["kind"] != "public"] == []
+            if p_["kind"] != "public"]
+        assert [(p_["kind"], p_["isDefault"]) for p_ in others] == [
+            ("private", True)]
 
     async def test_member_asset_counts(self, client):
         """成员列表带本项目资产数(A 级批次 2026-11-18):owner 归属权威,

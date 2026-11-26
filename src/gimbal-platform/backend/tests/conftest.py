@@ -257,6 +257,7 @@ async def _ensure_pool_schema() -> None:
         return
     from sqlalchemy import text
 
+    from app.models.project import PROJECT_CONTAINER_DDL
     from app.services.zone import SUITE_ZONE_TRIGGER_DDL
 
     admin = await _make_pg_engine(TEST_DATABASE_URL)
@@ -279,7 +280,8 @@ async def _ensure_pool_schema() -> None:
             await conn.execute(text(_PUBLIC_PROJECT_SEED_SQL))
             # M2a S1.5:suite_members 同区触发器(迁移链由 0042 挂;
             # 测试库走 create_all → 同一 DDL 单源补挂)
-            for stmt in SUITE_ZONE_TRIGGER_DDL:
+            # UPC M1:容器不变量触发器同单源补挂(0067 挂迁移链)
+            for stmt in (*SUITE_ZONE_TRIGGER_DDL, *PROJECT_CONTAINER_DDL):
                 await conn.execute(text(stmt))
     finally:
         await build.dispose()

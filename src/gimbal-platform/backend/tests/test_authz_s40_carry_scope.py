@@ -94,6 +94,8 @@ async def test_tiers_project_zone_ignores_user_layer(client, fresh_db):
         proj = Project(name="s40-proj")
         s.add(proj)
         await s.flush()
+        from tests.helpers import add_project_admin
+        await add_project_admin(s, proj.id)   # UPC §20:出生即有 admin
         s.add(ProjectMember(project_id=proj.id, user_id=uid, role="member"))
         await carry_store.put_bindings(
             s, "fin-service", {"$.a": "pub"}, updated_by_id=None,
@@ -184,6 +186,9 @@ async def test_api_scope_read_filter_and_write_gates(client):
     async with db_module.SessionLocal() as s:
         proj = Project(name="s40-api-proj")
         s.add(proj)
+        await s.flush()
+        from tests.helpers import add_project_admin
+        await add_project_admin(s, proj.id)   # UPC §20:出生即有 admin
         await s.flush()
         s.add(ProjectMember(project_id=proj.id, user_id=uid, role="member"))
         await s.commit()

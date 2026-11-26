@@ -76,6 +76,8 @@ async def _move_to_project(sid: str, username: str) -> None:
         proj = Project(name=f"s60-{sid}")
         s.add(proj)
         await s.flush()
+        from tests.helpers import add_project_admin
+        await add_project_admin(s, proj.id)   # UPC §20:出生即有 admin
         s.add(ProjectMember(project_id=proj.id, user_id=uid, role="member"))
         await s.execute(sa.update(ComposerScenario).where(
             ComposerScenario.scenario_id == sid).values(project_id=proj.id))

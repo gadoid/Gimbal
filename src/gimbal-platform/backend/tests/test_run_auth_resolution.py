@@ -25,6 +25,13 @@ async def _seed_owner(factory, alias: str, username: str, password: str,
         user = User(username=f"u_{alias}", display_name=f"u_{alias}",
                     password_hash="x")
         db.add(user)
+        await db.flush()
+        # UPC §4:非系统用户须有默认私有空间(库层延迟约束钉死)
+        from app.services.project_space import (
+            ensure_default_private_project,
+        )
+
+        await ensure_default_private_project(db, user.id)
         await db.commit()
         await db.refresh(user)
         await seed_identity_fixture(
@@ -89,6 +96,12 @@ async def test_same_tag_preference_beats_other_tag(fresh_db) -> None:
         user = User(username="u_pref", display_name="u_pref",
                     password_hash="x")
         db.add(user)
+        await db.flush()
+        from app.services.project_space import (
+            ensure_default_private_project,
+        )
+
+        await ensure_default_private_project(db, user.id)  # UPC §4
         await db.commit()
         await db.refresh(user)
         # 条目 + 测试账户走四件套;生产账户手工补(非默认环境)
@@ -119,6 +132,12 @@ async def test_multi_tag_no_match_is_ambiguous(fresh_db) -> None:
         user = User(username="u_amb", display_name="u_amb",
                     password_hash="x")
         db.add(user)
+        await db.flush()
+        from app.services.project_space import (
+            ensure_default_private_project,
+        )
+
+        await ensure_default_private_project(db, user.id)  # UPC §4
         await db.commit()
         await db.refresh(user)
         # 条目挂「测试」(默认环境),但同 username 账户只在 预发/生产
@@ -167,6 +186,12 @@ async def test_login_url_follows_account_tag(fresh_db) -> None:
         user = User(username="u_url", display_name="u_url",
                     password_hash="x")
         db.add(user)
+        await db.flush()
+        from app.services.project_space import (
+            ensure_default_private_project,
+        )
+
+        await ensure_default_private_project(db, user.id)  # UPC §4
         await db.commit()
         await db.refresh(user)
         from app.core.security import fernet_encrypt
@@ -210,6 +235,12 @@ async def test_two_identities_share_one_account(fresh_db) -> None:
         user = User(username="u_shared", display_name="u_shared",
                     password_hash="x")
         db.add(user)
+        await db.flush()
+        from app.services.project_space import (
+            ensure_default_private_project,
+        )
+
+        await ensure_default_private_project(db, user.id)  # UPC §4
         await db.commit()
         await db.refresh(user)
         await seed_identity_fixture(
@@ -242,6 +273,12 @@ async def test_default_ref_takes_system_default_account(fresh_db) -> None:
     async with factory() as db:
         user = User(username="u_def", display_name="u_def", password_hash="x")
         db.add(user)
+        await db.flush()
+        from app.services.project_space import (
+            ensure_default_private_project,
+        )
+
+        await ensure_default_private_project(db, user.id)  # UPC §4
         await db.commit()
         await db.refresh(user)
         await seed_identity_fixture(
