@@ -391,7 +391,8 @@
     },
     "asset_bundle_conflict": {
       "sites": [
-        "app/services/scenario_asset_package.py:237"
+        "app/services/scenario_asset_package.py:266",
+        "app/services/scenario_asset_package.py:284"
       ],
       "statuses": [
         409
@@ -399,7 +400,7 @@
     },
     "asset_bundle_default_invalid": {
       "sites": [
-        "app/services/scenario_asset_package.py:258"
+        "app/services/scenario_asset_package.py:302"
       ],
       "statuses": [
         422
@@ -407,8 +408,8 @@
     },
     "asset_bundle_default_missing": {
       "sites": [
-        "app/services/scenario_asset_package.py:103",
-        "app/services/scenario_asset_package.py:253"
+        "app/services/scenario_asset_package.py:104",
+        "app/services/scenario_asset_package.py:297"
       ],
       "statuses": [
         422
@@ -416,7 +417,7 @@
     },
     "asset_bundle_format_invalid": {
       "sites": [
-        "app/services/scenario_asset_package.py:89"
+        "app/services/scenario_asset_package.py:90"
       ],
       "statuses": [
         422
@@ -424,8 +425,8 @@
     },
     "asset_bundle_scenario_invalid": {
       "sites": [
-        "app/services/scenario_asset_package.py:281",
-        "app/services/scenario_asset_package.py:294"
+        "app/services/scenario_asset_package.py:325",
+        "app/services/scenario_asset_package.py:338"
       ],
       "statuses": [
         422
@@ -433,7 +434,7 @@
     },
     "asset_bundle_schemes_missing": {
       "sites": [
-        "app/services/scenario_asset_package.py:100"
+        "app/services/scenario_asset_package.py:101"
       ],
       "statuses": [
         422
@@ -441,7 +442,7 @@
     },
     "asset_bundle_source_missing": {
       "sites": [
-        "app/services/scenario_asset_package.py:95"
+        "app/services/scenario_asset_package.py:96"
       ],
       "statuses": [
         422
@@ -3368,7 +3369,7 @@
     "app/services/run_dispatcher.py:1146": "e.code",
     "app/services/run_dispatcher.py:1437": "e.code",
     "app/services/run_dispatcher.py:1475": "code",
-    "app/services/scenario_asset_package.py:471": "e.code",
+    "app/services/scenario_asset_package.py:515": "e.code",
     "app/services/scenario_import.py:892": "code",
     "app/services/scenario_import.py:962": "code"
   },
@@ -3386,7 +3387,7 @@
       "app/services/run_dispatcher.py:4012 NotFound",
       "app/services/run_dispatcher.py:4019 Conflict",
       "app/services/run_params.py:43 ParamsError",
-      "app/services/scenario_asset_package.py:51 AssetBundleError",
+      "app/services/scenario_asset_package.py:52 AssetBundleError",
       "app/services/scenario_import.py:55 ImportRejected",
       "app/services/scheme_repair.py:65 RepairCommandError",
       "app/services/service_aliases.py:315 BindingAliasInvalid",

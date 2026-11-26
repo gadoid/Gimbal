@@ -917,6 +917,164 @@ class TestAssetBundleRoundtrip:
         [w] = [x for x in r.json() if x["schemeId"] == qa_new]
         assert w["repairReason"] == "combo_dependency_invalid"
 
+    # ── AC-46 故障注入 + 并发重试 ────────────────────────────────────
+    async def _zero_residue(self, s, space_b: int) -> None:
+        """整场景零提交断言:目标项目内场景 / 方案 / 数据集 / 台账 /
+        修复事件一件不落(无半成品,AC-46)。"""
+        from sqlalchemy import func, select
+
+        from app.models.composer_data_set import ComposerDataSet
+        from app.models.composer_run_scheme import ComposerRunScheme
+        from app.models.composer_scenario import ComposerScenario
+        from app.models.scenario_asset_import import ScenarioAssetImport
+        from app.models.scheme_repair import SchemeRepairEvent
+
+        sids = select(ComposerScenario.scenario_id).where(
+            ComposerScenario.project_id == space_b).scalar_subquery()
+        assert (await s.execute(select(
+            func.count()).select_from(
+            ComposerScenario).where(
+            ComposerScenario.project_id == space_b))).scalar_one() == 0
+        assert (await s.execute(select(
+            func.count()).select_from(
+            ComposerRunScheme).where(
+            ComposerRunScheme.project_id == space_b))).scalar_one() == 0
+        assert (await s.execute(select(
+            func.count()).select_from(
+            ComposerDataSet).where(
+            ComposerDataSet.scenario_id.in_(sids)))).scalar_one() == 0
+        assert (await s.execute(select(
+            func.count()).select_from(
+            ScenarioAssetImport).where(
+            ScenarioAssetImport.project_id == space_b))).scalar_one() == 0
+        assert (await s.execute(select(
+            func.count()).select_from(
+            SchemeRepairEvent))).scalar_one() == 0
+
+    async def test_fault_at_scheme_write_zero_residue(self, client):
+        """AC-46:写 Scheme 处注入故障 → 整场景零提交(含幂等台账)。
+        第二个方案写前抛错,回滚后无任何半成品;重试(解除注入)成功。
+
+        注:注入用独立 MonkeyPatch 实例 —— fresh_db 持有的测试级
+        monkeypatch 绑定了 app 引擎/会话工厂,不可整体 undo。"""
+        from app.core import db as db_module
+        from app.services import scheme_store
+        from app.services import scenario_asset_package as asset_pkg
+
+        h, _space, _combo, _ds, _qa = await self._seed_source(client, "f1")
+        bundle = (await client.get(
+            "/api/scenarios/sc-m2x/asset-bundle", headers=h)).json()
+        h_b = await register_and_login(client, "m2x_fb1", "pw123456")
+        uid_b = (await client.get("/api/auth/me", headers=h_b)
+                 ).json()["user"]["id"]
+
+        calls = {"n": 0}
+        orig = scheme_store.normalized
+
+        def boom(payload):
+            calls["n"] += 1
+            if calls["n"] >= 2:      # 默认方案已写,回归方案写前炸
+                raise RuntimeError("injected: scheme write failure")
+            return orig(payload)
+
+        mp = pytest.MonkeyPatch()
+        mp.setattr(scheme_store, "normalized", boom)
+        async with db_module.SessionLocal() as s:
+            from app.models.user import User
+
+            owner = await s.get(User, uid_b)
+            space_b = await default_space_id(s, uid_b)
+            with pytest.raises(RuntimeError):
+                await asset_pkg.restore_bundle(
+                    s, project_id=space_b, bundle=bundle, user=owner)
+            await s.rollback()
+            await self._zero_residue(s, space_b)
+        mp.undo()
+
+        # 重试(同包同摘要)从零开始照常恢复 —— 失败不留下任何状态
+        r = await client.post(f"/api/projects/{space_b}/asset-bundles",
+                              headers=h_b, json=bundle)
+        assert r.status_code == 201, r.text
+        assert r.json()["restoredBindings"] == 1
+
+    async def test_fault_at_repair_audit_zero_residue(
+            self, client, monkeypatch):
+        """AC-46:事务内审计写入处注入故障(修复事件落库前)→ 同样
+        整场景零提交:恢复单元「导入必须原子写入绑定、修复状态及审计,
+        不能先提交空绑定再补状态」(§14.2)。"""
+        from app.core import db as db_module
+        from app.services import scheme_repair
+        from app.services import scenario_asset_package as asset_pkg
+
+        h, _space, _combo, _ds, _qa = await self._seed_source(client, "f2")
+        bundle = (await client.get(
+            "/api/scenarios/sc-m2x/asset-bundle", headers=h)).json()
+        bundle["skipCombos"] = True          # 回归方案走 blocked → 触审计
+        h_b = await register_and_login(client, "m2x_fb2", "pw123456")
+        uid_b = (await client.get("/api/auth/me", headers=h_b)
+                 ).json()["user"]["id"]
+
+        async def boom(*_a, **_k):
+            raise RuntimeError("injected: repair audit failure")
+
+        monkeypatch.setattr(scheme_repair, "mark_blocked", boom)
+        async with db_module.SessionLocal() as s:
+            from app.models.user import User
+
+            owner = await s.get(User, uid_b)
+            space_b = await default_space_id(s, uid_b)
+            with pytest.raises(RuntimeError):
+                await asset_pkg.restore_bundle(
+                    s, project_id=space_b, bundle=bundle, user=owner)
+            await s.rollback()
+            await self._zero_residue(s, space_b)
+            await s.commit()
+
+    async def test_concurrent_same_key_retry_converges(self, client):
+        """AC-46 并发重试:同键并发两笔恢复 —— 唯一约束裁定先提交者
+        (201);败者整笔回滚后重查台账,同摘要重放收敛(200,同映射);
+        库内恒恰一份场景 + 台账一行。"""
+        import asyncio
+
+        from sqlalchemy import func, select
+
+        from app.core import db as db_module
+        from app.models.composer_scenario import ComposerScenario
+        from app.models.scenario_asset_import import ScenarioAssetImport
+
+        h, _space, _combo, _ds, _qa = await self._seed_source(client, "c1")
+        bundle = (await client.get(
+            "/api/scenarios/sc-m2x/asset-bundle", headers=h)).json()
+        h_b = await register_and_login(client, "m2x_cb1", "pw123456")
+        uid_b = (await client.get("/api/auth/me", headers=h_b)
+                 ).json()["user"]["id"]
+        async with db_module.SessionLocal() as s:
+            space_b = await default_space_id(s, uid_b)
+            await s.commit()
+
+        path = f"/api/projects/{space_b}/asset-bundles"
+        r1, r2 = await asyncio.gather(
+            client.post(path, headers=h_b, json=bundle),
+            client.post(path, headers=h_b, json=bundle))
+        outcomes = sorted((r1.status_code, r2.status_code))
+        assert outcomes == [200, 201], (r1.text, r2.text)
+        win = r1 if r1.status_code == 201 else r2
+        lose = r2 if r1.status_code == 201 else r1
+        assert lose.json()["replayed"] is True
+        assert lose.json()["scenarioId"] == win.json()["scenarioId"]
+
+        async with db_module.SessionLocal() as s:
+            n_import = (await s.execute(select(
+                func.count()).select_from(
+                ScenarioAssetImport).where(
+                ScenarioAssetImport.project_id == space_b))).scalar_one()
+            n_scen = (await s.execute(select(
+                func.count()).select_from(
+                ComposerScenario).where(
+                ComposerScenario.project_id == space_b))).scalar_one()
+            assert n_import == 1
+            assert n_scen == 1
+
 
 async def _uid(client: AsyncClient, username: str) -> int:
     h = await register_and_login(client, username, "pw123456")

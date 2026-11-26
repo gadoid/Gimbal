@@ -510,3 +510,152 @@ class TestProjectContextProjection:
                                json={"is_active": False})
         assert r.status_code == 409
         assert r.json()["detail"]["code"] == "user_last_project_admin"
+
+
+# ── AC-31 并发不变量(§20:测试不能替代库层约束,但并发竞争下
+#    库层不变量必须真实证明不被击穿)──────────────────────────────────
+class TestConcurrentInvariants:
+    """§20 点名的并发面:同时移除最后两个 Admin、停用与降级竞争、
+    默认切换竞争。「删除与派发竞争」依赖 §13.1 删除状态机(流程未
+    实现,已登记 M3/M5 交付),本类不覆盖。
+
+    并发由两个**独立会话**的事务边界拼出:延迟约束触发器与部分唯一
+    索引的求值都发生在 COMMIT,测试只须把两笔事务的写与提交顺序
+    钉死,即是真实的交错竞争(谁先提交谁赢,后者在提交点被拒)。"""
+
+    async def test_concurrent_removal_of_last_two_admins(
+            self, client: AsyncClient):
+        """两事务各删一名(仅剩的)admin:各自单独合法,交错提交后
+        第二笔触发器已见对方的已提交删除 → 拒绝并回滚,末位不击穿。"""
+        h_a = await register_and_login(client, "upc_cx_a")
+        h_b = await register_and_login(client, "upc_cx_b")
+        uid_a, uid_b = await _uid_of(client, h_a), await _uid_of(client, h_b)
+        async with _db()() as s:
+            pid = (await s.execute(sa_text(
+                "INSERT INTO projects (project_uid, name, kind, "
+                "description, is_default, status) VALUES "
+                "(gen_random_uuid(), '并发末位', 'normal', '', false, "
+                "'active') RETURNING id"))).scalar_one()
+            await s.execute(sa_text(
+                "INSERT INTO project_members (project_id, user_id, role) "
+                "VALUES (:pid, :uid, 'admin')"), {"pid": pid, "uid": uid_a})
+            await s.execute(sa_text(
+                "INSERT INTO project_members (project_id, user_id, role) "
+                "VALUES (:pid, :uid, 'admin')"), {"pid": pid, "uid": uid_b})
+            await s.commit()
+        # 交错:s1 删 A → s2 删 B → s1 提交(触发器尚见 B,过)
+        # → s2 提交(触发器此刻已见 A 的已提交删除)→ 拒绝
+        s1, s2 = _db()(), _db()()
+        try:
+            await s1.execute(sa_text(
+                "DELETE FROM project_members WHERE project_id=:pid "
+                "AND user_id=:uid"), {"pid": pid, "uid": uid_a})
+            await s2.execute(sa_text(
+                "DELETE FROM project_members WHERE project_id=:pid "
+                "AND user_id=:uid"), {"pid": pid, "uid": uid_b})
+            await s1.commit()
+            with pytest.raises(IntegrityError):
+                await s2.commit()
+        finally:
+            await s1.close()
+            await s2.close()
+        async with _db()() as s:
+            roles = dict((await s.execute(sa_text(
+                "SELECT user_id, role FROM project_members "
+                "WHERE project_id=:pid"), {"pid": pid})).all())
+            # s2 整笔回滚:B 复原留任;A 的删除已提交
+            assert roles == {uid_b: "admin"}
+
+    async def test_concurrent_deactivate_vs_demote(
+            self, client: AsyncClient):
+        """停用(admin 用户)与降级(另一 admin)交错:第二笔提交时
+        触发器同时看到停用已提交 + 自己的降级 → 拒绝,不变量不击穿。"""
+        h_a = await register_and_login(client, "upc_cx_da")
+        h_b = await register_and_login(client, "upc_cx_db")
+        uid_a, uid_b = await _uid_of(client, h_a), await _uid_of(client, h_b)
+        async with _db()() as s:
+            pid = (await s.execute(sa_text(
+                "INSERT INTO projects (project_uid, name, kind, "
+                "description, is_default, status) VALUES "
+                "(gen_random_uuid(), '停用降级竞争', 'normal', '', false, "
+                "'active') RETURNING id"))).scalar_one()
+            await s.execute(sa_text(
+                "INSERT INTO project_members (project_id, user_id, role) "
+                "VALUES (:pid, :uid, 'admin')"), {"pid": pid, "uid": uid_a})
+            await s.execute(sa_text(
+                "INSERT INTO project_members (project_id, user_id, role) "
+                "VALUES (:pid, :uid, 'admin')"), {"pid": pid, "uid": uid_b})
+            await s.commit()
+        # s1 停用 A;s2 把 B 降为 member;s1 提交(触发器 ⑤ 尚见 B
+        # 在任)→ s2 提交(触发器 ③ 见 A 已停用 + 自己已降)→ 拒绝
+        s1, s2 = _db()(), _db()()
+        try:
+            await s1.execute(sa_text(
+                "UPDATE users SET is_active=false WHERE id=:uid"),
+                {"uid": uid_a})
+            await s2.execute(sa_text(
+                "UPDATE project_members SET role='member' "
+                "WHERE project_id=:pid AND user_id=:uid"),
+                {"pid": pid, "uid": uid_b})
+            await s1.commit()
+            with pytest.raises(IntegrityError):
+                await s2.commit()
+        finally:
+            await s1.close()
+            await s2.close()
+        async with _db()() as s:
+            role_b = (await s.execute(sa_text(
+                "SELECT role FROM project_members "
+                "WHERE project_id=:pid AND user_id=:uid"),
+                {"pid": pid, "uid": uid_b})).scalar_one()
+            assert role_b == "admin"      # s2 回滚,B 复原留任
+            active_a = (await s.execute(sa_text(
+                "SELECT is_active FROM users WHERE id=:uid"),
+                {"uid": uid_a})).scalar_one()
+            assert active_a is False       # s1 的停用已提交
+
+    async def test_concurrent_default_space_switch(
+            self, client: AsyncClient):
+        """默认切换竞争:部分唯一索引 uq_projects_private_default 是
+        并发权威 —— 两笔切换交错,第二笔提交撞索引被拒,每用户恒
+        至多一个默认。「用户级锁、先取消再设置」的服务面纪律属于
+        默认切换端点(§4,随生命周期交付落地)。"""
+        h = await register_and_login(client, "upc_cx_sw")
+        pids = []
+        for name in ("切换甲", "切换乙"):
+            r = await client.post("/api/projects", headers=h, json={
+                "name": name, "kind": "private"})
+            assert r.status_code == 201, r.text
+            pids.append(r.json()["id"])
+        uid = await _uid_of(client, h)
+        async with _db()() as s:
+            old_default = (await s.execute(sa_text(
+                "SELECT id FROM projects WHERE kind='private' "
+                "AND owner_id=:uid AND is_default"), {"uid": uid}
+            )).scalar_one()
+        # 交错:s1 全套切换(旧默认取消 + 甲置默认)→ 提交;s2 在
+        # 其后把乙置默认 → 提交撞索引(甲已默认)
+        s1, s2 = _db()(), _db()()
+        try:
+            await s1.execute(sa_text(
+                "UPDATE projects SET is_default=false "
+                "WHERE id=:pid"), {"pid": old_default})
+            await s1.execute(sa_text(
+                "UPDATE projects SET is_default=true WHERE id=:pid"),
+                {"pid": pids[0]})
+            await s1.commit()
+            # 唯一部分索引的违例在语句点即刻浮出(非提交点)
+            with pytest.raises(IntegrityError):
+                await s2.execute(sa_text(
+                    "UPDATE projects SET is_default=true WHERE id=:pid"),
+                    {"pid": pids[1]})
+            await s2.rollback()
+        finally:
+            await s1.close()
+            await s2.close()
+        async with _db()() as s:
+            defaults = (await s.execute(sa_text(
+                "SELECT id FROM projects WHERE kind='private' "
+                "AND owner_id=:uid AND is_default"), {"uid": uid}
+            )).scalars().all()
+            assert defaults == [pids[0]]    # 恰一个,先提交者胜

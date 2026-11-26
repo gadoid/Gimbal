@@ -31,6 +31,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.account_combo import AccountCombo
@@ -213,6 +214,25 @@ async def _validate_combo_entries(db: AsyncSession, entries: list) -> bool:
     return True
 
 
+def _replay_report(hit: ScenarioAssetImport) -> dict:
+    """同键同摘要的重放报告(先提交者的已提交映射,§14.2)。"""
+    return json.loads(json.dumps(hit.report or {})) | {
+        "replayed": True,
+        "scenarioId": hit.restored_scenario_id,
+    }
+
+
+async def _ledger_hit(db: AsyncSession, *, project_id: int,
+                      package_id: str, source_sid: str
+                      ) -> "ScenarioAssetImport | None":
+    return (await db.execute(
+        select(ScenarioAssetImport).where(
+            ScenarioAssetImport.project_id == project_id,
+            ScenarioAssetImport.package_id == package_id,
+            ScenarioAssetImport.source_scenario_id == source_sid)
+    )).scalar_one_or_none()
+
+
 async def restore_bundle(
     db: AsyncSession, *, project_id: int, bundle: dict, user,
 ) -> dict:
@@ -220,18 +240,45 @@ async def restore_bundle(
 
     返回恢复报告(§14.2:区分已恢复绑定 / 显式解绑待修复 / 未导入;
     不把待修复计为可执行)。幂等冲突抛
-    :class:`AssetBundleError`(409/重放由调用方返回已有映射)。"""
+    :class:`AssetBundleError`(409/重放由调用方返回已有映射)。
+
+    **并发同键**(§14.2:数据库唯一约束防止并发重复创建):败者在
+    唯一约束上落马 → 本事务回滚后重查台账 —— 同键同摘要重放收敛,
+    同键不同摘要 409;无台账命中的意外唯一冲突原样上抛(调用方新
+    事务重试,恢复契约:失败回滚、重试可继续)。"""
     _validate_shape(bundle)
     digest = request_digest(bundle)
     package_id = str(bundle.get("packageId") or uuid4().hex)
     source_sid = str(bundle["source"]["scenarioId"])
 
-    hit = (await db.execute(
-        select(ScenarioAssetImport).where(
-            ScenarioAssetImport.project_id == project_id,
-            ScenarioAssetImport.package_id == package_id,
-            ScenarioAssetImport.source_scenario_id == source_sid)
-    )).scalar_one_or_none()
+    try:
+        return await _restore_bundle_once(
+            db, project_id=project_id, bundle=bundle, user=user,
+            digest=digest, package_id=package_id, source_sid=source_sid)
+    except IntegrityError:
+        await db.rollback()
+        hit = await _ledger_hit(
+            db, project_id=project_id, package_id=package_id,
+            source_sid=source_sid)
+        if hit is None:
+            raise      # 非同键竞争的意外冲突:不吞错,新事务重试可继续
+        if hit.request_digest != digest:
+            raise AssetBundleError(
+                409, "asset_bundle_conflict",
+                "同键不同摘要:该源场景在此包标识下已有不同的恢复记录,"
+                "请处置后重试(§14.2)",
+                detail={"restoredScenarioId": hit.restored_scenario_id})
+        return _replay_report(hit)
+
+
+async def _restore_bundle_once(
+    db: AsyncSession, *, project_id: int, bundle: dict, user,
+    digest: str, package_id: str, source_sid: str,
+) -> dict:
+    """单事务恢复主体(:func:`restore_bundle` 的写入分支)。"""
+    hit = await _ledger_hit(
+        db, project_id=project_id, package_id=package_id,
+        source_sid=source_sid)
     if hit is not None:
         if hit.request_digest != digest:
             raise AssetBundleError(
@@ -240,10 +287,7 @@ async def restore_bundle(
                 "请处置后重试(§14.2)",
                 detail={"restoredScenarioId": hit.restored_scenario_id})
         # 同键同摘要 = 重放,返回已提交映射
-        return json.loads(json.dumps(hit.report or {})) | {
-            "replayed": True,
-            "scenarioId": hit.restored_scenario_id,
-        }
+        return _replay_report(hit)
 
     # ── 默认候选先验证(含选择 → 零提交,§14.2)─────────────────────
     default_sid = str(bundle["defaultSchemeId"])
