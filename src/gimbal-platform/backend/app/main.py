@@ -16,6 +16,8 @@ from loguru import logger
 from .core.config import settings
 from .core.db import init_db
 from .routers import (
+    account_combos,
+    asset_packages,
     adaptations,
     activity,
     admin,
@@ -241,6 +243,10 @@ def create_app() -> FastAPI:
     # M2a S8:项目凭证(项目管理员维护,成员选用不见明文)
     app.include_router(project_credentials.router, prefix="/api")
     app.include_router(project_tokens.router, prefix="/api")
+    # UPC M2:账户组合(§5/§9 项目作用域资源;方案绑定经 run-schemes)
+    app.include_router(account_combos.router, prefix="/api")
+    # UPC M2:场景资产包(§14.2;须在 scenarios catch-all 之前注册)
+    app.include_router(asset_packages.router, prefix="/api")
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
     # 通知中心:三接口 + 偏好 + 公告

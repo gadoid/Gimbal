@@ -618,6 +618,7 @@ async def delete_user(
     from sqlalchemy import update as sa_update
 
     from ..models.board_card import BoardCard
+    from ..models.composer_run_scheme import ComposerRunScheme
     from ..models.composer_scenario import ComposerScenario
     from ..models.execution import Execution
     from ..models.permission import UserStar
@@ -627,6 +628,34 @@ async def delete_user(
     from ..services.run_dispatcher import purge_case_dir
 
     caller_label = caller.display_name or caller.username
+
+    # ── UPC M2(§13/§20):处置按**区**收敛 ─────────────────────────
+    # 私有容器内容随人处置(迁移到受让人空间 / 公共项目 / 删除);普通
+    # 项目资产**不迁移不删除**,只改 owner_id 审计/维护者列(AC-17:
+    # 不误移动普通项目资产);公共内容走维护者位交接。复合 FK
+    # (§20.2/§20.6)在本处置事务内显式延迟 —— 场景/套件/成员/方案
+    # 一并挪动,提交时统一校验,拆分提交被整体拒绝。
+    from sqlalchemy import text as sa_text
+
+    await db.execute(sa_text(
+        "SET CONSTRAINTS fk_suite_members_suite_zone, "
+        "fk_suite_members_scenario_zone, "
+        "fk_scheme_scenario_zone, fk_scheme_combo_zone DEFERRED"))
+    from ..models.project import Project as _Proj
+
+    priv_ids = list((await db.execute(
+        select(_Proj.id).where(
+            _Proj.kind == "private", _Proj.owner_id == user_id))).scalars())
+    transfee_space_id = None
+    if disposal == "transfer":
+        from ..services.project_space import get_default_private_project
+
+        _ts = await get_default_private_project(db, transferee.id)
+        if _ts is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="transfer_to 用户没有默认私有空间,无法承接私有内容")
+        transfee_space_id = _ts.id
 
     # ── suite 处置(权限域二期 P1,《Suite成员层、引用分享与浏览镜头-
     #    设计方案》§7.10;必须在场景处置之前)────────────────────────
@@ -649,26 +678,54 @@ async def delete_user(
     own_suite_ids = set((await db.execute(
         select(Suite.id).where(Suite.owner_id == user_id))).scalars())
 
-    if disposal == "publicize":
-        # S1.5 起成员行无 owner_id 冗余列:套件删除经 FK CASCADE 收
-        # 成员行,不再按属主单独清扫
-        await db.execute(
-            sa_delete(Suite).where(Suite.owner_id == user_id))
-    elif disposal == "transfer":
-        # S1-e:公共项目套件默认转给执行 Admin;其余走 transfer_to
-        from ..services.zone import public_project_id as _ppid
+    from ..services.zone import public_project_id as _ppid_suite
 
+    _pub_pid_s = await _ppid_suite(db)
+    if disposal == "publicize":
+        # §13:私有空间套件删除(成员行随复合 FK CASCADE 收);
+        # 公共套件随维护者退场一并删除(无主公共资源不挂组语义);
+        # 普通项目套件是项目资产 —— 仅审计列接管,不删(AC-17)
+        await db.execute(
+            sa_delete(Suite).where(
+                Suite.owner_id == user_id,
+                Suite.project_id.in_(priv_ids + [_pub_pid_s])))
+        await db.execute(
+            sa_update(Suite).where(Suite.owner_id == user_id)
+            .values(owner_id=caller.id))
+    elif disposal == "transfer":
+        # S1-e:公共项目套件默认转给执行 Admin;私有套件整体迁入
+        # 受让人空间(成员行随迁,复合 FK 延迟到提交);普通项目套件
+        # 只动审计列
+        _moved = list((await db.execute(
+            select(Suite.id).where(
+                Suite.owner_id == user_id,
+                Suite.project_id.in_(priv_ids)))).scalars())
         await db.execute(
             sa_update(Suite).where(
                 Suite.owner_id == user_id,
-                Suite.project_id == await _ppid(db))
+                Suite.project_id == _pub_pid_s)
             .values(owner_id=public_transferee.id))
+        if _moved:
+            await db.execute(
+                sa_update(Suite).where(Suite.id.in_(_moved))
+                .values(owner_id=transferee.id,
+                        project_id=transfee_space_id))
+            await db.execute(
+                sa_update(SuiteMember).where(SuiteMember.suite_id.in_(_moved))
+                .values(project_id=transfee_space_id))
         await db.execute(
-            sa_update(Suite).where(Suite.owner_id == user_id)
+            sa_update(Suite).where(
+                Suite.owner_id == user_id,
+                Suite.project_id.not_in(priv_ids + [_pub_pid_s]))
             .values(owner_id=transferee.id))
     else:  # purge
         await db.execute(
-            sa_delete(Suite).where(Suite.owner_id == user_id))
+            sa_delete(Suite).where(
+                Suite.owner_id == user_id,
+                Suite.project_id.in_(priv_ids + [_pub_pid_s])))
+        await db.execute(
+            sa_update(Suite).where(Suite.owner_id == user_id)
+            .values(owner_id=caller.id))
 
     # ── 场景处置(三选一)─────────────────────────────────────────
     scenario_ids = list((await db.execute(
@@ -676,10 +733,25 @@ async def delete_user(
         .where(ComposerScenario.owner_id == user_id)
     )).scalars())
 
+    from ..services.zone import public_project_id as _ppid_scen
+
+    _pub_pid_c = await _ppid_scen(db)
+    # §13 分区:私有空间场景(随人处置)/ 公共(维护者位交接)/
+    # 普通项目(项目资产,只动审计列 —— FK SET NULL 语义)
+    _priv_sids = list((await db.execute(
+        select(ComposerScenario.scenario_id).where(
+            ComposerScenario.owner_id == user_id,
+            ComposerScenario.project_id.in_(priv_ids)))).scalars())
+    _pub_sids = list((await db.execute(
+        select(ComposerScenario.scenario_id).where(
+            ComposerScenario.owner_id == user_id,
+            ComposerScenario.project_id == _pub_pid_c))).scalars())
+    _normal_sids = [s_ for s_ in scenario_ids
+                    if s_ not in set(_priv_sids) | set(_pub_sids)]
     # S1.7 purge 拦截闸(D8):被**平台模板**引用的场景不能随 purge 删除
     # —— 列出受影响模板,先转移/下架模板再删。S1.3 起平台模板只引用
     # 公共项目场景,此闸主要拦迁移前遗留与平台模板引用公共副本的形态。
-    if disposal == "purge" and scenario_ids:
+    if disposal == "purge" and _priv_sids:
         from ..models.integration_task import IntegrationTask as _IT
 
         _refs = (await db.execute(select(_IT).where(
@@ -699,57 +771,93 @@ async def delete_user(
                         "message": "部分场景被平台模板引用,"
                                    "先转移或删除这些模板再 purge",
                         "templates": refs_payload})
-    if disposal == "publicize":
-        if scenario_ids:
-            # owner_id 显式置空(SET NULL 语义;SQLite 方言 FK 不强制的
-            # 双方言兜底),owner_name 快照保留原作者署名
-            from ..services.zone import public_project_id
-            await db.execute(
-                sa_update(ComposerScenario)
-                .where(ComposerScenario.owner_id == user_id)
-                # 影子写:公共态同步 project_id(S1.1)
-                .values(owner_id=None,
-                        project_id=await public_project_id(db)))
-    elif disposal == "transfer":
-        if scenario_ids:
-            # S1-e:公共项目内容(维护者位)默认转给执行删除的 Admin
-            # (public_transfer_to 可改选);私有区内容走 transfer_to
-            from ..services.zone import public_project_id
 
-            pub_label = (public_transferee.display_name
-                         or public_transferee.username)
+    if disposal == "publicize":
+        if _priv_sids:
+            # §13:私有场景迁入公共项目(owner_id 置空,署名保留
+            # owner_name 快照);方案行随迁(复合 FK 延迟到提交)
             await db.execute(
                 sa_update(ComposerScenario)
-                .where(ComposerScenario.owner_id == user_id,
-                       ComposerScenario.project_id
-                       == await public_project_id(db))
+                .where(ComposerScenario.scenario_id.in_(_priv_sids))
+                .values(owner_id=None, project_id=_pub_pid_c))
+            await db.execute(
+                sa_update(ComposerRunScheme)
+                .where(ComposerRunScheme.scenario_id.in_(_priv_sids))
+                .values(project_id=_pub_pid_c))
+        if _pub_sids:
+            await db.execute(
+                sa_update(ComposerScenario)
+                .where(ComposerScenario.scenario_id.in_(_pub_sids))
+                .values(owner_id=None))
+    elif disposal == "transfer":
+        # S1-e:公共内容(维护者位)默认转给执行删除的 Admin
+        # (public_transfer_to 可改选);私有内容整体迁入受让人空间
+        # (方案随迁);普通项目内容只动审计列(AC-17)
+        pub_label = (public_transferee.display_name
+                     or public_transferee.username)
+        transferee_label = transferee.display_name or transferee.username
+        if _priv_sids:
+            await db.execute(
+                sa_update(ComposerScenario)
+                .where(ComposerScenario.scenario_id.in_(_priv_sids))
+                .values(owner_id=transferee.id, owner_name=transferee_label,
+                        project_id=transfee_space_id))
+            await db.execute(
+                sa_update(ComposerRunScheme)
+                .where(ComposerRunScheme.scenario_id.in_(_priv_sids))
+                .values(project_id=transfee_space_id))
+        if _pub_sids:
+            await db.execute(
+                sa_update(ComposerScenario)
+                .where(ComposerScenario.scenario_id.in_(_pub_sids))
                 .values(owner_id=public_transferee.id,
                         owner_name=pub_label))
-            transferee_label = transferee.display_name or transferee.username
+        if _normal_sids:
             await db.execute(
                 sa_update(ComposerScenario)
-                .where(ComposerScenario.owner_id == user_id)
-                .values(owner_id=transferee.id, owner_name=transferee_label))
-    else:  # purge
-        for sid in scenario_ids:
+                .where(ComposerScenario.scenario_id.in_(_normal_sids))
+                .values(owner_id=transferee.id,
+                        owner_name=transferee_label))
+    else:  # purge:私有场景删除(方案/数据集随 store 收);公共/普通
+        # 项目内容不删 —— 用户删除时 owner_id 经 FK SET NULL 归档审计
+        for sid in _priv_sids:
             await scenario_store.delete(db, sid)
 
-    # ── 报告定义处置(S1.6 补:此前删用户零处理,owner 悬空)─────
-    if disposal == "transfer":
-        from ..models.report_definition import ReportDefinitionRow
-        from ..services.zone import public_project_id as _ppid3
+    # ── 报告定义处置(S1.6 + UPC §13 分区)────────────────────────
+    from ..models.report_definition import ReportDefinitionRow
 
+    if disposal == "transfer":
         await db.execute(
             sa_update(ReportDefinitionRow).where(
                 ReportDefinitionRow.owner_id == user_id,
-                ReportDefinitionRow.project_id == await _ppid3(db))
+                ReportDefinitionRow.project_id == _pub_pid_c)
             .values(owner_id=public_transferee.id))
+        # 私有报告定义迁入受让人空间;普通项目报告定义只动审计列
+        await db.execute(
+            sa_update(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id,
+                ReportDefinitionRow.project_id.in_(priv_ids))
+            .values(owner_id=transferee.id,
+                    project_id=transfee_space_id))
         await db.execute(
             sa_update(ReportDefinitionRow).where(
                 ReportDefinitionRow.owner_id == user_id)
             .values(owner_id=transferee.id))
     else:
-        from ..models.report_definition import ReportDefinitionRow
+        # publicize:私有迁入公共项目(§13 表);purge:私有删除;
+        # 公共/普通项目行只置空维护者(编辑面冻结,维护者位待接管)
+        if disposal == "publicize":
+            await db.execute(
+                sa_update(ReportDefinitionRow).where(
+                    ReportDefinitionRow.owner_id == user_id,
+                    ReportDefinitionRow.project_id.in_(priv_ids))
+                .values(owner_id=None, project_id=_pub_pid_c))
+        else:
+            from sqlalchemy import delete as _rd_del
+
+            await db.execute(_rd_del(ReportDefinitionRow).where(
+                ReportDefinitionRow.owner_id == user_id,
+                ReportDefinitionRow.project_id.in_(priv_ids)))
         await db.execute(
             sa_update(ReportDefinitionRow).where(
                 ReportDefinitionRow.owner_id == user_id)
@@ -790,15 +898,28 @@ async def delete_user(
             _to = (public_transferee if tpl.project_id == _pub_pid
                    else transferee)
             tpl.owner_id = _to.id
+            # UPC §13:私有模板整体迁入受让人空间(普通项目模板是项目
+            # 资产,只动审计位)
+            if tpl.project_id in priv_ids:
+                tpl.project_id = transfee_space_id
             tpl.token_id = None
             await db.execute(sa_delete(IntegrationTask).where(
                 IntegrationTask.template_id == tpl.id,
                 IntegrationTask.holder_id == user_id))
             disposed_tasks.append((tpl, "transfer"))
         elif disposal == "publicize":
-            # 模板连同全部实例删除;通知受影响订阅者(authz C1:平台
-            # 模板转挂 __platform__ 的分支随平台模式退役;平台模板本就
-            # 归 __platform__ 持有,不经过个人账号处置)
+            # UPC §13:普通项目模板是项目资产,不删 —— 审计位接管
+            # (AC-17 不误删普通项目资产);私有/公共模板连同全部实例
+            # 删除,通知受影响订阅者
+            if (tpl.project_id not in priv_ids
+                    and tpl.project_id != _pub_pid):
+                tpl.owner_id = caller.id
+                tpl.token_id = None
+                await db.execute(sa_delete(IntegrationTask).where(
+                    IntegrationTask.template_id == tpl.id,
+                    IntegrationTask.holder_id == user_id))
+                disposed_tasks.append((tpl, "transfer"))
+                continue
             holders = (await db.execute(select(IntegrationTask.holder_id).where(
                 IntegrationTask.template_id == tpl.id,
                 IntegrationTask.holder_id.is_not(None),
@@ -827,8 +948,18 @@ async def delete_user(
             await db.delete(tpl)
             disposed_tasks.append((tpl, "publicize"))
         else:  # purge
-            # 模板连同实例删除(purge 删除场景;scenario_id 无外键,
-            # 保留只会留下僵尸任务)
+            # UPC §13:普通项目模板接管不删;私有/公共模板连同实例删
+            # 除(purge 删除私有场景;scenario_id 无外键,保留只会留
+            # 下僵尸任务)
+            if (tpl.project_id not in priv_ids
+                    and tpl.project_id != _pub_pid):
+                tpl.owner_id = caller.id
+                tpl.token_id = None
+                await db.execute(sa_delete(IntegrationTask).where(
+                    IntegrationTask.template_id == tpl.id,
+                    IntegrationTask.holder_id == user_id))
+                disposed_tasks.append((tpl, "transfer"))
+                continue
             await db.execute(sa_delete(IntegrationTask).where(
                 IntegrationTask.template_id == tpl.id))
             await db.delete(tpl)

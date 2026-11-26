@@ -77,10 +77,9 @@ def ensure_schema_sync(async_url: str) -> None:
             from sqlalchemy import text as _sa_text
 
             from ..models.project import PROJECT_CONTAINER_DDL
-            from ..services.zone import SUITE_ZONE_TRIGGER_DDL
 
             with engine.begin() as conn:
-                for stmt in (*SUITE_ZONE_TRIGGER_DDL, *PROJECT_CONTAINER_DDL):
+                for stmt in PROJECT_CONTAINER_DDL:
                     conn.execute(_sa_text(stmt))
             command.stamp(cfg, "head")
             return

@@ -26,9 +26,10 @@ roles_with:
   ops.write: [admin, super_admin]
   alias.write: [admin, super_admin]
 
-# 表 B(authz W3 起,M2a S1.1 扩项目维度):对象 × 动词 → 谓词集。
-# 谓词缩写与语义(区互斥:私有区 = project_id 空 / 普通项目 / 公共项目):
-#   o    owner        私有区属主(D1:project_id 非空时属主身份不给权限)
+# 表 B(authz W3 起;UPC M2 收口):对象 × 动词 → 谓词集。
+# 谓词缩写与语义(区互斥:私有空间 / 普通项目 / 公共项目 —— 对象
+# project_id NOT NULL,归属权威 = 真实容器;owner_id 列降为审计/维护者):
+#   o    owner        对象所属项目是主体的私有空间(全部空间,含非默认)
 #   mem  member       对象所属普通项目的成员(公共项目不落成员行)
 #   pad  padmin       对象所属普通项目的项目管理员
 #   mnt  maintainer   公共项目对象的 owner_id(S1-b:公共项目写权跟维护者)

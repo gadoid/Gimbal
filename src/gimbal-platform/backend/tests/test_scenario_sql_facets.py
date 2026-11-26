@@ -156,10 +156,22 @@ async def test_facets_project_scope(client, owner):
                             role="admin"))
         await s.commit()
         pid = proj.id
-        # 把两条场景搬进项目(第三条留在外面)
+        # 把两条场景搬进项目(第三条留在外面)—— §20.2 跨项目移动是
+        # 专门事务:延迟复合 FK + 方案行随迁,提交时统一校验
+        from sqlalchemy import text as _text
+
+        from app.models.composer_run_scheme import ComposerRunScheme
+
+        await s.execute(_text(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         await s.execute(
             update(ComposerScenario)
             .where(ComposerScenario.scenario_id.in_(("sc-m3-a", "sc-m3-b")))
+            .values(project_id=pid))
+        await s.execute(
+            update(ComposerRunScheme)
+            .where(ComposerRunScheme.scenario_id.in_(("sc-m3-a", "sc-m3-b")))
             .values(project_id=pid))
         await s.commit()
 

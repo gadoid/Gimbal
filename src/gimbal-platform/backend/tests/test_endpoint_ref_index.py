@@ -42,9 +42,17 @@ async def _refs() -> set[tuple]:
              r.endpoint_id, r.via_var) for r in rows}
 
 
+async def _ensure_owner(db) -> int:
+    """UPC M2 布景:垫底属主(id=1)+ 默认私有空间。"""
+    from tests.helpers import ensure_fk_users
+
+    await ensure_fk_users(db, 1)
+    return 1
+
+
 async def test_create_populates_index(fresh_db):
     async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
+        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice", owner_id=await _ensure_owner(s))
     assert await _refs() == {
         ("sc-ix", 0, "body", "customer_id", "fin.order.add", None),
         ("sc-ix", 0, "body", "amount", "fin.order.add", "amount"),
@@ -55,7 +63,7 @@ async def test_create_populates_index(fresh_db):
 
 async def test_update_replaces_index(fresh_db):
     async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
+        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice", owner_id=await _ensure_owner(s))
         await scenario_store.update(s, "sc-ix", _draft("sc-ix", STEPS2))
     assert await _refs() == {
         ("sc-ix", 0, "body", "amount", "fin.order.add", None),
@@ -64,7 +72,7 @@ async def test_update_replaces_index(fresh_db):
 
 async def test_delete_clears_index(fresh_db):
     async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
+        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice", owner_id=await _ensure_owner(s))
         await scenario_store.delete(s, "sc-ix")
     assert await _refs() == set()
 
@@ -73,7 +81,7 @@ async def test_rebuild_equivalent_and_reports_unindexed(fresh_db):
     from app.services import endpoint_ref_index as idx
 
     async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
+        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice", owner_id=await _ensure_owner(s))
     before = await _refs()
 
     async with db_module.SessionLocal() as s:
@@ -95,7 +103,7 @@ async def test_rebuild_idempotent(fresh_db):
     from app.services import endpoint_ref_index as idx
 
     async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
+        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice", owner_id=await _ensure_owner(s))
     async with db_module.SessionLocal() as s:
         r1 = await idx.rebuild(s)
         r2 = await idx.rebuild(s)
@@ -110,7 +118,7 @@ async def test_unindexed_steps_reports_api_less_step(fresh_db):
         {"request": {"body": {"x": "1"}}},   # 无 api → 无 endpoint_id
     ]
     async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, _draft("sc-un", steps), owner="alice")
+        await scenario_store.create(s, _draft("sc-un", steps), owner="alice", owner_id=await _ensure_owner(s))
     async with db_module.SessionLocal() as s:
         report = await idx.unindexed_steps(s)
     assert report == [
@@ -136,7 +144,7 @@ async def test_anchor_row_for_zero_field_step(fresh_db):
         {"request": {"body": {"x": "1"}}},
     ]
     async with db_module.SessionLocal() as s:
-        await scenario_store.create(s, _draft("sc-anc", steps), owner="alice")
+        await scenario_store.create(s, _draft("sc-anc", steps), owner="alice", owner_id=await _ensure_owner(s))
     assert await _refs() == {
         ("sc-anc", 0, ANCHOR_SOURCE, ANCHOR_FIELD, "fin.order.get", None),
         ("sc-anc", 1, "body", "amount", "fin.order.add", None),

@@ -354,6 +354,12 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    # UPC M2(§16.1/§20.2):方案绑定的账户组合 —— **DTO 字段映射到
+    # composer_run_schemes.account_combo_id 显式列**(唯一持久化事实,
+    # 不落 payload —— scheme_store.normalized 对该键恒剥)。null/缺省 =
+    # 未绑定。方案工作台「保存」随整稿 PUT 生效(v4 §3.4 口径)。
+    account_combo_id: int | None = Field(default=None,
+                                         alias="accountComboId", ge=1)
     # §8.2(ADR-0003 #21):方案环境链位退役 —— 存量 payload
     # 里的 environmentId 键不再消费(数据保留,读侧忽略)。
     # RunOptions 形状(迁移完成,不再收旧平铺键)

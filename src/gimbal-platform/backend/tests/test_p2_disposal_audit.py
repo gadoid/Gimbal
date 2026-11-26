@@ -30,10 +30,25 @@ async def test_disposal_publicize(client):
     from app.models.composer_scenario import ComposerScenario
 
     async with db_module.SessionLocal() as s:
+        from sqlalchemy import text as _t
         from sqlalchemy import update
+
+        from tests.helpers import default_space_id
+        # UPC M2:归属换主 + 搬进 victim 默认空间(处置面按区判内容;
+        # 方案随迁,延迟复合 FK)
+        _home = await default_space_id(s, victim["id"])
+        await s.execute(_t(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         await s.execute(update(ComposerScenario)
                         .where(ComposerScenario.scenario_id == "sc-p2-pub")
-                        .values(owner_id=victim["id"], owner_name="p2_pub_victim"))
+                        .values(owner_id=victim["id"], owner_name="p2_pub_victim",
+                                project_id=_home))
+        from app.models.composer_run_scheme import ComposerRunScheme
+
+        await s.execute(update(ComposerRunScheme)
+                        .where(ComposerRunScheme.scenario_id == "sc-p2-pub")
+                        .values(project_id=_home))
         await s.commit()
         # 台账:victim 的一条执行
         from app.models.execution import Execution
@@ -70,11 +85,23 @@ async def test_disposal_transfer(client):
     from app.models.composer_scenario import ComposerScenario
 
     async with db_module.SessionLocal() as s:
+        from sqlalchemy import text as _t
         from sqlalchemy import update
+
+        from tests.helpers import default_space_id
+        _home = await default_space_id(s, victim["id"])
+        await s.execute(_t(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         await s.execute(update(ComposerScenario)
                         .where(ComposerScenario.scenario_id == "sc-p2-t")
-                        .values(owner_id=victim["id"], owner_name="p2_t_victim"))
-        # (个人别名随 authz M2a S6 退役,处置面不再涉及别名)
+                        .values(owner_id=victim["id"], owner_name="p2_t_victim",
+                                project_id=_home))
+        from app.models.composer_run_scheme import ComposerRunScheme
+
+        await s.execute(update(ComposerRunScheme)
+                        .where(ComposerRunScheme.scenario_id == "sc-p2-t")
+                        .values(project_id=_home))
         await s.commit()
 
     r = await client.request(
@@ -111,10 +138,22 @@ async def test_disposal_purge(client):
     from app.models.composer_scenario import ComposerScenario
 
     async with db_module.SessionLocal() as s:
+        from sqlalchemy import text as _t
         from sqlalchemy import update
+
+        from tests.helpers import default_space_id
+        _home = await default_space_id(s, victim["id"])
+        await s.execute(_t(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         await s.execute(update(ComposerScenario)
                         .where(ComposerScenario.scenario_id == "sc-p2-purge")
-                        .values(owner_id=victim["id"]))
+                        .values(owner_id=victim["id"], project_id=_home))
+        from app.models.composer_run_scheme import ComposerRunScheme
+
+        await s.execute(update(ComposerRunScheme)
+                        .where(ComposerRunScheme.scenario_id == "sc-p2-purge")
+                        .values(project_id=_home))
         await s.commit()
 
     r = await client.request("DELETE", f"/api/users/{victim['id']}", headers=admin,

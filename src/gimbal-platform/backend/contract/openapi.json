@@ -1,6 +1,178 @@
 {
   "components": {
     "schemas": {
+      "AccountComboCreate": {
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 2048,
+            "title": "Description",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ComboEntry"
+            },
+            "maxItems": 64,
+            "title": "Entries",
+            "type": "array"
+          },
+          "isDefault": {
+            "default": false,
+            "title": "Isdefault",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AccountComboCreate",
+        "type": "object"
+      },
+      "AccountComboSchemeRef": {
+        "properties": {
+          "comboId": {
+            "title": "Comboid",
+            "type": "integer"
+          },
+          "scenarioId": {
+            "title": "Scenarioid",
+            "type": "string"
+          },
+          "scenarioName": {
+            "title": "Scenarioname",
+            "type": "string"
+          },
+          "schemeId": {
+            "title": "Schemeid",
+            "type": "string"
+          },
+          "schemeName": {
+            "title": "Schemename",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comboId",
+          "schemeId",
+          "schemeName",
+          "scenarioId",
+          "scenarioName"
+        ],
+        "title": "AccountComboSchemeRef",
+        "type": "object"
+      },
+      "AccountComboUpdate": {
+        "description": "整体替换式 PATCH。None = 不改;entries 显式给值(含 [])则整体\n替换 —— 替换后逐条过保存面校验,条目有实质变化 revision +1。",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "entries": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ComboEntry"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entries"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "AccountComboUpdate",
+        "type": "object"
+      },
+      "AccountComboView": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ComboEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "isDefault": {
+            "title": "Isdefault",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "projectId": {
+            "title": "Projectid",
+            "type": "integer"
+          },
+          "referenceCount": {
+            "default": 0,
+            "title": "Referencecount",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schemes": {
+            "items": {
+              "$ref": "#/components/schemas/AccountComboSchemeRef"
+            },
+            "title": "Schemes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "name",
+          "isDefault",
+          "revision",
+          "entries"
+        ],
+        "title": "AccountComboView",
+        "type": "object"
+      },
       "ActivityEvent": {
         "properties": {
           "action": {
@@ -2153,6 +2325,25 @@
         "title": "CheckSelector",
         "type": "object"
       },
+      "ComboEntry": {
+        "description": "组合条目:服务键 → 身份条目名(一条一服务)。\n\n字段形状不做 pydantic 级收窄 —— 空串/形状违例由服务层统一给出\n``account_combo_entry_invalid``(422 detail 归一为域码,而非\npydantic 校验清单)。",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "alias"
+        ],
+        "title": "ComboEntry",
+        "type": "object"
+      },
       "CompositionMemberIn": {
         "description": "composition 的成员行:顺序即列表顺序(聚合发起序/串联链路序/\n扇出源在首位);role 见 suite_members.role。",
         "properties": {
@@ -2177,6 +2368,28 @@
           "scenarioId"
         ],
         "title": "CompositionMemberIn",
+        "type": "object"
+      },
+      "ConfirmNoComboIn": {
+        "description": "confirm_no_combo:明确确认无组合语义并提供理由(审计留痕)。",
+        "properties": {
+          "expectedRevision": {
+            "minimum": 1.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "reason"
+        ],
+        "title": "ConfirmNoComboIn",
         "type": "object"
       },
       "ConstantEntryCreateIn": {
@@ -5620,6 +5833,44 @@
             ],
             "title": "Projectmissingauths"
           },
+          "repairBlocked": {
+            "default": false,
+            "title": "Repairblocked",
+            "type": "boolean"
+          },
+          "repairCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repaircode"
+          },
+          "repairReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repairreason"
+          },
+          "repairRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repairrevision"
+          },
           "scenarioId": {
             "title": "Scenarioid",
             "type": "string"
@@ -6233,6 +6484,27 @@
         "title": "ReadIn",
         "type": "object"
       },
+      "RebindComboIn": {
+        "description": "rebind_combo:指定合法同区组合。目标组合的绑定授权在服务层复核\n(存在 ∧ 可读 ∧ 同区);候选组合错误按 §20.3 脱敏(不可读 = 不存在,\n统一 404/422,不成为存在性探针)。",
+        "properties": {
+          "comboId": {
+            "minimum": 1.0,
+            "title": "Comboid",
+            "type": "integer"
+          },
+          "expectedRevision": {
+            "minimum": 1.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "comboId",
+          "expectedRevision"
+        ],
+        "title": "RebindComboIn",
+        "type": "object"
+      },
       "RefreshIn": {
         "description": "Payload for POST /auth/refresh.",
         "properties": {
@@ -6822,6 +7094,18 @@
       "RunScheme": {
         "description": "场景级运行方案(工作台一等实体,plate 零感知,spec §4)。\n\n/run-schemes CRUD(方案唯一读写面)的请求/响应 wire 契约;\nisDefault/options(M10 RunOptions)为工作台键。",
         "properties": {
+          "accountComboId": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountcomboid"
+          },
           "dataSetIds": {
             "items": {
               "type": "string"
@@ -18059,6 +18343,404 @@
         ]
       }
     },
+    "/api/projects/{project_id}/account-combos": {
+      "get": {
+        "operationId": "list_account_combos_api_projects__project_id__account_combos_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccountComboView"
+                  },
+                  "title": "Response List Account Combos Api Projects  Project Id  Account Combos Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Account Combos",
+        "tags": [
+          "account-combos"
+        ]
+      },
+      "post": {
+        "operationId": "create_account_combo_api_projects__project_id__account_combos_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountComboCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountComboView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Account Combo",
+        "tags": [
+          "account-combos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/account-combos/{combo_id}": {
+      "delete": {
+        "operationId": "delete_account_combo_api_projects__project_id__account_combos__combo_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Project Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "combo_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Combo Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Account Combo",
+        "tags": [
+          "account-combos"
+        ]
+      },
+      "get": {
+        "operationId": "get_account_combo_api_projects__project_id__account_combos__combo_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Project Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "combo_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Combo Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountComboView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Account Combo",
+        "tags": [
+          "account-combos"
+        ]
+      },
+      "patch": {
+        "operationId": "update_account_combo_api_projects__project_id__account_combos__combo_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Project Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "combo_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Combo Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountComboUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountComboView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Account Combo",
+        "tags": [
+          "account-combos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/account-combos/{combo_id}/set-default": {
+      "post": {
+        "operationId": "set_default_account_combo_api_projects__project_id__account_combos__combo_id__set_default_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Project Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "combo_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Combo Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountComboView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Default Account Combo",
+        "tags": [
+          "account-combos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/asset-bundles": {
+      "post": {
+        "description": "原子恢复资产包到目标项目(幂等键 = 包标识 × 源场景标识;\n重放返回 200 + 已提交映射,首次恢复 201 + 报告)。",
+        "operationId": "restore_asset_bundle_api_projects__project_id__asset_bundles_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Bundle",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Restore Asset Bundle",
+        "tags": [
+          "asset-bundles"
+        ]
+      }
+    },
     "/api/projects/{project_id}/context": {
       "get": {
         "description": "§9 ProjectContext:ProjectLayout 的统一上下文(可见性与列表同源,\n不可见 404;不返回秘密与全部对象级权限)。",
@@ -20831,7 +21513,7 @@
         ]
       },
       "post": {
-        "description": "新建场景;``?projectId=`` = 在该项目内新建(S7.0,门 = 项目成员,\n公共项目 422 —— 见 ``zone.ensure_can_create_in_project``)。",
+        "description": "新建场景(UPC M2 写入点收敛,``project_access.resolve_content_target``):\n``?projectId=`` = 在该项目内新建(三 kind 统一门,§21);缺省 =\n创建者的**默认私有空间**(契约规则,非猜测 —— §4 每用户恰一个)。",
         "operationId": "create_scenario_api_scenarios_post",
         "parameters": [
           {
@@ -21293,6 +21975,56 @@
         "summary": "Put Scenario",
         "tags": [
           "scenarios"
+        ]
+      }
+    },
+    "/api/scenarios/{scenario_id}/asset-bundle": {
+      "get": {
+        "description": "导出场景资产包(§14.2:定义 + 数据集 + 方案 + 组合依赖;秘密剥离)。",
+        "operationId": "export_asset_bundle_api_scenarios__scenario_id__asset_bundle_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scenario_id",
+            "required": true,
+            "schema": {
+              "title": "Scenario Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export Asset Bundle Api Scenarios  Scenario Id  Asset Bundle Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Export Asset Bundle",
+        "tags": [
+          "asset-bundles"
         ]
       }
     },
@@ -21782,6 +22514,142 @@
           }
         ],
         "summary": "Update Run Scheme",
+        "tags": [
+          "run-schemes"
+        ]
+      }
+    },
+    "/api/scenarios/{scenario_id}/run-schemes/{scheme_id}/confirm-no-combo": {
+      "post": {
+        "operationId": "confirm_no_combo_api_scenarios__scenario_id__run_schemes__scheme_id__confirm_no_combo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scenario_id",
+            "required": true,
+            "schema": {
+              "title": "Scenario Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scheme_id",
+            "required": true,
+            "schema": {
+              "title": "Scheme Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmNoComboIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Confirm No Combo Api Scenarios  Scenario Id  Run Schemes  Scheme Id  Confirm No Combo Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Confirm No Combo",
+        "tags": [
+          "run-schemes"
+        ]
+      }
+    },
+    "/api/scenarios/{scenario_id}/run-schemes/{scheme_id}/rebind-combo": {
+      "post": {
+        "operationId": "rebind_combo_api_scenarios__scenario_id__run_schemes__scheme_id__rebind_combo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scenario_id",
+            "required": true,
+            "schema": {
+              "title": "Scenario Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scheme_id",
+            "required": true,
+            "schema": {
+              "title": "Scheme Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RebindComboIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rebind Combo Api Scenarios  Scenario Id  Run Schemes  Scheme Id  Rebind Combo Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Rebind Combo",
         "tags": [
           "run-schemes"
         ]

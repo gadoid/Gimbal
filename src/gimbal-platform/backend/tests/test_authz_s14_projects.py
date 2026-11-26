@@ -125,20 +125,45 @@ class TestProjectCrud:
 
         await client.post("/api/scenarios", headers=h_own,
                           json=make_draft("sc-s14-d"))
+        from sqlalchemy import select as _sel
+        from sqlalchemy import text as _text
+
+        from app.models.composer_run_scheme import ComposerRunScheme
+        from app.models.user import User as _User
+        from tests.helpers import default_space_id
+
         async with db_module.SessionLocal() as db:
+            _owner = (await db.execute(_sel(_User.id).where(
+                _User.username == "s14_down"))).scalar_one()
+            _home = await default_space_id(db, _owner)
+            # §20.2:跨项目移动是专门事务(延迟复合 FK + 方案随迁)
+            await db.execute(_text(
+                "SET CONSTRAINTS fk_scheme_scenario_zone, "
+                "fk_scheme_combo_zone DEFERRED"))
             await db.execute(_upd(ComposerScenario).where(
                 ComposerScenario.scenario_id == "sc-s14-d"
+            ).values(project_id=pid))
+            await db.execute(_upd(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == "sc-s14-d"
             ).values(project_id=pid))
             await db.commit()
         r = await client.delete(f"/api/projects/{pid}", headers=h_admin)
         assert r.status_code == 409, r.text
         assert r.json()["detail"]["code"] == "project_not_empty"
 
-        # 清空后删除 → 204;普通用户删除 → 403(能力门)
+        # 清空后删除 → 204;普通用户删除 → 403(能力门)。
+        # UPC M2:「搬出项目」= 搬回 owner 默认私有空间(project_id
+        # NOT NULL;旧置空写法退役),方案随迁
         async with db_module.SessionLocal() as db:
+            await db.execute(_text(
+                "SET CONSTRAINTS fk_scheme_scenario_zone, "
+                "fk_scheme_combo_zone DEFERRED"))
             await db.execute(_upd(ComposerScenario).where(
                 ComposerScenario.scenario_id == "sc-s14-d"
-            ).values(project_id=None))
+            ).values(project_id=_home))
+            await db.execute(_upd(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == "sc-s14-d"
+            ).values(project_id=_home))
             await db.commit()
         assert (await client.delete(
             f"/api/projects/{pid}", headers=h_usr)).status_code == 403
@@ -252,9 +277,12 @@ class TestMemberManagement:
                 s.add(ComposerScenario(
                     scenario_id=f"sc-s14mc-{i}",
                     owner_id=pa_uid, project_id=pid))
+            from tests.helpers import default_space_id
+
             s.add(ComposerScenario(
                 scenario_id="sc-s14mc-out",
-                owner_id=pa_uid))
+                owner_id=pa_uid,
+                project_id=await default_space_id(s, pa_uid)))
             s.add(Suite(name="套件A", owner_id=mb_uid, project_id=pid))
             await s.commit()
 

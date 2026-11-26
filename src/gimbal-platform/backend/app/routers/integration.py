@@ -63,10 +63,15 @@ async def _can_manage(db, user, tpl: IntegrationTask) -> bool:
     → 404),亦不得凭已知 ID 修改/删除。私有模板(属主自留地)与
     公共项目模板(无成员概念)沿用属主直通。"""
     if user.id == tpl.owner_id:
-        if tpl.project_id is None or tpl.is_platform_template:
+        if tpl.is_platform_template:
             return True
-        from ..services.zone import can_use_project_credentials, public_project_id
+        from ..services.zone import (can_use_project_credentials,
+                                     my_private_projects,
+                                     public_project_id)
         if tpl.project_id == await public_project_id(db):
+            return True
+        # UPC M2:私有空间模板 = 空间所有者直通(旧 null 区分支退役)
+        if tpl.project_id in await my_private_projects(db, user.id):
             return True
         # §4.1:普通项目模板 —— 属主也须是当前项目成员
         return await can_use_project_credentials(db, user.id, tpl.project_id)
@@ -80,12 +85,14 @@ async def _visible(db, user, tpl: IntegrationTask) -> bool:
     S7.0 —— 此前「project_id 非空即可见」把普通项目模板泄露给非成员)。"""
     if tpl.removed_at is not None:
         return False
-    if tpl.project_id is None:
-        return tpl.owner_id == user.id
-    from ..services.zone import my_project_roles, public_project_id
+    from ..services.zone import (my_private_projects, my_project_roles,
+                                  public_project_id)
     if tpl.project_id == await public_project_id(db):
         return True
-    return tpl.project_id in await my_project_roles(db, user.id)
+    if tpl.project_id in await my_project_roles(db, user.id):
+        return True
+    # UPC M2:私有空间模板的可见判定 = 空间所有权(Admin+ 不旁路)
+    return tpl.project_id in await my_private_projects(db, user.id)
 
 
 def _token_owns(principal: Principal, tpl: IntegrationTask) -> bool:
@@ -414,6 +421,10 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         apply_public(tpl, await public_project_id(db))
     elif body.projectId is not None:
         tpl.project_id = body.projectId
+    else:
+        # UPC M2:私有模板归属真实容器(缺省 = 注册者默认私有空间)
+        from ..services.zone import apply_private_zone
+        await apply_private_zone(db, tpl, user.id)
     db.add(tpl)
     await db.commit()
     await db.refresh(tpl)
@@ -623,13 +634,13 @@ async def patch_task(
                     raise _bad("scenario_not_public",
                                "场景未发布到公共项目,先发布场景再公开模板",
                                422)
-        # S1.1 影子写:visibility ⇔ project_id 同步(services.zone)
-        from ..services.zone import (apply_private, apply_public,
+        # UPC M2:公开 = 公共项目;转私 = 维护者默认私有空间(真实容器)
+        from ..services.zone import (apply_private_zone, apply_public,
                                      public_project_id)
         if body.visibility == "public":
             apply_public(tpl, await public_project_id(db))
         else:
-            apply_private(tpl)
+            await apply_private_zone(db, tpl, tpl.owner_id)
     if body.targetSystem is not None:
         tpl.target_system = body.targetSystem
     tpl.updated_by = user.id

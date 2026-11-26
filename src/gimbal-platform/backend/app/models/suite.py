@@ -1,23 +1,28 @@
-"""Suite — 一组用例的管理与绑定(权限域二期 P1)。
+"""Suite — 一组用例的管理与绑定(UPC M2:§20.6 双父同区复合 FK)。
 
-《Suite成员层、引用分享与浏览镜头-设计方案》§6.2/§6.3:
+《Suite成员层、引用分享与浏览镜头-设计方案》§6.2/§6.3 → UPC v2.10:
+
 - **成员关系只存本表**(唯一真相源);模式配置以 JSON 存在
   ``suites.mode_config``、按 id 引用成员,不存成员清单 —— 不双写。
-- **S1.5 同区约束取代同属主组合外键**:成员场景与套件同 project_id
-  (私有区同空时同属主)—— 应用层单点 ``zone.ensure_member_same_zone``
-  (422),0042 触发器兜底直插;旧组合外键与成员表冗余 ``owner_id``
-  列随 0042 删除(简化 FK 保留 suite/场景删除级联)。
-- **``suites.owner_id`` 不加 ON DELETE**:用户在处置完成前删不掉,
-  作为「必须先走处置」的兜底(§7.10)。
-- visibility 与场景同口径;P1 无 suite 发布入口(恒 private,
-  发布联动随 P2)。mode P1 只有 aggregate,mode_config 恒 {}。
+- **§20.6 同区约束(UPC M2 定稿)**:``suite_members`` 保留
+  (suite_id, scenario_id) 主键与成员角色,新增非空 ``project_id``;
+  两条复合外键 (project_id, suite_id) → suites(project_id, id) 与
+  (project_id, scenario_id) → composer_scenarios(project_id, scenario_id)
+  均 DEFERRABLE INITIALLY IMMEDIATE —— **取代** 0042 同区触发器与旧
+  单列外键:跨区成员行直接拒绝,父对象整体移动经显式延迟后原子提交,
+  只挪一端的非法提交完整回滚(AC-47)。父资产删除维持 CASCADE 收口。
+- **``suites.project_id`` 为真实容器归属**(§5:NOT NULL FK;名称唯一
+  从 (owner_id, name) 换轴为 ``UNIQUE(project_id, name)``)。
+  ``owner_id`` 保留为审计/维护者快照(公共项目写权跟维护者走,表 B
+  maintainer 谓词),不再是归属权威。不加 ON DELETE:项目删除先过
+  内容闸(RESTRICT 兜底),用户删除先处置私有空间资产(§13)。
 """
 from __future__ import annotations
 
 from datetime import datetime
 
 from sqlalchemy import (
-    ForeignKey, ForeignKeyConstraint, Index, Integer, String,
+    ForeignKey, ForeignKeyConstraint, Index, Integer, String, UniqueConstraint,
 )
 from sqlalchemy import func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -29,20 +34,22 @@ from ._types import JsonVar, UtcDateTime
 class Suite(Base):
     __tablename__ = "suites"
     __table_args__ = (
-        # 同属主组名不重(§6.3)
-        Index("uq_suites_owner_name", "owner_id", "name", unique=True),
+        # §20:名称唯一按项目分域(替代旧 uq_suites_owner_name)
+        UniqueConstraint("project_id", "name", name="uq_suites_project_name"),
+        # §20.6 复合 FK 目标候选键(非延迟)
+        Index("uq_suites_project_id", "project_id", "id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[str] = mapped_column(String(512), default="")
-    # 不加 ON DELETE:未处置的用户删不掉(处置流程负责删 suite,§7.10)
+    # 审计/维护者快照(归属权威是 project_id;公共项目写权 = 维护者,
+    # 表 B maintainer 谓词)。不加 ON DELETE:未处置的用户删不掉(§13)。
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), index=True)
-    # visibility 列随 0043 删除(同场景口径)。
-    # 项目区:空 = 私有区;同区约束(S1.5/0041)按本列判
-    project_id: Mapped[int | None] = mapped_column(
-        ForeignKey("projects.id"), nullable=True, index=True)
+    # 真实容器归属(§5:NOT NULL FK;普通项目资产 / 私有空间资产)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id"), nullable=False, index=True)
     # aggregate(默认)/chain/fanout/compose(重构方案四模式)
     mode: Mapped[str] = mapped_column(String(32), default="aggregate")
     # 按 id 引用成员的模式配置,不存成员清单(§6.2 不双写)
@@ -63,24 +70,31 @@ class Suite(Base):
 
 
 class SuiteMember(Base):
-    """suite 成员行:PK (suite_id, scenario_id)。
+    """suite 成员行:PK (suite_id, scenario_id) + 非空 project_id 校验键。
 
-    S1.5 起同区约束取代旧同属主组合外键:成员场景与套件同
-    ``project_id``(私有区同空时同属主)—— 应用层单点
-    ``zone.ensure_member_same_zone``(422),DB 触发器(0042)兜底直插;
-    旧组合外键与冗余 ``owner_id`` 列随 0042 删除。简化 FK 保留级联
-    (suite/场景删除时成员行自收;scenario 侧 DEFERRED 配合删除顺序)。"""
+    §20.6(UPC M2 定稿):同区约束由两条**复合外键**表达
+    (project_id, suite_id) → suites(project_id, id) 与
+    (project_id, scenario_id) → composer_scenarios(project_id, scenario_id),
+    均 DEFERRABLE INITIALLY IMMEDIATE、ON DELETE CASCADE(父资产删除
+    成员行自收)。跨区写入直接拒绝;父对象整体移动经显式延迟后原子
+    提交;只挪一端的非法提交完整回滚。旧单列外键与 0042 同区触发器
+    随 0068 退役 —— 复合边是唯一事实源。"""
 
     __tablename__ = "suite_members"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["suite_id"], ["suites.id"],
-            ondelete="CASCADE", name="fk_suite_members_suite_id",
+            ["project_id", "suite_id"], ["suites.project_id", "suites.id"],
+            ondelete="CASCADE", onupdate="NO ACTION",
+            name="fk_suite_members_suite_zone",
+            deferrable=True, initially="IMMEDIATE",
         ),
         ForeignKeyConstraint(
-            ["scenario_id"], ["composer_scenarios.scenario_id"],
-            ondelete="CASCADE", deferrable=True, initially="DEFERRED",
-            name="fk_suite_members_scenario_id",
+            ["project_id", "scenario_id"],
+            ["composer_scenarios.project_id",
+             "composer_scenarios.scenario_id"],
+            ondelete="CASCADE", onupdate="NO ACTION",
+            name="fk_suite_members_scenario_zone",
+            deferrable=True, initially="IMMEDIATE",
         ),
         # 反查「场景在哪些 suite」(§6.3;场景详情反查与级联提示的驱动面)
         Index("ix_suite_members_scenario", "scenario_id"),
@@ -90,6 +104,8 @@ class SuiteMember(Base):
         Integer, primary_key=True)
     scenario_id: Mapped[str] = mapped_column(
         String(128), primary_key=True)
+    # §20.6 非空同区校验键(与套件行一致;由创建路径从套件写入)
+    project_id: Mapped[int] = mapped_column(Integer, nullable=False)
     # 成员角色(重构方案约束 1,推翻 P2 设计 §6.1):main/before/after;
     # 前置/后置也是成员 —— 同区约束经成员表单一真相源覆盖
     role: Mapped[str] = mapped_column(String(16), default="main")

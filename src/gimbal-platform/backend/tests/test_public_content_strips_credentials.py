@@ -62,39 +62,53 @@ async def _inject_users(sid: str, users: dict | None = None) -> None:
 
 
 # ── ① 主规则:谓词矩阵(built_in_users / prepare_exec 两层)────────
-@pytest.mark.parametrize("executor,owner,project,expect_kept", [
-    (1, 1, None, True),     # 私有区 + 执行人 = 属主 → 生效
-    (2, 1, None, False),    # 引用执行 / 订阅执行 / 非属主导出 → 当空
-    (None, 1, None, False),  # fail-closed:执行人未知 → 当空(此前放行)
-    (1, None, None, False),  # fail-closed:孤儿场景(属主已删)→ 当空
-    (None, None, None, False),
-    (1, 1, 7, False),       # 原 5(S6):项目/公共区 → 属主本人也当空
+@pytest.mark.parametrize("executor,owner,kind,expect_kept", [
+    (1, 1, "private", True),   # 私有空间 + 执行人 = 属主 → 生效(UPC M2)
+    (2, 1, "private", False),  # 引用执行 / 订阅执行 / 非属主导出 → 当空
+    (None, 1, "private", False),  # fail-closed:执行人未知 → 当空
+    (1, None, "private", False),  # fail-closed:孤儿场景(属主已删)→ 当空
+    (None, None, "private", False),
+    (1, 1, "normal", False),   # 普通项目/公共区 → 属主本人也当空
+    (1, 1, None, False),       # fail-closed:归属未知 → 当空(旧 None=私有退役)
 ])
-def test_built_in_users_main_rule(executor, owner, project, expect_kept):
+def test_built_in_users_main_rule(executor, owner, kind, expect_kept):
     from app.services.run_prepare import built_in_users
 
     payload = {"definition": {"config": {"users": dict(_USERS)}}}
     out = built_in_users(payload, executor_id=executor,
-                         scenario_owner_id=owner, project_id=project)
+                         scenario_owner_id=owner, project_kind=kind)
     assert bool(out) is expect_kept
     if expect_kept:
         assert out == _USERS
 
 
-async def test_prepare_exec_main_rule_wired():
+async def test_prepare_exec_main_rule_wired(client):
     """prepare_exec 透传主规则(dispatcher/graph/runner/export 四链的
-    共同装配点;executor ≠ owner ⇒ prep.built_in_users 当空)。"""
+    共同装配点;executor ≠ owner ⇒ prep.built_in_users 当空)。
+    UPC M2:私有区轴 = 真实私有空间(kind 判定)。"""
     from app.core import db as db_module
     from app.services import run_prepare
+    from tests.helpers import ensure_fk_users
 
+    # 属主(id=1)与其默认空间 —— 私有区轴的 kind 解析数据源
+    async with db_module.SessionLocal() as s:
+        await ensure_fk_users(s, 1)
+    async with db_module.SessionLocal() as s:
+        from sqlalchemy import select as _sel
+
+        from app.models.project import Project as _Proj
+
+        priv_pid = (await s.execute(_sel(_Proj.id).where(
+            _Proj.kind == "private", _Proj.is_default.is_(True),
+            _Proj.owner_id == 1))).scalar_one()
     payload = {"definition": {"config": {"users": dict(_USERS)}}}
     prep = await run_prepare.prepare_exec(
         db_module.SessionLocal, payload, owner_id=2,
-        scenario_owner_id=1, with_auth=False)
+        scenario_owner_id=1, project_id=priv_pid, with_auth=False)
     assert prep.built_in_users == {}
     prep_own = await run_prepare.prepare_exec(
         db_module.SessionLocal, payload, owner_id=1,
-        scenario_owner_id=1, with_auth=False)
+        scenario_owner_id=1, project_id=priv_pid, with_auth=False)
     assert prep_own.built_in_users == _USERS
 
 

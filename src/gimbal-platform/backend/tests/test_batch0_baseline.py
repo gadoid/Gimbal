@@ -115,8 +115,11 @@ async def test_b7_compare_scenario_uses_working_as_from(monkeypatch, fresh_db):
     draft = make_draft(sid, plate={"fin": "working"})
     async with db_module.SessionLocal() as s:
         await ensure_fk_users(s, 1)
+        from tests.helpers import default_space_id
+
         s.add(ComposerScenario(scenario_id=sid, owner_name="u1",
-                               owner_id=1, payload=draft))
+                               owner_id=1, project_id=await default_space_id(s, 1),
+                               payload=draft))
         await s.commit()
     captured: dict = {}
 

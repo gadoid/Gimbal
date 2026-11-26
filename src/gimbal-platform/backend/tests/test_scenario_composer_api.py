@@ -392,11 +392,24 @@ async def test_member_cannot_attach_dataset_to_unowned_scenario(
     from app.core.db import SessionLocal
     from app.models.composer_scenario import ComposerScenario
 
+    # The first registered user is bootstrapped as admin — register
+    # alice first so bob is a plain member.
+    await _register_and_login(client, "alice", "alicepass123")
     async with SessionLocal() as db:
+        from sqlalchemy import select as _sel
+
+        from app.models.user import User as _User
+        from tests.helpers import default_space_id
+
+        alice_uid = (await db.execute(_sel(_User.id).where(
+            _User.username == "alice"))).scalar_one()
+        # UPC M2:归属必真实 —— 无主孤儿挂 alice 默认空间
+        # (测试意图 = owner_id 无主 → 锁;owner_id 语义不变)
         db.add(
             ComposerScenario(
                 scenario_id="sc-orphan",
                 owner_name="",
+                project_id=await default_space_id(db, alice_uid),
                 payload={
                     "definition": {
                         "kind": "scenario",
@@ -411,10 +424,6 @@ async def test_member_cannot_attach_dataset_to_unowned_scenario(
             )
         )
         await db.commit()
-
-    # The first registered user is bootstrapped as admin — register
-    # alice first so bob is a plain member.
-    await _register_and_login(client, "alice", "alicepass123")
     bob = await _register_and_login(client, "bob", "bobpass456")
     r = await client.post(
         "/api/scenarios/sc-orphan/data-sets",

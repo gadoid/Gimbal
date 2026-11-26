@@ -31,6 +31,11 @@ from .webhook_delivery import WebhookDelivery
 # 项目区(M2a S1.0:只建表不上码;授权面随 S1.1+)
 from .project import Project, ProjectMember
 from .project_promotion import ProjectPromotion
+# UPC M2:账户组合(§5/§20.2)+ Scheme 修复状态审计与诊断(§20.3)
+from .account_combo import AccountCombo
+from .scheme_repair import SchemeRepairEvent, SchemeRepairDiagnosis
+# §14.2 场景资产包恢复幂等台账(UPC M2 最小闭环)
+from .scenario_asset_import import ScenarioAssetImport
 # 执行配置(执行配置分层①:场景外部支撑的跨场景载体,scope user|project)
 from .exec_config import ExecConfig
 # 服务注册重构(2026-11-16,docs/service-registry-redesign.md §1):
@@ -79,6 +84,10 @@ __all__ = [
     "ServiceIdentity",
     "AuthAccount",
     "IdentityProjectGrant",
+    "AccountCombo",
+    "SchemeRepairEvent",
+    "SchemeRepairDiagnosis",
+    "ScenarioAssetImport",
 ]
 
 from .report_definition import ReportDefinitionRow  # noqa: F401

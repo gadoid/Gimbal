@@ -374,8 +374,11 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
 
     # 方案选条目:svc2 → svc2-other(注入键随之换)
     async with dbm.SessionLocal() as db:
+        from tests.helpers import scenario_project_id
+
         db.add(ComposerRunScheme(
             scheme_id="rs-cfa", scenario_id="sc-cfa-public", name="s",
+            project_id=await scenario_project_id(db, "sc-cfa-public"),
             payload={"serviceBindings": {"svc2": {"alias": "svc2-other"}}}))
         await db.commit()
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,

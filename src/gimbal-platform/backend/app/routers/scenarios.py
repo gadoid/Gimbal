@@ -431,17 +431,18 @@ async def create_scenario(
     response: Response,
     project_id: Annotated[int | None, Query(alias="projectId", ge=1)] = None,
 ) -> Scenario:
-    """新建场景;``?projectId=`` = 在该项目内新建(S7.0,门 = 项目成员,
-    公共项目 422 —— 见 ``zone.ensure_can_create_in_project``)。"""
+    """新建场景(UPC M2 写入点收敛,``project_access.resolve_content_target``):
+    ``?projectId=`` = 在该项目内新建(三 kind 统一门,§21);缺省 =
+    创建者的**默认私有空间**(契约规则,非猜测 —— §4 每用户恰一个)。"""
     owner = user.display_name or user.username
-    if project_id is not None:
-        from ..services.zone import (ProjectCreateDenied,
-                                     ensure_can_create_in_project)
-        try:
-            await ensure_can_create_in_project(db, user.id, project_id)
-        except ProjectCreateDenied as e:
-            raise HTTPException(status_code=e.status, detail={
-                "code": e.code, "message": e.message}) from None
+    from ..services.project_access import resolve_content_target
+    from ..services.zone import ProjectCreateDenied
+    try:
+        target = await resolve_content_target(db, user.id, project_id)
+    except ProjectCreateDenied as e:
+        raise HTTPException(status_code=e.status, detail={
+            "code": e.code, "message": e.message}) from None
+    project_id = target.id
     # 决策 1 引用即登记(阶段 0):定义侧身份存在性闸(audit 头 /
     # enforce 422;项目门之后、store 之前 —— 不动事务,纯读)。
     # extra_bases = 手配草稿叠层(P2-2:首存即裁同 base,不漏时序缝)。
@@ -747,11 +748,14 @@ async def list_scenarios(
             page=page, page_size=page_size,
         )
         if fields == "options":
+            from ..services.zone import public_project_id as _ppid_opts
+
+            _pub_pid_list = await _ppid_opts(db)
             items = [
                 ScenarioOptionsItem(
                     scenarioId=r.scenario_id,
                     name=scenario_store._meta_from_row(r).name,
-                    visibility=("public" if r.project_id is not None
+                    visibility=("public" if r.project_id == _pub_pid_list
                                 else "private"),
                     owner=r.owner_name or "",
                 )
@@ -783,22 +787,28 @@ async def list_scenarios(
     # 引用复核分支不复存在,ADR-0003 #20)。本分支仅
     # starred=false(排除收藏)走 Python 侧,其余走 SQL 分支。
     from ._ownership import can_pure
-    from ..services.zone import my_project_roles, public_project_id
+    from ..services.zone import (my_private_projects, my_project_roles,
+                                 public_project_id)
     _ctx = dict(
         public_project_id=await public_project_id(db),
-        project_roles=await my_project_roles(db, user.id))
+        project_roles=await my_project_roles(db, user.id),
+        private_project_ids=await my_private_projects(db, user.id))
     readable = [r for r in rows
                 if can_pure(user, "scenario", "read", r, **_ctx)]
     if scope == "mine":
         readable = [r for r in readable if r.owner_id == user.id]
     elif scope == "private":
-        readable = [r for r in readable
-                    if r.owner_id == user.id and r.project_id is None]
+        # UPC M2:私有域 = 主体拥有的私有空间内容(空间内场景即私有)
+        _priv = await my_private_projects(db, user.id)
+        readable = [r for r in readable if r.project_id in _priv]
     if project_id is not None:
         readable = [r for r in readable if r.project_id == project_id]
     if visibility:
+        # UPC M2:visibility 桶 = 公共项目内容(真实容器;私有空间内容
+        # 归 private 桶,与响应派生同口径)
+        _pub_pid_v = _ctx["public_project_id"]
         readable = [r for r in readable
-                    if ("public" if r.project_id is not None
+                    if ("public" if r.project_id == _pub_pid_v
                         else "private") == visibility]
     # 关注页/关注卡的服务端数据源(store 退位后前端不再持有全量可过滤,
     # PG迁移方案 §7 M5 的 ?starred=true 端点提前随 M1 到位)。
@@ -817,11 +827,13 @@ async def list_scenarios(
     page_rows = readable[start : start + page_size]
 
     if fields == "options":
+        # UPC M2:visibility 桶按公共项目判定(私有空间内容 = private)
+        _pub_pid_opts = _ctx["public_project_id"]
         items = [
             ScenarioOptionsItem(
                 scenarioId=r.scenario_id,
                 name=scenario_store._meta_from_row(r).name,
-                visibility=("public" if r.project_id is not None
+                visibility=("public" if r.project_id == _pub_pid_opts
                             else "private"),
                 owner=r.owner_name or "",
             )
@@ -1020,8 +1032,9 @@ async def unpublish_scenario(
     row = await _load_row(db, scenario_id)
     pid = await public_project_id(db)
 
-    if row.project_id is None:
-        # 私有原件:删它的公共副本(没有 → 常规闸 403,行为同旧)
+    if row.project_id != pid:
+        # 私有空间原件(UPC M2:真实容器,旧「project_id 空」分支退役):
+        # 删它的公共副本(没有 → 常规闸 403,行为同旧)
         copy_row = await scenario_store.find_public_copy(db, scenario_id)
         if copy_row is None:
             await _require_visibility_actor(

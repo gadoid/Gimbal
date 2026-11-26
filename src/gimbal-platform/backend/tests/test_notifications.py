@@ -213,8 +213,11 @@ async def test_notify_finished_name_and_id(client: AsyncClient):
         await ensure_fk_users(s, 1)  # PG 强制 FK:owner_id=1 需垫
         # 活场景行(供空快照兜底查名;_notify_finished 只读
         # payload.definition.meta.name,payload 造最小形即可)
+        from tests.helpers import default_space_id
+
         s.add(ComposerScenario(
             scenario_id="sc-notify-alive", owner_id=1, owner_name="垫底",
+            project_id=await default_space_id(s, 1),
             payload={"definition": {"meta": {"name": "活行场景名"}}}))
         # 三条单发执行:有快照名 / 空快照+场景存活 / 空快照+场景已删
         for sid, snap in (

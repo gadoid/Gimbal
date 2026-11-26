@@ -508,19 +508,30 @@ def built_in_user_aliases(scenario_payload: dict | None) -> list[str]:
     return sorted(str(k) for k in (users or {}))
 
 
-def zone_allows_direct(project_id: int | None) -> bool:
-    """场景内置凭证(``config.users``)只在**私有区**
-    生效;项目区 / 公共区(场景 ``project_id`` 非空)一律不生效 —— 凭证
-    只来自执行人的账户装载。地址无区规则(恒来自环境部署表),
-    本判定只剩内置凭证语义。"""
-    return project_id is None
+def zone_allows_direct(project_kind: str | None) -> bool:
+    """场景内置凭证(``config.users``)只在**私有空间**生效(UPC M2:
+    私有区 = 真实私有空间容器,kind 判定;旧「project_id 空」口径随
+    资源迁移退役);普通项目 / 公共区一律不生效 —— 凭证只来自执行人
+    的账户装载。地址无区规则(恒来自环境部署表),本判定只剩内置凭证
+    语义。None = 未知归属,fail-closed 不生效。"""
+    return project_kind == "private"
+
+
+async def project_kind_of(db: "Any", project_id: int | None) -> "str | None":
+    """项目 kind 解析(UPC M2:built_in_users 的区轴数据源)。"""
+    if project_id is None:
+        return None
+    from ..models.project import Project as _Proj
+
+    proj = await db.get(_Proj, project_id)
+    return proj.kind if proj is not None else None
 
 
 def built_in_users(
     scenario_payload: dict | None, *,
     executor_id: int | None,
     scenario_owner_id: int | None,
-    project_id: int | None,
+    project_kind: str | None,
 ) -> dict[str, Any]:
     """场景 definition.config.users —— 仅当执行人 == 场景属主、且场景在
     私有区时返回。
@@ -536,7 +547,7 @@ def built_in_users(
     ``project_id``(必填):项目 / 公共区场景当空(属主本人执行
     同样当空 —— 区规则不看人)。
     """
-    if not zone_allows_direct(project_id):
+    if not zone_allows_direct(project_kind):
         return {}
     if executor_id is None or executor_id != scenario_owner_id:
         return {}
@@ -700,10 +711,14 @@ async def prepare_exec(
     steps = definition.get("steps") or []
     # authz 主规则:executor(owner_id = 凭证池归属,即执行人)≠
     # 场景属主 ⇒ 内置 users 基座当空
+    # UPC M2:内置凭证判**私有空间**(kind 轴)—— 经 db_factory 短会话
+    async with db_factory() as _s:
+        _proj_kind = await project_kind_of(_s, project_id)
     prep = ExecPrep(
         built_in_users=built_in_users(
             scenario_payload, executor_id=owner_id,
-            scenario_owner_id=scenario_owner_id, project_id=project_id))
+            scenario_owner_id=scenario_owner_id,
+            project_kind=_proj_kind))
 
     # 分层②:显式选定配置的绑定 → {声明条目: 池取用条目}(换池内
     # 命中哪条;注入标签不变)。解析失败不阻塞(缺条目由既有 fail-fast

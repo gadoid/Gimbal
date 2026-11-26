@@ -54,8 +54,11 @@ async def _seed(client, name: str, *, body=None, entries=None,
         await scenario_store.create(
             s, ScenarioDraft.model_validate(draft),
             owner=name, owner_id=1)
+        from tests.helpers import scenario_project_id
+
         s.add(ComposerRunScheme(
             scheme_id=f"rsch-{name}", scenario_id=f"sc-{name}",
+            project_id=await scenario_project_id(s, f"sc-{name}"),
             name="调试", is_default=False,
             payload={"options": {"step_from": None, "step_to": step_to, "n_runs": 1, "parallel": 1, "subscribe": None}}))
         await s.commit()

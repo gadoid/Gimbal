@@ -15,15 +15,21 @@ async def _mk_project(name: str, members: dict[str, str]) -> int:
 
 
 async def _move(sid: str, pid: int | None) -> None:
-    from sqlalchemy import select as sa_select, update as _upd
+    from sqlalchemy import select as sa_select, text as _txt, update as _upd
 
     from app.core import db as db_module
     from app.models.composer_scenario import ComposerScenario
+    from app.models.composer_run_scheme import ComposerRunScheme
 
     async with db_module.SessionLocal() as db:
         row = (await db.execute(sa_select(ComposerScenario).where(
             ComposerScenario.scenario_id == sid))).scalar_one()
+        # §20.2 复合 FK:场景迁区时方案行同步携带(挂起约束)
+        await db.execute(_txt(
+            "SET CONSTRAINTS fk_scheme_scenario_zone DEFERRED"))
         row.project_id = pid
+        await db.execute(_upd(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid).values(project_id=pid))
         await db.commit()
 
 

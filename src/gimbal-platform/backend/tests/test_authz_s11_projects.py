@@ -33,17 +33,37 @@ async def _uid(username: str) -> int:
 
 
 async def _move_scenario_to_project(sid: str, pid: int | None) -> None:
-    """场景进区(单会话内 load→set→commit;游离实例的属性改动不落库)。"""
+    """场景进区(UPC M2:跨项目移动是专门事务 —— 延迟复合 FK + 方案随迁;
+    pid=None = 搬回属主默认私有空间,旧「置空」写法随 NOT NULL 退役)。"""
     from app.core import db as db_module
 
     async with db_module.SessionLocal() as db:
         from sqlalchemy import select as sa_select
+        from sqlalchemy import text as sa_text
 
+        from app.models.composer_run_scheme import ComposerRunScheme
         from app.models.composer_scenario import ComposerScenario
         row = (await db.execute(sa_select(ComposerScenario).where(
             ComposerScenario.scenario_id == sid))).scalar_one()
-        row.project_id = pid
+        target = pid
+        if target is None:
+            from tests.helpers import default_space_id
+
+            target = await default_space_id(db, row.owner_id)
+        await db.execute(sa_text(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
+        row.project_id = target
+        await db.execute(sa_update_helper(
+            ComposerRunScheme, sid, target))
         await db.commit()
+
+
+def sa_update_helper(model, sid: str, target: int):
+    from sqlalchemy import update
+
+    return (update(model).where(model.scenario_id == sid)
+            .values(project_id=target))
 
 
 async def _scenario_row(sid: str):
@@ -278,7 +298,13 @@ class TestShadowWrite:
         assert not ((copy.payload["definition"].get("config") or {})
                     .get("users")), "公共副本落库即无凭证"
         orig = await _scenario_row("sc-s11-sh")
-        assert orig.project_id is None
+        # UPC M2:原件留在属主默认私有空间(真实容器;旧「置空」断言退役)
+        from app.core import db as _dbm
+        from tests.helpers import default_space_id
+
+        async with _dbm.SessionLocal() as _s:
+            _home = await default_space_id(_s, orig.owner_id)
+        assert orig.project_id == _home
         assert (orig.payload["definition"]["config"]["users"]
                 == {"acct": {"url": "u"}}), "原件不动"
 
@@ -601,10 +627,23 @@ class TestS13PublishSemantics:
         from sqlalchemy import select as sa_select
 
         from app.models.composer_scenario import ComposerScenario
+        from sqlalchemy import text as sa_text
+
+        from app.models.composer_run_scheme import ComposerRunScheme
+        from sqlalchemy import update as sa_upd
+
         async with db_module.SessionLocal() as db:
             row = (await db.execute(sa_select(ComposerScenario).where(
                 ComposerScenario.scenario_id == "sc-s13-mg"))).scalar_one()
-            apply_public(row, await public_project_id(db))  # 模拟 0040 迁入
+            _pub = await public_project_id(db)
+            # 模拟 0040 迁入(§20.2:方案随迁 + 延迟复合 FK)
+            await db.execute(sa_text(
+                "SET CONSTRAINTS fk_scheme_scenario_zone, "
+                "fk_scheme_combo_zone DEFERRED"))
+            apply_public(row, _pub)
+            await db.execute(sa_upd(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == "sc-s13-mg"
+            ).values(project_id=_pub))
             await db.commit()
 
         r = await client.post("/api/scenarios/sc-s13-mg/unpublish", headers=h)

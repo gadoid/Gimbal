@@ -95,12 +95,17 @@ async def _mk_suite(owner_id: int, sid: str, *, name: str = "b2-suite") -> int:
     """直插私有 Suite + 单成员(同区:均私有区)。"""
     from app.models.suite import Suite, SuiteMember
 
+    from tests.helpers import default_space_id
+
     async with await _session() as s:
+        pid = await default_space_id(s, owner_id)
         suite = Suite(name=name, owner_id=owner_id, description="",
+                      project_id=pid,
                       mode_config={"units": {sid: {}}})
         s.add(suite)
         await s.flush()
-        s.add(SuiteMember(suite_id=suite.id, scenario_id=sid, sort=0))
+        s.add(SuiteMember(suite_id=suite.id, scenario_id=sid,
+                          project_id=pid, sort=0))
         await s.commit()
         return suite.id
 

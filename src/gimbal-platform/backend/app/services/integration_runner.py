@@ -520,11 +520,15 @@ async def _template_env(db, scen: ComposerScenario,
 
 
 async def normal_project_of(db, tpl: IntegrationTask) -> int | None:
-    """模板所属**普通**项目 id(私有 / 公共项目模板 → None)。"""
+    """模板所属**普通**项目 id(UPC M2:kind 判定 —— 私有空间/公共项目
+    模板 → None;旧「project_id 非空且非公共」口径随真实容器退役,
+    否则私有空间模板会被误配项目凭证源)。"""
     if tpl.project_id is None:
         return None
-    from .zone import public_project_id
-    if tpl.project_id == await public_project_id(db):
+    from ..models.project import Project
+
+    proj = await db.get(Project, tpl.project_id)
+    if proj is None or proj.kind != "normal":
         return None
     return tpl.project_id
 
@@ -1106,16 +1110,28 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             # 普通项目模板的属主被移出项目后,自有实例同样暂停(指纹闸
             # consent_gate 仍 owner 豁免:自有内容无需自我确认,但成员
             # 门按持有者判,属主身份不替代成员关系)。
+            # UPC M2:私有空间模板(真实容器)与旧私有模板同语义 ——
+            # 无成员闸;公共模板走下方公共分支。成员闸只对**普通项目**
+            # 模板生效。
+            from ..models.project import Project as _Proj
+
+            _tpl_proj_row = (await db.get(_Proj, tpl.project_id)
+                             if tpl.project_id is not None else None)
+            _tpl_kind = _tpl_proj_row.kind if _tpl_proj_row else None
             _member_gate = (inst.holder_id is not None and (
                 consent_gate or                       # 非 owner 持有(P2.3/S8 原面)
-                (tpl.project_id is not None           # §4.1:普通项目模板的 owner
-                 and inst.holder_id == tpl.owner_id)))
+                (_tpl_kind == "normal" and inst.holder_id == tpl.owner_id)))
             _member_ok = False
-            if _member_gate and tpl.project_id is not None:
-                from ..services.zone import can_use_project_credentials
-                _member_ok = await can_use_project_credentials(
-                    db, inst.holder_id, tpl.project_id)
-            if (_member_gate and tpl.project_id != await _ppid_cg(db)
+            if _member_gate:
+                if _tpl_kind == "private":
+                    # UPC M2:私有空间模板 —— 仅空间所有者可执行;
+                    # 转私有前的订阅者(漏网路径)按 made_private 收口
+                    _member_ok = inst.holder_id == tpl.owner_id
+                else:  # normal:成员闸(属主身份不替代成员关系)
+                    from ..services.zone import can_use_project_credentials
+                    _member_ok = await can_use_project_credentials(
+                        db, inst.holder_id, tpl.project_id)
+            if (_member_gate and _tpl_kind != "public"
                     and not _member_ok):
                 return await _pause_consent_changed(
                     db, inst, tpl,

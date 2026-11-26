@@ -183,8 +183,18 @@ async def mk_task_pair(*, name="w-task", token_id=None,
                 owner = u.id
             owner_id = owner
         holder = owner_id
+        # UPC M2:模板行挂真实容器(owner 的默认私有空间;
+        # ck_integration_task_shape 钉死模板行 project_id 非空)
+        from sqlalchemy import select as _sel
+
+        from app.models.project import Project as _Proj
+
+        tpl_project_id = (await s.execute(_sel(_Proj.id).where(
+            _Proj.kind == "private", _Proj.is_default.is_(True),
+            _Proj.owner_id == owner_id))).scalar()
         tpl = IntegrationTask(name=name, owner_id=owner_id,
-                              scenario_id=scenario_id, token_id=token_id)
+                              scenario_id=scenario_id, token_id=token_id,
+                              project_id=tpl_project_id)
         s.add(tpl)
         await s.flush()
         inst = IntegrationTask(

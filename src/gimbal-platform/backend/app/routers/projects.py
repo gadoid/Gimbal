@@ -636,9 +636,10 @@ async def delete_project(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "public_project_protected",
                         "message": "公共项目不可删除"})
-    # 内容闸:四张对象表任一挂靠即拒
+    # 内容闸:五张对象表任一挂靠即拒(UPC M2:账户组合进闸,AC-22)
     from sqlalchemy import select as _sel
 
+    from ..models.account_combo import AccountCombo
     from ..models.composer_scenario import ComposerScenario
     from ..models.integration_task import IntegrationTask
     from ..models.report_definition import ReportDefinitionRow
@@ -650,6 +651,10 @@ async def delete_project(
     if occupied is None:
         occupied = (await db.execute(_sel(Suite.id).where(
             Suite.project_id == project_id).limit(1))).scalar_one_or_none()
+    if occupied is None:
+        occupied = (await db.execute(_sel(AccountCombo.id).where(
+            AccountCombo.project_id == project_id).limit(1))
+        ).scalar_one_or_none()
     if occupied is None:
         occupied = (await db.execute(_sel(IntegrationTask.id).where(
             IntegrationTask.project_id == project_id,
@@ -663,8 +668,8 @@ async def delete_project(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "project_not_empty",
-                    "message": "项目内仍有内容(场景/套件/集成模板/报告"
-                               "定义),需先清空或迁走再删除"})
+                    "message": "项目内仍有内容(场景/套件/组合/集成模板"
+                               "/报告定义),需先清空或迁走再删除"})
     await _audit(db, user, "project.deleted", proj, {"name": proj.name})
     # S8:项目账户随项目删除(FK NO ACTION —— 显式删,凭证是项目的配置
     # 不是内容,不进内容闸)

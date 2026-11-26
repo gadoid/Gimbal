@@ -1099,9 +1099,12 @@ async def _ensure_batch_scope(db, scenario_id: str, *, batch_id: str,
     row = await scenario_store.get_row(db, scenario_id)
     if row is None:
         raise KeyError(f"scenario_not_found: {scenario_id}")
-    # S1.1 闸升级:批次可代改 = 公共 + 项目场景(project_id 非空;
-    # 影子写保证与 visibility 判定等价,普通项目 S1.3/S1.4 起才有内容)
-    if row.project_id is not None:
+    # S1.1 闸升级(UPC M2 口径):批次可代改 = 公共 + 普通项目场景;
+    # 「project_id 空 = 私有区」已退役 —— 私有区改为场景所属容器
+    # kind 判定(private 空间内容恒归属主自行适配)
+    from .run_prepare import project_kind_of
+
+    if await project_kind_of(db, row.project_id) != "private":
         return
     if notify and row.owner_id is not None:
         from . import notifications as notify_svc

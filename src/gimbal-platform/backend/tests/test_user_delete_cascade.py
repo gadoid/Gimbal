@@ -83,7 +83,10 @@ async def test_publicize_notification_failure_keeps_disposal(
             User.username == "pub_bob2"))).scalar_one()
         hid = (await s.execute(_sel(User.id).where(
             User.username == "pub_holder"))).scalar_one()
+        from tests.helpers import default_space_id
+
         tpl = IntegrationTask(name="pub-tpl-1", owner_id=tid,
+                              project_id=await default_space_id(s, tid),
                               card_template="status")
         s.add(tpl)
         await s.flush()

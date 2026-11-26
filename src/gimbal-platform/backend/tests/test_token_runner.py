@@ -47,10 +47,12 @@ class TestPreRunChecks:
     async def _scenario(self, scenario_id="sc-w",
                         owner_id=1):
         from app.models.composer_scenario import ComposerScenario
+        from tests.helpers import default_space_id
         async with db_module.SessionLocal() as s:
             row = ComposerScenario(
                 scenario_id=scenario_id,
                 owner_id=owner_id,
+                project_id=await default_space_id(s, owner_id),
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": scenario_id}}})
             s.add(row)
@@ -138,8 +140,11 @@ class TestPreRunChecks:
                                   env_id=env, ref_mode="default"))
             from .helpers import seed_deployment
             await seed_deployment(s, "pay", "https://sx.local")
+            from tests.helpers import default_space_id
+
             s.add(ComposerScenario(scenario_id="sc-sx",
                                    owner_id=uid,
+                                   project_id=await default_space_id(s, uid),
                                    payload=scen_payload))
             await s.commit()
         tid, _ = await mk_token(user_id=uid)      # 空范围
@@ -355,8 +360,11 @@ class TestUnbind:
         uid = await _uid("ub5_owner")
         sub_id = await _uid("ub5_sub", role="user")
         tid, _ = await mk_token(user_id=uid)
+        from tests.helpers import default_space_id
+
         async with db_module.SessionLocal() as s:
             tpl = IntegrationTask(name="w-sub", owner_id=uid,
+                                  project_id=await default_space_id(s, uid),
                                   scenario_id="sc-w", token_id=tid)
             s.add(tpl)
             await s.flush()

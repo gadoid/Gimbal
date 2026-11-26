@@ -79,8 +79,19 @@ async def _move_to_project(sid: str, username: str) -> None:
         from tests.helpers import add_project_admin
         await add_project_admin(s, proj.id)   # UPC §20:出生即有 admin
         s.add(ProjectMember(project_id=proj.id, user_id=uid, role="member"))
+        from sqlalchemy import text as _text
+
+        from app.models.composer_run_scheme import ComposerRunScheme
+
+        # §20.2:跨项目移动 = 专门事务(延迟复合 FK + 方案随迁)
+        await s.execute(_text(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         await s.execute(sa.update(ComposerScenario).where(
             ComposerScenario.scenario_id == sid).values(project_id=proj.id))
+        await s.execute(sa.update(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid).values(
+                project_id=proj.id))
         await s.commit()
 
 

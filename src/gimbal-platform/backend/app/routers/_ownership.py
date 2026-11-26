@@ -71,27 +71,27 @@ def has_capability(user: Any, cap: str) -> bool:
     return role in CAPABILITIES.get(cap, ())
 
 
-# ── 表 B(authz W3 起,M2a S1.1 扩项目维度):对象 × 动词 ──────────────
-# 单元格 = 谓词名集合(命中其一即放行)。谓词按**区**取效(S1 三区:
-# project_id 空 = 私有区 / 普通项目 / 公共项目),同格内各区谓词互斥:
-#   owner     私有区属主(user.id == obj.owner_id ∧ project_id IS NULL
-#             —— D1:project_id 非空时属主身份不给任何权限)
+# ── 表 B(authz W3 起,M2a S1.1 扩项目维度;UPC M2 收口)──────────────
+# 单元格 = 谓词名集合(命中其一即放行)。谓词按**项目关系**取效
+# (UPC M2:对象 project_id NOT NULL,归属权威 = 真实容器):
+#   owner     对象所属项目是**主体拥有的私有空间**(全部私有空间,
+#             非仅默认;owner_id 列降为审计/维护者快照,不参与判定)
 #   member    对象所属普通项目的成员(任意角色,含只读 + 执行的项目
 #             用户;公共项目不落成员行)—— 读 / 复制 / 执行
 #   contributor 对象所属普通项目的可写角色(项目管理员 ∨ 项目成员;
 #             M2b Q1:项目用户只读 + 执行,不命中)—— 写 / 删
 #   padmin    对象所属普通项目的项目管理员
-#   maintainer 公共项目对象的 owner_id(S1-b 例外:公共项目写权跟
-#             维护者走 —— owner_id 在公共项目的语义 = 维护者)
+#   maintainer 公共项目对象的 owner_id(公共项目写权跟维护者走)
 #   public_reader 对象在公共项目(全员可读)
 #   public_admin  对象在公共项目 ∧ ops.write(Admin+ 的公共治理,
 #             取代 W3 的 steward:下架公共对象,R6 不变)
-# 数据集/运行方案行上没有 project_id —— 读随父场景(§7.4 引用闭包,
-# 实际判定走 can_read_scenario_row / 父场景 can()),写属主单判。
+# 数据集行上没有 project_id:读随父场景(§7.4 引用闭包,实际判定走
+# can_read_scenario_row / 父场景 can());运行方案行 M2 起携带从父场景
+# 派生的 project_id,判定与父场景动词同形。
 # 角色不在表 B 出现:角色差由表 A 表达。表 B 变更必须同步
 # tests/authz_expected.yaml 的 table_b 段(人工审定快照,R7)。
-# publish 的 maintainer:影子期已公共对象再「发布」是空操作,放行
-# 维护者避免无谓 403;S1.3 起该格语义 = 重新发布(维护者更新公共副本)。
+# publish 的 maintainer:重新发布 = 维护者更新公共副本,放行避免
+# 无谓 403。
 
 # contributor 谓词的角色集(M2b Q1;成员角色字面量只在模型常量)
 _CONTRIBUTOR_ROLES = ProjectMember.WRITER_ROLES
@@ -147,31 +147,34 @@ TABLE_B: dict[str, dict[str, frozenset[str]]] = {
 }
 
 
-def _pred_owner(user: Any, obj: Any) -> bool:
-    """owner 谓词(D1):私有区属主 —— project_id 非空时属主身份不
-    给任何权限(公共项目的维护者例外走 maintainer 谓词,S1-b)。"""
-    if getattr(obj, "project_id", None) is not None:
+def _pred_owner(user: Any, obj: Any,
+                private_project_ids: "frozenset[int] | None") -> bool:
+    """owner 谓词(UPC M2):对象所属项目是主体拥有的私有空间 ——
+    涵盖其全部私有空间(默认 + 额外);owner_id 列不再参与判定。"""
+    pid = getattr(obj, "project_id", None)
+    if pid is None or private_project_ids is None:
         return False
-    return _user_matches(user, obj.owner_id)
+    return pid in private_project_ids
 
 
 def can_pure(
     user: Any, obj_type: str, verb: str, obj: Any, *,
     public_project_id: int | None = None,
     project_roles: dict[int, str] | None = None,
+    private_project_ids: "frozenset[int] | None" = None,
 ) -> bool:
     """表 B 求值(可注入上下文的纯函数版)。
 
-    ``public_project_id`` / ``project_roles``(主体在普通项目的角色表)
-    由调用方注入:不传则 public_reader/maintainer/public_admin/member/
-    padmin 谓词按「无上下文」恒 False(影子期这些对象只经 :func:`can`
-    判定)。未登记的 (对象, 动词) 是编码错误,即刻 KeyError
-    (与 roles_with 同口径,而非静默拒绝)。
+    ``public_project_id`` / ``project_roles`` / ``private_project_ids``
+    (主体拥有的私有空间集合,UPC M2 起 owner 谓词的数据源)由调用方
+    注入:不传则 public_reader/maintainer/public_admin/member/padmin/
+    owner 谓词按「无上下文」恒 False。未登记的 (对象, 动词) 是编码
+    错误,即刻 KeyError(与 roles_with 同口径,而非静默拒绝)。
     """
     preds = TABLE_B.get(obj_type, {}).get(verb)
     if preds is None:
         raise KeyError(f"table B 未登记: {obj_type}.{verb}")
-    if "owner" in preds and _pred_owner(user, obj):
+    if "owner" in preds and _pred_owner(user, obj, private_project_ids):
         return True
     pid = getattr(obj, "project_id", None)
     in_public = (public_project_id is not None and pid == public_project_id)
@@ -197,16 +200,19 @@ def can_pure(
 async def can(db, user: Any, obj_type: str, verb: str, obj: Any) -> bool:
     """表 B 求值(完整版)—— 对象级判定唯一入口。
 
-    obj 需带 ``owner_id`` 与 ``project_id``。公共项目 id 与主体项目
-    角色一次查询、会话内缓存(services.zone)。S7.4:ref 谓词已随
-    引用分享退役(存量转私有副本),can 与 can_pure 全集等价 ——
-    签名保留 async 供既有调用方。
+    obj 需带 ``project_id``(UPC M2:归属权威;``owner_id`` 仅公共项目
+    maintainer 谓词消费)。公共项目 id、主体项目角色与私有空间集合各
+    一次查询、会话内缓存(services.zone)。S7.4:ref 谓词已随引用分享
+    退役,can 与 can_pure 全集等价 —— 签名保留 async 供既有调用方。
     """
-    from ..services.zone import my_project_roles, public_project_id
+    from ..services.zone import (my_private_projects, my_project_roles,
+                                  public_project_id)
 
     return can_pure(user, obj_type, verb, obj,
                     public_project_id=await public_project_id(db),
-                    project_roles=await my_project_roles(db, user.id))
+                    project_roles=await my_project_roles(db, user.id),
+                    private_project_ids=await my_private_projects(
+                        db, user.id))
 
 
 def _user_matches(user: Any, owner_id: int) -> bool:
@@ -231,24 +237,23 @@ def ensure_owner(user: Any, owner_id: int, detail: Any) -> None:
 
 async def can_run_scenario(
     db, user: Any, *, scenario_id: str, owner_id: int | None,
-    project_id: int | None = None,
+    project_id: int,
 ) -> bool:
-    """执行判定(表 B scenario.run = owner ∨ member;S7.4 引用退役):
-    私有区仅属主;普通项目成员可跑;公共项目不开执行(公共资源跑需
-    先 fork,不变量 7;W3 起 admin 同样无旁路)。owner 谓词带区守卫
-    (D1:project_id 非空时属主身份不给权限);owner_id=None(孤儿)
-    时仅项目分支可过。S1.3 起发布 = 复制:原件恒私有(属主可跑),
-    公共副本对所有人不可执行 —— 无维护者例外。"""
-    if project_id is None:
-        return owner_id is not None and _user_matches(user, owner_id)
-    from ..services.zone import my_project_roles
+    """执行判定(表 B scenario.run = owner ∨ member;UPC M2:project_id
+    恒非空,判定 = 项目关系):私有空间仅所有者;普通项目成员可跑;
+    公共项目不开执行(公共资源跑需先复制,不变量 7;Admin+ 同样无
+    旁路)。owner_id 列不再参与(降为审计)。"""
+    from ..services.zone import my_private_projects, my_project_roles
+
+    if project_id in await my_private_projects(db, user.id):
+        return True
     return project_id in await my_project_roles(db, user.id)
 
 
 async def can_read_scenario_row(db, user: Any, row: Any) -> bool:
-    """读判定(对象级,含引用与项目谓词):行对象须有 scenario_id/
-    owner_id/project_id。S1.1 起统一走 :func:`can`(表 B scenario.read
-    = owner ∨ ref ∨ member ∨ public_reader),不再各写一支。"""
+    """读判定(对象级,含项目谓词):行对象须有 scenario_id/project_id。
+    统一走 :func:`can`(表 B scenario.read = owner ∨ member ∨
+    public_reader),不再各写一支。"""
     return await can(db, user, "scenario", "read", row)
 
 

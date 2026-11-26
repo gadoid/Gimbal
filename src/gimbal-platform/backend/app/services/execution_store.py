@@ -41,9 +41,11 @@ async def scenario_display_map(
     from types import SimpleNamespace
 
     from ..routers._ownership import can_pure
-    from .zone import my_project_roles, public_project_id
+    from .zone import (my_private_projects, my_project_roles,
+                       public_project_id)
     ctx = dict(public_project_id=await public_project_id(db),
-               project_roles=await my_project_roles(db, user.id))
+               project_roles=await my_project_roles(db, user.id),
+               private_project_ids=await my_private_projects(db, user.id))
     return {
         sid: (str(name or "") if can_pure(
                   user, "scenario", "read",

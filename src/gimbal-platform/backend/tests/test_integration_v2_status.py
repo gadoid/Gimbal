@@ -135,8 +135,11 @@ async def _seed_pair(*, holder=1, owner=1,
     """模板 + 实例行;返回 (tpl_id, inst_id)。"""
     async with db_module.SessionLocal() as s:
         await ensure_fk_users(s, owner, holder)
+        from tests.helpers import default_space_id
+
         s.add(IntegrationTask(
             name="v2用例", owner_id=owner,
+            project_id=await default_space_id(s, owner),
             scenario_id="sc-v2", target_system="fin",
             trigger_cron=cron, result_policy="latest"))
         await s.flush()
@@ -391,8 +394,11 @@ class TestLegacyMapSql:
         await register_and_login(client, "v2_mig", "pw123456")
         async with db_module.SessionLocal() as s:
             await ensure_fk_users(s, 1, 2, 3, 4, 5)
+            from tests.helpers import default_space_id
+
             s.add(IntegrationTask(
                 name="tpl", owner_id=1,
+                project_id=await default_space_id(s, 1),
                 scenario_id="sc-v2-mig",
                 trigger_cron="*/5 * * * *"))
             await s.flush()

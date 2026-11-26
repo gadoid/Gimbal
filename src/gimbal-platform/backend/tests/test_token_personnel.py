@@ -160,8 +160,11 @@ class TestDeleteUserDisposal:
         # 个人模式场景直插(处置段按 owner 找场景)
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
+            from tests.helpers import default_space_id
+
             s.add(ComposerScenario(
                 scenario_id=f"sc-{uid}", owner_id=uid,
+                project_id=await default_space_id(s, uid),
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": "x"}}}))
             await s.commit()
@@ -192,8 +195,11 @@ class TestDeleteUserDisposal:
             "df_owner5")
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
+            from tests.helpers import default_space_id
+
             s.add(ComposerScenario(
                 scenario_id=f"sc5-{uid}", owner_id=uid,
+                project_id=await default_space_id(s, uid),
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": "x"}}}))
             await s.commit()
@@ -219,8 +225,11 @@ class TestDeleteUserDisposal:
             "df_owner3")
         from app.models.composer_scenario import ComposerScenario
         async with db_module.SessionLocal() as s:
+            from tests.helpers import default_space_id
+
             s.add(ComposerScenario(
                 scenario_id=f"sc3-{uid}", owner_id=uid,
+                project_id=await default_space_id(s, uid),
                 payload={"definition": {"steps": [], "config": {},
                                         "meta": {"name": "x"}}}))
             await s.commit()

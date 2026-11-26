@@ -60,9 +60,12 @@ async def _mk_scenario(client, h, sid: str, steps: list,
 
 async def _insert_scheme(scenario_id: str, scheme_id: str, *, payload: dict,
                          is_default: bool = False) -> None:
+    from tests.helpers import scenario_project_id
+
     async with db_module.SessionLocal() as db:
         db.add(ComposerRunScheme(
             scheme_id=scheme_id, scenario_id=scenario_id,
+            project_id=await scenario_project_id(db, scenario_id),
             name=f"s0-{scheme_id}", is_default=is_default, payload=payload))
         await db.commit()
 

@@ -84,11 +84,21 @@ def _make_draft(
     })
 
 
+
+
+async def _ensure_owner(db) -> int:
+    """UPC M2 布景:垫底属主用户(id=1)+ 默认私有空间 ——
+    create_in_transaction 的缺省归属解析要求(owner_id 不可再缺省)。"""
+    from tests.helpers import ensure_fk_users
+
+    await ensure_fk_users(db, 1)
+    return 1
+
 # ── scenario_store ─────────────────────────────────────────────────
 async def test_scenario_create_then_get(fresh_db) -> None:
     async with _session() as db:
         draft = _make_draft()
-        scen = await scenario_store.create(db, draft, owner="alice")
+        scen = await scenario_store.create(db, draft, owner="alice", owner_id=await _ensure_owner(db))
         assert scen.meta.scenario_id == "sc-test"
         assert scen.data_set_count == 0
         assert scen.step_count == 0
@@ -98,14 +108,14 @@ async def test_scenario_create_then_get(fresh_db) -> None:
 
 async def test_scenario_create_duplicate_raises(fresh_db) -> None:
     async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(db, _make_draft(), owner="alice", owner_id=await _ensure_owner(db))
         with pytest.raises(ValueError, match="scenario_id_exists"):
-            await scenario_store.create(db, _make_draft(), owner="alice")
+            await scenario_store.create(db, _make_draft(), owner="alice", owner_id=await _ensure_owner(db))
 
 
 async def test_scenario_update_blocks_rename(fresh_db) -> None:
     async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(db, _make_draft(), owner="alice", owner_id=await _ensure_owner(db))
         renamed = _make_draft(scenarioId="sc-renamed")
         with pytest.raises(ValueError, match="scenario_id_changed"):
             await scenario_store.update(db, "sc-test", renamed)
@@ -121,7 +131,7 @@ async def test_scenario_meta_update_time_projected_from_db(fresh_db) -> None:
     from datetime import datetime, timezone
 
     async with _session() as db:
-        created = await scenario_store.create(db, _make_draft(), owner="alice")
+        created = await scenario_store.create(db, _make_draft(), owner="alice", owner_id=await _ensure_owner(db))
         assert created.meta.update_time is not None
         assert created.meta.update_time.tzinfo is timezone.utc
 
@@ -146,7 +156,7 @@ async def test_scenario_meta_update_time_projected_from_db(fresh_db) -> None:
 async def test_scenario_delete_cascades_datasets(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"a": 0}), owner="alice"
+            db, _make_draft(config_vars={"a": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         await data_set_store.create(
             db, "sc-test", DataSetDraft(name="ds", rows=[{"a": 1}, {"a": 2}])
@@ -161,15 +171,15 @@ async def test_scenario_delete_cascades_datasets(fresh_db) -> None:
 async def test_scenario_list_filters_by_system_and_priority(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(scenarioId="sc-fin", system=["fin"]), owner="alice"
+            db, _make_draft(scenarioId="sc-fin", system=["fin"]), owner="alice", owner_id=await _ensure_owner(db)
         )
         await scenario_store.create(
             db, _make_draft(scenarioId="sc-logi", system=["logi"], module="ship"),
-            owner="bob",
+            owner="bob", owner_id=await _ensure_owner(db),
         )
         await scenario_store.create(
             db, _make_draft(scenarioId="sc-fin-p0", system=["fin"], priority=0),
-            owner="alice",
+            owner="alice", owner_id=await _ensure_owner(db),
         )
         only_fin = await scenario_store.list_scenarios(db, system="fin")
         assert {s.meta.scenario_id for s in only_fin} == {"sc-fin", "sc-fin-p0"}
@@ -182,14 +192,14 @@ async def test_scenario_list_filters_by_system_and_priority(fresh_db) -> None:
 async def test_scenario_list_q_searches_across_fields(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(scenarioId="sc-foo"), owner="alice"
+            db, _make_draft(scenarioId="sc-foo"), owner="alice", owner_id=await _ensure_owner(db)
         )
         await scenario_store.create(
             db, _make_draft(
                 scenarioId="sc-bar", name="Special Bar",
                 tags=["smoke", "fin.order"],
             ),
-            owner="alice",
+            owner="alice", owner_id=await _ensure_owner(db),
         )
         found_by_name = await scenario_store.list_scenarios(db, q="Special")
         assert {s.meta.scenario_id for s in found_by_name} == {"sc-bar"}
@@ -225,7 +235,7 @@ async def test_scenario_read_round_trips_orchestration(fresh_db) -> None:
                 "resourceMeta": {"mock-a": "默认 mock 描述"},
             },
         })
-        await scenario_store.create(db, draft, owner="alice")
+        await scenario_store.create(db, draft, owner="alice", owner_id=await _ensure_owner(db))
         fetched = await scenario_store.get(db, "sc-orch")
 
         # orchestration round-trips with persisted values (NOT defaults)
@@ -251,7 +261,7 @@ async def test_scenario_read_legacy_payload_yields_none_extras(fresh_db) -> None
         # Use the normal create path (orchestration defaults to empty),
         # then GET — empty defaults are NOT None, but that's fine; the
         # point is no crash and the read shape stays valid.
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(db, _make_draft(), owner="alice", owner_id=await _ensure_owner(db))
         fetched = await scenario_store.get(db, "sc-test")
         # Empty orchestration still validates into the model (not None),
         # and config/resource are the dict defaults from _make_draft. The
@@ -267,7 +277,7 @@ async def test_scenario_data_set_count_sums_row_counts(fresh_db) -> None:
     the dataset count)."""
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"x": 0}), owner="alice"
+            db, _make_draft(config_vars={"x": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         await data_set_store.create(
             db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}, {"x": 2}])
@@ -290,10 +300,10 @@ async def test_scenario_list_data_set_count_defaults_to_zero(fresh_db) -> None:
     dict lookup defaults to 0, and the row still appears in the list)."""
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"x": 0}), owner="alice"
+            db, _make_draft(config_vars={"x": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         await scenario_store.create(
-            db, _make_draft(scenarioId="sc-empty"), owner="alice"
+            db, _make_draft(scenarioId="sc-empty"), owner="alice", owner_id=await _ensure_owner(db)
         )
         await data_set_store.create(
             db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
@@ -307,7 +317,7 @@ async def test_scenario_list_data_set_count_defaults_to_zero(fresh_db) -> None:
 async def test_data_set_create_assigns_incremental_id(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"x": 0}), owner="alice"
+            db, _make_draft(config_vars={"x": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         ds1 = await data_set_store.create(
             db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
@@ -331,7 +341,7 @@ async def test_data_set_create_unknown_scenario_raises(fresh_db) -> None:
 async def test_data_set_summary_preview_truncated_to_3(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"x": 0}), owner="alice"
+            db, _make_draft(config_vars={"x": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         rows = [{"x": i} for i in range(5)]
         await data_set_store.create(
@@ -348,7 +358,7 @@ async def test_data_set_var_unlocks_roundtrip(fresh_db) -> None:
     """var_unlocks(变量锁本地放开清单)随创建落库、读取回显、更新重写。"""
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"x": 0}), owner="alice"
+            db, _make_draft(config_vars={"x": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         created = await data_set_store.create(
             db, "sc-test",
@@ -372,7 +382,7 @@ async def test_data_set_var_unlocks_default_empty(fresh_db) -> None:
     """旧客户端不传 var_unlocks → 缺省空清单(不是 None),读写不炸。"""
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"x": 0}), owner="alice"
+            db, _make_draft(config_vars={"x": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         created = await data_set_store.create(
             db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
@@ -385,7 +395,7 @@ async def test_scenario_copy_carries_dataset_var_unlocks(fresh_db) -> None:
     放开清单按名存储 — 漏拷则分叉场景的解锁语义静默丢失)。"""
     async with _session() as db:
         await scenario_store.create(
-            db, _make_draft(config_vars={"x": 0}), owner="alice"
+            db, _make_draft(config_vars={"x": 0}), owner="alice", owner_id=await _ensure_owner(db)
         )
         await data_set_store.create(
             db, "sc-test",

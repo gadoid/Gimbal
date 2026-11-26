@@ -154,6 +154,15 @@ class PrecheckResult(BaseModel):
     # 同读法);未按执行配置口径预检 = 空清单(派发默认行口径时再拦)
     not_circled: list[str] = Field(
         default_factory=list, alias="notCircled")
+    # §20.3 统一装配闸(precheck 形态):blocked 方案在凭证解析**之前**
+    # 返回结构化阻塞诊断(不进行凭证解析或实际请求,AC-45)。repairReason
+    # 经 §20.3 授权投影;对外稳定错误码 scheme_repair_required。
+    repair_blocked: bool = Field(default=False, alias="repairBlocked")
+    repair_reason: "str | None" = Field(default=None, alias="repairReason")
+    repair_code: "str | None" = Field(default=None, alias="repairCode")
+    # §20.3:稳定错误码携带方案 revision(修复命令的 expected_revision 数据源)
+    repair_revision: "int | None" = Field(default=None,
+                                         alias="repairRevision")
 
 
 @router.post("/precheck", response_model=list[PrecheckResult])
@@ -200,7 +209,7 @@ async def precheck_run(
         one = await _precheck_one(
             db, scen_row, item, token=token,
             user_id=user.id if user is not None else None,
-            slot_map=_slot_map, circled=_circled)
+            user=user, slot_map=_slot_map, circled=_circled)
         one.builtin_auth_shadowed = await builtin_auth_shadowed(
             user.id if user is not None else None, scen_row)
         out.append(one)
@@ -268,6 +277,7 @@ async def builtin_auth_shadowed(executor_id: int | None,
 async def _precheck_one(
     db: AsyncSession, scen: ComposerScenario, item: PrecheckItem,
     *, token: "Any | None" = None, user_id: int | None = None,
+    user: "Any | None" = None,
     slot_map: dict[str, str] | None = None,
     circled: "frozenset[str] | None" = None,
 ) -> PrecheckResult:
@@ -281,6 +291,23 @@ async def _precheck_one(
         result.scheme_found = False
         result.scheme_valid = False
         return result
+
+    # ── §20.3 统一装配闸(先于一切数据集/身份/凭证/地址解析;AC-45:
+    # blocked 在凭证解析前返回授权投影,凭证调用数为零)────────────
+    if scheme.repair_status == "blocked":
+        result.scheme_valid = False
+        result.repair_blocked = True
+        result.repair_code = "scheme_repair_required"
+        result.repair_revision = scheme.revision
+        if user is not None:
+            from ..services import scheme_repair
+            result.repair_reason = await scheme_repair.projected_reason(
+                db, user, scheme)
+        else:
+            from ..services.scheme_repair import GENERIC_PROJECTION
+            result.repair_reason = GENERIC_PROJECTION
+        return result
+
     payload: dict[str, Any] = scheme_store.normalized(scheme.payload)
     selection = payload.get("dataSetSelection") or []
     entry_ids = payload.get("injectionEntryIds") or []

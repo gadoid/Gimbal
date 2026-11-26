@@ -326,7 +326,8 @@ async def materialize_graph(
             built_in_users=run_prepare.built_in_users(
                 r["scenario_row"].payload, executor_id=owner_id,
                 scenario_owner_id=r["scenario_row"].owner_id,
-                project_id=r["scenario_row"].project_id),
+                project_kind=await run_prepare.project_kind_of(
+                    db, r["scenario_row"].project_id)),
             carry_context=carry_ctxs[i],
             alias_base_urls=unit_urls.get(r["unit"]["ref"], {}),
         )

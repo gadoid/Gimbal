@@ -27,11 +27,21 @@ from tests.test_migrations import (  # noqa: E402
     _add_legacy_visibility, _cfg, _create_retired_tables, temp_schema,
 )
 
-_COMPARE_TABLES = ("projects", "project_members")
-_TRIGGER_TABLES = ("projects", "project_members", "users", "suite_members")
+# M2 起交付面扩展到全部对象表 + 组合/方案/成员复合约束(§20.4:
+# 每次新增 DDL 更新同一断言套件)
+_COMPARE_TABLES = (
+    "projects", "project_members",
+    "composer_scenarios", "composer_run_schemes",
+    "suites", "suite_members", "account_combos",
+    "integration_tasks", "report_definitions",
+    "scheme_repair_events", "scheme_repair_diagnosis",
+    "scenario_asset_imports",
+)
+_TRIGGER_TABLES = ("projects", "project_members", "users")
 
+# §20.6 复合 FK 取代 0042 同区触发器:suite_member_same_zone 不再
+# 在任一路径存在(链路径 0042 挂上、0068 摘除)
 _SHARED_FUNCTIONS = (
-    "suite_member_same_zone",
     "project_member_kind_guard",
     "project_kind_immutable",
     "project_member_admin_invariant",
@@ -58,7 +68,6 @@ def _build_fresh(sync_url: str) -> None:
     """路径 B:正式新库初始化 = create_all + 共享触发器 DDL + stamp。"""
     from app.core.db import Base
     from app.models.project import PROJECT_CONTAINER_DDL
-    from app.services.zone import SUITE_ZONE_TRIGGER_DDL
 
     import app.models  # noqa: F401  注册所有模型
 
@@ -66,7 +75,7 @@ def _build_fresh(sync_url: str) -> None:
     try:
         Base.metadata.create_all(engine, checkfirst=False)
         with engine.begin() as conn:
-            for stmt in (*SUITE_ZONE_TRIGGER_DDL, *PROJECT_CONTAINER_DDL):
+            for stmt in PROJECT_CONTAINER_DDL:
                 conn.execute(text(stmt))
         command.stamp(_cfg(sync_url), "head")
     finally:
@@ -199,7 +208,8 @@ class TestDualPathStructure:
         assert a["functions"] == b["functions"]
 
     def test_container_invariants_present(self, dual_paths):
-        """两路径都具备 §20 容器不变量的完整触发器面(非仅路径 B)。"""
+        """两路径都具备 §20 容器不变量的完整触发器面(非仅路径 B);
+        §20.6 起对象表不再挂任何触发器(复合 FK 是权威)。"""
         for shape in dual_paths:
             trigger_names = {t[0]
                              for rows in shape["triggers"].values()
@@ -209,8 +219,8 @@ class TestDualPathStructure:
                          "trg_project_member_admin_invariant",
                          "trg_project_admin_invariant",
                          "trg_user_active_admin_invariant",
-                         "trg_user_default_space_invariant",
-                         "trg_suite_member_same_zone"):
+                         "trg_user_default_space_invariant"):
                 assert name in trigger_names, name
+            assert "trg_suite_member_same_zone" not in trigger_names
             fns = set(shape["functions"])
             assert fns == set(_SHARED_FUNCTIONS)

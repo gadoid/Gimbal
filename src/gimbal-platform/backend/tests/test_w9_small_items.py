@@ -36,16 +36,20 @@ async def _mk_suite_with_units(client: AsyncClient, owner_h: dict) -> int:
     from app.models.suite import Suite
 
     owner_id = await _mk_user_id("vd_own")
+    from tests.helpers import default_space_id
+
     async with db_module.SessionLocal() as s:
+        pid = await default_space_id(s, owner_id)
         # name 是生成列(payload 派生),不直插
         s.add(ComposerScenario(
-            scenario_id="sc-w9-vd", owner_id=owner_id,
+            scenario_id="sc-w9-vd", owner_id=owner_id, project_id=pid,
             payload={"definition": {
                 "meta": {"scenarioId": "sc-w9-vd", "name": "VD",
                          "plate": {"fin": "1.0#1"}},
                 "steps": [], "config": {}}}))
         await s.flush()
         row = Suite(name="w9-vd", description="", owner_id=owner_id,
+                    project_id=pid,
                     mode_config={"units": {"sc-w9-vd": {"ref": "a"}}})
         s.add(row)
         await s.commit()

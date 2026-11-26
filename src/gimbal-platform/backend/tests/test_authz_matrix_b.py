@@ -51,8 +51,9 @@ _CAPS = {  # 表 A 的快照(能力面只取矩阵需要的一个)
     "super_admin": {"ops.write", "users.manage"},
 }
 
-# 区常量:普通项目 P=500(成员 uid 3/4),公共项目 PUBLIC=900
-_P, _PUBLIC = 500, 900
+# 区常量(UPC M2:对象挂真实容器):私有空间 PRIV=800(uid 1 所有),
+# 普通项目 P=500(成员 uid 3/4),公共项目 PUBLIC=900
+_PRIV, _P, _PUBLIC = 800, 500, 900
 
 # 主体:(role, uid, memberships) —— memberships: {project_id: 角色}
 # 「移出项目的创建人」= uid 1(普通项目对象 owner_id=1)∧ memberships
@@ -70,10 +71,12 @@ _SUBJECTS = [
 
 
 def _expected_from_snapshot(preds, *, uid, role, memberships, obj):
-    """由快照谓词推导期望(ref 恒 False;区互斥,按对象 project_id 判)。"""
+    """由快照谓词推导期望(ref 恒 False;区互斥,按对象 project_id 判)。
+    UPC M2:owner 谓词 = 对象所属项目是主体的私有空间(owner_id 列
+    不再参与判定,降为审计/维护者快照)。"""
     zone = getattr(obj, "project_id", None)
     for abbr in preds:
-        if abbr == "o" and zone is None and uid == obj.owner_id:
+        if abbr == "o" and zone == _PRIV and uid == 1:
             return True
         if abbr == "mem" and zone == _P and _P in memberships:
             return True
@@ -105,7 +108,7 @@ def _matrix_cases():
             for role, uid, mem, _label in _SUBJECTS:
                 if obj_type == "report_definition":
                     states = [  # (对象, 说明)
-                        (SimpleNamespace(owner_id=1, project_id=None),
+                        (SimpleNamespace(owner_id=1, project_id=_PRIV),
                          "私有"),
                         (SimpleNamespace(owner_id=1, project_id=_P),
                          "普通项目"),
@@ -116,7 +119,7 @@ def _matrix_cases():
                     ]
                 else:
                     states = [
-                        (SimpleNamespace(owner_id=1, project_id=None),
+                        (SimpleNamespace(owner_id=1, project_id=_PRIV),
                          "私有"),
                         (SimpleNamespace(owner_id=1, project_id=_P),
                          "普通项目"),
@@ -142,9 +145,11 @@ def test_can_pure_matrix(obj_type, verb, role, uid, memberships, obj,
     from app.routers._ownership import can_pure
 
     user = SimpleNamespace(role=role, id=uid)
+    priv = frozenset({_PRIV}) if uid == 1 else frozenset()
     assert can_pure(user, obj_type, verb, obj,
                     public_project_id=_PUBLIC,
-                    project_roles=memberships) is expected
+                    project_roles=memberships,
+                    private_project_ids=priv) is expected
 
 
 def test_can_pure_without_zone_context_fails_closed():

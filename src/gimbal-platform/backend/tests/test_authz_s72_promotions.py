@@ -125,9 +125,19 @@ class TestAnalyze:
         from app.core import db as db_module
         from app.models.composer_scenario import ComposerScenario
 
+        from sqlalchemy import text as _text
+
+        from app.models.composer_run_scheme import ComposerRunScheme
+
         async with db_module.SessionLocal() as db:
+            await db.execute(_text(
+                "SET CONSTRAINTS fk_scheme_scenario_zone, "
+                "fk_scheme_combo_zone DEFERRED"))
             await db.execute(sa_update(ComposerScenario).where(
                 ComposerScenario.scenario_id == "sc-s72-g"
+            ).values(project_id=pid))
+            await db.execute(sa_update(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == "sc-s72-g"
             ).values(project_id=pid))
             await db.commit()
         r = await client.post(
@@ -362,9 +372,14 @@ class TestSuitePromotion:
 
         # 合法私有套件成员 = 自己的私有场景(S1.5 同区触发器钉死;
         # 他人私有/他项目场景根本进不来 —— blockers 属防御分支)
+        from app.models.suite import Suite as _Suite
+
         async with db_module.SessionLocal() as db:
+            # UPC M2:成员行 project_id 与套件一致(§20.6 校验键)
+            suite_row = await db.get(_Suite, sid)
             for i, scen in enumerate(["sc-s72-pre", "sc-s72-priv"]):
                 db.add(SuiteMember(suite_id=sid, scenario_id=scen,
+                                   project_id=suite_row.project_id,
                                    role="main", sort=i))
             await db.commit()
         r = await client.post(

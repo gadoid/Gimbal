@@ -28,6 +28,38 @@ from ..models.project import Project, ProjectMember
 from . import zone
 
 
+def relation_of_project(project: Project, user_id: int) -> str | None:
+    """免查成员表的同步关系投影(private 所有权 / public_reader);
+    normal 的成员关系须查角色表,走 :func:`project_relation`。表 B
+    owner 谓词与私有空间创建门共用本判定(所有权比较单点)。"""
+    if project.kind == Project.KIND_PRIVATE:
+        return "owner" if project.owner_id == user_id else None
+    if project.kind == Project.KIND_PUBLIC:
+        return "public_reader"
+    return None
+
+
+async def resolve_content_target(
+    db: AsyncSession, user_id: int, project_id: int | None,
+) -> Project:
+    """内容创建目标解析(UPC M2 归属写入点收敛,§8/§21):所有容器
+    资源(场景/套件/报告/集成模板/组合/资产导入)的创建路径统一经此
+    解析目标项目 —— 缺省 = 用户**默认私有空间**(§4:每用户恰一个,
+    缺省归属是契约规则,不是猜测);显式 id 则经
+    ``zone.ensure_can_create_in_project`` 三 kind 统一校验(存在 /
+    active / 公共 422 / private 属主 / normal 可写成员)。"""
+    if project_id is not None:
+        return await zone.ensure_can_create_in_project(db, user_id, project_id)
+    from .project_space import get_default_private_project
+
+    proj = await get_default_private_project(db, user_id)
+    if proj is None:
+        raise zone.ProjectCreateDenied(
+            404, "default_space_missing",
+            "用户没有默认私有空间(用户初始化未完成或处置中)")
+    return proj
+
+
 def visible_projects_clause(viewer_id: int) -> ColumnElement[bool]:
     """项目可见性 SQL 谓词 —— 列表、/auth/me、详情与对象可见性同源。
 

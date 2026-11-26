@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from sqlalchemy import delete, func, select
+from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.project import Project, ProjectMember
@@ -63,13 +64,70 @@ async def create_private_space(
     return proj
 
 
-async def dispose_private_containers(db: AsyncSession, user_id: int) -> int:
-    """用户删除处置(§13「仅处置其私有容器及主体资源」):删其私有空间。
+async def dispose_private_assets(db: AsyncSession, project_ids: list[int]) -> None:
+    """删除项目内容(FK 依赖序;§13「删除前生成依赖处置计划」的
+    私有空间处置面):方案 → 套件成员 → 套件 → 组合 → 报告定义 →
+    集成模板 → 场景(数据集/端点引用/收藏随场景显式收口)。只 flush,
+    与调用方同一事务。"""
+    from sqlalchemy import delete as sa_delete
 
-    M1 期容器内尚无对象资源(对象表 project_id 迁移随 M2);资源迁入
-    后此处置升级为依赖处置计划(§13 表:Scenario/Suite 先迁移或
-    Purge)。成员行不可能存在(private 不落成员行,触发器钉死)。
-    """
+    from ..models.account_combo import AccountCombo
+    from ..models.composer_data_set import ComposerDataSet
+    from ..models.composer_run_scheme import ComposerRunScheme
+    from ..models.composer_scenario import ComposerScenario
+    from ..models.integration_task import IntegrationTask
+    from ..models.report_definition import ReportDefinitionRow
+    from ..models.suite import Suite, SuiteMember
+    from ..models.user import User as _U  # noqa: F401  user_stars CASCADE
+
+    if not project_ids:
+        return
+    await db.execute(sa_delete(ComposerRunScheme).where(
+        ComposerRunScheme.project_id.in_(project_ids)))
+    await db.execute(sa_delete(SuiteMember).where(
+        SuiteMember.project_id.in_(project_ids)))
+    await db.execute(sa_delete(Suite).where(
+        Suite.project_id.in_(project_ids)))
+    await db.execute(sa_delete(AccountCombo).where(
+        AccountCombo.project_id.in_(project_ids)))
+    await db.execute(sa_delete(ReportDefinitionRow).where(
+        ReportDefinitionRow.project_id.in_(project_ids)))
+    await db.execute(sa_delete(IntegrationTask).where(
+        IntegrationTask.project_id.in_(project_ids),
+        IntegrationTask.template_id.is_(None)))
+    # 场景的三个 NO ACTION 引用者先收口,再删场景本体
+    from ..models.permission import UserStar
+    from ..models.scenario_endpoint_ref import ScenarioEndpointRef
+
+    scen_ids = sa_select(ComposerScenario.scenario_id).where(
+        ComposerScenario.project_id.in_(project_ids)).scalar_subquery()
+    await db.execute(sa_delete(ScenarioEndpointRef).where(
+        ScenarioEndpointRef.scenario_id.in_(scen_ids)))
+    await db.execute(sa_delete(ComposerDataSet).where(
+        ComposerDataSet.scenario_id.in_(scen_ids)))
+    # §20.2:方案行(含默认方案,场景创建即生)先于场景本体删除
+    # —— fk_scheme_scenario_zone 为 NO ACTION
+    from ..models.composer_run_scheme import ComposerRunScheme
+
+    await db.execute(sa_delete(ComposerRunScheme).where(
+        ComposerRunScheme.scenario_id.in_(scen_ids)))
+    await db.execute(sa_delete(UserStar).where(
+        UserStar.scenario_id.in_(scen_ids)))
+    await db.execute(sa_delete(ComposerScenario).where(
+        ComposerScenario.project_id.in_(project_ids)))
+
+
+async def dispose_private_containers(db: AsyncSession, user_id: int) -> int:
+    """用户删除处置(§13「仅处置其私有容器及主体资源」):先清空各私有
+    空间内容(依赖处置计划),再删容器本身。成员行不可能存在(private
+    不落成员行,触发器钉死)。"""
+    pids = (await db.execute(
+        select(Project.id).where(
+            Project.kind == Project.KIND_PRIVATE,
+            Project.owner_id == user_id))).scalars().all()
+    if not pids:
+        return 0
+    await dispose_private_assets(db, list(pids))
     res = await db.execute(
         delete(Project).where(
             Project.kind == Project.KIND_PRIVATE,

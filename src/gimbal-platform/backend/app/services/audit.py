@@ -65,6 +65,16 @@ AUDIT_ACTIONS = (
     # promotion 行自身(resolution.immediate + decidedBy)。
     "promotion.approve",
     "promotion.reject",
+    # ── UPC M2:账户组合资源治理(组合 v4 §5.5;方案绑定/解绑随
+    # run-schemes 写面,与既有 run-schemes 写动作同一记录口径)──────
+    "account_combo.create",
+    "account_combo.update",     # 改名/描述/条目(条目变化 revision+1)
+    "account_combo.set_default",
+    "account_combo.delete",
+    # ── UPC M2:§20.3 修复命令(行级同事务审计在 scheme_repair_events;
+    # 此处只记治理面动作)──────────────────────────────
+    "scheme.repair.rebind_combo",
+    "scheme.repair.confirm_no_combo",
 )
 
 

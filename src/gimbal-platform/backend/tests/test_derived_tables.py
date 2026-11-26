@@ -27,7 +27,8 @@ async def _seed_parents(s) -> None:
     await ensure_fk_users(s, 1)
     try:
         await scenario_store.create(
-            s, ScenarioDraft.model_validate(make_draft("sc-a")), owner="alice")
+            s, ScenarioDraft.model_validate(make_draft("sc-a")), owner="alice",
+            owner_id=1)
     except ValueError:  # 已存在(同测试内二次进人)
         pass
 

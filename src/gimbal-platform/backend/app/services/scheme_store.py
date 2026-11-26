@@ -1,17 +1,35 @@
-"""CRUD store for composer_run_schemes(workbench spec §5)。
+"""CRUD store for composer_run_schemes(workbench spec §5;UPC M2 §16.1)。
 
-行形状:关系的做关系(scenario 归属/name 唯一/default 标记在列),
-文档的做文档(方案体一个 JSON payload,camelCase wire 形状)。
-store 层错误约定:ValueError("name_conflict") / ValueError("default_protected")
-/ KeyError(scheme_id) — 路由层负责翻译成 409/405/404。
+行形状:关系的做关系(scenario 归属/name 唯一/default 标记/组合绑定
+显式列在列),文档的做文档(方案体一个 JSON payload,camelCase wire
+形状)。store 层错误约定:ValueError("name_conflict") /
+ValueError("default_protected") / KeyError(scheme_id) —— 路由层负责
+翻译成 409/405/404。
+
+UPC M2(§16.1 组合绑定读写点收敛):
+
+* **绑定唯一持久化事实 = ``account_combo_id`` 显式列**(§20.2);API
+  同名 DTO 字段(``accountComboId``)在此双向映射 —— ``normalized()``
+  把 payload 里的该键**恒剥**(含历史残留与恶意直写),持久化 payload
+  不再保存绑定,无第二事实源。
+* ``project_id`` 从父场景派生(冗余校验键,复合 FK 钉死一致),创建
+  时随场景写入,此后不存在独立修改归属的路径。
+* **复制恒剥绑定**(§5.1/v4 §4.3:副本 = 新建),但**继承阻塞**
+  (§20.3:复制不得通过普通空绑定清除 blocked —— 源 blocked 则副本
+  blocked,同原因)。
+* ``revision`` 乐观锁:修复命令与绑定变更 expected_revision 原子校验,
+  方案内容保存同事务递增(§20.3「绑定与 revision 同事务」)。
 """
 from __future__ import annotations
+
+from typing import Any
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.composer_run_scheme import ComposerRunScheme
+from ..models.composer_scenario import ComposerScenario
 
 DEFAULT_SCHEME_NAME = "默认方案"
 
@@ -26,6 +44,8 @@ _EMPTY_PAYLOAD: dict = {
     "options": dict(_EMPTY_OPTIONS),
 }
 
+_UNSET: Any = object()
+
 
 def normalized(payload: dict | None) -> dict:
     """合并缺省键,保证 wire 形状完整(存量/旧端点数据可能缺新键)。
@@ -34,8 +54,12 @@ def normalized(payload: dict | None) -> dict:
     dataSetSelection(spec v3 §4 权威键;rowIndexes 空 = 整库)。
     执行参数:M10 RunOptions 形状(options 包裹),迁移已完成
     (scripts/migrate_scheme_run_options.py --apply),不再收旧平铺键。
+
+    UPC M2(§16.1):``accountComboId`` 恒剥 —— 绑定走显式列,
+    payload 不保存(入参残留/历史行/直写一律剥离,无第二事实源)。
     """
     p = dict(payload or {})
+    p.pop("accountComboId", None)
     out = dict(_EMPTY_PAYLOAD)
     out.update({k: v for k, v in p.items() if k in out})
     # 旧形状兼容:只有 dataSetIds(整库语义)而无行级选择时,合成
@@ -75,12 +99,32 @@ async def _next_scheme_id(db: AsyncSession) -> str:
     return f"rs-{n:03d}"
 
 
-def _to_wire(row: ComposerRunScheme) -> dict:
-    # 迁移完成:不再展开平铺键;前端读 options 形状(M10/RunOptions)
+async def _scenario_project_id(db: AsyncSession, scenario_id: str) -> int:
+    """方案归属从父场景派生(§20.2 冗余校验键的唯一写入来源)。"""
+    pid = (await db.execute(
+        select(ComposerScenario.project_id).where(
+            ComposerScenario.scenario_id == scenario_id)
+    )).scalar_one_or_none()
+    if pid is None:
+        raise KeyError(scenario_id)
+    return pid
+
+
+def _to_wire(row: ComposerRunScheme, *,
+             repair_reason: str | None = None) -> dict:
+    # 迁移完成:不再展开平铺键;前端读 options 形状(M10/RunOptions)。
+    # UPC M2:accountComboId ↔ 显式列双向映射;repairStatus/revision
+    # 随行;repairReason 由路由层经 §20.3 授权投影后注入(此处缺省
+    # None = ready;内部精确原因不直接序列化)。
     return {
         "schemeId": row.scheme_id,
         "name": row.name,
         "isDefault": bool(row.is_default),
+        "accountComboId": row.account_combo_id,
+        "repairStatus": row.repair_status,
+        "repairReason": (repair_reason if row.repair_status == "blocked"
+                         else None),
+        "revision": row.revision,
         **normalized(row.payload),
     }
 
@@ -96,6 +140,7 @@ async def ensure_default_scheme(db: AsyncSession, scenario_id: str) -> None:
         db.add(ComposerRunScheme(
             scheme_id=await _next_scheme_id(db),
             scenario_id=scenario_id,
+            project_id=await _scenario_project_id(db, scenario_id),
             name=DEFAULT_SCHEME_NAME,
             is_default=True,
             payload=dict(_EMPTY_PAYLOAD),
@@ -103,18 +148,24 @@ async def ensure_default_scheme(db: AsyncSession, scenario_id: str) -> None:
         await db.commit()
 
 
-async def list_schemes(db: AsyncSession, scenario_id: str) -> list[dict]:
+async def list_schemes(
+    db: AsyncSession, scenario_id: str, *,
+    repair_reasons: dict[str, str | None] | None = None,
+) -> list[dict]:
     rows = (await db.execute(
         select(ComposerRunScheme)
         .where(ComposerRunScheme.scenario_id == scenario_id)
         .order_by(ComposerRunScheme.is_default.desc(), ComposerRunScheme.name)
     )).scalars().all()
-    return [_to_wire(r) for r in rows]
+    reasons = repair_reasons or {}
+    return [_to_wire(r, repair_reason=reasons.get(r.scheme_id))
+            for r in rows]
 
 
 async def create_scheme(
     db: AsyncSession, scenario_id: str, *,
     name: str, payload: dict, is_default: bool = False,
+    account_combo_id: int | None = None,
 ) -> dict:
     if not is_default and name == DEFAULT_SCHEME_NAME:
         raise ValueError("name_conflict")
@@ -128,7 +179,13 @@ async def create_scheme(
         raise ValueError("name_conflict")
     row = ComposerRunScheme(
         scheme_id=await _next_scheme_id(db),
-        scenario_id=scenario_id, name=name, is_default=is_default,
+        scenario_id=scenario_id,
+        project_id=await _scenario_project_id(db, scenario_id),
+        name=name, is_default=is_default,
+        # 原生新建 = 已确认组合语义(绑定或空绑定都 ready;§20.3
+        # 状态机 [*] → Ready),修复状态不接受调用方指定
+        repair_status="ready",
+        account_combo_id=account_combo_id,
         payload=_sanitize_default(payload) if is_default else normalized(payload),
     )
     db.add(row)
@@ -184,7 +241,13 @@ async def resolve_for_run(
 async def update_scheme(
     db: AsyncSession, scenario_id: str, scheme_id: str, *,
     name: str | None, payload: dict | None,
+    account_combo_id: Any = _UNSET,
 ) -> dict:
+    """方案保存(整稿 PUT)。``account_combo_id``:_UNSET = 调用方未传
+    (保留存量);None = 解绑;int = 换绑 —— 绑定与 revision 同事务
+    (§16.1)。blocked 方案的绑定改动由 ck_scheme_combo_repair 在库层
+    拒绝(普通 PATCH 不得清除阻塞,§20.3)—— 修复命令经
+    ``services.scheme_repair`` 专用路径,不经此处。"""
     row = await get_row(db, scenario_id, scheme_id)
     if row.is_default:
         if payload is not None:
@@ -205,6 +268,14 @@ async def update_scheme(
             row.name = name
         if payload is not None:
             row.payload = normalized(payload)
+    if account_combo_id is not _UNSET:
+        if (row.repair_status == "blocked"
+                and account_combo_id is not None):
+            # §20.3:普通保存不得解除/改绑 blocked —— 修复命令是仅有入口
+            # (库层 ck_scheme_combo_repair 兜底;此处先行给人话错误)
+            raise ValueError("scheme_repair_required")
+        row.account_combo_id = account_combo_id
+    row.revision += 1
     await db.commit()
     return _to_wire(row)
 
@@ -229,10 +300,16 @@ async def copy_schemes(
     dst 物化默认方案,直接补插源侧 default 行会撞「每场景恰一默认」
     的部分唯一索引(及 (scenario, name) 唯一索引);整组替换保证
     dst ≡ src(含默认方案的 payload 定制)。
+
+    UPC M2(§5.1/§20.3):**绑定恒剥**(副本 = 新建,不携带组合引用);
+    **阻塞继承** —— 源 blocked 则副本 blocked(同原因),普通复制
+    不得通过空绑定清除 blocked;源 ready(含空绑定)副本 ready。
+    新 scheme_uid 由库默认生成(不可复用身份,删除重建是新身份)。
     """
     await db.execute(sa_delete(ComposerRunScheme).where(
         ComposerRunScheme.scenario_id == dst_scenario_id
     ))
+    dst_pid = await _scenario_project_id(db, dst_scenario_id)
     rows = (await db.execute(
         select(ComposerRunScheme)
         .where(ComposerRunScheme.scenario_id == src_scenario_id)
@@ -241,7 +318,12 @@ async def copy_schemes(
         db.add(ComposerRunScheme(
             scheme_id=await _next_scheme_id(db),
             scenario_id=dst_scenario_id, name=r.name,
-            is_default=r.is_default, payload=dict(r.payload or {}),
+            project_id=dst_pid,
+            is_default=r.is_default,
+            # 绑定恒剥;阻塞继承(ready 保持 ready)
+            repair_status=r.repair_status,
+            repair_reason=r.repair_reason,
+            payload=dict(r.payload or {}),
         ))
 
 

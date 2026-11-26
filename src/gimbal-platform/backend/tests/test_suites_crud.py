@@ -246,11 +246,15 @@ async def test_member_boundary_own_scenarios_only(client: AsyncClient) -> None:
 
         async with db_module.SessionLocal() as s:
             try:
+                from app.models.suite import Suite as _Suite
+
+                _sp = (await s.get(_Suite, sid)).project_id
                 await s.execute(text(
                     "INSERT INTO suite_members "
-                    "(suite_id, scenario_id, role, sort, added_at) "
-                    "VALUES (:sid, 'sc-mb-bob', 'main', 0, now())"),
-                    {"sid": sid})
+                    "(suite_id, scenario_id, project_id, role, sort,"
+                    " added_at) "
+                    "VALUES (:sid, 'sc-mb-bob', :pid, 'main', 0, now())"),
+                    {"sid": sid, "pid": _sp})
                 await s.commit()
                 raised = False
             except Exception:

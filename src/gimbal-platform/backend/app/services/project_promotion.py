@@ -96,10 +96,22 @@ async def project_admin_ids(db: AsyncSession, project_id: int) -> list[int]:
         ProjectMember.role == ProjectMember.ROLE_ADMIN))).scalars().all())
 
 
+async def _scen_in_private_zone(db: AsyncSession, project_id: int) -> bool:
+    """场景是否位于私有空间容器(UPC M2:归属列恒非空,私有区由
+    容器 kind 判定;套件成员分析用)。"""
+    kind = (await db.execute(select(Project.kind).where(
+        Project.id == project_id))).scalar_one_or_none()
+    return kind == "private"
+
+
 async def _load_source(
     db: AsyncSession, kind: str, source_id: str, applicant_id: int,
 ):
-    """来源对象门:存在 + 属主是申请人 + 在私有区(未进任何项目)。"""
+    """来源对象门:存在 + 属主是申请人 + 在**申请人私有空间**内
+    (UPC M2:私有区 = 真实私有空间容器;旧「project_id 空」判定退役)。"""
+    from .zone import my_private_projects
+
+    priv = await my_private_projects(db, applicant_id)
     if kind == "scenario":
         row = (await db.execute(select(ComposerScenario).where(
             ComposerScenario.scenario_id == source_id))).scalar_one_or_none()
@@ -108,7 +120,7 @@ async def _load_source(
                                  f"scenario not found: {source_id}")
         if row.owner_id != applicant_id:
             raise PromotionError(403, "not_owner", "只能加入自己名下的场景")
-        if row.project_id is not None:
+        if row.project_id not in priv:
             raise PromotionError(
                 422, "source_not_private", "场景已在项目中,不能再次加入")
         return row
@@ -121,7 +133,7 @@ async def _load_source(
                                  f"suite not found: {source_id}")
         if row.owner_id != applicant_id:
             raise PromotionError(403, "not_owner", "只能加入自己名下的用例集")
-        if row.project_id is not None:
+        if row.project_id not in priv:
             raise PromotionError(
                 422, "source_not_private", "用例集已在项目中,不能再次加入")
         return row
@@ -362,10 +374,9 @@ async def analyze_promotion(
             if scen.project_id == project_id:
                 plan.append({"scenarioId": m.scenario_id,
                              "action": "reference", "role": m.role or "main"})
-            elif scen.project_id is not None:
-                blockers.append({"scenarioId": m.scenario_id,
-                                 "reason": "in_other_project"})
-            else:
+            elif await _scen_in_private_zone(db, scen.project_id):
+                # UPC M2:私有区 = 场景所属容器 kind 判定(旧
+                # 「project_id 空」分支退役);私有成员可随行提升
                 promoted = (await db.execute(
                     select(ComposerScenario.scenario_id)
                     .where(ComposerScenario.project_id == project_id,
@@ -388,6 +399,9 @@ async def analyze_promotion(
                 else:
                     blockers.append({"scenarioId": m.scenario_id,
                                      "reason": "not_owner"})
+            else:
+                blockers.append({"scenarioId": m.scenario_id,
+                                 "reason": "in_other_project"})
         slots: list[str] = []
         identity_entries: list[dict] = []
         for m in members:
@@ -475,9 +489,10 @@ async def execute_promotion_copy(
                              "成员场景状态变化,重新发起加入申请")
     from datetime import datetime, timezone
     from .suite_copy import suite_owner_display
-    # 同属主内 suite 名唯一(uq_suites_owner_name):计数后缀去冲突
+    # 目标项目内名唯一(uq_suites_project_name,UPC M2 换轴):计数后缀
     existing = {n for (n,) in (await db.execute(
-        select(Suite.name).where(Suite.owner_id == suite.owner_id))).all()}
+        select(Suite.name).where(
+            Suite.project_id == promo.project_id))).all()}
     name = suite.name
     if name in existing:
         i = 2
@@ -507,6 +522,7 @@ async def execute_promotion_copy(
             new_sid = await _promote_scenario(db, scen, promo.project_id)
             copied.append(new_sid)
         db.add(SuiteMember(suite_id=new_suite.id, scenario_id=new_sid,
+                           project_id=new_suite.project_id,
                            role=m["role"], sort=sort))
         mapping[m["scenarioId"]] = new_sid
         sort += 1

@@ -46,6 +46,11 @@ class ComposerScenario(Base):
 
     __tablename__ = "composer_scenarios"
     __table_args__ = (
+        # §20.2 复合 FK 目标候选键(非延迟;fk_scheme_scenario_zone 与
+        # fk_suite_members_scenario_zone 共用)。全局 scenario_id 业务 ID
+        # 唯一性不变(§20.2「不擅自改变业务 ID 唯一性」)。
+        Index("uq_scenario_project_scenario_id", "project_id", "scenario_id",
+              unique=True),
         # 列表分页锚(§2.2:排序 updated_at DESC + visibility 桶)
         # GIN 仅 PG 生效(JSONB 路径索引);SQLite 侧渲染为普通 btree
         #(本地量小,无害)。M3 检索 SQL 化时按需补 trgm。
@@ -70,20 +75,16 @@ class ComposerScenario(Base):
     # 属主字符串快照(展示;原 ``owner`` 列升正位为三件套规范命名)。
     # 归属判断的唯一权威是 owner_id。
     owner_name: Mapped[str] = mapped_column(String(128), default="")
-    # 稳定属主(int user.id)。M2:FK + SET NULL —— 人走场景留(转公共库
-    # 或转让,处置流程见权限方案 §4.3;历史 owner_id=0 行由 ETL 映射 NULL)。
+    # 稳定属主快照(int user.id;M2:FK + SET NULL —— 人走场景留)。UPC
+    # M2 起归属权威是 project_id(私有空间/项目/公共项目),owner_id 保留
+    # 为审计与公共项目维护者快照(表 B maintainer 谓词)。
     owner_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    # visibility 列随 0043 删除(读写全切 project 谓词,响应由
-    # zone.derive_visibility 派生)。项目区:空 = 私有区;公共项目 =
-    # 公开内容(S1.9 删
-    # visibility 列前,两者由影子写保持一致)。不加 ON DELETE:项目
-    # 删除前置 409 清空(S1.4),库层 FK 兜底拦住漏网内容。
-    project_id: Mapped[int | None] = mapped_column(
-        ForeignKey("projects.id"), nullable=True, index=True)
+    # (旧「visibility」/「项目区空 = 私有区」的影子写层随 0043/0068 退役;
+    #  现读取见 services.zone.derive_visibility —— 由 project_id 派生)
     # 副本来源三件套(权限域二期 P2,§7.3/§13.4-债1):场景与 suite 的
     # 副本共用此套字段,「副本 · 来自某人」徽标与将来对比原件的依据。
     forked_from_id: Mapped[str | None] = mapped_column(
@@ -92,6 +93,12 @@ class ComposerScenario(Base):
         String(128), nullable=True)
     forked_from_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True)
+    # 真实容器归属(UPC §5:NOT NULL FK —— 旧「project_id 空 = 私有区」
+    # 语义随 M2 资源迁移收口,私有区内容落所有者的私有空间)。不加
+    # ON DELETE:项目删除前置 409 清空(S1.4),库层 FK RESTRICT 兜底
+    # 拦住漏网内容;用户删除先处置私有空间资产(§13)。
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id"), nullable=False, index=True)
     # Full draft container: {definition, orchestration} — the single
     # source of truth for meta/steps/config/resource.  列表侧的 meta 投影
     # 由下方生成列自算(源存果算,DB 物化,应用不可写)。

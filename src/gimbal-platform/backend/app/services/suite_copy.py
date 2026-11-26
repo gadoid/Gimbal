@@ -91,9 +91,18 @@ async def deep_copy_suite(
             "code": "suite_empty",
             "message": "suite 没有成员,无可拷贝内容"})
 
+    # UPC M2:接收人的私有区 = 其默认私有空间(真实容器归属)
+    from .project_space import get_default_private_project
+    target_project = await get_default_private_project(db, target.id)
+    if target_project is None:
+        raise HTTPException(404, {
+            "code": "default_space_missing",
+            "message": f"接收人 {target.username} 没有默认私有空间"
+                       "(用户处置未完成或异常状态)"})
+
     # SUITE_CAP(草稿不计入,Python 侧过滤)/ SUITE_MEMBER_CAP(§7.8)
     own_cfgs = (await db.execute(
-        select(Suite.mode_config).where(Suite.owner_id == target.id)
+        select(Suite.mode_config).where(Suite.project_id == target_project.id)
     )).all()
     n_formal = sum(1 for (cfg,) in own_cfgs
                    if not (cfg or {}).get("draft"))
@@ -106,10 +115,11 @@ async def deep_copy_suite(
             "code": "suite_member_cap_exceeded",
             "message": f"suite member cap is {settings.SUITE_MEMBER_CAP}"})
 
-    # suite 名冲突:计数后缀(scenario resolve 同款策略)
+    # suite 名冲突:计数后缀(scenario resolve 同款策略;项目内唯一)
     name = suite.name
     existing = {n for (n,) in (await db.execute(
-        select(Suite.name).where(Suite.owner_id == target.id)))}
+        select(Suite.name).where(
+            Suite.project_id == target_project.id)))}
     if name in existing:
         i = 2
         while f"{name}-{i}" in existing:
@@ -119,6 +129,7 @@ async def deep_copy_suite(
     from datetime import datetime, timezone
     new_suite = Suite(
         name=name, description=suite.description, owner_id=target.id,
+        project_id=target_project.id,
         mode=suite.mode, rev=0,          # 副本 rev 归零(约束 8)
         forked_from_id=suite.id,
         forked_from_owner_name=sharer_disp,
@@ -148,6 +159,7 @@ async def deep_copy_suite(
         db.add(SuiteMember(
             suite_id=new_suite.id,
             scenario_id=out.meta.scenario_id,
+            project_id=new_suite.project_id,  # §20.6 校验键随套件
             role=m.role or "main",    # 前置/后置角色随副本(约束 8)
             sort=sort))
         mapping[m.scenario_id] = out.meta.scenario_id

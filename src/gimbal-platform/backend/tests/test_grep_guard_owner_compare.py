@@ -66,7 +66,6 @@ _ALLOWLIST: dict[str, int] = {
     'routers/integration.py:if has_capability(current, "ops.write") or db_tpl.owner_id == current.id:': 1,
     'routers/integration.py:if tpl.owner_id != user.id:': 1,
     'routers/integration.py:if tpl.token_id is None or tpl.owner_id != user.id:': 1,
-    'routers/integration.py:return tpl.owner_id == user.id': 1,
     'routers/integration.py:subscribed = (inst is not None and inst.holder_id == user.id)': 1,
     'routers/me.py:AuthAccount).where(AuthAccount.owner_id == user.id))).scalar_one())': 1,
     # A 级批次(2026-11-18):实例×凭证聚合端点的个人池计数(本人镜头)
@@ -77,31 +76,26 @@ _ALLOWLIST: dict[str, int] = {
     'routers/projects.py:if proj.owner_id != user.id:': 1,
     'routers/projects.py:if project.owner_id != user.id:': 1,
     'routers/projects.py:return proj.owner_id == user.id': 2,
-    'services/project_space.py:Project.owner_id == user_id))': 1,
-    'services/project_space.py:Project.owner_id == user_id,': 1,
     'routers/me.py:ComposerScenario.owner_id == user.id,': 1,
     'routers/me.py:Execution.owner_id == user.id,': 2,
     'routers/me.py:IntegrationTask.holder_id == user.id))': 1,
     'routers/me.py:IntegrationTask.holder_id == user.id))).scalar_one())': 1,
     'routers/project_tokens.py:AccessToken.holder_id == user_id,': 1,
     'routers/scenarios.py:.where(Execution.owner_id == user.id,': 1,
-    'routers/scenarios.py:if r.owner_id == user.id and r.project_id is None]': 1,
     'routers/scenarios.py:if row.owner_id is not None and row.owner_id != user.id:': 1,
     'routers/scenarios.py:if su.owner_id is not None and su.owner_id != user.id:': 1,
     'routers/scenarios.py:own = row.owner_id == user.id': 1,
     'routers/scenarios.py:readable = [r for r in readable if r.owner_id == user.id]': 1,
     'routers/suites.py:Execution.owner_id == runner_id,': 1,
+    # UPC M2:普通/公共项目内容的创建人位(access 投影提示,实际写权
+    # 仍由表 B 把关)
+    'routers/suites.py:elif suite.owner_id == user.id:': 1,
     'routers/suites.py:Execution.owner_id == user.id,': 2,
-    'routers/suites.py:clauses = [Suite.owner_id == user.id, Suite.project_id.is_(None)]': 1,
     'routers/suites.py:clauses = [Suite.owner_id == user.id]   # 镜头(含我维护的公共副本)': 1,
     'routers/suites.py:if copy.owner_id != user.id:': 1,
     'routers/suites.py:if ex.owner_id != user.id:': 1,
-    'routers/suites.py:select(Suite.mode_config).where(Suite.owner_id == user.id)': 1,
-    'routers/suites.py:select(Suite.name).where(Suite.owner_id == suite.owner_id)))': 1,
-    'routers/suites.py:select(Suite.name).where(Suite.owner_id == user.id)))}': 1,
     'routers/suites.py:select(func.count()).where(Suite.owner_id == suite.owner_id,': 1,
     'routers/users.py:.where(ComposerScenario.owner_id == user_id)': 3,
-    'routers/users.py:.where(ComposerScenario.owner_id == user_id,': 1,
     'routers/users.py:AccessToken.holder_id == target.id,': 1,
     'routers/users.py:IntegrationTask.holder_id != user_id))).scalars().all()': 1,
     'routers/users.py:IntegrationTask.holder_id == user_id))': 2,
@@ -112,7 +106,6 @@ _ALLOWLIST: dict[str, int] = {
     'routers/users.py:Suite.owner_id == user_id,': 1,
     'routers/users.py:sa_delete(AuthAccount).where(AuthAccount.owner_id == user_id))': 1,
     'routers/users.py:sa_delete(ConstantEntry).where(ConstantEntry.owner_id == user_id))': 1,
-    'routers/users.py:sa_delete(Suite).where(Suite.owner_id == user_id))': 2,
     'routers/users.py:sa_update(Execution).where(Execution.owner_id == user_id)': 1,
     'routers/users.py:sa_update(Suite).where(Suite.owner_id == user_id)': 1,
     'routers/users.py:select(Execution).where(Execution.owner_id == user_id)': 1,
@@ -125,38 +118,47 @@ _ALLOWLIST: dict[str, int] = {
     # A 级批次(2026-11-18):streaks 泛化 owner/project 二选一,原
     # .where(Execution.owner_id == owner_id) 行形收进 scope
     'services/execution_store.py:scope = (Execution.owner_id == owner_id if owner_id is not None': 1,
-    'services/integration_runner.py:IntegrationTask.holder_id != tpl.owner_id,': 2,
-    'services/integration_runner.py:IntegrationTask.holder_id == holder,': 2,
     # 01-03 §4.1(2026-11-24):owner 实例的成员复核分支选择(同上方
     # ``_token`` 复核的「属主实例」面,终态类);移除联动的持有实例
     # 检索(个人数据查询,同 ensure_instance 类)。
-    'services/integration_runner.py:IntegrationTask.holder_id == user_id,': 1,
-    'services/integration_runner.py:and inst.holder_id == tpl.owner_id)))': 1,
-    'services/integration_runner.py:and (inst.holder_id != user_id': 1,
-    'services/integration_runner.py:and inst.holder_id != tpl.owner_id)': 1,
-    'services/integration_runner.py:if _token is not None and inst.holder_id == tpl.owner_id:': 1,
-    'services/integration_runner.py:if row_dict and inst.holder_id != scen.owner_id:': 1,
-    'services/integration_runner.py:mine = next((i for i in insts if i.holder_id == new_holder), None)': 1,
-    'services/integration_runner.py:reg = next((i for i in insts if i.holder_id == old_holder), None)': 1,
     'services/maintenance_transfer.py:IntegrationTask.holder_id == old_owner_id))': 1,
     'services/project_promotion.py:elif scen.owner_id == src.owner_id:': 1,
     'services/project_promotion.py:if row.owner_id != applicant_id:': 2,
-    'services/project_promotion.py:select(Suite.name).where(Suite.owner_id == suite.owner_id))).all()}': 1,
     # C1 切片2(2026-11-23):clientRef 幂等条件(预查/回查两处同款)去重进
     # _dup_client_ref_id —— 单一实现在此保留白名单(等值比较 = 幂等身份
     # 维度与 0056 部分唯一索引同拍,非属主可见性判定)。
     'services/run_dispatcher.py:& (Execution.owner_id == user_id))': 1,
     'services/run_prepare.py:return DBAuthAccount.owner_id == owner_id': 1,
-    'services/scenario_query.py:return (ComposerScenario.owner_id == user.id) & \\': 1,
     'services/scenario_query.py:return ComposerScenario.owner_id == user.id': 1,
+    # UPC M2 scope=private:「我的场景」= 我拥有的私有空间容器内容
+    # (容器属主等值,非场景属主可见性判定)
+    'services/scenario_query.py:_P.owner_id == user.id))': 1,
     'services/scenario_store.py:ComposerScenario.owner_id == owner_id))': 1,
     'services/scenario_store.py:ComposerScenario.owner_id == user.id': 1,
     'services/scenario_store.py:cross_owner = src.owner_id != new_owner_id': 1,
     'services/share_ref_retire.py:ComposerScenario.owner_id == owner_id,': 1,
     'services/share_ref_retire.py:Suite.owner_id == owner_id,': 1,
-    'services/suite_copy.py:select(Suite.mode_config).where(Suite.owner_id == target.id)': 1,
-    'services/suite_copy.py:select(Suite.name).where(Suite.owner_id == target.id)))}': 1,
     'services/webhook_outbox.py:if inst.holder_id != tpl.owner_id:': 1,
+    'services/integration_runner.py:and (inst.holder_id != user_id': 1,
+    'services/integration_runner.py:IntegrationTask.holder_id == holder,': 2,
+    'services/integration_runner.py:mine = next((i for i in insts if i.holder_id == new_holder), None)': 1,
+    'services/integration_runner.py:reg = next((i for i in insts if i.holder_id == old_holder), None)': 1,
+    'services/integration_runner.py:if row_dict and inst.holder_id != scen.owner_id:': 1,
+    'services/integration_runner.py:_member_ok = inst.holder_id == tpl.owner_id': 1,
+    'services/integration_runner.py:(_tpl_kind == "normal" and inst.holder_id == tpl.owner_id)))': 1,
+    'services/integration_runner.py:and inst.holder_id != tpl.owner_id)': 1,
+    'services/integration_runner.py:if _token is not None and inst.holder_id == tpl.owner_id:': 1,
+    'services/integration_runner.py:IntegrationTask.holder_id == user_id,': 1,
+    'services/integration_runner.py:IntegrationTask.holder_id != tpl.owner_id,': 2,
+    # ── UPC M2:用户处置面(按**被删用户**选资产集合 —— 属主域筛选,
+    # 非权限判定)+ 执行闸的持有者=属主形(§4.1 成员复核分支)────────
+    'routers/users.py:.where(ComposerScenario.owner_id == user_id)': 1,
+    'routers/users.py:ComposerScenario.owner_id == user_id,': 2,
+    'routers/users.py:IntegrationTask.holder_id == user_id))': 4,
+    'routers/users.py:ReportDefinitionRow.owner_id == user_id,': 4,
+    'routers/users.py:Suite.owner_id == user_id,': 5,
+    'routers/users.py:_Proj.kind == "private", _Proj.owner_id == user_id))).scalars())': 1,
+    'routers/users.py:sa_update(Suite).where(Suite.owner_id == user_id)': 2,
 }
 
 
@@ -164,7 +166,8 @@ def _scan() -> Counter:
     hits: Counter = Counter()
     for sub in ("routers", "services"):
         for py in sorted((_APP / sub).rglob("*.py")):
-            if py.name in ("_ownership.py", "zone.py", "project_access.py"):
+            if py.name in ("_ownership.py", "zone.py", "project_access.py",
+                           "project_space.py"):
                 continue
             for line in py.read_text(encoding="utf-8").splitlines():
                 if any(rx.search(line) for rx in SHAPES):

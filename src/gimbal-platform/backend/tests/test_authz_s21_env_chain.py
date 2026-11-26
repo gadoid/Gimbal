@@ -326,10 +326,23 @@ async def test_template_env_by_identity_and_fingerprint_tracks(
         s.add(dep)
         s.add(Deployment(base_service=_BASE, env_id=sit,
                          base_url="http://dep-sit"))
+        from sqlalchemy import text as _t
+
+        from app.models.composer_run_scheme import ComposerRunScheme
+        from sqlalchemy import update as _u
+
         scen = (await s.execute(sa.select(ComposerScenario).where(
             ComposerScenario.scenario_id == "sc-s21-fp"))).scalar_one()
+        # §20.2:跨项目移动 = 专门事务(延迟复合 FK + 方案随迁)
+        await s.execute(_t(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         scen.project_id = proj.id
+        await s.execute(_u(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-s21-fp"
+        ).values(project_id=proj.id))
         tpl = IntegrationTask(name="s21-fp-tpl", owner_id=uid,
+                              project_id=proj.id,
                               scenario_id="sc-s21-fp", target_system="fin",
                               trigger_cron="*/5 * * * *",
                               result_policy="latest")

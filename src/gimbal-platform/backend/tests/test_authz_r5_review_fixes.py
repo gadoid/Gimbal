@@ -341,9 +341,19 @@ class TestExportZoneRules:
         from app.models.composer_scenario import ComposerScenario as _CS
         from sqlalchemy import select as _sel
         async with db_module.SessionLocal() as s2:
+            from sqlalchemy import text as _t
+            from sqlalchemy import update as _u
+
+            from app.models.composer_run_scheme import ComposerRunScheme as _RS
+            # §20.2:挂项目 = 专门事务(延迟复合 FK + 方案随迁)
+            await s2.execute(_t(
+                "SET CONSTRAINTS fk_scheme_scenario_zone, "
+                "fk_scheme_combo_zone DEFERRED"))
             row2 = (await s2.execute(_sel(_CS).where(
                 _CS.scenario_id == "sc-r5-proj"))).scalar_one()
             row2.project_id = pid
+            await s2.execute(_u(_RS).where(
+                _RS.scenario_id == "sc-r5-proj").values(project_id=pid))
             await s2.commit()
         r = await client.get("/api/scenarios/sc-r5-proj/export", headers=h)
         assert r.status_code == 200, r.text

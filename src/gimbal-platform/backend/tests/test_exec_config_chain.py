@@ -483,9 +483,19 @@ async def test_project_zone_carry_chain_with_project_config(
     # 场景挂进普通项目(成员本人 = 管理员,便于建项目变体)
     pid = await _mk_project("ec-pc-proj", members={"ec_pc": "admin"})
     async with db_module.SessionLocal() as s:
+        from sqlalchemy import text as _text
+
+        from app.models.composer_run_scheme import ComposerRunScheme
         from app.models.composer_scenario import ComposerScenario
+        # §20.2:跨项目移动 = 专门事务(延迟复合 FK + 方案随迁)
+        await s.execute(_text(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         await s.execute(sa.update(ComposerScenario).where(
             ComposerScenario.scenario_id == "sc-ec-pc"
+        ).values(project_id=pid))
+        await s.execute(sa.update(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-ec-pc"
         ).values(project_id=pid))
         pub = await carry_store.public_scope(s)
         await carry_store.put_bindings(

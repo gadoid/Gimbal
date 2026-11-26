@@ -65,9 +65,15 @@ def visibility_clause(user=None, viewer_id: int | None = None, scope: str = "all
     if scope == "mine" and user is not None:
         return ComposerScenario.owner_id == user.id
     if scope == "private" and user is not None:
-        # S7.0:「我的场景」= 我名下且未加入任何项目(私有)
-        return (ComposerScenario.owner_id == user.id) & \
-            ComposerScenario.project_id.is_(None)
+        # S7.0/UPC M2:「我的场景」= 我拥有的**私有空间**内容(真实
+        # 容器;旧「owner ∧ project_id 空」口径随资源迁移退役)
+        from sqlalchemy import select as _sq
+
+        from ..models.project import Project as _P
+
+        return ComposerScenario.project_id.in_(
+            _sq(_P.id).where(_P.kind == "private",
+                             _P.owner_id == user.id))
     # 三区谓词单点收敛到 zone_read_clause(场景/suite/报告定义
     # 列表同款)。引用分享退场(ADR-0003 #20),ref EXISTS 两支不复存在。
     from .zone import zone_read_clause

@@ -58,12 +58,21 @@ async def _seed(owner_ids: dict[str, int]) -> None:
                     sid, steps=steps, **{"name": sid})),
                 owner=owner, owner_id=owner_ids[owner])
             if visibility != "private":
-                # S1.3 起 set_visibility 退役:公共行(迁移形态)直改
+                # S1.3 起 set_visibility 退役:公共行(迁移形态)直改。
+                # §20.2 复合 FK:方案行随场景同迁(挂起约束 + 同步携带)
+                from sqlalchemy import text as _txt, update as _upd
+
+                from app.models.composer_run_scheme import ComposerRunScheme
                 from app.services.zone import public_project_id
-                from sqlalchemy import update as _upd
+                pub = await public_project_id(s)
+                await s.execute(_txt(
+                    "SET CONSTRAINTS fk_scheme_scenario_zone DEFERRED"))
                 await s.execute(_upd(ComposerScenario).where(
                     ComposerScenario.scenario_id == sid).values(
-                    project_id=await public_project_id(s)))
+                    project_id=pub))
+                await s.execute(_upd(ComposerRunScheme).where(
+                    ComposerRunScheme.scenario_id == sid).values(
+                    project_id=pub))
 
         await _create("sc-own-tpl", "own_user", "private",
                       [_tpl_step("fin.order.add", "${auth.qa1.token}")])
@@ -95,8 +104,11 @@ async def _seed(owner_ids: dict[str, int]) -> None:
         # sc-own-sch 的存量方案绑定(authAlias,无模板;扫描面不读方案)
         # is_default=False:create 已自动建默认方案(partial unique
         # 每场景一个 default)— 扫描面读全部方案的绑定,与 default 无关
+        from tests.helpers import scenario_project_id
+
         s.add(ComposerRunScheme(
             scheme_id="rs-own-1", scenario_id="sc-own-sch", name="方案二",
+            project_id=await scenario_project_id(s, "sc-own-sch"),
             is_default=False, payload={"serviceBindings": {
                 "fin-service": {"authAlias": ALIAS}}},
         ))

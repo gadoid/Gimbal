@@ -32,9 +32,13 @@ async def test_signals_bulk_trend_and_last_run(client):
     from app.services import scenario_store, scheme_store
 
     async with db_module.SessionLocal() as s:
-        # 私有场景(带默认方案)+ 公共场景
+        from tests.helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1)
+        # 私有场景(带默认方案)+ 公共场景;UPC M2:归属须显式
         await scenario_store.create(
-            s, ScenarioDraft.model_validate(make_draft("sc-m5-a")), owner="u")
+            s, ScenarioDraft.model_validate(make_draft("sc-m5-a")),
+            owner="u", owner_id=1)
         from app.services.zone import public_project_id
 
         await scenario_store.create(
@@ -122,8 +126,12 @@ async def test_signals_trend_pins(client):
     from app.services import scenario_store
 
     async with db_module.SessionLocal() as s:
+        from tests.helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1)
         await scenario_store.create(
-            s, ScenarioDraft.model_validate(make_draft("sc-m5-pins")), owner="u")
+            s, ScenarioDraft.model_validate(make_draft("sc-m5-pins")),
+            owner="u", owner_id=1)
         # 私有场景趋势锁默认方案(与既有用例同口径)
         from app.services import scheme_store
         schemes = await scheme_store.list_schemes(s, "sc-m5-pins")

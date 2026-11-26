@@ -36,10 +36,19 @@ EXPIRING_WINDOW_DAYS = 7
 
 
 async def _stat_private_scenarios(db, user) -> int:
+    """UPC M2:私有场景 = 我的私有空间内容(真实容器;旧「project_id
+    空」计数面随资源迁移退役)。"""
+    from ..models.project import Project
+
+    from ..services.zone import my_private_projects
+
+    priv = await my_private_projects(db, user.id)
+    if not priv:
+        return 0
     return int((await db.execute(select(func.count()).select_from(
         ComposerScenario).where(
             ComposerScenario.owner_id == user.id,
-            ComposerScenario.project_id.is_(None)))).scalar_one())
+            ComposerScenario.project_id.in_(priv)))).scalar_one())
 
 
 async def _stat_follows(db, user) -> int:

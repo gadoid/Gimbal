@@ -73,12 +73,15 @@ class ReportDefinitionUpdate(BaseModel):
     public: bool | None = None
 
 
-def _to_out(row: ReportDefinitionRow) -> ReportDefinitionOut:
+def _to_out(row: ReportDefinitionRow, public_pid: int | None) -> ReportDefinitionOut:
+    # UPC M2:visibility 由项目 kind 派生(私有空间内容 ≠ public;
+    # 旧「project_id 非空即 public」口径随真实容器退役)
+    is_public = row.project_id == public_pid
     return ReportDefinitionOut(
         id=row.id, name=row.name, description=row.description,
         definition=row.definition, owner_id=row.owner_id,
-        visibility=("public" if row.project_id is not None else "private"),
-        isPublic=row.project_id is not None,
+        visibility=("public" if is_public else "private"),
+        isPublic=is_public,
         createdAt=str(row.created_at) if row.created_at else None,
     )
 
@@ -95,7 +98,10 @@ async def list_definitions(
         .where(zone_read_clause(ReportDefinitionRow, user.id))
         .order_by(ReportDefinitionRow.id.desc())
     )).scalars().all()
-    return {"items": [_to_out(r).model_dump() for r in rows]}
+    from ..services.zone import public_project_id as _ppid_rd
+
+    _pub = await _ppid_rd(db)
+    return {"items": [_to_out(r, _pub).model_dump() for r in rows]}
 
 
 def _validate_m2(definition: dict, name: str) -> None:
@@ -129,16 +135,19 @@ async def create_definition(
         definition=_validated_definition(body),
         owner_id=user.id,
     )
-    # S1.1 影子写:公共态 = visibility + project_id 同步(services.zone)
-    from ..services.zone import apply_private, apply_public, public_project_id
+    # UPC M2:公共态 = 公共项目;私有态 = 创建者默认私有空间(真实容器)
+    from ..services.zone import apply_private_zone, apply_public, \
+        public_project_id
     if body.public:
         apply_public(row, await public_project_id(db))
     else:
-        apply_private(row)
+        await apply_private_zone(db, row, user.id)
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return _to_out(row).model_dump()
+    from ..services.zone import public_project_id as _ppid_rd
+
+    return _to_out(row, await _ppid_rd(db)).model_dump()
 
 
 async def _get_owned(db: AsyncSession, user, did: int) -> ReportDefinitionRow:
@@ -161,7 +170,9 @@ async def get_definition(
     user: CurrentUser, db: DbSession, definition_id: int,
 ) -> dict:
     row = await _get_owned(db, user, definition_id)
-    return _to_out(row).model_dump()
+    from ..services.zone import public_project_id as _ppid_rd
+
+    return _to_out(row, await _ppid_rd(db)).model_dump()
 
 
 @router.put("/{definition_id}")
@@ -189,15 +200,18 @@ async def update_definition(
     # 公共/私有切换不动 owner(维护者恒定;编辑权随 owner);影子写
     # visibility ⇔ project_id 同步翻转(S1.1)
     if body.public is not None:
-        from ..services.zone import apply_private, apply_public, \
+        from ..services.zone import apply_private_zone, apply_public, \
             public_project_id
         if body.public:
             apply_public(row, await public_project_id(db))
         else:
-            apply_private(row)
+            await apply_private_zone(db, row, row.owner_id
+                                     or user.id)
     await db.commit()
     await db.refresh(row)
-    return _to_out(row).model_dump()
+    from ..services.zone import public_project_id as _ppid_rd
+
+    return _to_out(row, await _ppid_rd(db)).model_dump()
 
 
 class TransferIn(BaseModel):

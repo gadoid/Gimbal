@@ -33,9 +33,13 @@ async def _seed(scenario_id: str, *, owner_id: int = 1, plate_ref="1.0#1"):
     if not plate_ref:
         draft["definition"]["meta"].pop("plate", None)
         async with db_module.SessionLocal() as s:
+            from tests.helpers import default_space_id
+
             s.add(ComposerScenario(
                 scenario_id=scenario_id, owner_name=f"u{owner_id}",
-                owner_id=owner_id, payload=draft))
+                owner_id=owner_id,
+                project_id=await default_space_id(s, owner_id),
+                payload=draft))
             await s.commit()
         return
     draft["definition"]["meta"]["plate"] = {"fin": plate_ref}

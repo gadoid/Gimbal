@@ -225,10 +225,21 @@ async def test_put_owner_manual_config(client: AsyncClient, plate_mock):
         from app.models.project import ProjectMember
         s.add(ProjectMember(project_id=pid, user_id=owner_b, role="member"))
         await s.flush()
+        from sqlalchemy import text as _t
+        from sqlalchemy import update as _u
+
+        from app.models.composer_run_scheme import ComposerRunScheme
         from app.models.composer_scenario import ComposerScenario
+        # §20.2:挂项目 = 专门事务(延迟复合 FK + 方案随迁)
+        await s.execute(_t(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
         row = (await s.execute(sa.select(ComposerScenario).where(
             ComposerScenario.scenario_id == "sc-ad-7"))).scalar_one()
         row.project_id = pid
+        await s.execute(_u(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-ad-7"
+        ).values(project_id=pid))
         await s.commit()
     h_b = await role_headers(client, "ad_pb")
     await _seed_account("ad_pb", env=env)

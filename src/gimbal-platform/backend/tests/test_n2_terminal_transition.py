@@ -150,8 +150,11 @@ class TestIntegrationRecoverStuck:
                                      cron="*/5 * * * *") -> int:
         async with db_module.SessionLocal() as s:
             await ensure_fk_users(s, 1, 2)
+            from tests.helpers import default_space_id
+
             s.add(IntegrationTask(
                 name="n2集成", owner_id=1,
+                project_id=await default_space_id(s, 1),
                 scenario_id="sc-n2i",
                 trigger_cron=cron, result_policy="latest"))
             await s.flush()
@@ -309,8 +312,11 @@ class TestLeaseToken:
                     running_since=None) -> int:
         async with db_module.SessionLocal() as s:
             await ensure_fk_users(s, 1, 2)
+            from tests.helpers import default_space_id
+
             s.add(IntegrationTask(
                 name="租约", owner_id=1,
+                project_id=await default_space_id(s, 1),
                 scenario_id="sc-lease",
                 trigger_cron="*/5 * * * *", result_policy="latest"))
             await s.flush()

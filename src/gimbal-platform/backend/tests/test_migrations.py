@@ -109,6 +109,27 @@ def _add_legacy_alias_columns(eng) -> None:
             "REFERENCES users(id) DEFERRABLE INITIALLY DEFERRED")
 
 
+def _relax_project_zone(eng) -> None:
+    """时代造形(UPC M2/0068 后):对象表 ``project_id`` 放回可空、摘
+    M2 新增形状 CHECK —— 旧「空 = 私有区」时代(≤0067)的造数直插
+    需要;升级到 head 的链腿由 0068 回填后再钉 NOT NULL(不升到头的
+    用例保持时代形态)。"""
+    with eng.begin() as conn:
+        for t in ("composer_scenarios", "suites", "report_definitions",
+                  "suite_members", "composer_run_schemes"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE {t} ALTER COLUMN project_id DROP NOT NULL")
+        conn.exec_driver_sql(
+            "ALTER TABLE integration_tasks "
+            "ALTER COLUMN project_id DROP NOT NULL")
+        conn.exec_driver_sql(
+            "ALTER TABLE integration_tasks "
+            "DROP CONSTRAINT IF EXISTS ck_integration_task_shape")
+        conn.exec_driver_sql(
+            "ALTER TABLE composer_run_schemes "
+            "DROP CONSTRAINT IF EXISTS ck_scheme_combo_repair")
+
+
 def _create_retired_tables(eng) -> None:
     """时代造形(P2-A 裁定的恢复机制,本批落地):0057 退役
     ``service_aliases`` / ``auth_sessions`` / ``service_meta`` 与
@@ -245,6 +266,11 @@ def _upgrade_to(sync_url: str, rev: str) -> None:
     _eng = create_engine(sync_url)
     try:
         _create_retired_tables(_eng)
+        # UPC M2(0068 收口 NOT NULL 后):升到 0068 之前的 revision 时,
+        # 对象表仍处「空 = 私有区」时代 —— 放回可空 + 摘 M2 形状
+        # CHECK,后续迁移腿与时代造数才能按旧形态重放
+        if not rev.startswith("0068") and rev != _head():
+            _relax_project_zone(_eng)
     finally:
         _eng.dispose()
     command.upgrade(_cfg(sync_url), rev)
@@ -343,6 +369,7 @@ def test_0036_role_rename(seed):
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             with Session(eng) as s:
                 for row in seed:
                     s.add(User(
@@ -446,6 +473,7 @@ def test_0036_revives_token_owner_ineligible():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             with Session(eng) as s:
                 root = User(username="root", display_name="",
                             password_hash="x", role="admin")
@@ -510,6 +538,7 @@ def test_0037_report_def_visibility_backfill():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             # S1.9:create_all 已无 visibility 列(0043 删列后模型),
             # 天然即 0036 形态(无 visibility 列的 report_definitions)
             with eng.begin() as c:
@@ -557,6 +586,7 @@ def test_0038_platform_retire():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             with eng.begin() as c:
                 # 0052 CHECK(kind 形状)按当前模型建表即在 —— 模拟 0038 前
                 # 存量库(含平台令牌行)先摘掉
@@ -703,6 +733,7 @@ def test_0039_drop_identity_mode():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             _add_legacy_identity_mode(eng)
             with eng.begin() as conn:
                 conn.exec_driver_sql(
@@ -726,20 +757,40 @@ def test_0039_drop_identity_mode():
 def _to_0039_shape(eng) -> None:
     """create_all 是当前模型(已含 project_id / is_platform_template 与
     projects 两表);撤掉这些模拟 0039 存量库(PG 删列连带删索引与 FK,
-    成员表先于项目表删)。"""
+    成员表先于项目表删)。UPC M2 形态回退:suite_members.project_id 与
+    composer_run_schemes 的 M2 列(0039 时代不存在)CASCADE 卸除 ——
+    复合 FK/候选键随列退场;project_id 列同用 CASCADE(复合边依赖它)。"""
     _add_legacy_visibility(eng)
     with eng.begin() as conn:
+        # M2 列先卸(依赖 suite/scenario 的 project_id 复合边随 CASCADE 收)
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members DROP COLUMN IF EXISTS project_id"
+            " CASCADE")
+        for col in ("account_combo_id", "repair_status", "repair_reason",
+                    "revision", "scheme_uid", "project_id"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE composer_run_schemes DROP COLUMN IF EXISTS"
+                f" {col} CASCADE")
         for t in ("composer_scenarios", "suites", "integration_tasks",
                   "report_definitions", "executions"):
-            conn.exec_driver_sql(f"ALTER TABLE {t} DROP COLUMN project_id")
+            conn.exec_driver_sql(
+                f"ALTER TABLE {t} DROP COLUMN project_id CASCADE")
+        # 0039 形态:run_schemes 挂旧单列 scenario FK(复合边已随列退场)
+        conn.exec_driver_sql(
+            "ALTER TABLE composer_run_schemes ADD CONSTRAINT"
+            " composer_run_schemes_scenario_id_fkey FOREIGN KEY"
+            " (scenario_id) REFERENCES composer_scenarios (scenario_id)"
+            " ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED")
         conn.exec_driver_sql(
             "ALTER TABLE integration_tasks "
             "DROP COLUMN is_platform_template")
         conn.exec_driver_sql("DROP TABLE project_members")
         # S7.2:project_promotions FK 挡 DROP projects —— 先卸(重塑
-        # 0039 形态,该表本不存在)
-        conn.exec_driver_sql(
-            "DROP TABLE IF EXISTS project_promotions")
+        # 0039 形态,该表本不存在);UPC M2 表同理先卸
+        for t in ("project_promotions", "scenario_asset_imports",
+                  "scheme_repair_diagnosis", "scheme_repair_events",
+                  "account_combos"):
+            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {t} CASCADE")
         conn.exec_driver_sql("DROP TABLE projects")
 
 
@@ -768,6 +819,7 @@ def test_0040_project_zone():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             with eng.begin() as c:
                 # 0052 CHECK(kind 形状)按当前模型建表即在 —— 模拟 0038 前
                 # 存量库(含平台令牌行)先摘掉
@@ -987,6 +1039,7 @@ def test_0041_public_shadow_backfill():
             # upgrade head(0041 回填)
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             _to_0039_shape(eng)
             command.stamp(_cfg(sync_url), "0039_drop_identity_mode")
             command.upgrade(_cfg(sync_url), "0040_project_zone")
@@ -1118,6 +1171,7 @@ def test_0042_suite_member_zone():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             with Session(eng) as s:
                 alice = User(username="alice", display_name="",
                              password_hash="x", role="user")
@@ -1271,6 +1325,7 @@ def test_0044_deployments_env_chain(envs, aliases, want_default,
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             _to_0043_shape(eng)
             with eng.begin() as conn:
                 for name in envs:
@@ -1391,6 +1446,7 @@ def test_0045_auth_slot_bindings(aliases, want_systems):
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             _to_0044_shape(eng)
             with eng.begin() as conn:
                 # 两个 owner(u1/u2)各有 want_systems 里的凭证
@@ -1534,6 +1590,7 @@ def test_0046_carry_scope():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             _to_0045_shape(eng)
             with eng.begin() as conn:
                 # 公共项目 id=1(conftest 同款种子口径:手工插)
@@ -1646,6 +1703,7 @@ def test_0047_alias_slimming():
         try:
             Base.metadata.create_all(eng)
             _create_retired_tables(eng)
+            _relax_project_zone(eng)
             _add_legacy_alias_columns(eng)
             with Session(eng) as s:
                 u1 = User(username="u1", display_name="u1",

@@ -351,8 +351,11 @@ async def test_non_auth_failure_keeps_running(client):
 
     await register_and_login(client, "authrev2_admin", "pw123456")
     async with db_module.SessionLocal() as s:
+        from tests.helpers import default_space_id
+
         s.add(IntegrationTask(
             name="普通失败", owner_id=1,
+            project_id=await default_space_id(s, 1),
             scenario_id="sc-x",
             target_system="fin", trigger_cron="*/5 * * * *",
             result_policy="latest"))

@@ -2,6 +2,41 @@
 // 生成 —— 勿手改;单源事实在后端契约快照(gen_api_contract.py)。
 // 切换策略:api/*.ts facade re-export,组件 import 面零改动。
 
+export interface AccountComboCreate {
+  description?: unknown
+  entries?: Array<ComboEntry>
+  isDefault?: boolean
+  name: unknown
+}
+
+export interface AccountComboSchemeRef {
+  comboId: number
+  scenarioId: unknown
+  scenarioName: unknown
+  schemeId: unknown
+  schemeName: unknown
+}
+
+// 整体替换式 PATCH。None = 不改;entries 显式给值(含 [])则整体
+// 替换 —— 替换后逐条过保存面校验,条目有实质变化 revision +1。
+export interface AccountComboUpdate {
+  description?: unknown | null
+  entries?: Array<ComboEntry> | null
+  name?: unknown | null
+}
+
+export interface AccountComboView {
+  description?: unknown
+  entries: Array<ComboEntry>
+  id: number
+  isDefault: boolean
+  name: unknown
+  projectId: number
+  referenceCount?: number
+  revision: number
+  schemes?: Array<AccountComboSchemeRef>
+}
+
 export interface ActivityEvent {
   action?: unknown | null
   at: unknown
@@ -408,11 +443,27 @@ export interface CheckSelector {
   tags?: Array<unknown>
 }
 
+// 组合条目:服务键 → 身份条目名(一条一服务)。
+// 
+// 字段形状不做 pydantic 级收窄 —— 空串/形状违例由服务层统一给出
+// ``account_combo_entry_invalid``(422 detail 归一为域码,而非
+// pydantic 校验清单)。
+export interface ComboEntry {
+  alias: unknown
+  service: unknown
+}
+
 // composition 的成员行:顺序即列表顺序(聚合发起序/串联链路序/
 // 扇出源在首位);role 见 suite_members.role。
 export interface CompositionMemberIn {
   role?: "main" | "before" | "after"
   scenarioId: unknown
+}
+
+// confirm_no_combo:明确确认无组合语义并提供理由(审计留痕)。
+export interface ConfirmNoComboIn {
+  expectedRevision: number
+  reason: unknown
 }
 
 export interface ConstantEntryCreateIn {
@@ -1107,6 +1158,10 @@ export interface PrecheckResult {
   outOfScopeTargets?: Array<Record<string, unknown>>
   projectAmbiguousAuths?: Array<unknown> | null
   projectMissingAuths?: Array<unknown> | null
+  repairBlocked?: boolean
+  repairCode?: unknown | null
+  repairReason?: unknown | null
+  repairRevision?: number | null
   scenarioId: unknown
   schemeFound?: boolean
   schemeId: unknown
@@ -1246,6 +1301,14 @@ export interface ReadIn {
   ids?: Array<number> | null
 }
 
+// rebind_combo:指定合法同区组合。目标组合的绑定授权在服务层复核
+// (存在 ∧ 可读 ∧ 同区);候选组合错误按 §20.3 脱敏(不可读 = 不存在,
+// 统一 404/422,不成为存在性探针)。
+export interface RebindComboIn {
+  comboId: number
+  expectedRevision: number
+}
+
 // Payload for POST /auth/refresh.
 export interface RefreshIn {
   refresh_token: unknown
@@ -1352,6 +1415,7 @@ export interface RunResponse {
 // /run-schemes CRUD(方案唯一读写面)的请求/响应 wire 契约;
 // isDefault/options(M10 RunOptions)为工作台键。
 export interface RunScheme {
+  accountComboId?: number | null
   dataSetIds?: Array<unknown>
   dataSetSelection?: Array<DataSetSelection>
   injectionEntryIds?: Array<unknown>

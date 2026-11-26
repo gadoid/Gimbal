@@ -177,6 +177,18 @@ def _integrity_message(code: str, scenario_id: str) -> str:
             "同名即直接引用,或改条目名后重试")
 
 
+async def _resolve_default_zone(
+    db: AsyncSession, owner_id: int | None,
+) -> int | None:
+    """UPC M2 归属写入点收敛:缺省目标 = **owner 的默认私有空间**(§4
+    每用户恰一个 —— 契约规则,非猜测)。显式 project_id 调用方不经此。
+    无默认空间(系统管道无属主/处置中)→ None,由调用方决定语义。"""
+    from .project_space import get_default_private_project
+
+    proj = await get_default_private_project(db, owner_id)
+    return proj.id if proj else None
+
+
 async def create_in_transaction(
     db: AsyncSession,
     draft: ScenarioDraft,
@@ -198,7 +210,23 @@ async def create_in_transaction(
     边界统一 except 并映射(如 ``ValueError("scenario_id_exists: ...")``)
     后回滚整单。返回**未 refresh** 的 row(server_default 列需调用方
     在 commit 后 refresh)。
+
+    UPC M2:``project_id`` 缺省 = owner 的默认私有空间(project_id
+    NOT NULL 后「空 = 私有区」退役);显式归属由路由层先行经
+    ``project_access.resolve_content_target`` 校验。
     """
+    if project_id is None:
+        if owner_id is None:
+            # §8/AC-04:无 owner 也无显式目标 —— 契约违例,不隐式猜测归属
+            raise ValueError(
+                "scenario_target_required: 场景创建须明确归属"
+                "(owner 的默认私有空间或显式 project_id)")
+        resolved = await _resolve_default_zone(db, owner_id)
+        if resolved is None:
+            raise ValueError(
+                "default_space_missing: 用户没有默认私有空间"
+                "(用户初始化未完成或处置中)")
+        project_id = resolved
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     await enforce_meta_plate(draft.definition)      # 唯一写入口
@@ -295,10 +323,9 @@ async def create(
     ``owner`` parameter (the authenticated user's display_name), so a
     caller cannot spoof the owner field by sending a different value in
     the request body.  ``owner_id`` 同理由路由层传入(int user.id,
-    P1 起为归属判断主键);缺省 None = 归属未知(与 ETL 把历史 0 行
-    映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,不落 0)。
-    区归属由 ``project_id`` 决定(缺省 None = 私有区;
-    响应由 project 派生)。
+    审计/维护者快照);归属权威是 ``project_id``(UPC M2:真实容器)。
+    区归属:缺省 = owner 的默认私有空间;显式归属由路由层经
+    ``project_access.resolve_content_target`` 三 kind 统一校验。
 
     提交包装器:常规创建/copy/fork/迁移脚本等既有调用方行为
     零变化;导入流水线走 :func:`create_in_transaction` 自管事务

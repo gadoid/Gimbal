@@ -35,8 +35,9 @@ class ReportDefinitionRow(Base):
     owner_id: Mapped[int | None] = mapped_column(
         Integer, nullable=True, index=True)
     # visibility 列随 0043 删除(W9-2 公共态 = 公共项目挂靠)。
-    # 项目区:空 = 私有区;公共项目 = 公开定义
-    project_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("projects.id"), nullable=True, index=True)
+    # UPC §5:真实容器归属 —— NOT NULL FK(私有区内容 = 所有者私有空间;
+    # 公开定义 = 公共项目;owner_id 保留为维护者,见上)。
+    project_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("projects.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime, server_default=func.now())

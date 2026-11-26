@@ -312,8 +312,11 @@ async def test_resolve_name_conflict_truncates_to_64(
     async with db_module.SessionLocal() as s:
         await ensure_fk_users(s, 1)
         long_name = "x" * 64
+        from tests.helpers import default_space_id
+
         s.add(ComposerScenario(
             scenario_id="sc-long-name", owner_id=1, owner_name="垫底",
+            project_id=await default_space_id(s, 1),
             payload={"definition": {"meta": {"name": long_name}}}))
 
         # 生成列 name 由 payload 派生;flush 后才可查询

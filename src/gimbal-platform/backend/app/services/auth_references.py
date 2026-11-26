@@ -157,9 +157,11 @@ async def references(
     from types import SimpleNamespace
 
     from ..routers._ownership import can_pure
-    from .zone import my_project_roles, public_project_id
+    from .zone import (my_private_projects, my_project_roles,
+                       public_project_id)
     _ctx = dict(public_project_id=await public_project_id(db),
-                project_roles=await my_project_roles(db, user.id))
+                project_roles=await my_project_roles(db, user.id),
+                private_project_ids=await my_private_projects(db, user.id))
     visible = [r for r in hits
                if can_pure(user, "scenario", "read",
                            SimpleNamespace(owner_id=r.owner_id,

@@ -52,6 +52,23 @@ async def my_project_roles(db: AsyncSession, user_id: int) -> dict[int, str]:
     return roles
 
 
+async def my_private_projects(db: AsyncSession, user_id: int) -> frozenset[int]:
+    """主体拥有的全部私有空间 id 集合(会话级缓存)—— 表 B owner
+    谓词(UPC M2:私有对象挂真实私有空间,owner 判定 = 空间所有权,
+    owner_id 列降为审计快照)。"""
+    key = "zone:private_projects:" + str(user_id)
+    cached = db.info.get(key)
+    if cached is not None:
+        return cached
+    rows = (await db.execute(
+        select(Project.id).where(
+            Project.kind == Project.KIND_PRIVATE,
+            Project.owner_id == user_id))).scalars().all()
+    value = frozenset(rows)
+    db.info[key] = value
+    return value
+
+
 async def can_use_project_credentials(
     db: AsyncSession, user_id: int | None, project_id: int | None,
 ) -> bool:
@@ -75,19 +92,32 @@ class ProjectCreateDenied(Exception):
 
 async def ensure_can_create_in_project(
     db: AsyncSession, user_id: int, project_id: int,
-) -> None:
-    """项目内新建门(authz M2a S7.0,D6「项目内可直接新建」):项目须存在
-    (否则 404)、不是公共项目(422 —— 内容进公共项目只有「发布」一条路,
-    S1.3)、主体是项目成员(非成员 404 不泄露存在性;D1:项目对象权限只看
-    项目角色,Admin+ 不旁路)。"""
+) -> "Project":
+    """项目内新建门(UPC M2:三 kind 统一口径,资源创建目标解析的单
+    校验点):项目须存在(404)、状态 active(§13.1 归档起禁止新写入,
+    409)、公共项目 422(内容进公共项目只有「发布」一条路)、private
+    仅所有者(非所有者 404 不泄露存在性)、normal 须可写成员(非成员
+    404;项目用户只读 403,D1:Admin+ 不旁路)。返回校验过的项目行。"""
     proj = await db.get(Project, project_id)
     if proj is None:
         raise ProjectCreateDenied(404, "not_found",
                                   f"project not found: {project_id}")
-    if proj.kind == "public":
+    if proj.status != Project.STATUS_ACTIVE:
+        raise ProjectCreateDenied(
+            409, "project_not_active",
+            f"项目状态为 {proj.status},禁止新写入(§13.1)")
+    if proj.kind == Project.KIND_PUBLIC:
         raise ProjectCreateDenied(
             422, "public_project_create_forbidden",
-            "公共项目不能直接新建 —— 请在私有区创建后发布")
+            "公共项目不能直接新建 —— 请在私有空间创建后发布")
+    if proj.kind == Project.KIND_PRIVATE:
+        # owner 比较单点在 project_space/表 B 谓词;此处是创建门的一部分
+        from .project_access import relation_of_project
+
+        if relation_of_project(proj, user_id) != "owner":
+            raise ProjectCreateDenied(404, "not_found",
+                                      f"project not found: {project_id}")
+        return proj
     role = (await my_project_roles(db, user_id)).get(project_id)
     if role is None:
         raise ProjectCreateDenied(404, "not_found",
@@ -97,29 +127,35 @@ async def ensure_can_create_in_project(
         raise ProjectCreateDenied(
             403, "project_role_readonly",
             "项目用户只能读和执行项目内容,不能新建")
+    return proj
 
 
 def zone_read_clause(model, viewer_id: int):
-    """三区读谓词(带 owner_id + project_id 的任意模型):私有区属主 ∨
-    我所在的普通项目 ∨ 公共项目 —— 场景 / suite / 报告定义列表共用
-    (ref 分支由调用方叠加,且仅限私有区对象)。SQL 谓词单点,与
-    ``routers._ownership.can`` 的表 B 求值同口径。"""
-    from sqlalchemy import and_, or_, select as sa_select
+    """对象可见性谓词(UPC M2 收口):project_id NOT NULL 后,对象
+    可见 ≡ 所属项目可见 —— 私有空间属主 ∨ 普通项目成员 ∨ 公共项目。
+    与 ``project_access.visible_projects_clause`` 同语义(项目级单点),
+    本函数是**对象级** SQL 单点;AC-51 令两条路径返回一致的 ID 集合。
+    旧「owner_id ∧ project_id IS NULL」私有区分支随 M2 资源迁移退役。"""
+    from sqlalchemy import or_, select as sa_select
 
     my = sa_select(ProjectMember.project_id).where(
         ProjectMember.user_id == viewer_id)
-    pub = sa_select(Project.id).where(Project.kind == "public")
+    pub = sa_select(Project.id).where(Project.kind == Project.KIND_PUBLIC)
+    priv = sa_select(Project.id).where(
+        Project.kind == Project.KIND_PRIVATE,
+        Project.owner_id == viewer_id)
     return or_(
-        and_(model.owner_id == viewer_id, model.project_id.is_(None)),
+        model.project_id.in_(priv),
         model.project_id.in_(my),
         model.project_id.in_(pub),
     )
 
 
 SUITE_ZONE_TRIGGER_DDL = (
-    # S1.5 同区触发器(与 ensure_member_same_zone 同口径;0042 迁移与
-    # 测试建库共用本单源 —— 测试库走 create_all 不跑迁移,由 conftest
-    # 挂同一条触发器,保证端点测试有与生产一致的库层兜底)
+    # 历史链工件(0042 的执行体;UPC M2/0068 起 §20.6 复合 FK 取代
+    # 本触发器 —— fresh 路径不再挂,链路径由 0042 挂上、0068 摘除,
+    # 两路径最终结构一致 §20.4)。常量保留仅为让 0042 可导入执行,
+    # 新代码不得引用。
     """
     CREATE OR REPLACE FUNCTION suite_member_same_zone()
     RETURNS trigger AS $$
@@ -152,41 +188,44 @@ SUITE_ZONE_TRIGGER_DDL = (
 
 
 def ensure_member_same_zone(
-    *, suite_project_id: int | None, suite_owner_id: int | None,
-    scen_project_id: int | None, scen_owner_id: int | None,
+    *,
+    suite_project_id: int | None, scen_project_id: int | None,
     scenario_id: str,
 ) -> None:
-    """S1.5 同区约束(应用层单点):套件成员场景与套件**同 project_id**;
-    都为空(私有区)时再要求**同属主**(私有套件仍只放本人的场景)。
-    项目套件自此可容纳其他成员的场景。违例 raise ValueError
-    ``suite_member_cross_zone``(端点转 422;DB 触发器 0042 兜底
-    直插绕过应用层的写法)。"""
-    if suite_project_id is None and scen_project_id is None:
-        if suite_owner_id != scen_owner_id:
-            raise ValueError(
-                "suite_member_cross_zone: "
-                f"私有套件只能加入自己的场景({scenario_id} 属于他人)")
-    elif suite_project_id != scen_project_id:
+    """同区校验(应用层单点,UPC M2 §20.6):套件成员场景与套件同
+    ``project_id``。旧「同空时同属主」分支随资源迁移退役 —— 私有区
+    内容挂真实私有空间,两个私有空间即使同属一人也互斥(§5.1 硬同区
+    按项目判)。违例 raise ValueError ``suite_member_cross_zone``
+    (端点转 422;DB 侧由 0068 的两条复合外键兜底直插绕过)。"""
+    if suite_project_id != scen_project_id:
         raise ValueError(
             "suite_member_cross_zone: "
             f"套件与成员场景须同区({scenario_id} 不在本套件的项目里)")
 
 
 def apply_public(row: Any, public_pid: int | None) -> None:
-    """置公共态(project_id=公共项目)。S1.9/0043 删 visibility 列后
-    只写 project_id —— 列的读写全切项目谓词,本函数是唯一写点之一。"""
+    """置公共态(project_id=公共项目;发布路径唯一写点之一)。"""
     row.project_id = public_pid
 
 
-def apply_private(row: Any) -> None:
-    """置私有态(project_id=NULL = 私有区)。"""
-    row.project_id = None
+async def apply_private_zone(
+    db: AsyncSession, row: Any, owner_id: int,
+) -> None:
+    """置私有态(UPC M2):对象回到 **owner 的默认私有空间**(真实
+    容器;下架/转私路径的写点)。旧 apply_private(project_id=None)
+    随「空 = 私有区」语义退役;无默认空间 = 用户处置未完成,拒绝。"""
+    from .project_space import get_default_private_project
+
+    proj = await get_default_private_project(db, owner_id)
+    if proj is None:
+        raise ValueError(
+            "default_space_missing: 用户没有默认私有空间,无法落私有区"
+            "(用户处置未完成或异常状态)")
+    row.project_id = proj.id
 
 
-async def derive_visibility(db, project_id: int | None) -> str:
-    """响应派生(S1.9):visibility 字段的替代口径 —— project_id 为空 =
-    'private';公共项目 = 'public';普通项目 = 'private'(前端只把
-    'public' 当公共徽章,普通项目内容不出公共页)。pid 走会话缓存。"""
-    if project_id is None:
-        return "private"
+async def derive_visibility(db, project_id: int) -> str:
+    """响应派生:公共项目 = 'public',其余(private/normal)= 'private'
+    (前端只把 'public' 当公共徽章,普通项目内容不出公共页)。pid 走
+    会话缓存。UPC M2:project_id 恒非空,None 分支随资源迁移退役。"""
     return "public" if project_id == await public_project_id(db) else "private"

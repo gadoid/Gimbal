@@ -295,6 +295,31 @@ NIGHT_ADMIN = "upc_night_admin"
 项目出生即有管理员;测试主角保持原角色,守夜人只满足不变量。"""
 
 
+async def scenario_project_id(db, scenario_id: str) -> int:
+    """父场景的容器归属(UPC M2 直插方案行:project_id 从父场景派生,
+    §20.2 冗余校验键)。"""
+    from sqlalchemy import select
+
+    from app.models.composer_scenario import ComposerScenario
+
+    return int((await db.execute(select(
+        ComposerScenario.project_id).where(
+        ComposerScenario.scenario_id == scenario_id))).scalar_one())
+
+
+async def default_space_id(db, user_id) -> int:
+    """用户的默认私有空间 id(UPC M2 直插布景:对象表 project_id NOT NULL,
+    私有区内容挂所有者默认空间 —— 经注册/建号/直插用户入口必然存在)。"""
+    from sqlalchemy import select
+
+    from app.models.project import Project
+
+    pid = (await db.execute(select(Project.id).where(
+        Project.kind == "private", Project.is_default.is_(True),
+        Project.owner_id == user_id))).scalar_one()
+    return int(pid)
+
+
 async def mk_user_with_space(username: str, *, role: str = "user") -> int:
     """直插用户 + 默认私有空间(§4:非系统用户须有默认空间,延迟约束
     触发器在提交时兜底)。经 inbound_fixtures.mk_user 单点。"""

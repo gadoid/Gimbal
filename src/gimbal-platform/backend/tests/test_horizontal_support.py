@@ -261,8 +261,11 @@ class TestIntegrationTimeline:
         await register_and_login(client, "iv_holder", "iv_holderpass123")
         holder_id = await _uid("iv_holder")
         async with db_module.SessionLocal() as db:
+            from tests.helpers import default_space_id
+
             tpl = IntegrationTask(
                 name="iv-task", owner_id=holder_id,
+                project_id=await default_space_id(db, holder_id),
                 target_type="scenario",
                 scenario_id="sc-iv-1", trigger_cron="*/5 * * * *",
                 result_policy="latest",

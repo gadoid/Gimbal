@@ -53,16 +53,9 @@ async def _load_suite(db: AsyncSession, suite_id: int) -> Suite:
     return row
 
 
-def _require_read(user: CurrentUser, suite: Suite) -> None:
-    """读闸(同步快路径,表 B suite.read 的纯判):private → 属主,
-    否则 404(不泄露)。P2 引用/公共读由 ``_require_read_async`` 承担
-    (§7.6)。W3 起 admin 无旁路。"""
-    if user.id != suite.owner_id and suite.project_id is None:
-        raise not_found_404("suite", str(suite.id))
-
-
 async def _require_read_async(db, user: CurrentUser, suite: Suite) -> None:
-    """读闸(完整判定,表 B suite.read):public ∨ 属主 ∨ suite 引用。"""
+    """读闸(表 B suite.read,唯一实现):私有空间所有者 ∨ 项目成员 ∨
+    公共读者(UPC M2:对象可见 ≡ 所属项目可见)。不可见统一 404。"""
     from ._ownership import can
 
     if not await can(db, user, "suite", "read", suite):
@@ -108,12 +101,14 @@ def _is_draft(suite: Suite) -> bool:
     return bool((suite.mode_config or {}).get("draft"))
 
 
-def _summary(suite: Suite, member_count: int,
-             latest_run: dict | None = None,
-             owner_name: str | None = None) -> SuiteSummaryOut:
+async def _summary(db: AsyncSession, suite: Suite, member_count: int,
+                   latest_run: dict | None = None,
+                   owner_name: str | None = None) -> SuiteSummaryOut:
+    from ..services.zone import derive_visibility
+
     return SuiteSummaryOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=("public" if suite.project_id is not None else "private"),
+        visibility=await derive_visibility(db, suite.project_id),
         mode=suite.mode,
         memberCount=member_count, rev=suite.rev, isDraft=_is_draft(suite),
         createdAt=_iso(suite.created_at), updatedAt=_iso(suite.updated_at),
@@ -160,6 +155,12 @@ async def _latest_runs_by_suite(
     return latest
 
 
+async def zone_member_pids(db, user_id):
+    from ..services.zone import my_project_roles
+
+    return await my_project_roles(db, user_id)
+
+
 async def _access_and_caps(
     db: AsyncSession, user: CurrentUser, suite: Suite,
 ) -> dict:
@@ -174,17 +175,20 @@ async def _access_and_caps(
     按 access='public' 渲染的「复制到我的」在普通项目 fork 404
     (必然失败入口)。修后:普通项目 = access 'member',edit/run 随
     表 B 真值;公共项目读者维持只读(先复制再跑,不变量 7)。"""
-    from ..services.zone import public_project_id
+    from ..services.zone import (my_private_projects, public_project_id)
     from ._ownership import can
 
-    if user.id == suite.owner_id:
+    if suite.project_id in await my_private_projects(db, user.id):
+        access = "owner"        # 私有空间所有者(真实所有权)
+    elif suite.owner_id == user.id:
+        # 创建人位(普通/公共项目内容的维护与入口提示;实际写权仍由
+        # 表 B 把关 —— 被移出项目的创建人可见性先行 404)
         access = "owner"
-    elif suite.project_id is not None:
-        access = ("member"
-                  if suite.project_id != await public_project_id(db)
-                  else "public")
+    elif suite.project_id == await public_project_id(db):
+        access = "public"
+    elif suite.project_id in await zone_member_pids(db, user.id):
+        access = "member"
     else:
-        # 引用访问不复存在(ADR-0003 #20);私有非属主无访问(项目成员经表 B member)
         access = None
     if access is None:
         return {}
@@ -211,11 +215,13 @@ async def _detail_out(
     db: AsyncSession, user: CurrentUser, suite: Suite,
     members: list[SuiteMember] | None = None,
 ) -> SuiteDetailOut:
+    from ..services.zone import derive_visibility
+
     if members is None:
         members = await _ordered_members(db, suite.id)
     out = SuiteDetailOut(
         suiteId=suite.id, name=suite.name, description=suite.description,
-        visibility=("public" if suite.project_id is not None else "private"),
+        visibility=await derive_visibility(db, suite.project_id),
         mode=suite.mode,
         memberCount=len(members), rev=suite.rev, isDraft=_is_draft(suite),
         modeConfig=suite.mode_config or {},
@@ -242,6 +248,8 @@ async def _members_out(
 ) -> list[SuiteMemberOut]:
     """成员摘要:名称/模块来自场景行(行缺失 = 场景被删的瞬态,名字
     回落 scenarioId;FK CASCADE 会随即收掉成员行,这里只是读窗口)。"""
+    from ..services.zone import derive_visibility
+
     out: list[SuiteMemberOut] = []
     for m in members:
         scen = await scenario_store.get_row(db, m.scenario_id)
@@ -250,7 +258,8 @@ async def _members_out(
             scenarioId=m.scenario_id,
             name=(meta.name if meta and meta.name else m.scenario_id),
             module=(meta.module or "") if meta else "",
-            visibility=("public" if scen and scen.project_id is not None else "private"),
+            visibility=(await derive_visibility(db, scen.project_id)
+                        if scen else "private"),
             role=m.role or "main",
             sort=m.sort, addedAt=_iso(m.added_at),
         ))
@@ -286,8 +295,11 @@ async def list_suites(
     elif scope == "mine":
         clauses = [Suite.owner_id == user.id]   # 镜头(含我维护的公共副本)
     elif scope == "private":
-        # S7.0:「我的用例集」= 我名下且未加入任何项目
-        clauses = [Suite.owner_id == user.id, Suite.project_id.is_(None)]
+        # S7.0/UPC M2:「我的用例集」= 我的私有空间内容(真实容器)
+        from ..services.zone import my_private_projects
+
+        clauses = [Suite.project_id.in_(
+            await my_private_projects(db, user.id))]
     else:
         # S1.2 三区(表 B suite.read = zone_read_clause;S7.4 引用支移除)
         clauses = [zone_read_clause(Suite, user.id)]
@@ -331,7 +343,7 @@ async def list_suites(
     )).all() if page_rows else []
     owners = {r.id: (r.display_name or r.username) for r in owner_rows}
     items = [
-        _summary(s, await _member_count(db, s.id), latest.get(s.id),
+        await _summary(db, s, await _member_count(db, s.id), latest.get(s.id),
                  owners.get(s.owner_id))
         for s in page_rows
     ]
@@ -342,19 +354,18 @@ async def list_suites(
 async def create_suite(
     user: CurrentUser, db: DbSession, body: SuiteCreateIn,
 ) -> SuiteSummaryOut:
-    if body.projectId is not None:
-        from ..services.zone import (ProjectCreateDenied,
-                                     ensure_can_create_in_project)
-        try:
-            await ensure_can_create_in_project(db, user.id, body.projectId)
-        except ProjectCreateDenied as e:
-            raise HTTPException(status_code=e.status, detail={
-                "code": e.code, "message": e.message}) from None
+    from ..services.project_access import resolve_content_target
+    from ..services.zone import ProjectCreateDenied
+    try:
+        target = await resolve_content_target(db, user.id, body.projectId)
+    except ProjectCreateDenied as e:
+        raise HTTPException(status_code=e.status, detail={
+            "code": e.code, "message": e.message}) from None
     # 草稿口径(重构方案):name 缺省 = 画布首次拖入创建草稿,服务端
     # 生成不重名草稿名;草稿不计入 SUITE_CAP、单独 SUITE_DRAFT_CAP
     #(团队规模有界,JSON 的 draft 标记在 Python 侧过滤,不进 SQL)
     own_cfgs = (await db.execute(
-        select(Suite.mode_config).where(Suite.owner_id == user.id)
+        select(Suite.mode_config).where(Suite.project_id == target.id)
     )).all()
     n_draft = sum(1 for (cfg,) in own_cfgs if (cfg or {}).get("draft"))
     is_draft = body.name is None
@@ -368,7 +379,7 @@ async def create_suite(
             "code": "suite_cap_exceeded",
             "message": f"suite cap per user is {settings.SUITE_CAP}"})
     existing = {n for (n,) in (await db.execute(
-        select(Suite.name).where(Suite.owner_id == user.id)))}
+        select(Suite.name).where(Suite.project_id == target.id)))}
     name = body.name
     if name is None:
         base = "未命名 Suite"
@@ -382,7 +393,7 @@ async def create_suite(
             "code": "suite_name_conflict",
             "message": "同名 suite 已存在(属主内唯一)"})
     suite = Suite(name=name, description=body.description,
-                  owner_id=user.id, project_id=body.projectId,
+                  owner_id=user.id, project_id=target.id,
                   mode_config=({"draft": True} if is_draft else {}))
     db.add(suite)
     await db.commit()
@@ -394,7 +405,7 @@ async def create_suite(
             db, actor_id=user.id, kind="suite.created",
             resource_type="suite", resource_id=str(suite.id),
             detail={"name": suite.name})
-    return _summary(suite, 0)
+    return await _summary(db, suite, 0)
 
 
 @router.get("/{suite_id}", response_model=SuiteDetailOut)
@@ -431,7 +442,7 @@ async def patch_suite(
         suite.rev += 1
     await db.commit()
     await db.refresh(suite)
-    return _summary(suite, await _member_count(db, suite.id))
+    return await _summary(db, suite, await _member_count(db, suite.id))
 
 
 @router.delete("/{suite_id}", status_code=204)
@@ -521,18 +532,16 @@ async def add_members(
                 "code": "suite_member_cap_exceeded",
                 "message": (f"suite member cap is "
                             f"{settings.SUITE_MEMBER_CAP}")})
-        # 同区约束(单点 zone.ensure_member_same_zone):成员与套件
-        # 同 project_id;私有区同空时同属主 —— 项目套件可容纳其他成员
-        # 的场景,跨区/私有他人 → 422(ADR-0003 #19;
-        # 公共套件是副本,加成员走原件 + 重发布,前置 422 兜住)
+        # 同区约束(单点 zone.ensure_member_same_zone;§20.6 复合 FK
+        # 兜底):成员与套件同 project_id —— 两个私有空间同属一人也
+        # 互斥(§5.1);项目套件可容纳其他成员的场景,跨区 → 422
+        # (ADR-0003 #19;公共套件是副本,加成员走原件 + 重发布)
         from ..services.zone import ensure_member_same_zone
 
         try:
             ensure_member_same_zone(
                 suite_project_id=suite.project_id,
-                suite_owner_id=suite.owner_id,
-                scen_project_id=scen.project_id,
-                scen_owner_id=scen.owner_id, scenario_id=sid)
+                scen_project_id=scen.project_id, scenario_id=sid)
         except ValueError as e:
             await db.rollback()
             raise HTTPException(
@@ -540,7 +549,8 @@ async def add_members(
                 detail={"code": "suite_member_cross_zone",
                         "message": str(e).split(": ", 1)[1]}) from None
         db.add(SuiteMember(
-            suite_id=suite.id, scenario_id=sid, sort=next_sort,
+            suite_id=suite.id, scenario_id=sid, project_id=suite.project_id,
+            sort=next_sort,
         ))
         next_sort += 1
         added += 1
@@ -699,7 +709,7 @@ async def put_composition(
             "code": "suite_member_cap_exceeded",
             "message": f"suite member cap is {settings.SUITE_MEMBER_CAP}"})
 
-    # S1.5 同区校验(与 add_members 同一单点);不存在 → 404
+    # 同区校验(与 add_members 同一单点,§20.6);不存在 → 404
     from ..services.zone import ensure_member_same_zone
 
     for m in body.members:
@@ -710,9 +720,7 @@ async def put_composition(
         try:
             ensure_member_same_zone(
                 suite_project_id=suite.project_id,
-                suite_owner_id=suite.owner_id,
-                scen_project_id=scen.project_id,
-                scen_owner_id=scen.owner_id, scenario_id=m.scenarioId)
+                scen_project_id=scen.project_id, scenario_id=m.scenarioId)
         except ValueError as e:
             await db.rollback()
             raise HTTPException(
@@ -732,7 +740,7 @@ async def put_composition(
         if row is None:
             db.add(SuiteMember(
                 suite_id=suite.id, scenario_id=m.scenarioId,
-                role=m.role, sort=idx))
+                project_id=suite.project_id, role=m.role, sort=idx))
         else:
             row.role = m.role
             row.sort = idx
@@ -1719,10 +1727,11 @@ async def publish_suite(
     if existing is not None:
         await db.delete(existing)
         await db.flush()
-    # 副本名:同属主下不与原件/其他套件撞名(uq_suites_owner_name)
+    # 副本名:同项目(= 公共项目)内不与原件/其他套件撞名
+    # (UPC M2:uq_suites_project_name 换轴)
     base = f"{suite.name}(公共)"
     taken = set((await db.execute(
-        select(Suite.name).where(Suite.owner_id == suite.owner_id)))
+        select(Suite.name).where(Suite.project_id == pid)))
         .scalars().all())
     name, n = base, 2
     while name in taken:
@@ -1742,7 +1751,7 @@ async def publish_suite(
     for m in members:
         db.add(SuiteMember(
             suite_id=copy.id, scenario_id=sid_map[m.scenario_id],
-            role=m.role, sort=m.sort))
+            project_id=pid, role=m.role, sort=m.sort))
     await db.commit()
     await db.refresh(copy)
     # 时间线:记在原套件轴(副本创建即发布动作)
@@ -1756,7 +1765,7 @@ async def publish_suite(
         resource_type="suite", resource_id=str(suite.id),
         detail={"name": suite.name, "publicCopyId": copy.id,
                 "cascaded": 0, **extra})
-    return _summary(copy, len(members))
+    return await _summary(db, copy, len(members))
 
 
 @router.delete("/{suite_id}/publish", response_model=SuiteSummaryOut)
@@ -1782,7 +1791,9 @@ async def unpublish_suite(
     suite = await _load_suite(db, suite_id)
     pid = await public_project_id(db)
 
-    if suite.project_id is None:
+    from ..services.zone import my_private_projects as _mpp_unpub
+
+    if suite.project_id in await _mpp_unpub(db, user.id):
         copy = await _find_public_suite_copy(db, suite.id)
         if copy is None:
             if not await can(db, user, "suite", "read", suite):
@@ -1862,7 +1873,7 @@ async def unpublish_suite(
         db, actor_id=actor_id, kind="suite.unpublished",
         resource_type="suite", resource_id=str(suite.id),
         detail={"name": suite.name, "publicCopyId": copy_id, **extra})
-    return _summary(suite, await _member_count(db, suite.id))
+    return await _summary(db, suite, await _member_count(db, suite.id))
 
 
 class TransferIn(BaseModel):

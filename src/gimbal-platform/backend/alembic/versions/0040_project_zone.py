@@ -154,19 +154,23 @@ def downgrade() -> None:
     # 行为回到 0039 代码的读法);普通项目内容随两表删除一并失去挂靠
     for table in _ZONE_TABLES + ("executions",):
         bind.execute(sa.text(f"UPDATE {table} SET project_id = NULL"))
-    for table in _ZONE_TABLES + ("executions",):
-        if "project_id" not in {c["name"] for c in insp.get_columns(table)}:
-            continue
-        op.drop_index(f"ix_{table}_project_id", table_name=table)
-        if table != "executions":  # 匿名 FK:按定义找名再删
-            fks = [f["name"] for f in insp.get_foreign_keys(table)
-                   if f["referred_table"] == "projects"]
-            for name in fks:
-                op.drop_constraint(name, table, type_="foreignkey")
-        op.drop_column(table, "project_id")
+        # UPC M2(0068 复合边依赖该列):downgrade 腿在终态形状上重放时,
+        # CASCADE 一并收掉引用该列的复合 FK/候选键(§20.2/§20.6 随列
+        # 共存共亡;0068 的 downgrade 不存在,反向即整列退场)
+        bind.execute(sa.text(
+            f"ALTER TABLE {table} DROP COLUMN project_id CASCADE"))
     if "is_platform_template" in {
             c["name"] for c in insp.get_columns("integration_tasks")}:
         op.drop_column("integration_tasks", "is_platform_template")
     # ① 反向:两表删除(公共项目行随之;步⑤删掉的挂靠模板不可还原)
+    # UPC M2 表(0067/0068 起;0039 时代不存在)——downgrade 腿在终态
+    # 形状上重放时先卸,FK 挡 DROP projects
+    bind.execute(sa.text(
+        "DROP TABLE IF EXISTS scenario_asset_imports CASCADE"))
+    bind.execute(sa.text(
+        "DROP TABLE IF EXISTS scheme_repair_diagnosis CASCADE"))
+    bind.execute(sa.text(
+        "DROP TABLE IF EXISTS scheme_repair_events CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS account_combos CASCADE"))
     op.drop_table("project_members")
     op.drop_table("projects")

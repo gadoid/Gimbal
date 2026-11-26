@@ -200,19 +200,83 @@
     },
     "account_ambiguous": {
       "sites": [
-        "app/routers/run_precheck.py:581"
+        "app/routers/run_precheck.py:608"
       ],
       "statuses": []
     },
+    "account_combo_capability_disabled": {
+      "sites": [
+        "app/services/account_combo.py:149",
+        "app/services/scheme_repair.py:285"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "account_combo_entry_invalid": {
+      "sites": [
+        "app/services/account_combo.py:129",
+        "app/services/account_combo.py:133"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "account_combo_in_use": {
+      "sites": [
+        "app/services/account_combo.py:265"
+      ],
+      "statuses": [
+        409
+      ]
+    },
+    "account_combo_name_exists": {
+      "sites": [
+        "app/services/account_combo.py:175",
+        "app/services/account_combo.py:201"
+      ],
+      "statuses": [
+        409
+      ]
+    },
+    "account_combo_not_found": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
+      "sites": [
+        "app/routers/account_combos.py:110",
+        "app/routers/account_combos.py:268",
+        "app/routers/account_combos.py:295",
+        "app/routers/account_combos.py:315",
+        "app/services/account_combo.py:298",
+        "app/services/scheme_repair.py:313"
+      ],
+      "statuses": [
+        404,
+        422
+      ]
+    },
+    "account_combo_scope_mismatch": {
+      "sites": [
+        "app/services/account_combo.py:301",
+        "app/services/scheme_repair.py:317"
+      ],
+      "statuses": [
+        422
+      ]
+    },
     "account_missing": {
       "sites": [
-        "app/routers/run_precheck.py:572"
+        "app/routers/run_precheck.py:599"
       ],
       "statuses": []
     },
     "address_missing": {
       "sites": [
-        "app/routers/run_precheck.py:612"
+        "app/routers/run_precheck.py:639"
       ],
       "statuses": []
     },
@@ -288,9 +352,9 @@
     },
     "alias_unavailable": {
       "sites": [
-        "app/routers/integration.py:893",
-        "app/routers/integration.py:940",
-        "app/routers/integration.py:977"
+        "app/routers/integration.py:904",
+        "app/routers/integration.py:951",
+        "app/routers/integration.py:988"
       ],
       "statuses": [
         503
@@ -325,6 +389,64 @@
         404
       ]
     },
+    "asset_bundle_conflict": {
+      "sites": [
+        "app/services/scenario_asset_package.py:237"
+      ],
+      "statuses": [
+        409
+      ]
+    },
+    "asset_bundle_default_invalid": {
+      "sites": [
+        "app/services/scenario_asset_package.py:258"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "asset_bundle_default_missing": {
+      "sites": [
+        "app/services/scenario_asset_package.py:103",
+        "app/services/scenario_asset_package.py:253"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "asset_bundle_format_invalid": {
+      "sites": [
+        "app/services/scenario_asset_package.py:89"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "asset_bundle_scenario_invalid": {
+      "sites": [
+        "app/services/scenario_asset_package.py:281",
+        "app/services/scenario_asset_package.py:294"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "asset_bundle_schemes_missing": {
+      "sites": [
+        "app/services/scenario_asset_package.py:100"
+      ],
+      "statuses": [
+        422
+      ]
+    },
+    "asset_bundle_source_missing": {
+      "sites": [
+        "app/services/scenario_asset_package.py:95"
+      ],
+      "statuses": [
+        422
+      ]
+    },
     "auth_aliases_ambiguous": {
       "shapes": [
         [
@@ -335,7 +457,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:870",
+        "app/routers/suites.py:878",
         "app/services/run_dispatcher.py:1358"
       ],
       "statuses": [
@@ -352,7 +474,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:877",
+        "app/routers/suites.py:885",
         "app/services/run_dispatcher.py:1368",
         "app/services/run_dispatcher.py:1374"
       ],
@@ -519,8 +641,8 @@
         ]
       ],
       "sites": [
-        "app/routers/integration.py:326",
-        "app/routers/integration.py:503",
+        "app/routers/integration.py:333",
+        "app/routers/integration.py:514",
         "app/routers/runs.py:492"
       ],
       "statuses": [
@@ -543,6 +665,7 @@
         "app/core/deps.py:137",
         "app/core/deps.py:169",
         "app/routers/access_tokens.py:210",
+        "app/routers/account_combos.py:84",
         "app/routers/projects.py:266",
         "app/routers/projects.py:630",
         "app/services/scenario_import.py:631"
@@ -605,9 +728,17 @@
       ],
       "statuses": []
     },
+    "confirm_reason_required": {
+      "sites": [
+        "app/services/scheme_repair.py:357"
+      ],
+      "statuses": [
+        422
+      ]
+    },
     "consent_stale": {
       "sites": [
-        "app/routers/integration.py:943"
+        "app/routers/integration.py:954"
       ],
       "statuses": [
         409
@@ -642,10 +773,10 @@
         ]
       ],
       "sites": [
-        "app/routers/integration.py:952",
+        "app/routers/integration.py:963",
         "app/routers/runs.py:455",
         "app/routers/runs.py:463",
-        "app/routers/suites.py:857",
+        "app/routers/suites.py:865",
         "app/services/run_dispatcher.py:1302",
         "app/services/run_dispatcher.py:1307"
       ],
@@ -656,7 +787,7 @@
     },
     "credential_source_locked": {
       "sites": [
-        "app/routers/integration.py:957"
+        "app/routers/integration.py:968"
       ],
       "statuses": [
         409
@@ -664,8 +795,8 @@
     },
     "cron_invalid": {
       "sites": [
-        "app/routers/integration.py:332",
-        "app/routers/integration.py:567"
+        "app/routers/integration.py:339",
+        "app/routers/integration.py:578"
       ],
       "statuses": [
         422
@@ -721,6 +852,21 @@
       ],
       "statuses": [
         422
+      ]
+    },
+    "default_space_missing": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
+      "sites": [
+        "app/services/project_access.py:57",
+        "app/services/suite_copy.py:98"
+      ],
+      "statuses": [
+        404
       ]
     },
     "default_space_protected": {
@@ -802,7 +948,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:611"
+        "app/routers/suites.py:621"
       ],
       "statuses": [
         422
@@ -816,7 +962,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:636"
+        "app/routers/suites.py:646"
       ],
       "statuses": [
         422
@@ -860,7 +1006,7 @@
         ]
       ],
       "sites": [
-        "app/routers/run_precheck.py:540",
+        "app/routers/run_precheck.py:567",
         "app/routers/runs.py:293",
         "app/routers/runs.py:447",
         "app/routers/scenarios.py:219",
@@ -874,7 +1020,7 @@
     },
     "env_unspecified": {
       "sites": [
-        "app/routers/run_precheck.py:565"
+        "app/routers/run_precheck.py:592"
       ],
       "statuses": []
     },
@@ -1014,10 +1160,10 @@
     },
     "forbidden": {
       "sites": [
-        "app/routers/integration.py:525",
-        "app/routers/integration.py:666",
-        "app/routers/integration.py:705",
-        "app/routers/integration.py:743"
+        "app/routers/integration.py:536",
+        "app/routers/integration.py:677",
+        "app/routers/integration.py:716",
+        "app/routers/integration.py:754"
       ],
       "statuses": [
         403
@@ -1031,7 +1177,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:866",
+        "app/routers/suites.py:874",
         "app/services/run_dispatcher.py:1355"
       ],
       "statuses": [
@@ -1101,14 +1247,14 @@
     },
     "identity_missing": {
       "sites": [
-        "app/routers/run_precheck.py:559",
+        "app/routers/run_precheck.py:586",
         "app/services/adhoc_run.py:405"
       ],
       "statuses": []
     },
     "identity_not_circled": {
       "sites": [
-        "app/routers/run_precheck.py:603",
+        "app/routers/run_precheck.py:630",
         "app/services/run_dispatcher.py:1486"
       ],
       "statuses": []
@@ -1146,7 +1292,7 @@
     },
     "inflight_limit": {
       "sites": [
-        "app/routers/integration.py:797"
+        "app/routers/integration.py:808"
       ],
       "statuses": [
         429
@@ -1154,14 +1300,14 @@
     },
     "instance_gone": {
       "sites": [
-        "app/services/integration_runner.py:1262",
-        "app/services/integration_runner.py:1343"
+        "app/services/integration_runner.py:1278",
+        "app/services/integration_runner.py:1359"
       ],
       "statuses": []
     },
     "instance_missing": {
       "sites": [
-        "app/routers/integration.py:961"
+        "app/routers/integration.py:972"
       ],
       "statuses": [
         500
@@ -1169,7 +1315,7 @@
     },
     "instance_not_found": {
       "sites": [
-        "app/services/integration_runner.py:975"
+        "app/services/integration_runner.py:979"
       ],
       "statuses": []
     },
@@ -1251,7 +1397,7 @@
         "app/routers/access_tokens.py:235",
         "app/routers/access_tokens.py:277",
         "app/routers/access_tokens.py:318",
-        "app/services/project_promotion.py:128"
+        "app/services/project_promotion.py:140"
       ],
       "statuses": [
         422
@@ -1265,8 +1411,8 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:904",
-        "app/routers/projects.py:953"
+        "app/routers/projects.py:909",
+        "app/routers/projects.py:958"
       ],
       "statuses": [
         409
@@ -1274,7 +1420,7 @@
     },
     "login_missing": {
       "sites": [
-        "app/routers/run_precheck.py:588"
+        "app/routers/run_precheck.py:615"
       ],
       "statuses": []
     },
@@ -1307,7 +1453,7 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:858"
+        "app/routers/projects.py:863"
       ],
       "statuses": [
         409
@@ -1321,7 +1467,7 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:850"
+        "app/routers/projects.py:855"
       ],
       "statuses": [
         422
@@ -1337,7 +1483,7 @@
       ],
       "sites": [
         "app/routers/project_promotions.py:124",
-        "app/services/project_promotion.py:474"
+        "app/services/project_promotion.py:488"
       ],
       "statuses": [
         409,
@@ -1352,7 +1498,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:566"
+        "app/routers/suites.py:576"
       ],
       "statuses": [
         422
@@ -1386,7 +1532,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1117"
+        "app/routers/scenarios.py:1130"
       ],
       "statuses": [
         409
@@ -1400,7 +1546,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:650"
+        "app/routers/suites.py:660"
       ],
       "statuses": [
         422
@@ -1414,7 +1560,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:662"
+        "app/routers/suites.py:672"
       ],
       "statuses": [
         422
@@ -1428,7 +1574,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:657"
+        "app/routers/suites.py:667"
       ],
       "statuses": [
         422
@@ -1462,7 +1608,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:1633"
+        "app/routers/suites.py:1641"
       ],
       "statuses": [
         409
@@ -1497,6 +1643,7 @@
         ]
       ],
       "sites": [
+        "app/routers/account_combos.py:58",
         "app/routers/auth_sessions.py:185",
         "app/routers/carry.py:81",
         "app/routers/carry.py:92",
@@ -1504,24 +1651,24 @@
         "app/routers/carry.py:151",
         "app/routers/executions.py:113",
         "app/routers/executions.py:275",
-        "app/routers/integration.py:491",
-        "app/routers/integration.py:508",
-        "app/routers/integration.py:513",
-        "app/routers/integration.py:523",
-        "app/routers/integration.py:658",
-        "app/routers/integration.py:661",
-        "app/routers/integration.py:664",
-        "app/routers/integration.py:698",
-        "app/routers/integration.py:703",
-        "app/routers/integration.py:729",
-        "app/routers/integration.py:741",
-        "app/routers/integration.py:768",
-        "app/routers/integration.py:831",
-        "app/routers/integration.py:882",
-        "app/routers/integration.py:928",
-        "app/routers/integration.py:1011",
-        "app/routers/integration.py:1077",
-        "app/routers/integration.py:1114",
+        "app/routers/integration.py:502",
+        "app/routers/integration.py:519",
+        "app/routers/integration.py:524",
+        "app/routers/integration.py:534",
+        "app/routers/integration.py:669",
+        "app/routers/integration.py:672",
+        "app/routers/integration.py:675",
+        "app/routers/integration.py:709",
+        "app/routers/integration.py:714",
+        "app/routers/integration.py:740",
+        "app/routers/integration.py:752",
+        "app/routers/integration.py:779",
+        "app/routers/integration.py:842",
+        "app/routers/integration.py:893",
+        "app/routers/integration.py:939",
+        "app/routers/integration.py:1022",
+        "app/routers/integration.py:1088",
+        "app/routers/integration.py:1125",
         "app/routers/project_credentials.py:70",
         "app/routers/project_credentials.py:110",
         "app/routers/project_promotions.py:95",
@@ -1534,25 +1681,26 @@
         "app/routers/projects.py:182",
         "app/routers/projects.py:193",
         "app/routers/projects.py:618",
-        "app/routers/projects.py:743",
-        "app/routers/projects.py:891",
-        "app/routers/projects.py:942",
-        "app/routers/report_definitions.py:151",
-        "app/routers/report_definitions.py:155",
-        "app/routers/report_definitions.py:174",
-        "app/routers/report_definitions.py:181",
-        "app/routers/report_definitions.py:222",
-        "app/routers/report_definitions.py:225",
-        "app/routers/report_definitions.py:245",
-        "app/routers/report_definitions.py:252",
-        "app/routers/scenarios.py:641",
+        "app/routers/projects.py:748",
+        "app/routers/projects.py:896",
+        "app/routers/projects.py:947",
+        "app/routers/report_definitions.py:160",
+        "app/routers/report_definitions.py:164",
+        "app/routers/report_definitions.py:185",
+        "app/routers/report_definitions.py:192",
+        "app/routers/report_definitions.py:236",
+        "app/routers/report_definitions.py:239",
+        "app/routers/report_definitions.py:259",
+        "app/routers/report_definitions.py:266",
+        "app/routers/scenarios.py:642",
         "app/routers/webhook_deliveries.py:54",
         "app/services/project_promotion.py:59",
         "app/services/project_promotion.py:69",
-        "app/services/project_promotion.py:107",
-        "app/services/project_promotion.py:120",
-        "app/services/zone.py:85",
-        "app/services/zone.py:93"
+        "app/services/project_promotion.py:119",
+        "app/services/project_promotion.py:132",
+        "app/services/zone.py:103",
+        "app/services/zone.py:118",
+        "app/services/zone.py:123"
       ],
       "statuses": [
         404
@@ -1566,7 +1714,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:1620"
+        "app/routers/suites.py:1628"
       ],
       "statuses": [
         403
@@ -1580,8 +1728,8 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1368",
-        "app/routers/suites.py:1888"
+        "app/routers/scenarios.py:1381",
+        "app/routers/suites.py:1899"
       ],
       "statuses": [
         403
@@ -1598,13 +1746,13 @@
         "app/routers/executions.py:991",
         "app/routers/runs.py:582",
         "app/routers/runs.py:612",
-        "app/routers/suites.py:91",
-        "app/routers/suites.py:1790",
-        "app/routers/suites.py:1794",
-        "app/routers/suites.py:1802",
-        "app/routers/suites.py:1818",
-        "app/services/project_promotion.py:110",
-        "app/services/project_promotion.py:123"
+        "app/routers/suites.py:84",
+        "app/routers/suites.py:1801",
+        "app/routers/suites.py:1805",
+        "app/routers/suites.py:1813",
+        "app/routers/suites.py:1829",
+        "app/services/project_promotion.py:122",
+        "app/services/project_promotion.py:135"
       ],
       "statuses": [
         403
@@ -1782,7 +1930,7 @@
       ],
       "sites": [
         "app/routers/scenarios.py:280",
-        "app/routers/scenarios.py:1443"
+        "app/routers/scenarios.py:1456"
       ],
       "statuses": [
         502
@@ -1804,7 +1952,7 @@
         "app/routers/endpoint_catalog.py:154",
         "app/routers/endpoint_catalog.py:313",
         "app/routers/scenarios.py:293",
-        "app/routers/scenarios.py:1455"
+        "app/routers/scenarios.py:1468"
       ],
       "statuses": [
         422,
@@ -1825,10 +1973,10 @@
         "app/routers/endpoint_catalog.py:294",
         "app/routers/endpoint_catalog.py:298",
         "app/routers/generator_catalog.py:57",
-        "app/routers/integration.py:890",
+        "app/routers/integration.py:901",
         "app/routers/runs.py:265",
         "app/routers/scenarios.py:285",
-        "app/routers/scenarios.py:1448",
+        "app/routers/scenarios.py:1461",
         "app/routers/strategy_catalog.py:60",
         "app/services/query_view_runner.py:107",
         "app/services/query_view_runner.py:116",
@@ -1846,7 +1994,7 @@
     },
     "platform_template_public": {
       "sites": [
-        "app/routers/integration.py:529"
+        "app/routers/integration.py:540"
       ],
       "statuses": [
         409
@@ -1861,7 +2009,7 @@
         ]
       ],
       "sites": [
-        "app/routers/users.py:696"
+        "app/routers/users.py:768"
       ],
       "statuses": [
         409
@@ -1920,7 +2068,7 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:734"
+        "app/routers/projects.py:739"
       ],
       "statuses": [
         409
@@ -1934,8 +2082,8 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:844",
-        "app/routers/projects.py:883"
+        "app/routers/projects.py:849",
+        "app/routers/projects.py:888"
       ],
       "statuses": [
         409
@@ -1957,6 +2105,15 @@
         409
       ]
     },
+    "project_not_active": {
+      "sites": [
+        "app/services/scheme_repair.py:279",
+        "app/services/zone.py:106"
+      ],
+      "statuses": [
+        409
+      ]
+    },
     "project_not_empty": {
       "shapes": [
         [
@@ -1965,16 +2122,23 @@
         ]
       ],
       "sites": [
-        "app/routers/projects.py:663"
+        "app/routers/projects.py:668"
       ],
       "statuses": [
         409
       ]
     },
     "project_role_readonly": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
       "sites": [
+        "app/routers/account_combos.py:95",
         "app/services/project_promotion.py:72",
-        "app/services/zone.py:97"
+        "app/services/zone.py:127"
       ],
       "statuses": [
         403
@@ -1982,7 +2146,7 @@
     },
     "project_token_public_forbidden": {
       "sites": [
-        "app/routers/integration.py:348"
+        "app/routers/integration.py:355"
       ],
       "statuses": [
         422
@@ -1990,7 +2154,7 @@
     },
     "project_visibility_conflict": {
       "sites": [
-        "app/routers/integration.py:338"
+        "app/routers/integration.py:345"
       ],
       "statuses": [
         422
@@ -2018,8 +2182,8 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:1052",
-        "app/routers/suites.py:1807"
+        "app/routers/scenarios.py:1065",
+        "app/routers/suites.py:1818"
       ],
       "statuses": [
         409
@@ -2027,7 +2191,7 @@
     },
     "public_project_create_forbidden": {
       "sites": [
-        "app/services/zone.py:88"
+        "app/services/zone.py:110"
       ],
       "statuses": [
         422
@@ -2041,7 +2205,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:1714"
+        "app/routers/suites.py:1722"
       ],
       "statuses": [
         409
@@ -2155,7 +2319,7 @@
         ]
       ],
       "sites": [
-        "app/routers/report_definitions.py:110"
+        "app/routers/report_definitions.py:116"
       ],
       "statuses": [
         422
@@ -2184,7 +2348,7 @@
         ]
       ],
       "sites": [
-        "app/routers/integration.py:476",
+        "app/routers/integration.py:487",
         "app/routers/runs.py:200",
         "app/services/run_dispatcher.py:1499"
       ],
@@ -2195,7 +2359,7 @@
     },
     "result_policy_invalid": {
       "sites": [
-        "app/routers/integration.py:334"
+        "app/routers/integration.py:341"
       ],
       "statuses": [
         422
@@ -2203,7 +2367,7 @@
     },
     "resume_not_allowed": {
       "sites": [
-        "app/routers/integration.py:1133"
+        "app/routers/integration.py:1144"
       ],
       "statuses": [
         409
@@ -2217,7 +2381,7 @@
     },
     "run_failed": {
       "sites": [
-        "app/routers/integration.py:814"
+        "app/routers/integration.py:825"
       ],
       "statuses": [
         500
@@ -2243,7 +2407,7 @@
         ]
       ],
       "sites": [
-        "app/routers/run_schemes.py:133"
+        "app/routers/run_schemes.py:192"
       ],
       "statuses": [
         405
@@ -2257,8 +2421,8 @@
         ]
       ],
       "sites": [
-        "app/routers/run_schemes.py:90",
-        "app/routers/run_schemes.py:113"
+        "app/routers/run_schemes.py:133",
+        "app/routers/run_schemes.py:163"
       ],
       "statuses": [
         409
@@ -2272,8 +2436,9 @@
         ]
       ],
       "sites": [
-        "app/routers/run_schemes.py:108",
-        "app/routers/run_schemes.py:128",
+        "app/routers/run_schemes.py:158",
+        "app/routers/run_schemes.py:187",
+        "app/routers/run_schemes.py:233",
         "app/routers/runs.py:397"
       ],
       "statuses": [
@@ -2312,7 +2477,7 @@
     },
     "running": {
       "sites": [
-        "app/routers/integration.py:807"
+        "app/routers/integration.py:818"
       ],
       "statuses": [
         409
@@ -2348,17 +2513,17 @@
       ],
       "sites": [
         "app/routers/executions.py:978",
-        "app/routers/integration.py:343",
-        "app/routers/integration.py:354",
-        "app/routers/integration.py:845",
-        "app/routers/integration.py:934",
+        "app/routers/integration.py:350",
+        "app/routers/integration.py:361",
+        "app/routers/integration.py:856",
+        "app/routers/integration.py:945",
         "app/routers/runs.py:363",
         "app/routers/runs.py:369",
         "app/routers/runs.py:537",
         "app/routers/runs.py:543",
         "app/routers/runs.py:604",
-        "app/services/integration_runner.py:675",
-        "app/services/integration_runner.py:984",
+        "app/services/integration_runner.py:679",
+        "app/services/integration_runner.py:988",
         "app/services/query_context.py:70",
         "app/services/run_dispatcher.py:882"
       ],
@@ -2368,7 +2533,7 @@
     },
     "scenario_not_in_project": {
       "sites": [
-        "app/routers/integration.py:364"
+        "app/routers/integration.py:371"
       ],
       "statuses": [
         422
@@ -2376,9 +2541,9 @@
     },
     "scenario_not_owned": {
       "sites": [
-        "app/routers/integration.py:378",
-        "app/routers/integration.py:382",
-        "app/routers/integration.py:855"
+        "app/routers/integration.py:385",
+        "app/routers/integration.py:389",
+        "app/routers/integration.py:866"
       ],
       "statuses": [
         422
@@ -2386,10 +2551,10 @@
     },
     "scenario_not_public": {
       "sites": [
-        "app/routers/integration.py:375",
-        "app/routers/integration.py:612",
+        "app/routers/integration.py:382",
         "app/routers/integration.py:623",
-        "app/routers/integration.py:709"
+        "app/routers/integration.py:634",
+        "app/routers/integration.py:720"
       ],
       "statuses": [
         422
@@ -2409,6 +2574,14 @@
         404
       ]
     },
+    "scheme_not_blocked": {
+      "sites": [
+        "app/services/scheme_repair.py:253"
+      ],
+      "statuses": [
+        409
+      ]
+    },
     "scheme_not_owned": {
       "shapes": [
         [
@@ -2417,15 +2590,38 @@
         ]
       ],
       "sites": [
-        "app/routers/integration.py:391",
-        "app/routers/integration.py:450",
-        "app/routers/integration.py:589",
-        "app/routers/integration.py:594",
-        "app/routers/integration.py:862",
+        "app/routers/integration.py:398",
+        "app/routers/integration.py:461",
+        "app/routers/integration.py:600",
+        "app/routers/integration.py:605",
+        "app/routers/integration.py:873",
         "app/routers/runs.py:132"
       ],
       "statuses": [
         422
+      ]
+    },
+    "scheme_repair_required": {
+      "shapes": [
+        [
+          "code",
+          "message"
+        ]
+      ],
+      "sites": [
+        "app/routers/run_schemes.py:168",
+        "app/services/scheme_repair.py:276"
+      ],
+      "statuses": [
+        409
+      ]
+    },
+    "scheme_revision_conflict": {
+      "sites": [
+        "app/services/scheme_repair.py:261"
+      ],
+      "statuses": [
+        409
       ]
     },
     "scope_alias_unknown": {
@@ -2590,8 +2786,8 @@
     },
     "source_deleted": {
       "sites": [
-        "app/services/project_promotion.py:457",
-        "app/services/project_promotion.py:468"
+        "app/services/project_promotion.py:471",
+        "app/services/project_promotion.py:482"
       ],
       "statuses": [
         409
@@ -2599,8 +2795,8 @@
     },
     "source_not_private": {
       "sites": [
-        "app/services/project_promotion.py:112",
-        "app/services/project_promotion.py:125"
+        "app/services/project_promotion.py:124",
+        "app/services/project_promotion.py:137"
       ],
       "statuses": [
         422
@@ -2614,7 +2810,7 @@
         ]
       ],
       "sites": [
-        "app/routers/scenarios.py:868"
+        "app/routers/scenarios.py:880"
       ],
       "statuses": [
         409
@@ -2634,7 +2830,7 @@
     },
     "subscription_not_found": {
       "sites": [
-        "app/routers/integration.py:1032"
+        "app/routers/integration.py:1043"
       ],
       "statuses": [
         404
@@ -2642,7 +2838,7 @@
     },
     "subscription_required": {
       "sites": [
-        "app/routers/integration.py:790"
+        "app/routers/integration.py:801"
       ],
       "statuses": [
         409
@@ -2656,8 +2852,8 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:367",
-        "app/services/suite_copy.py:101"
+        "app/routers/suites.py:378",
+        "app/services/suite_copy.py:110"
       ],
       "statuses": [
         409
@@ -2671,7 +2867,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:362"
+        "app/routers/suites.py:373"
       ],
       "statuses": [
         409
@@ -2685,10 +2881,10 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:1013",
-        "app/routers/suites.py:1638",
+        "app/routers/suites.py:1021",
+        "app/routers/suites.py:1646",
         "app/services/suite_copy.py:90",
-        "app/services/suite_copy.py:156"
+        "app/services/suite_copy.py:168"
       ],
       "statuses": [
         409
@@ -2719,7 +2915,7 @@
       ],
       "sites": [
         "app/routers/shares.py:105",
-        "app/routers/suites.py:1694"
+        "app/routers/suites.py:1702"
       ],
       "statuses": [
         409
@@ -2733,9 +2929,9 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:520",
-        "app/routers/suites.py:698",
-        "app/services/suite_copy.py:105"
+        "app/routers/suites.py:531",
+        "app/routers/suites.py:708",
+        "app/services/suite_copy.py:114"
       ],
       "statuses": [
         409
@@ -2749,8 +2945,8 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:538",
-        "app/routers/suites.py:718"
+        "app/routers/suites.py:547",
+        "app/routers/suites.py:726"
       ],
       "statuses": [
         422
@@ -2765,7 +2961,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:1707"
+        "app/routers/suites.py:1715"
       ],
       "statuses": [
         422
@@ -2779,8 +2975,8 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:381",
-        "app/routers/suites.py:420"
+        "app/routers/suites.py:392",
+        "app/routers/suites.py:431"
       ],
       "statuses": [
         409
@@ -2796,7 +2992,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:691"
+        "app/routers/suites.py:701"
       ],
       "statuses": [
         409
@@ -2812,7 +3008,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:816"
+        "app/routers/suites.py:824"
       ],
       "statuses": [
         409
@@ -2859,14 +3055,14 @@
     },
     "template_gone": {
       "sites": [
-        "app/services/integration_runner.py:1265",
-        "app/services/integration_runner.py:1346"
+        "app/services/integration_runner.py:1281",
+        "app/services/integration_runner.py:1362"
       ],
       "statuses": []
     },
     "template_removed": {
       "sites": [
-        "app/services/integration_runner.py:978"
+        "app/services/integration_runner.py:982"
       ],
       "statuses": []
     },
@@ -2923,7 +3119,7 @@
     },
     "token_not_bound": {
       "sites": [
-        "app/routers/integration.py:542"
+        "app/routers/integration.py:553"
       ],
       "statuses": [
         409
@@ -2944,7 +3140,7 @@
     },
     "token_owner_mismatch": {
       "sites": [
-        "app/routers/integration.py:771"
+        "app/routers/integration.py:782"
       ],
       "statuses": [
         403
@@ -2952,7 +3148,7 @@
     },
     "token_rebind_not_allowed": {
       "sites": [
-        "app/routers/integration.py:538"
+        "app/routers/integration.py:549"
       ],
       "statuses": [
         422
@@ -2971,7 +3167,7 @@
     },
     "token_unbind_not_allowed": {
       "sites": [
-        "app/routers/integration.py:515"
+        "app/routers/integration.py:526"
       ],
       "statuses": [
         403
@@ -3000,8 +3196,8 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:888",
-        "app/routers/suites.py:1083",
+        "app/routers/suites.py:896",
+        "app/routers/suites.py:1091",
         "app/services/run_dispatcher.py:980"
       ],
       "statuses": [
@@ -3016,10 +3212,10 @@
         ]
       ],
       "sites": [
-        "app/routers/integration.py:747",
-        "app/routers/report_definitions.py:230",
-        "app/routers/scenarios.py:1374",
-        "app/routers/suites.py:1894"
+        "app/routers/integration.py:758",
+        "app/routers/report_definitions.py:244",
+        "app/routers/scenarios.py:1387",
+        "app/routers/suites.py:1905"
       ],
       "statuses": [
         422
@@ -3034,7 +3230,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:842"
+        "app/routers/suites.py:850"
       ],
       "statuses": [
         403
@@ -3077,7 +3273,7 @@
         ]
       ],
       "sites": [
-        "app/routers/suites.py:623"
+        "app/routers/suites.py:633"
       ],
       "statuses": [
         422
@@ -3109,7 +3305,7 @@
     },
     "visibility_invalid": {
       "sites": [
-        "app/routers/integration.py:336"
+        "app/routers/integration.py:343"
       ],
       "statuses": [
         422
@@ -3117,7 +3313,7 @@
     },
     "working_preview": {
       "sites": [
-        "app/routers/integration.py:780"
+        "app/routers/integration.py:791"
       ],
       "statuses": [
         409
@@ -3128,12 +3324,15 @@
     "app/core/deps.py:121": "e.code",
     "app/routers/_error_mapping.py:28": "str(msg).split(': ', 1)[-1]",
     "app/routers/_error_mapping.py:51": "msg",
-    "app/routers/_ownership.py:227": "detail",
+    "app/routers/_ownership.py:233": "detail",
     "app/routers/access_tokens.py:529": "e.code",
     "app/routers/access_tokens.py:559": "e.code",
     "app/routers/access_tokens.py:593": "e.code",
     "app/routers/access_tokens.py:646": "e.code",
     "app/routers/access_tokens.py:685": "e.code",
+    "app/routers/account_combos.py:234": "e.code",
+    "app/routers/account_combos.py:66": "e.code",
+    "app/routers/asset_packages.py:32": "e.code",
     "app/routers/auth_sessions.py:290": "_msg or f\"account '{payload.username}' already exists for system '{payload.system}' in this environment\"",
     "app/routers/auth_sessions.py:410": "_msg or '更新冲突:同系统同环境已存在同名账户'",
     "app/routers/exec_configs.py:241": "e.code",
@@ -3142,13 +3341,15 @@
     "app/routers/executions.py:1030": "e.code",
     "app/routers/executions.py:766": "f'bad_{prefix}_pair'",
     "app/routers/executions.py:774": "f'bad_{prefix}_ts'",
-    "app/routers/integration.py:362": "e.code",
-    "app/routers/integration.py:888": "e.code",
+    "app/routers/integration.py:369": "e.code",
+    "app/routers/integration.py:899": "e.code",
     "app/routers/project_credentials.py:198": "_code",
     "app/routers/project_credentials.py:270": "_code if _msg else 'update_conflict'",
     "app/routers/query_views.py:131": "e.code",
     "app/routers/query_views.py:94": "e.code",
-    "app/routers/run_schemes.py:60": "e.code",
+    "app/routers/run_schemes.py:223": "e.code",
+    "app/routers/run_schemes.py:77": "e.code",
+    "app/routers/run_schemes.py:83": "e.code",
     "app/routers/runs.py:263": "e.code",
     "app/routers/runs.py:314": "e.code",
     "app/routers/runs.py:316": "e.code",
@@ -3160,12 +3361,14 @@
     "app/routers/scenarios.py:198": "e.code",
     "app/routers/scenarios.py:444": "e.code",
     "app/routers/services.py:819": "code",
-    "app/routers/suites.py:352": "e.code",
-    "app/routers/suites.py:601": "payload",
+    "app/routers/suites.py:363": "e.code",
+    "app/routers/suites.py:611": "payload",
+    "app/services/account_combo.py:143": "e.code",
     "app/services/plate_client.py:694": "resp.json().get('error', {}).get('code', 'plate_error')",
     "app/services/run_dispatcher.py:1146": "e.code",
     "app/services/run_dispatcher.py:1437": "e.code",
     "app/services/run_dispatcher.py:1475": "code",
+    "app/services/scenario_asset_package.py:471": "e.code",
     "app/services/scenario_import.py:892": "code",
     "app/services/scenario_import.py:962": "code"
   },
@@ -3173,6 +3376,7 @@
     "coded_exception_classes": [
       "app/routers/run_precheck.py:69 PrecheckGateError",
       "app/services/access_token.py:91 TokenAuthError",
+      "app/services/account_combo.py:39 ComboError",
       "app/services/adhoc_run.py:48 AdhocRejected",
       "app/services/integration_runner.py:385 IntegrationRunError",
       "app/services/plate_client.py:60 PlateRejectedError",
@@ -3182,11 +3386,13 @@
       "app/services/run_dispatcher.py:4012 NotFound",
       "app/services/run_dispatcher.py:4019 Conflict",
       "app/services/run_params.py:43 ParamsError",
+      "app/services/scenario_asset_package.py:51 AssetBundleError",
       "app/services/scenario_import.py:55 ImportRejected",
+      "app/services/scheme_repair.py:65 RepairCommandError",
       "app/services/service_aliases.py:315 BindingAliasInvalid",
       "app/services/service_scope.py:27 ServiceScopeError",
       "app/services/suite_version.py:20 SuiteVersionError",
-      "app/services/zone.py:66 ProjectCreateDenied"
+      "app/services/zone.py:83 ProjectCreateDenied"
     ],
     "helpers": [
       "app/routers/_name_checks.py:assert_name_available",
@@ -3198,6 +3404,6 @@
     ],
     "int_codes_module": "app/routers/_codes.py",
     "note": "动态(非字面量)code 位点在 dynamic 面:取值由对应异常/helper 调用位点枚举,位点增删即契约变化;无码纯 message detail 不入面",
-    "scanned_files": 181
+    "scanned_files": 189
   }
 }

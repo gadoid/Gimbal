@@ -1,22 +1,39 @@
-"""方案 CRUD 路由(工作台 spec §5)。
+"""方案 CRUD 路由(工作台 spec §5;UPC M2:组合绑定显式列 + 修复命令)。
 
 独立于 scenarios.py(它有 /{scenario_id} catch-all,必须最后注册);
-嵌套路径与 data_sets.create_router 同款先例。悬空引用告警不在此层
-重复 —— 工作台前端有死因判定面,dispatch 侧仍有兜底 warn。
+嵌套路径与 data_sets.create_router 同款先例。
+
+UPC M2(§16.1/§20.3):
+
+* DTO ``accountComboId`` ↔ ``composer_run_schemes.account_combo_id``
+  显式列双向映射(唯一持久化事实,不写入 payload);写面校验经
+  ``account_combo.require_combo_bindable``(存在 ∧ 可读 ∧ 同区)。
+* DTO 新增 ``repairStatus`` / ``repairReason``(§20.3 授权投影,经
+  ``scheme_repair.reasons_for_schemes``)与 ``revision``;内部精确
+  原因不直接序列化。
+* 修复命令(blocked → ready 的仅有入口,§20.3):
+  ``POST .../run-schemes/{scheme_id}/rebind-combo`` 与
+  ``POST .../run-schemes/{scheme_id}/confirm-no-combo`` —— 方案写门 +
+  expected_revision 原子校验 + 目标组合绑定授权;状态/绑定/revision
+  与行级审计同事务(scheme_repair_events)。
 """
 from __future__ import annotations
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ..models.composer_run_scheme import ComposerRunScheme
 from ..models.composer_scenario import ComposerScenario
 from ._error_mapping import not_found_404
 from ..schemas.scenario_composer import RunScheme
-from ..services import scheme_store, scenario_store
+from ..services import (account_combo, scenario_store, scheme_repair,
+                        scheme_store)
 
 router = APIRouter(prefix="/scenarios", tags=["run-schemes"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -30,8 +47,8 @@ async def _load_row(db: AsyncSession, scenario_id: str) -> ComposerScenario:
 
 
 async def _require_owner(db, user: CurrentUser, row: ComposerScenario) -> None:
-    """写闸(表 B scenario.write,S1.2 区感知):运行方案随父场景,
-    写权 = 父场景 can(write)(owner ∨ 项目成员 ∨ 公共维护者)。"""
+    """写闸(表 B scenario.write,UPC M2:项目关系):运行方案随父场景,
+    写权 = 父场景 can(write)(私有空间所有者 ∨ 项目可写成员 ∨ 公共维护者)。"""
     from ._ownership import can, can_read_scenario_row
 
     if not await can_read_scenario_row(db, user, row):
@@ -61,18 +78,38 @@ async def _require_env(db, body: RunScheme) -> None:
             "service": e.service, "alias": e.alias}) from None
 
 
+def _combo_binding_error(e: account_combo.ComboError) -> HTTPException:
+    return HTTPException(status_code=e.status, detail={
+        "code": e.code, "message": e.message, **e.detail})
+
+
 @router.get("/{scenario_id}/run-schemes")
 async def list_run_schemes(
     user: CurrentUser, db: DbSession, scenario_id: str,
 ) -> list[dict]:
     row = await _load_row(db, scenario_id)
-    # P2 引用闭包(§7.4):读 = 属主/admin/引用者;写端点仍 _require_owner。
+    # P2 引用闭包(§7.4):读 = 属主/项目成员/公共读者;写端点仍
+    # _require_owner。
     from ._ownership import can_read_scenario_row
     if not await can_read_scenario_row(db, user, row):
         raise not_found_404("scenario", scenario_id)
     # 缺失自动物化默认项(spec §5)— 自愈迁移/钩子漏网的存量场景
     await scheme_store.ensure_default_scheme(db, scenario_id)
-    return await scheme_store.list_schemes(db, scenario_id)
+    schemes = (await db.execute(
+        select(ComposerRunScheme)
+        .where(ComposerRunScheme.scenario_id == scenario_id)
+        .order_by(ComposerRunScheme.is_default.desc(),
+                  ComposerRunScheme.name)
+    )).scalars().all()
+    reasons = await scheme_repair.reasons_for_schemes(db, user, schemes)
+    return [_wire(s, reasons) for s in schemes]
+
+
+def _wire(s, reasons: dict[str, str | None]) -> dict:
+    """方案行 → wire(§9:repairStatus + 投影 repairReason + revision +
+    accountComboId 显式列双向映射)。"""
+    wire = scheme_store._to_wire(s, repair_reason=reasons.get(s.scheme_id))
+    return wire
 
 
 @router.post("/{scenario_id}/run-schemes", status_code=201)
@@ -83,8 +120,14 @@ async def create_run_scheme(
     await _require_owner(db, user, row)
     await _require_env(db, body)
     try:
+        await account_combo.require_combo_bindable(
+            db, user, row, body.account_combo_id)
+    except account_combo.ComboError as e:
+        raise _combo_binding_error(e) from None
+    try:
         return await scheme_store.create_scheme(db, scenario_id,
-            name=body.name, payload=_to_payload(body))
+            name=body.name, payload=_to_payload(body),
+            account_combo_id=body.account_combo_id)
     except ValueError as e:
         if str(e) == "name_conflict":
             raise HTTPException(status_code=409, detail={
@@ -102,8 +145,15 @@ async def update_run_scheme(
     await _require_owner(db, user, row)
     await _require_env(db, body)
     try:
-        return await scheme_store.update_scheme(db, scenario_id, scheme_id,
-            name=body.name, payload=_to_payload(body))
+        await account_combo.require_combo_bindable(
+            db, user, row, body.account_combo_id)
+    except account_combo.ComboError as e:
+        raise _combo_binding_error(e) from None
+    try:
+        await scheme_store.update_scheme(
+            db, scenario_id, scheme_id,
+            name=body.name, payload=_to_payload(body),
+            account_combo_id=body.account_combo_id)
     except KeyError:
         raise HTTPException(status_code=404, detail={
             "code": "run_scheme_not_found",
@@ -113,7 +163,16 @@ async def update_run_scheme(
             raise HTTPException(status_code=409, detail={
                 "code": "run_scheme_name_conflict",
                 "message": "方案名场景内唯一(「默认方案」为保留名)"})
+        if str(e) == "scheme_repair_required":
+            # §20.3:普通保存不得改绑 blocked(修复命令是仅有入口)
+            raise HTTPException(status_code=409, detail={
+                "code": "scheme_repair_required",
+                "message": "方案组合依赖待修复,绑定变更须经修复命令"
+                           "(rebind-combo / confirm-no-combo)"})
         raise
+    scheme = await scheme_store.get_row(db, scenario_id, scheme_id)
+    reasons = await scheme_repair.reasons_for_schemes(db, user, [scheme])
+    return _wire(scheme, reasons)
 
 
 @router.delete("/{scenario_id}/run-schemes/{scheme_id}", status_code=204)
@@ -135,3 +194,94 @@ async def delete_run_scheme(
                 "message": "默认方案不可删除"})
         raise
     return Response(status_code=204)
+
+
+# ── §20.3 修复命令(blocked → ready 的仅有入口)────────────────────
+
+class RebindComboIn(BaseModel):
+    """rebind_combo:指定合法同区组合。目标组合的绑定授权在服务层复核
+    (存在 ∧ 可读 ∧ 同区);候选组合错误按 §20.3 脱敏(不可读 = 不存在,
+    统一 404/422,不成为存在性探针)。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    combo_id: int = Field(alias="comboId", ge=1)
+    expected_revision: int = Field(alias="expectedRevision", ge=1)
+
+
+class ConfirmNoComboIn(BaseModel):
+    """confirm_no_combo:明确确认无组合语义并提供理由(审计留痕)。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    expected_revision: int = Field(alias="expectedRevision", ge=1)
+    reason: str = Field(min_length=1, max_length=2048)
+
+
+def _repair_cmd_error(e: scheme_repair.RepairCommandError) -> HTTPException:
+    return HTTPException(status_code=e.status, detail={
+        "code": e.code, "message": e.message})
+
+
+async def _load_scheme(db, user, scenario_id: str, scheme_id: str):
+    """修复命令的统一装载 + 方案写门(§21:scheme.update)。"""
+    row = await _load_row(db, scenario_id)
+    await _require_owner(db, user, row)
+    try:
+        scheme = await scheme_store.get_row(db, scenario_id, scheme_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail={
+            "code": "run_scheme_not_found",
+            "message": f"run scheme {scheme_id} not found"}) from None
+    return row, scheme
+
+
+async def _audit_repair(db, user, action: str, scheme_id: str,
+                  project_id: int) -> None:
+    """修复命令的治理面审计(best-effort;行级同事务审计在
+    scheme_repair_events,§20.3 的权威事实源)。"""
+    from ..services import audit
+
+    await audit.record(
+        db, actor_id=user.id,
+        actor_name=getattr(user, "display_name", "") or "",
+        action=action, resource_type="run_scheme", resource_id=scheme_id,
+        detail={"project_id": project_id})
+
+
+@router.post("/{scenario_id}/run-schemes/{scheme_id}/rebind-combo")
+async def rebind_combo(
+    user: CurrentUser, db: DbSession, scenario_id: str, scheme_id: str,
+    body: RebindComboIn,
+) -> dict:
+    _, scheme = await _load_scheme(db, user, scenario_id, scheme_id)
+    try:
+        await scheme_repair.rebind_combo(
+            db, scheme, user=user, combo_id=body.combo_id,
+            expected_revision=body.expected_revision)
+    except scheme_repair.RepairCommandError as e:
+        raise _repair_cmd_error(e) from None
+    await db.commit()
+    await _audit_repair(db, user, "scheme.repair.rebind_combo",
+                  scheme.scheme_id, scheme.project_id)
+    reasons = await scheme_repair.reasons_for_schemes(db, user, [scheme])
+    return _wire(scheme, reasons)
+
+
+@router.post("/{scenario_id}/run-schemes/{scheme_id}/confirm-no-combo")
+async def confirm_no_combo(
+    user: CurrentUser, db: DbSession, scenario_id: str, scheme_id: str,
+    body: ConfirmNoComboIn,
+) -> dict:
+    _, scheme = await _load_scheme(db, user, scenario_id, scheme_id)
+    try:
+        await scheme_repair.confirm_no_combo(
+            db, scheme, user=user,
+            expected_revision=body.expected_revision, reason=body.reason)
+    except scheme_repair.RepairCommandError as e:
+        raise _repair_cmd_error(e) from None
+    await db.commit()
+    await _audit_repair(db, user, "scheme.repair.confirm_no_combo",
+                  scheme.scheme_id, scheme.project_id)
+    reasons = await scheme_repair.reasons_for_schemes(db, user, [scheme])
+    return _wire(scheme, reasons)

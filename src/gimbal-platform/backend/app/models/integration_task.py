@@ -38,7 +38,8 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, ForeignKey, Index, Integer, String, Text,
+    BigInteger, Boolean, CheckConstraint, ForeignKey, Index, Integer, String,
+    Text,
 )
 from sqlalchemy import func
 from sqlalchemy import false as sa_false
@@ -57,6 +58,15 @@ class IntegrationTask(Base):
         Index("uq_integration_instance", "template_id", "holder_id",
               unique=True),
         Index("ix_integration_due", "state", "enabled", "next_run_at"),
+        # UPC §5「IntegrationTemplate project_id NOT NULL」的 M2 落法:
+        # 单表两层行(模板/实例)尚未拆表(拆分随后续阶段),先用归属
+        # 形状 CHECK 钉死 —— 模板行(容器资源)必须挂真实项目;
+        # 实例行(principal 域,同 PersonalExecConfig)恒空。
+        CheckConstraint(
+            "(template_id IS NULL AND project_id IS NOT NULL) "
+            "OR (template_id IS NOT NULL AND project_id IS NULL)",
+            name="ck_integration_task_shape",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -67,9 +77,10 @@ class IntegrationTask(Base):
         ForeignKey("users.id"), nullable=False)
     # visibility 列随 0043 删除;API 的 visibility 入参语义不变
     #(公开 ⇔ project_id=公共项目,创建/更新走 zone.apply_*)。
-    # 项目区:仅模板行使用 —— 公共项目 = 公开模板(可订阅),
-    # 实例行恒空(实例归持有人,个人对象)。_can_manage 判定
-    # 平台模板用下方 is_platform_template,不比对属主。
+    # 项目区:仅模板行使用(ck_integration_task_shape 钉死模板行非空、
+    # 实例行恒空 —— 实例归持有人,principal 域对象)—— 公共项目 =
+    # 公开模板(可订阅)。_can_manage 判定平台模板用下方
+    # is_platform_template,不比对属主。
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id"), nullable=True, index=True)
     # 「平台维护的保活模板」与「个人发布的公共模板」的
