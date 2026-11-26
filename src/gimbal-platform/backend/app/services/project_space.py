@@ -68,7 +68,10 @@ async def dispose_private_assets(db: AsyncSession, project_ids: list[int]) -> No
     """删除项目内容(FK 依赖序;§13「删除前生成依赖处置计划」的
     私有空间处置面):方案 → 套件成员 → 套件 → 组合 → 报告定义 →
     集成模板 → 场景(数据集/端点引用/收藏随场景显式收口)。只 flush,
-    与调用方同一事务。"""
+    与调用方同一事务。
+    评审二轮 P1-3:历史台账行(资产导入台账/晋升记录)引用项目且非
+    级联,又无独立清理入口 —— 不随容器收口则含台账的私有空间在删
+    Project 行时撞 NO ACTION FK,用户删除失败。"""
     from sqlalchemy import delete as sa_delete
 
     from ..models.account_combo import AccountCombo
@@ -76,7 +79,9 @@ async def dispose_private_assets(db: AsyncSession, project_ids: list[int]) -> No
     from ..models.composer_run_scheme import ComposerRunScheme
     from ..models.composer_scenario import ComposerScenario
     from ..models.integration_task import IntegrationTask
+    from ..models.project_promotion import ProjectPromotion
     from ..models.report_definition import ReportDefinitionRow
+    from ..models.scenario_asset_import import ScenarioAssetImport
     from ..models.suite import Suite, SuiteMember
     from ..models.user import User as _U  # noqa: F401  user_stars CASCADE
 
@@ -95,6 +100,11 @@ async def dispose_private_assets(db: AsyncSession, project_ids: list[int]) -> No
     await db.execute(sa_delete(IntegrationTask).where(
         IntegrationTask.project_id.in_(project_ids),
         IntegrationTask.template_id.is_(None)))
+    # 历史台账行随容器显式收口(P1-3;项目没了,幂等键与晋升记录无意义)
+    await db.execute(sa_delete(ScenarioAssetImport).where(
+        ScenarioAssetImport.project_id.in_(project_ids)))
+    await db.execute(sa_delete(ProjectPromotion).where(
+        ProjectPromotion.project_id.in_(project_ids)))
     # 场景的三个 NO ACTION 引用者先收口,再删场景本体
     from ..models.permission import UserStar
     from ..models.scenario_endpoint_ref import ScenarioEndpointRef

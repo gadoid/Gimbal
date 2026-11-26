@@ -130,6 +130,36 @@ def _relax_project_zone(eng) -> None:
             "DROP CONSTRAINT IF EXISTS ck_scheme_combo_repair")
 
 
+def _strip_upc_shapes(eng) -> None:
+    """时代造形(§20.4 双路径真实性收口):baseline 的 ``create_all`` 按
+    **当前模型**建表,UPC 形状(0067/0068 负责新增的列与表)天然就位 ——
+    不摘除则 ``upgrade head`` 链腿上两迁移的增量分支被存在性守卫全部
+    空转,「迁移链 vs fresh」比较成为同义反复(假绿)。本助手按两迁移
+    的 add/建表清单**逆**摘除,把链路径起点还原到 ≤0066 时代形态;后续
+    ``upgrade head`` 真实执行回填/加列/建约束(§20.4 的被测对象)。
+
+    摘除面冻结自 0067/0068 的增量分支(projects 四列 / run_schemes 六列
+    / suite_members 一列 / 四张新表);已有列(scenarios/suites/
+    report_definitions/integration_tasks 的 ``project_id``)是 0066 前的
+    存量形状,不动。仅测试造形用 —— 产品面空库语义不变。
+    """
+    with eng.begin() as conn:
+        # 列先于表:复合 FK(方案→组合)随列自动消亡,再 DROP TABLE 无挂碍
+        for c in ("scheme_uid", "project_id", "account_combo_id",
+                  "repair_status", "repair_reason", "revision"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE composer_run_schemes "
+                f"DROP COLUMN IF EXISTS {c} CASCADE")
+        conn.exec_driver_sql(
+            "ALTER TABLE suite_members DROP COLUMN IF EXISTS project_id CASCADE")
+        for c in ("project_uid", "owner_id", "is_default", "status"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE projects DROP COLUMN IF EXISTS {c} CASCADE")
+        for t in ("scenario_asset_imports", "scheme_repair_diagnosis",
+                  "scheme_repair_events", "account_combos"):
+            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {t} CASCADE")
+
+
 def _create_retired_tables(eng) -> None:
     """时代造形(P2-A 裁定的恢复机制,本批落地):0057 退役
     ``service_aliases`` / ``auth_sessions`` / ``service_meta`` 与

@@ -24,7 +24,8 @@ _BACKEND = Path(__file__).resolve().parents[1]
 
 # 单源复用(test_migrations 是链测试的家):造形机制 + temp schema + 配置
 from tests.test_migrations import (  # noqa: E402
-    _add_legacy_visibility, _cfg, _create_retired_tables, temp_schema,
+    _add_legacy_visibility, _cfg, _create_retired_tables, _strip_upc_shapes,
+    temp_schema,
 )
 
 # M2 起交付面扩展到全部对象表 + 组合/方案/成员复合约束(§20.4:
@@ -52,13 +53,19 @@ _SHARED_FUNCTIONS = (
 
 
 def _build_chain(sync_url: str) -> None:
-    """路径 A(交付快照语义):baseline 建表 + 时代造形,沿链升到 head。"""
+    """路径 A(交付快照语义):baseline 建表 + 时代造形,沿链升到 head。
+
+    baseline 按当前模型 create_all,UPC 形状(0067/0068 负责新增的
+    列/表)天然就位 —— 不摘除则两迁移的增量分支被守卫空转,比较沦为
+    同义反复;先 ``_strip_upc_shapes`` 还原 ≤0066 时代起点,让
+    ``upgrade head`` 真实执行回填/加列/建约束(H4 盲区收口)。"""
     command.upgrade(_cfg(sync_url), "0001_baseline")
     engine = create_engine(sync_url)
     try:
         # 时代造形(退役前三表 + visibility 列):历史增量引用的旧形态
         _add_legacy_visibility(engine)
         _create_retired_tables(engine)
+        _strip_upc_shapes(engine)
     finally:
         engine.dispose()
     command.upgrade(_cfg(sync_url), "head")

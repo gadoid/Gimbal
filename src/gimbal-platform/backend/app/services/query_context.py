@@ -16,6 +16,12 @@ rows 路由的前提(query_views.py 路由 docstring)——「service_url 由
   解析后经 ``query_alias`` 显式覆盖,此处只做缺省);
 * ``owner_id`` = 场景属主:查询凭证按**执行身份**装载(与派发侧
   prepare_exec 同视角 —— 成员查询项目场景,用的也是场景执行身份)。
+
+组合 v4 §7.1(方案感知,随 UPC M3 执行装配接入):绑定基础从定义级
+改为「schemeId 解析 + 组合垫底」(查询视角 = 执行视角);§20.3 装配闸
+(blocked 不进装配);步骤多直接身份不猜测(422 ``query_identity_
+ambiguous``,复用 ``auth_ref_scan.step_auth_refs`` —— 含 ``call.user``
+直引)。**未保存编辑态不参与**:后端只认库中方案行。
 """
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..services.auth_ref_scan import step_auth_refs
 from ..services.env_chain import (
     EnvMixed, deployment_urls, resolve_execution_tag,
 )
@@ -52,15 +59,23 @@ class QueryContext:
     service_url: str          # 当前执行标签的部署地址
     owner_id: int             # 查询凭证装载按场景执行身份
     query_alias: str | None   # 缺省查询别名(显式 query_alias 优先)
+    project_id: "int | None" = None   # 凭证池通道(S8 项目池资格判定)
 
 
 async def resolve_query_context(
     db: AsyncSession, *, user, scenario_id: str, step_index: int,
+    scheme_id: "str | None" = None,
 ) -> QueryContext:
     """已保存场景 + 步骤位 → 查询地址与身份(全链服务端解析)。
 
     未保存草稿没有稳定 scenario_id —— 调用方(前端)应先保存再查
     (01-04 §5.2 推荐路径);本函数只受理已保存场景。
+
+    ``scheme_id``(组合 v4 §7.1,方案感知):前端传当前生效方案;
+    缺省/跨场景/已删经 ``resolve_for_run`` 回落默认方案(与执行面同款
+    回落);未保存编辑态不参与 —— 解析到的是库中方案行的上一次保存
+    内容。blocked 方案先于一切身份/标签/地址解析拒绝(§20.3,与执行
+    面同码 409);查询 L1/单飞键随 (view, 凭证) 不串台(见 runner)。
     """
     from ..routers._ownership import can_read_scenario_row
 
@@ -83,9 +98,42 @@ async def resolve_query_context(
         raise QueryContextError(
             "step_service_required",
             f"步骤 #{step_index} 没有服务绑定(call.service 为空)")
-    # 生效身份(绑定换名口径同执行链):定义级 serviceBindings 单源
-    bindings = (definition.get("config") or {}).get("serviceBindings")
-    alias = effective_alias(svc, bindings)
+
+    # ── §20.3 统一装配闸(UPC M3,查询面接入方案感知后适用)──────
+    # 方案解析与执行面同源(resolve_for_run 回落);blocked 先于任何
+    # 身份/标签/地址/凭证解析(该面虽不解密,下游 loader 会 —— 闸
+    # 在解析入口统一拒)。
+    from ..services.account_combo import scheme_bindings_with_combo
+    from ..services import scheme_store
+    scheme = await scheme_store.resolve_for_run(db, scenario_id, scheme_id)
+    if scheme is not None and scheme.repair_status == "blocked":
+        raise QueryContextError(
+            "scheme_repair_required",
+            "运行方案处于待修复状态(组合依赖受阻),请先在方案修复"
+            "入口完成修复(§20.3)", status=409)
+
+    # ── 步骤直接身份(§7.1 点 2/3):step_auth_refs 复用(${auth.*}
+    #    模板 ∪ call.user 直引)。多直接身份无法唯一判定 → 422,不取
+    #    第一个(前端 headers 首命中就是「取第一个」,这里替它挡住)。
+    direct_refs = step_auth_refs(step)
+    if len(direct_refs) > 1:
+        raise QueryContextError(
+            "query_identity_ambiguous",
+            f"步骤 #{step_index} 声明了多个直接身份({direct_refs}),"
+            "单身份取数无法唯一判定,请改用明确的 query_alias 语义或"
+            "拆分步骤", status=422)
+
+    # ── 生效绑定(§7.1:方案 serviceBindings + 组合垫底;方案行
+    #    缺席(场景无方案)回落定义级 legacy)──────────────────────
+    if scheme is not None:
+        bindings = await scheme_bindings_with_combo(db, scheme)
+    else:
+        bindings = (definition.get("config") or {}).get("serviceBindings")
+
+    if len(direct_refs) == 1:
+        alias = direct_refs[0]     # 步骤声明的直接身份优先(执行视角)
+    else:
+        alias = effective_alias(svc, bindings)
     # 执行标签:身份 > 项目默认 > 平台默认;条目缺行不参与标签判定
     try:
         tag = await resolve_execution_tag(
@@ -110,4 +158,4 @@ async def resolve_query_context(
             f"服务 {svc} 的部署地址不是 http(s): {url!r}")
     return QueryContext(
         service=svc, service_url=url, owner_id=row.owner_id,
-        query_alias=alias)
+        query_alias=alias, project_id=row.project_id)

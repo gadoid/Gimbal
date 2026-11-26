@@ -17,9 +17,10 @@
   (携带投影原因与 revision),禁止先解析秘密或执行外部副作用。
   M2 接通正式 precheck;M3 完成 execute/query/schedule/probe 全入口。
 * **修复命令**(:func:`rebind_combo` / :func:`confirm_no_combo`)——
-  blocked → ready 的仅有入口:方案修改权限 + 绑定目标授权 + 
-  expected_revision 原子校验,更新绑定/状态/原因/revision 与审计
-  **同事务**;并发过期 revision 409。普通 PATCH/复制/空绑定不得解除
+  blocked → ready 的仅有入口:方案修改权限 + 绑定目标授权 +
+  expected_revision 校验(**行锁 FOR UPDATE 内串行**,并发过期 revision
+  409),更新绑定/状态/原因/revision 与审计
+  **同事务**;普通 PATCH/复制/空绑定不得解除
   阻塞(库层 ck_scheme_combo_repair + copy_schemes 继承共同钉死)。
 """
 from __future__ import annotations
@@ -255,6 +256,15 @@ def _require_blocked_for_command(scheme: ComposerRunScheme) -> None:
             "修复命令仅作用于 blocked 方案;ready 方案的绑定变更走普通保存")
 
 
+async def _lock_scheme_row(db: AsyncSession,
+                           scheme: ComposerRunScheme) -> None:
+    """修复命令入口的行锁重读(SELECT ... FOR UPDATE + refresh,M1
+    原子性收口):expected_revision 的检查-递增在锁内串行 —— 两个并发
+    修复命令不再能同时通过同一 revision(后到者在锁上等待,拿到的是
+    已递增的行,409 落在 _check_expected_revision)。"""
+    await db.refresh(scheme, with_for_update=True)
+
+
 def _check_expected_revision(scheme: ComposerRunScheme,
                              expected_revision: int) -> None:
     if expected_revision != scheme.revision:
@@ -298,21 +308,27 @@ async def rebind_combo(
     + 目标组合 read);此处验证 blocked 状态、expected_revision、项目
     状态与能力、目标组合存在∧同区∧可读。绑定/状态/原因/revision 与
     审计同事务;失败整体回滚。"""
+    # 评审四轮 P2-7:统一 **combo → scheme** 全局锁序(与普通 PUT 的
+    # require_combo_bindable → update_scheme 同序)—— 修前 repair 先锁
+    # scheme 再在 FK 更新时取 combo 锁,与 PUT 对锁可成环死锁。组合行
+    # 锁先行(require_combo_bindable 锁=True,存在∧可读∧同区一并
+    # 验证),scheme 锁到手后重验 blocked/revision(锁等待期间状态
+    # 可能已被并发推进)。
+    from . import account_combo as _combo_svc
+
+    try:
+        combo = await _combo_svc.require_combo_bindable(db, user, scheme,
+                                                        combo_id)
+    except _combo_svc.ComboError as e:
+        # 路由只映射 RepairCommandError —— 组合闸域错误折算同形;
+        # §20.3 修复面口径:不可读目标与不存在目标不可区分,恒 404
+        # (require_combo_bindable 的 422 形态按此收敛)
+        status = 404 if e.code == "account_combo_not_found" else e.status
+        raise RepairCommandError(status, e.code, e.message) from None
+    await _lock_scheme_row(db, scheme)
     _require_blocked_for_command(scheme)
     _check_expected_revision(scheme, expected_revision)
     await _require_active_combo_capability(db, scheme)
-    combo = await db.get(AccountCombo, combo_id)
-    if combo is not None:
-        from ..models.project import Project
-
-        proj = await db.get(Project, combo.project_id)
-        if proj is None or not await project_access.can_view_project(
-                db, user.id, proj):
-            combo = None
-    if combo is None:
-        raise RepairCommandError(
-            404, "account_combo_not_found",
-            f"账户组合不存在: {combo_id}")
     if combo.project_id != scheme.project_id:
         raise RepairCommandError(
             422, "account_combo_scope_mismatch",
@@ -350,6 +366,7 @@ async def confirm_no_combo(
 
     确认理由是审计事实(``reason``),不是 repair_reason(ready 恒无
     原因);确认不得绕过其他凭证或装配约束(装配闸与预检照常)。"""
+    await _lock_scheme_row(db, scheme)
     _require_blocked_for_command(scheme)
     _check_expected_revision(scheme, expected_revision)
     await _require_active_combo_capability(db, scheme)

@@ -1363,6 +1363,11 @@ function resolveQueryContext(step: StepView): {
  *  凭证」(悬空另有徽章显形,不回退猜测)。无引用 → null → 域内首键
  *  fallback(修订 10 行为,单用户场景零变化)。 */
 function headerAuthTagOf(step: StepView): string | null {
+  // 组合 v4 §7.1 点 2:直引补齐 —— call.user 直引与 headers ${auth.*}
+  // 同为步骤执行身份声明(后端 step_auth_refs 同口径),旧版只扫
+  // headers 会漏掉 call.user 直引的身份声明。
+  const callUser = (step as unknown as { call?: { user?: string } }).call?.user
+  if (callUser) return callUser
   for (const v of Object.values(stepHeaders(step))) {
     const ref = parseTplRefs(String(v ?? '')).find(r => r.domain === 'auth' && r.alias)
     if (ref?.alias) return ref.alias

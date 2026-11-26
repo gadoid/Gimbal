@@ -228,3 +228,87 @@ def test_upgrade_binding_evidence_aborts_and_rolls_back():
                 assert "repair_status" not in cols
         finally:
             eng.dispose()
+
+
+def test_upgrade_renames_same_name_suites_in_one_project():
+    """评审 P1-4 回归:0066 旧唯一轴 (owner_id, name) 允许同一 normal
+    项目下不同 owner 同名 —— 升级建 UNIQUE(project_id, name) 前按确定性
+    策略重命名(id 最小者保名,其余「名-迁移2…」),不再 UniqueViolation
+    整笔失败;保名行原样、约束就位。"""
+    from alembic import command
+    from sqlalchemy import create_engine, text
+
+    with temp_schema() as (_schema, sync_url):
+        command.upgrade(_cfg(sync_url), "0001_baseline")
+        eng = create_engine(sync_url)
+        try:
+            _to_0066_shape(eng)
+            with eng.begin() as conn:
+                for stmt in (
+                    # 两个真人用户(非系统;触发器要求默认私有空间在
+                    # 0067 造,0066 期无此约束,直插合法)
+                    """
+                    INSERT INTO users (username, display_name,
+                                       password_hash, role, is_active,
+                                       is_system)
+                    VALUES ('upg_sw_a', 'A', 'x', 'user', true, false),
+                           ('upg_sw_b', 'B', 'x', 'user', true, false)
+                    """,
+                    # normal 项目(0066 期无 kind 形状 CHECK 的新列约束
+                    # —— baseline 按当前模型建表,kind 三值已合法)
+                    """
+                    INSERT INTO projects (name, kind, description,
+                                          created_at)
+                    VALUES ('upg-sw-proj', 'normal', '', now())
+                    """,
+                    """
+                    INSERT INTO project_members (project_id, user_id,
+                                                 role)
+                    SELECT p.id, u.id, 'admin'
+                      FROM projects p, users u
+                     WHERE p.name = 'upg-sw-proj'
+                       AND u.username IN ('upg_sw_a', 'upg_sw_b')
+                    """,
+                    # 同项目、不同 owner、同名两套件(旧轴合法)
+                    """
+                    INSERT INTO suites (name, owner_id, project_id, mode, mode_config,
+                                        rev, description)
+                    SELECT '同名集', u.id, p.id, 'standard', '{}', 1, ''
+                      FROM projects p, users u
+                     WHERE p.name = 'upg-sw-proj'
+                       AND u.username = 'upg_sw_a'
+                    """,
+                    """
+                    INSERT INTO suites (name, owner_id, project_id, mode, mode_config,
+                                        rev, description)
+                    SELECT '同名集', u.id, p.id, 'standard', '{}', 1, ''
+                      FROM projects p, users u
+                     WHERE p.name = 'upg-sw-proj'
+                       AND u.username = 'upg_sw_b'
+                    """,
+                ):
+                    conn.exec_driver_sql(stmt)
+            command.stamp(_cfg(sync_url), "0066_incremental_model_align")
+            # 修前:此处在 uq_suites_project_name 上 UniqueViolation
+            command.upgrade(_cfg(sync_url), "head")
+
+            with eng.begin() as conn:
+                rows = conn.execute(text("""
+                    SELECT s.name, u.username
+                      FROM suites s JOIN users u ON u.id = s.owner_id
+                     ORDER BY s.id
+                """)).all()
+                assert rows[0] == ("同名集", "upg_sw_a")   # id 最小者保名
+                assert rows[1][0] == "同名集-迁移2"          # 确定性重命名
+                assert rows[1][1] == "upg_sw_b"
+                # 新唯一轴就位(结构一致性归 test_upc_dual_path,这里钉
+                # 「升级后项目内唯一」语义)
+                dup = conn.execute(text("""
+                    SELECT count(*) FROM (
+                        SELECT project_id, name FROM suites
+                         GROUP BY project_id, name
+                        HAVING count(*) > 1) d
+                """)).scalar_one()
+                assert dup == 0
+        finally:
+            eng.dispose()

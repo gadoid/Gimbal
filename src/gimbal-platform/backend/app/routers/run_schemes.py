@@ -153,7 +153,8 @@ async def update_run_scheme(
         await scheme_store.update_scheme(
             db, scenario_id, scheme_id,
             name=body.name, payload=_to_payload(body),
-            account_combo_id=body.account_combo_id)
+            account_combo_id=body.account_combo_id,
+            expected_revision=body.expected_revision)
     except KeyError:
         raise HTTPException(status_code=404, detail={
             "code": "run_scheme_not_found",
@@ -163,6 +164,12 @@ async def update_run_scheme(
             raise HTTPException(status_code=409, detail={
                 "code": "run_scheme_name_conflict",
                 "message": "方案名场景内唯一(「默认方案」为保留名)"})
+        if str(e) == "revision_conflict":
+            # 评审 P2-14:显式 CAS 落空 —— 方案已被并发修改
+            raise HTTPException(status_code=409, detail={
+                "code": "scheme_revision_conflict",
+                "message": "方案已发生变化(expectedRevision 落空),"
+                           "请刷新后重试"})
         if str(e) == "scheme_repair_required":
             # §20.3:普通保存不得改绑 blocked(修复命令是仅有入口)
             raise HTTPException(status_code=409, detail={

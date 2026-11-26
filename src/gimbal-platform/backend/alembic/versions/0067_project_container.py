@@ -114,6 +114,16 @@ def upgrade() -> None:
     if "owner_id" not in cols:
         op.create_index("ix_projects_owner_id", "projects", ["owner_id"])
 
+    # §13.2 不可复用身份的唯一性:模型声明 unique=True(create_all 落
+    # UNIQUE 约束),增量分支此前只加列未加约束 —— 双路径结构漂移,
+    # 链上补齐(守卫:已有同列唯一约束即空转)
+    ucs = sa.inspect(bind).get_unique_constraints("projects")
+    if not any(u["column_names"] == ["project_uid"] for u in ucs):
+        # 命名随 create_all 自动名(<table>_<col>_key):UNIQUE 约束在 PG
+        # 侧伴随同名唯一索引,§20.4 索引断言按名比较
+        op.create_unique_constraint(
+            "projects_project_uid_key", "projects", ["project_uid"])
+
     # ── 约束与索引(fresh 链由模型 create_all 就位;幂等守卫)────────
     _drop_legacy_name_unique(bind)
     insp = sa.inspect(bind)

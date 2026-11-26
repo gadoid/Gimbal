@@ -138,11 +138,36 @@ async def _apply_scheme_recipe(
     else:
         scheme = await scheme_store.resolve_for_run(
             db, scen.scenario_id, None)
+    # ── §20.3 统一装配闸(UPC M3 令牌执行面)───────────────────────
+    # 方案待修复(blocked)不进入配方应用 —— 先于绑定/数据集/注入装配
+    # 与后续任何凭证解析;投影原因走 GENERIC(不透传内部 reason)。
+    if scheme is not None:
+        from ..services.scheme_repair import (
+            SchemeRepairRequired, require_ready,)
+        try:
+            require_ready(scheme)
+        except SchemeRepairRequired:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "scheme_repair_required",
+                    "message": ("运行方案处于待修复状态(组合依赖受阻),"
+                                "请先在方案修复入口完成修复(§20.3)"),
+                }) from None
     payload = (scheme.payload if scheme is not None else {}) or {}
     from ..schemas.scenario_composer import scrub_retired_bindings
+    # ── M3 执行装配:组合垫底(令牌面,v4 §3.2「覆写源 = {**组合,
+    #    **方案} —— 装载时合并,覆写前垫请求会被整体覆写冲掉」)────
+    # scheme_bindings_with_combo 单源读取(显式列 → 条目映射);
+    # 请求级配方已被 M1 配方禁令拒绝,此处就是完整覆写源。
+    if scheme is not None:
+        from ..services.account_combo import scheme_bindings_with_combo
+        _merged_bindings = await scheme_bindings_with_combo(db, scheme)
+    else:
+        _merged_bindings = scrub_retired_bindings(
+            payload.get("serviceBindings"))
     body.service_bindings = {
-        k: ServiceBinding(**v) for k, v in
-        scrub_retired_bindings(payload.get("serviceBindings")).items()
+        k: ServiceBinding(**v) for k, v in _merged_bindings.items()
     }
     body.data_set_ids = [str(x) for x in (payload.get("dataSetIds") or [])]
     body.data_set_selection = [
@@ -388,11 +413,27 @@ async def preview_effective_config(
     if scheme_id:
         try:
             sch = await scheme_store.get_row(db, sid, scheme_id)
+            # §20.3 统一装配闸(UPC M3 预览装配面):blocked 方案不进入
+            # 生效配置装配 —— 预览会解析别名/凭证终值,与执行同一受控
+            # 面;先于任何装配解析拒绝(错误码与执行面同源)。
+            from ..services.scheme_repair import (
+                SchemeRepairRequired, require_ready,)
+            try:
+                require_ready(sch)
+            except SchemeRepairRequired:
+                raise HTTPException(409, detail={
+                    "code": "scheme_repair_required",
+                    "message": ("运行方案处于待修复状态(组合依赖受阻),"
+                                "请先在方案修复入口完成修复(§20.3)")})
             # §8.2:方案不携带环境链位(ADR-0003 #21)—— 存量 payload 键不再消费
-            bindings_raw = {
-                **scrub_retired_bindings(
-                    (sch.payload or {}).get("serviceBindings")),
-                **bindings_raw}
+            # M3 执行装配:组合垫底(预览面,v4 §3.2「组合 < 方案 < 请求」
+            # —— 与执行同基础,预览解析别名/凭证终值)
+            from ..services.account_combo import combo_base, pad_bindings
+            _scheme_b = pad_bindings(
+                scrub_retired_bindings((sch.payload or {}).get(
+                    "serviceBindings")),
+                await combo_base(db, sch.account_combo_id))
+            bindings_raw = {**_scheme_b, **bindings_raw}
         except KeyError:
             raise HTTPException(404, detail={
                 "code": "run_scheme_not_found",

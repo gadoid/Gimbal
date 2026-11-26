@@ -22,6 +22,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Index,
     Integer,
     String,
@@ -43,6 +44,12 @@ class ExecConfig(Base):
         # 默认配置每 scope 至多一行(绑定的链位②载体)
         Index("uq_exec_configs_default", "scope", "scope_id", unique=True,
               postgresql_where=text("is_default")),
+        # §11.2 形状闸(UPC M3,库层钉死应用配对纪律):scope 只有两型,
+        # user / project;(scope, scope_id) 与 carry_binding 同通用维度
+        # 口径 —— user 行 scope_id = 用户 id、project 行 = 项目 id,
+        # 恒非空(路由层成对写;直写违例在提交期拒,不为第三形态留缝)。
+        CheckConstraint("scope IN ('user', 'project')",
+                        name="ck_exec_configs_scope"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

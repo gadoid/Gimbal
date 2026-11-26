@@ -34,6 +34,10 @@ fresh 链(baseline 按当前模型 create_all)列/约束/索引天然就位,本�
 from alembic import op
 import sqlalchemy as sa
 
+# 模型 JSON 口径 = JsonVar(PG 上 jsonb);增量建表须与 fresh create_all
+# 同型 —— sa.JSON() 在 PG 落 json,双路径列型漂移(§20.4 会抓)
+from app.models._types import JsonVar  # noqa: E402
+
 revision = "0068_upc_resource_containers"
 down_revision = "0067_project_container"
 branch_labels = None
@@ -187,6 +191,45 @@ def _backfill_suites(bind) -> None:
             "(所有者无默认私有空间);请显式处置后再升级")
 
 
+def _dedup_suite_names(bind) -> None:
+    """(project_id, name) 冲突的确定性重命名(评审二轮 P1-4):旧唯一轴
+    是 (owner_id, name) —— 同一 normal 项目下不同 owner 可同名;按新轴
+    回填归属后直接建 UNIQUE(project_id, name) 会在存量库上
+    UniqueViolation 整笔失败。策略 = 同组保留 id 最小行,其余按
+    「名-迁移2/3…」确定性后缀重命名(后缀再撞则递增),升级无人值守
+    可完成;fresh/已合规库零行命中空转。"""
+    dups = bind.execute(sa.text("""
+        SELECT project_id, name
+          FROM suites
+         GROUP BY project_id, name
+        HAVING count(*) > 1
+    """)).fetchall()
+    for project_id, name in dups:
+        rows = bind.execute(sa.text("""
+            SELECT id FROM suites
+             WHERE project_id = :p AND name = :n
+             ORDER BY id
+        """), {"p": project_id, "n": name}).scalars().all()
+        for seq, sid in enumerate(rows[1:], start=2):
+            k = seq
+            while True:
+                suffix = f"-迁移{k}"
+                # suites.name varchar(128):旧合法数据允许 128 字符同名
+                # —— 候选名先按 128 截断再消歧,防追加后缀触发
+                # StringDataRightTruncation 整笔回滚(评审三轮 R3-5)
+                cand = name[:128 - len(suffix)] + suffix
+                taken = bind.execute(sa.text(
+                    "SELECT 1 FROM suites WHERE project_id = :p "
+                    "AND name = :c"), {"p": project_id, "c": cand}
+                ).scalar_one_or_none()
+                if taken is None:
+                    break
+                k += 1
+            bind.execute(sa.text(
+                "UPDATE suites SET name = :c WHERE id = :i"),
+                {"c": cand, "i": sid})
+
+
 def _backfill_report_definitions(bind) -> None:
     # 遗留无主公共行(owner NULL)在 0037/0041 已挂公共项目;残留
     # owner 非空的私有行回填默认空间;仍无归位的按依赖清理
@@ -269,11 +312,12 @@ def upgrade() -> None:
             sa.Column("project_id", sa.Integer(),
                       sa.ForeignKey("projects.id"), nullable=False),
             sa.Column("name", sa.String(64), nullable=False),
-            sa.Column("description", sa.Text(), nullable=False,
-                      server_default=""),
+            # description:模型仅 Python 侧 default("")(无 server_default
+            # —— 库内 DEFAULT 不落,双路径列默认值须同态)
+            sa.Column("description", sa.Text(), nullable=False),
             sa.Column("is_default", sa.Boolean(), nullable=False,
                       server_default=sa.text("false")),
-            sa.Column("payload", sa.JSON(), nullable=False),
+            sa.Column("payload", JsonVar, nullable=False),
             sa.Column("revision", sa.Integer(), nullable=False,
                       server_default=sa.text("1")),
             sa.Column("updated_by_id", sa.Integer(),
@@ -286,7 +330,8 @@ def upgrade() -> None:
             sa.UniqueConstraint("project_id", "name",
                                 name="uq_account_combos_project_name"),
         )
-        op.create_index("ix_account_combos_project", "account_combos",
+        # 模型 project_id index=True → create_all 自动名 ix_…_project_id
+        op.create_index("ix_account_combos_project_id", "account_combos",
                         ["project_id"])
         # §20.2 复合 FK 目标候选键 + 每项目默认唯一(部分索引)
         op.create_index("uq_combo_project_id", "account_combos",
@@ -320,6 +365,9 @@ def upgrade() -> None:
             op.alter_column("suites", "project_id", nullable=False)
         if "uq_suites_owner_name" in _indexes(bind, "suites"):
             op.drop_index("uq_suites_owner_name", table_name="suites")
+        # 评审 P1-4:旧 (owner_id, name) 唯一允许同项目不同 owner 同名,
+        # 建新轴前先确定性重命名(直接建约束会在存量库 UniqueViolation)
+        _dedup_suite_names(bind)
         if "uq_suites_project_name" not in _constraints(bind, "suites"):
             op.create_unique_constraint("uq_suites_project_name", "suites",
                                         ["project_id", "name"])
@@ -400,6 +448,15 @@ def upgrade() -> None:
         op.add_column("composer_run_schemes", sa.Column(
             "scheme_uid", sa.Uuid(), nullable=False,
             server_default=sa.func.gen_random_uuid()))
+        # §13.2 不可复用身份唯一性(模型 unique=True;增量分支此前只加
+        # 列未加约束 —— 双路径结构漂移,链上补齐)
+        if not any(u["column_names"] == ["scheme_uid"] for u in
+                   sa.inspect(bind).get_unique_constraints(
+                       "composer_run_schemes")):
+            # 命名随 create_all 自动名(§20.4 索引断言按名比较)
+            op.create_unique_constraint(
+                "composer_run_schemes_scheme_uid_key",
+                "composer_run_schemes", ["scheme_uid"])
     if "project_id" not in rs_cols:
         op.add_column("composer_run_schemes",
                      sa.Column("project_id", sa.Integer(), nullable=True))
@@ -495,8 +552,7 @@ def upgrade() -> None:
             sa.Column("reason", sa.Text()),
             sa.Column("request_id", sa.String(128)),
             sa.Column("actor_id", sa.Integer()),
-            sa.Column("actor_name", sa.String(128), nullable=False,
-                      server_default=""),
+            sa.Column("actor_name", sa.String(128), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True),
                       nullable=False, server_default=sa.func.now()),
         )
@@ -523,9 +579,9 @@ def upgrade() -> None:
             sa.Column("request_digest", sa.String(64), nullable=False),
             sa.Column("restored_scenario_id", sa.String(128),
                       nullable=False),
-            sa.Column("restored_scheme_ids", sa.JSON(), nullable=False),
+            sa.Column("restored_scheme_ids", JsonVar, nullable=False),
             sa.Column("default_scheme_id", sa.String(128)),
-            sa.Column("report", sa.JSON(), nullable=False),
+            sa.Column("report", JsonVar, nullable=False),
             sa.Column("notes", sa.Text()),
             sa.Column("created_by", sa.Integer(),
                       sa.ForeignKey("users.id", ondelete="SET NULL")),

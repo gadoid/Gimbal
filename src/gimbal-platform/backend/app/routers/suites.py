@@ -391,7 +391,7 @@ async def create_suite(
     elif name in existing:
         raise HTTPException(status_code=409, detail={
             "code": "suite_name_conflict",
-            "message": "同名 suite 已存在(属主内唯一)"})
+            "message": "同名 suite 已存在(项目内唯一)"})
     suite = Suite(name=name, description=body.description,
                   owner_id=user.id, project_id=target.id,
                   mode_config=({"draft": True} if is_draft else {}))
@@ -422,15 +422,18 @@ async def patch_suite(
     suite = await _load_suite(db, suite_id)
     await _require_write(db, user, suite)
     if body.name is not None and body.name != suite.name:
+        # M2 契约:suite 名称唯一轴 = (project_id, name) —— 与库层
+        # uq_suites_project_name 同轴。按 owner 查重是旧契约残留:跨项目
+        # 同名误 409,同项目不同 owner 同名漏检到提交时撞唯一约束 500。
         dup = (await db.execute(
-            select(func.count()).where(Suite.owner_id == suite.owner_id,
+            select(func.count()).where(Suite.project_id == suite.project_id,
                                        Suite.name == body.name,
                                        Suite.id != suite.id)
         )).scalar()
         if dup:
             raise HTTPException(status_code=409, detail={
                 "code": "suite_name_conflict",
-                "message": "同名 suite 已存在(属主内唯一)"})
+                "message": "同名 suite 已存在(项目内唯一)"})
         suite.name = body.name
     if body.description is not None:
         suite.description = body.description
@@ -654,6 +657,47 @@ def _validate_composition(body: SuiteCompositionIn) -> None:
                            for k, v in mp.items())):
             raise _bad_cfg(
                 f"units.{uid}.map 须为 str→str(上游输出名 → 本地输入名)")
+        # 评审五轮 P2-4:行选择结构在**写入边界**验证 —— 修前非法
+        # rowIndex 存进 mode_config,物化期才炸 ValueError,被 validate
+        # 的基础设施降级分支吞成 degraded warning(预检绿、执行 201)
+        sid_cfg = u.get("schemeId")
+        if sid_cfg is not None and (not isinstance(sid_cfg, str)
+                                    or not sid_cfg):
+            raise _bad_cfg(f"units.{uid}.schemeId 须为非空字符串")
+        row = u.get("row")
+        if row is not None:
+            if not isinstance(row, dict):
+                raise _bad_cfg(
+                    f"units.{uid}.row 须为对象(datasetId + rowIndex)")
+            ds_id = row.get("datasetId")
+            if not isinstance(ds_id, str) or not ds_id:
+                raise _bad_cfg(f"units.{uid}.row.datasetId 须为非空字符串")
+            ri = row.get("rowIndex", 0)
+            if isinstance(ri, bool) or not isinstance(ri, int) or ri < 0:
+                raise _bad_cfg(f"units.{uid}.row.rowIndex 须为非负整数")
+        # 评审六轮 P2-2:单元级 needs/repeat/nRuns 类型在**写入边界**验证
+        # —— 修前 needs=7 在下方 needs_edges 推导 TypeError → 500;
+        # repeat/nRuns="x" 落库后 validate/run 的 est 计算 int("x") →
+        # ValueError → 500;负值更是把 est 推到 0 以下直接绕过总 cap
+        # (est > cap 恒假)。上界与 SUITE_RUN_TOTAL_CAP 同界 ——
+        # 单值即触顶,乘法不可能再低于 cap 语义失真。
+        nds = u.get("needs")
+        if nds is not None and (not isinstance(nds, list) or not all(
+                isinstance(x, str) and x for x in nds)):
+            raise _bad_cfg(f"units.{uid}.needs 须为非空字符串数组")
+        for key in ("repeat", "nRuns"):
+            v = u.get(key)
+            if v is not None and (isinstance(v, bool) or not isinstance(v, int)
+                                  or v < 1
+                                  or v > settings.SUITE_RUN_TOTAL_CAP):
+                raise _bad_cfg(
+                    f"units.{uid}.{key} 须为 1..{settings.SUITE_RUN_TOTAL_CAP}"
+                    "的整数(与总 runs cap 同界)")
+        ii = u.get("injectionEntryIds")
+        if ii is not None and (not isinstance(ii, list) or not all(
+                isinstance(x, str) and x for x in ii)):
+            raise _bad_cfg(
+                f"units.{uid}.injectionEntryIds 须为非空字符串数组")
     needs_edges = [
         (uid, n) for uid, u in units.items() for n in (u.get("needs") or [])]
     if needs_edges and body.mode != "compose":
@@ -778,10 +822,24 @@ def _build_graph_spec(suite: Suite, members: list[SuiteMember]) -> dict:
         for k in ("schemeId", "row", "map", "injectionEntryIds"):
             if u.get(k) is not None:
                 d[k] = u[k]
+
+        def _int_or(key: str) -> int:
+            # 评审六轮 P2-2:写入闸前落库的遗留垃圾值(如 "x")以人话
+            # ValueError 上抛,调用方归 4xx —— 不再在拼装层 500
+            v = u.get(key)
+            if v is None:
+                return 1
+            try:
+                return int(v)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"单元 {m.scenario_id} 的 {key} 须为整数"
+                    "(遗留非法配置,请重新保存编排)") from e
+
         if u.get("repeat"):
-            d["repeat"] = int(u["repeat"])
+            d["repeat"] = _int_or("repeat")
         if u.get("nRuns"):
-            d["nRuns"] = int(u["nRuns"])
+            d["nRuns"] = _int_or("nRuns")
         if u.get("needs"):
             d["needs"] = [_ref_of(n) for n in u["needs"] if n in units_cfg
                           or n in {m2.scenario_id for m2 in members}]
@@ -799,6 +857,36 @@ def _build_graph_spec(suite: Suite, members: list[SuiteMember]) -> dict:
         if cfg.get(key) is not None:
             gs[key] = cfg[key]
     return gs
+
+
+def _estimate_graph_runs(graph_spec: dict) -> int:
+    """编排预计 runs(评审六轮 P2-2:总 cap 与单元边界**一致**校验)。
+
+    与 ``materialize_graph`` 的乘法同语义:单元 nRuns>1 优先生效;否则
+    **主体单元**(units 段)吃图级 nRuns 的 setdefault 乘法 —— 修前
+    est 只加 repeat×单元 nRuns,图级 nRuns 的整图乘法被 cap 预检漏计
+    (单值合法、总量绕 cap)。写入闸前落库的垃圾/负值以 ValueError
+    上抛,调用方归 4xx(est 不再被负值压到 0 以下绕过 cap)。
+    """
+    gn = int(graph_spec.get("nRuns") or 1)
+    total = 0
+    for section in ("before", "units", "after"):
+        for u in (graph_spec.get(section) or []):
+            try:
+                rep = int(u.get("repeat") or 1)
+                un = int(u.get("nRuns") or 1)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"单元 {u.get('ref')!r} 的 repeat/nRuns 须为整数"
+                    "(遗留非法配置,请重新保存编排)") from e
+            if rep < 1 or un < 1:
+                raise ValueError(
+                    f"单元 {u.get('ref')!r} 的 repeat/nRuns 须为正整数"
+                    f"(收到 repeat={rep}, nRuns={un})")
+            if un <= 1 and section == "units" and gn > 1:
+                un = gn          # setdefault:单元未显式乘时才吃图级乘法
+            total += rep * un
+    return total
 
 
 async def _in_flight_batch(
@@ -828,17 +916,24 @@ def _in_flight_409(batch_id: str) -> HTTPException:
         "link": f"/executions?batch_id={batch_id}"})
 
 
-async def _run_orchestration(
-    db: AsyncSession, user: CurrentUser, suite: Suite,
-    members: list[SuiteMember], *, control: dict | None = None,
-    credential_source: str | None = None,
-) -> dict:
-    """编排模式运行(重构方案):逐单元 can_run_scenario(任一不过整体
-    403 —— 图不能像聚合那样跳过单元),入队时把成员 / 编排配置 / 各
-    单元方案与数据行参数全部物化进任务(worker 不回读 Suite,不变量
-    5);快照 = 入队时解析完成的 graph_spec + 当时 rev。"""
+async def _assembly_gate(
+    db: AsyncSession, user: CurrentUser, members: list[SuiteMember],
+    units_cfg: dict,
+) -> tuple[list[str], dict[str, object]]:
+    """整图装配闸(评审五轮 P1-1:validate 与 run 共用同一实现)。
+
+    逐单元三连判定:授权(``can_run_scenario``)+ 方案选择
+    (``resolve_unit_scheme`` 单源:引用失效即禁跑,裸基线不误报)+
+    §20.3 blocked 装配闸。任一不过 → 该单元不可运行(图不能跳过单元,
+    调用方整体拒绝);返回 ``(不可运行 scenarioId 列表, 通过单元的场景
+    行表)``,后者供 validate 第二遍阴影凭证检查免二次查行。
+
+    run 侧必须在**创建 execution 之前、凭证解析之前**完整执行本闸 ——
+    修前 _run_orchestration 只查场景可运行性,blocked 方案仍能入队物化
+    (预检 ok=false、run 201,契约不一致,且物化会解密认证凭证)。"""
     from ._ownership import can_run_scenario as _can_run
     not_runnable: list[str] = []
+    scen_by_unit: dict[str, object] = {}
     for m in members:
         scen = await scenario_store.get_row(db, m.scenario_id)
         if scen is None or not await _can_run(
@@ -846,13 +941,47 @@ async def _run_orchestration(
                 owner_id=scen.owner_id if scen else None,
                 project_id=scen.project_id if scen else None):
             not_runnable.append(m.scenario_id)
+            continue
+        scen_by_unit[m.scenario_id] = scen
+        u0 = units_cfg.get(m.scenario_id) or {}
+        scheme0, err0 = await scheme_store.resolve_unit_scheme(
+            db, m.scenario_id, scheme_id=u0.get("schemeId"),
+            row_spec=u0.get("row"))
+        if err0 is not None:
+            # 执行器会 GraphDispatchError 的引用失效 → 禁跑明细
+            not_runnable.append(m.scenario_id)
+            continue
+        if scheme0 is not None and scheme0.get("repairStatus") == "blocked":
+            # §20.3 装配闸(DTO 形态,与 require_ready 同一判定面):
+            # blocked 结构化禁跑,凭证解析零
+            not_runnable.append(m.scenario_id)
+    return not_runnable, scen_by_unit
+
+
+async def _run_orchestration(
+    db: AsyncSession, user: CurrentUser, suite: Suite,
+    members: list[SuiteMember], *, control: dict | None = None,
+    credential_source: str | None = None,
+) -> dict:
+    """编排模式运行(重构方案):先过与 validate 同一份整图装配闸
+    (_assembly_gate,任一单元不可运行整体 403 —— 图不能像聚合那样
+    跳过单元),再入队;入队时把成员 / 编排配置 / 各单元方案与数据行
+    参数全部物化进任务(worker 不回读 Suite,不变量 5);快照 = 入队时
+    解析完成的 graph_spec + 当时 rev。"""
+    units_cfg = (suite.mode_config or {}).get("units") or {}
+    not_runnable, _ready = await _assembly_gate(db, user, members, units_cfg)
     if not_runnable:
         raise HTTPException(status_code=403, detail={
             "code": "units_not_runnable",
             "message": "编排模式下所有单元都必须可运行(图不能跳过单元)",
             "units": not_runnable})
 
-    graph_spec = _build_graph_spec(suite, members)
+    try:
+        graph_spec = _build_graph_spec(suite, members)
+    except ValueError as e:
+        # 遗留垃圾配置(写入闸前落库)→ 人话 422,不再拼装层 500
+        raise HTTPException(status_code=422, detail={
+            "code": "mode_config_invalid", "message": str(e)}) from None
     if control:
         graph_spec["control"] = control
     # S8 收口:项目凭证 —— suite 同区约束保证成员场景同项目,凭证池唯一;
@@ -888,10 +1017,13 @@ async def _run_orchestration(
                             "项目配置页登记,或改用个人凭证:"
                             + "、".join(_missing)),
                 "aliases": _missing, "credentialSource": "project"})
-    est = sum(int(u.get("repeat") or 1) * int(u.get("nRuns") or 1)
-              for u in [*graph_spec.get("before", []),
-                        *graph_spec["units"],
-                        *graph_spec.get("after", [])])
+    # 评审六轮 P2-2:est 与物化乘法同语义(图级 nRuns 计入)—— 图级
+    # 乘法不再绕过总 cap
+    try:
+        est = _estimate_graph_runs(graph_spec)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail={
+            "code": "mode_config_invalid", "message": str(e)}) from None
     if est > settings.SUITE_RUN_TOTAL_CAP:
         raise HTTPException(status_code=409, detail={
             "code": "too_many_runs",
@@ -941,6 +1073,20 @@ async def _run_orchestration(
                + len(graph_spec.get("after", [])))
     return {"executionId": execution.id, "batchId": batch_id,
             "mode": suite.mode, "units": n_units, "estimatedRuns": est}
+
+
+async def _combo_padded_scheme(db, scheme: "dict | None") -> "dict | None":
+    """M3 执行装配:组合垫底(Suite 直跑面,v4 §3.2「调用方垫底:
+    取默认方案后先合并再传入,_req_from_scheme 纯函数签名不改」)——
+    DTO 副本的 serviceBindings 先垫组合条目再交给配方装配。"""
+    if scheme is None or scheme.get("accountComboId") is None:
+        return scheme
+    from ..services.account_combo import combo_base, pad_bindings
+    out = dict(scheme)
+    out["serviceBindings"] = pad_bindings(
+        scheme.get("serviceBindings") or {},
+        await combo_base(db, scheme["accountComboId"]))
+    return out
 
 
 def _req_from_scheme(
@@ -1050,8 +1196,9 @@ async def run_suite(
         scen_rows[m.scenario_id] = scen
         await scheme_store.ensure_default_scheme(db, m.scenario_id)
         schemes = await scheme_store.list_schemes(db, m.scenario_id)
-        default_schemes[m.scenario_id] = next(
-            (s for s in schemes if s.get("isDefault")), None)
+        # M3 执行装配:默认方案先组合垫底再进配方(v4 §3.2 调用方垫底)
+        default_schemes[m.scenario_id] = await _combo_padded_scheme(
+            db, next((s for s in schemes if s.get("isDefault")), None))
     await db.commit()  # ensure_default_scheme 的自愈写入先落库
 
     # ── 防重(§6.6):按 (suite, 发起人),时效窗口内的未终态批次 ──
@@ -1328,7 +1475,8 @@ async def validate_suite(
                 # 修复既有缺陷:漏传 user_id 会让 pick_bindings 走
                 # owner_id IS NULL 的项目池分支,missingAuths 不可信
                 user_id=user.id)
-            if (sh := await _shadowed_item(
+            # 评审 P1-2:blocked 装配闸先行,辅助凭证告警一并跳过
+            if not pc.repair_blocked and (sh := await _shadowed_item(
                     user.id, scen, _name_of(m.scenario_id, scen))):
                 items.append(sh)
             if not pc.scheme_valid:
@@ -1357,7 +1505,16 @@ async def validate_suite(
     else:
         # ── 编排:逐单元可运行 + 物化 + 执行器编译 ─────────────────
         from ..services import graph_dispatch as gd
-        graph_spec = _build_graph_spec(suite, members)
+        try:
+            graph_spec = _build_graph_spec(suite, members)
+        except ValueError as e:
+            # 评审六轮 P2-2:遗留垃圾配置(写入闸前落库)→ error 级
+            # 条目 + ok=false,不再拼装层 500
+            items.append(_vitem("error", "mode_config_invalid", str(e)))
+            return {"ok": False, "mode": mode,
+                    "unitCount": len(members), "estimatedRuns": 0,
+                    "runCap": settings.SUITE_RUN_TOTAL_CAP, "gates": gates_n,
+                    "degraded": False, "inFlight": None, "items": items}
         ref2sid: dict[str, str] = {}
         for m in members:
             ref2sid[(units_cfg.get(m.scenario_id) or {}).get("ref")
@@ -1371,18 +1528,15 @@ async def validate_suite(
             names[m.scenario_id] = (meta.name if meta and meta.name
                                     else m.scenario_id)
 
-        not_runnable: list[str] = []
         shadowed: list[dict] = []
-        for m in members:
-            scen = await scenario_store.get_row(db, m.scenario_id)
-            if scen is None or not await _can_run(
-                    db, user, scenario_id=m.scenario_id,
-                    owner_id=scen.owner_id if scen else None,
-                    project_id=scen.project_id if scen else None):
-                not_runnable.append(names[m.scenario_id])
-            elif (sh := await _shadowed_item(
-                    user.id, scen, names[m.scenario_id])):
-                shadowed.append(sh)
+        # 评审四轮 P2-4/P2-5:**两遍法**;评审五轮 P1-1:第一遍闸与
+        # run 共用同一实现(_assembly_gate)—— validate 与执行不再有
+        # 各自手写的第二份判定面。第一遍全部单元先过授权 + §20.3 装配
+        # 闸;全部 ready 之后才进第二遍阴影凭证检查/别名收集/物化(修前
+        # 单循环交替,blocked 单元在后时,前序 ready 单元已被解密凭证)。
+        not_runnable_ids, scen_by_unit = await _assembly_gate(
+            db, user, members, units_cfg)
+        not_runnable = [names[sid] for sid in not_runnable_ids]
         if not_runnable:
             # 图不能跳过单元 —— 整体禁跑并列出(重构方案已定)
             items.append(_vitem("error", "units_not_runnable",
@@ -1393,19 +1547,32 @@ async def validate_suite(
                     "runCap": settings.SUITE_RUN_TOTAL_CAP, "gates": gates_n,
                     "degraded": False, "inFlight": None, "items": items}
 
+        # 第二遍(评审四轮 P2-4):整图全部 ready 才做阴影凭证检查 ——
+        # 任意单元 blocked 时凭证解析零调用(AC-45 对整图成立)
+        for m in members:
+            scen = scen_by_unit.get(m.scenario_id)
+            if scen is None:
+                continue
+            if (sh := await _shadowed_item(
+                    user.id, scen, names[m.scenario_id])):
+                shadowed.append(sh)
         items.extend(shadowed)
-        est = sum(int((units_cfg.get(m.scenario_id) or {}).get("repeat") or 1)
-                  * int((units_cfg.get(m.scenario_id) or {}).get("nRuns") or 1)
-                  for m in members)
+        # 评审六轮 P2-2:est 与 run 同一实现(_estimate_graph_runs,
+        # 图级 nRuns 乘法计入)—— 预检与执行的 cap 判定不再漂移
+        try:
+            est = _estimate_graph_runs(graph_spec)
+        except ValueError as e:
+            est = 0
+            items.append(_vitem("error", "mode_config_invalid", str(e)))
 
         # 多行方案只跑一行(约束 5):未选行 → 裸基线提示;已选 → 只跑该行
         for m in members:
             u = units_cfg.get(m.scenario_id) or {}
-            schemes = await scheme_store.list_schemes(db, m.scenario_id)
-            scheme = (next((s for s in schemes
-                            if s.get("schemeId") == u.get("schemeId")), None)
-                      if u.get("schemeId")
-                      else next((s for s in schemes if s.get("isDefault")), None))
+            # 评审 P2-5:与执行器同源(第一遍已把引用失效挡为禁跑,
+            # 此处 None = 裸基线)
+            scheme, _err = await scheme_store.resolve_unit_scheme(
+                db, m.scenario_id, scheme_id=u.get("schemeId"),
+                row_spec=u.get("row"))
             if scheme is None:
                 items.append(_vitem(
                     "warn", "no_scheme",
@@ -1420,10 +1587,13 @@ async def validate_suite(
                     f"当前未选行,将跑裸基线",
                     units=[m.scenario_id], action="unit"))
             elif rows > 1 and u.get("row"):
+                # 评审六轮 P2-1:rowIndex 写入边界合法缺省(默认 0)——
+                # 读取端同口径取缺省,不再直接下标 KeyError → 500
                 items.append(_vitem(
                     "warn", "row_single",
                     f"「{names[m.scenario_id]}」的方案选了 {rows} 行,只会跑"
-                    f"{u['row']['datasetId']} 第 {u['row']['rowIndex']} 行"))
+                    f"{u['row']['datasetId']} 第 "
+                    f"{u['row'].get('rowIndex', 0)} 行"))
 
         # 物化 + 编译(plate convert / gimbal import 不可用 → 降级本地检查)
         try:
@@ -1437,7 +1607,6 @@ async def validate_suite(
             # 不再手写一份收集(此前只看单元绑定,与 materialize_graph
             # 的注入面漂移);解析按发起人(不借用属主凭证,P2 §13.3-5),
             # 走会话工厂。
-            from ..core import db as db_module
             from ..services import run_prepare
             from ..services.run_dispatcher import session_factory as _sf
             aliases = await run_prepare.graph_auth_aliases(

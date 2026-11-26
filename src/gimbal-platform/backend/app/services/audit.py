@@ -75,6 +75,11 @@ AUDIT_ACTIONS = (
     # 此处只记治理面动作)──────────────────────────────
     "scheme.repair.rebind_combo",
     "scheme.repair.confirm_no_combo",
+    # ── UPC §13.1 生命周期与默认空间(治理面;含 publicize/transfer
+    # 等既有项目治理动作沿用 project.* 前缀口径)─────────────────────
+    "project.archived",             # 归档(active → archived,§13.1)
+    "project.restored",             # 恢复归档(archived → active)
+    "project.default_switched",     # 默认私有空间切换(§4)
 )
 
 
@@ -88,17 +93,39 @@ async def record(
     resource_id: str | None = None,
     resource_name: str | None = None,
     detail: dict | None = None,
+    commit: bool = True,
 ) -> None:
     """落一条审计记录(best-effort:失败仅记日志,不抛)。
 
     ``resource_name``:资源名称快照,与 actor_name 同理 —— 资源事后被删,
     审计仍可读(读侧优先展示名称,旧记录回落 ``type:id``)。
+    ``commit=False``(评审二轮 P1-3):调用方自持事务时审计与业务写入
+    同事务提交 —— 中途失败随业务一并回滚,不留「审计已记、业务未成」
+    的假事实;默认 True 维持既有即时落账语义。
     """
     from loguru import logger
 
     merged = dict(detail or {})
     if resource_name:
         merged.setdefault("resource_name", resource_name)
+    if not commit:
+        # 评审三轮 R3-2:业务自持事务内走 SAVEPOINT —— 审计失败只回滚
+        # 审计行自己,**禁止回滚调用方事务**(修前失败分支无条件
+        # rollback() 会把调用方已写入的处置整体回滚后吞错继续,
+        # transfer/publicize 实际退化成 purge)。savepoint 失败后外层
+        # 事务仍可正常提交;若外层本身已坏,后续语句/提交自然失败,
+        # fail-closed 不留半程状态。
+        try:
+            async with db.begin_nested():
+                db.add(AuditLog(
+                    actor_id=actor_id, actor_name=actor_name or "",
+                    action=action, resource_type=resource_type,
+                    resource_id=resource_id, detail=merged,
+                ))
+                await db.flush()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("audit: record {} failed (nested): {}", action, e)
+        return
     try:
         db.add(AuditLog(
             actor_id=actor_id, actor_name=actor_name or "", action=action,

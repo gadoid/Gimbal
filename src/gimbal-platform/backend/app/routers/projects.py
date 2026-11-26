@@ -7,13 +7,17 @@
   ``services.project_access.visible_projects_clause`` —— 私有空间仅
   所有者可见,**Admin+ 不旁路**(AC-51;§6「Private 其他用户(含
   平台管理员)」全否)。不可见统一 404,不泄露存在性。
-* **管理面**:private = 所有者(owner_id,无成员行);normal = 项目
-  管理员 ∨ Admin+;public = 仅 Admin+(系统治理)。项目管理员
-  (role=admin)管理本项目成员;**末位项目管理员保护** —— 最后一个
-  admin 不能被移除或降级(DB 延迟约束触发器兜底)。
+* **管理面**(§6/AC-51:与可见性同源,无普通项目旁路):private =
+  所有者(owner_id,无成员行;Admin+ 不旁路);normal = 项目成员管理员
+  (D1:Admin+ 非成员不旁路 —— 看不到的项目管理面同样 404);public =
+  仅 Admin+(系统治理)。项目管理员(role=admin)管理本项目成员;
+  **末位项目管理员保护** —— 最后一个有效 admin 不能被移除或降级
+  (与 DB 触发器同口径:在职 ∧ 非系统;API 预检同源,不再撞 500)。
 * **删除**:private = 所有者,默认空间受专门闸保护(§4);normal =
-  Admin+ 且有内容 409 ``project_not_empty``(不做级联删除);公共项目
-  不可删不可改 kind。
+  项目成员管理员 ∧ Admin+(§6 投影 ``project.delete = is_ops`` 于
+  管理员分支 —— 授权删除面与授权创建同口径),有内容 409
+  ``project_not_empty``(不做级联删除);历史台账行(资产导入台账/
+  晋升记录)随项目显式清理;公共项目不可删不可改 kind。
 * **成员关系**:private/public 不落成员行(触发器钉死);普通成员行
   只增不改权限边界:读面由表 B / zone_read_clause 派生。审计:建/删/
   成员变更入审计(admin 面)。
@@ -35,7 +39,7 @@ from ..models.user import User
 from ..policies import capabilities_of_kind
 from ..services import project_access
 from ..services.project_space import (
-    create_private_space, dispose_private_containers,
+    count_valid_admins, create_private_space, dispose_private_containers,
 )
 from ._ownership import has_capability
 
@@ -174,9 +178,11 @@ async def _my_role(db: AsyncSession, user, project_id: int) -> str | None:
 async def _require_manage(
     db: AsyncSession, user, project: Project,
 ) -> None:
-    """管理面门:私有 = 所有者(Admin+ 不旁路,他人不可见 → 404);
-    普通 = 项目管理员 ∨ Admin+;公共 = Admin+。成员但非项目管理员 403
-    (项目可见,无管理权)。"""
+    """管理面门(§6/AC-51:与可见性同源,无普通项目旁路):
+    私有 = 所有者(Admin+ 不旁路,他人不可见 → 404);
+    普通 = 项目成员管理员(D1:Admin+ 非成员不旁路 —— 列表/详情看不到
+    的项目,管理面同样 404;成员但非项目管理员 403);
+    公共 = Admin+(平台治理;public 不落成员行)。"""
     if project.kind == Project.KIND_PRIVATE:
         if project.owner_id != user.id:
             raise HTTPException(
@@ -184,7 +190,12 @@ async def _require_manage(
                 detail={"code": "not_found",
                         "message": f"project not found: {project.id}"})
         return
-    if has_capability(user, "ops.write"):
+    if project.kind == Project.KIND_PUBLIC:
+        if not has_capability(user, "ops.write"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "capability_forbidden",
+                        "message": "公共项目治理需要技术运营权限(Admin+)"})
         return
     my_role = await _my_role(db, user, project.id)
     if my_role == ProjectMember.ROLE_ADMIN:
@@ -197,7 +208,64 @@ async def _require_manage(
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail={"code": "not_project_admin",
-                "message": "只有项目管理员(或 Admin+)能管理项目"})
+                "message": "只有项目管理员能管理项目"})
+
+
+async def _require_manage_locked(
+    db: AsyncSession, user, project: Project,
+    *, target_user_id: int | None = None,
+) -> None:
+    """评审二轮 P1-7(TOCTOU):管理**写点**的角色重验 —— 操作者自己的
+    成员行 ``SELECT ... FOR UPDATE``,与并发的降级/移除同锁串行;锁内
+    读到的角色才是写入点的真实授权(修前检查-写入间的降级窗口可让
+    在途请求完成成员变更)。仅 normal 项目有成员行;公共项目治理走
+    ops.write(无成员行,上游已判),私有空间属主单判。
+
+    评审四轮 P2-8:``target_user_id`` 提供时,操作者与**目标**行按
+    ``user_id`` 升序一次锁定 —— 目标行随写获取的旧法在两名管理员
+    互改时各持己行等对方行,可成锁环(死锁,一方 40P01 500)。
+    固定全序锁 = 串行化且无环。
+
+    评审五轮 P2-5:成员写点**先锁项目行** —— 两名管理员并发自降级/
+    自移除时各只锁己行,都读到「还有两名管理员」双双放行,后提交者
+    撞延迟约束触发器 ``trg_project_member_admin_invariant`` → 未映射
+    500。项目行锁把同项目的成员写全序化:后到者在锁内重读到前者已
+    提交的降级,末位保护按真实计数拒绝。锁序 projects → project_members
+    全仓一致(project_tokens 治理面同样先锁项目行),无环。"""
+    if project.kind != Project.KIND_NORMAL:
+        return
+    await db.refresh(project, with_for_update=True)
+    ids = {user.id}
+    if target_user_id:
+        ids.add(target_user_id)
+    rows = (await db.execute(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id.in_(ids)).order_by(
+            ProjectMember.user_id).with_for_update()
+    )).scalars().all()
+    mine = next((r for r in rows if r.user_id == user.id), None)
+    if mine is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found",
+                    "message": f"project not found: {project.id}"})
+    if mine.role != ProjectMember.ROLE_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "not_project_admin",
+                    "message": "只有项目管理员能管理项目"})
+
+
+def _require_active(project: Project) -> None:
+    """评审三轮 R3-6:归档起禁止**管理写入**(§13.1;创建闸同码
+    ``project_not_active``,409)。读面与删除治理面不在此列。"""
+    if project.status != Project.STATUS_ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "project_not_active",
+                    "message": f"项目状态为 {project.status},"
+                               "归档起禁止管理写入(§13.1)"})
 
 
 async def _member_count(db: AsyncSession, project_id: int) -> int:
@@ -206,7 +274,20 @@ async def _member_count(db: AsyncSession, project_id: int) -> int:
             ProjectMember.project_id == project_id))).scalar_one()
 
 
-async def _audit(db, user, action: str, project: Project, detail: dict):
+def _is_admin_invariant(e: IntegrityError) -> bool:
+    """提交期 ``IntegrityError`` 是否为 §20 末位有效管理员触发器
+    (``trg_project_member_admin_invariant``,延迟约束触发器 ERRCODE
+    23514)。SQLAlchemy 2.0 无 CheckViolation 专类 —— 按驱动异常类名
+    (asyncpg ``CheckViolationError`` / psycopg ``CheckViolation``)+
+    触发器消息双信号识别。"""
+    orig = getattr(e, "orig", None)
+    if type(orig).__name__ in ("CheckViolationError", "CheckViolation"):
+        return True
+    return "project_admin_required" in str(orig or e)
+
+
+async def _audit(db, user, action: str, project: Project, detail: dict,
+                 *, commit: bool = True):
     from ..services import audit as audit_svc
 
     await audit_svc.record(
@@ -214,7 +295,7 @@ async def _audit(db, user, action: str, project: Project, detail: dict):
         actor_name=user.display_name or user.username,
         action=action, resource_type="project",
         resource_id=str(project.id), resource_name=project.name,
-        detail=detail)
+        detail=detail, commit=commit)
 
 
 async def _env_name(db: AsyncSession, env_id: int | None) -> str | None:
@@ -305,18 +386,23 @@ async def create_project(
 
 def _can_manage(user, proj: Project, my_role: str | None) -> bool:
     """管理权(与 ``_require_manage`` 同口径):私有 = 所有者;
-    普通 = 项目管理员 ∨ Admin+;公共 = Admin+。"""
+    普通 = 项目成员管理员(Admin+ 非成员不旁路,D1/§6);公共 = Admin+。
+    评审四轮 P1-1:归档起管理写冻结 —— 投影与闸同收敛(§13.1)。"""
+    if proj.status != Project.STATUS_ACTIVE:
+        return False
     if proj.kind == Project.KIND_PRIVATE:
         return proj.owner_id == user.id
-    if has_capability(user, "ops.write"):
-        return True
-    return proj.kind != Project.KIND_PUBLIC and my_role == "admin"
+    if proj.kind == Project.KIND_PUBLIC:
+        return has_capability(user, "ops.write")
+    return my_role == "admin"
 
 
 def _can_write(user, proj: Project, my_role: str | None) -> bool:
     """项目内写权(M2b Q1,与表 B contributor 同口径):私有 = 所有者;
     普通项目 = 项目管理员 ∨ 项目成员(项目用户只读 + 执行);
-    公共项目只走「发布」,恒 False。"""
+    公共项目只走「发布」,恒 False。归档起冻结(§13.1,评审 P1-1)。"""
+    if proj.status != Project.STATUS_ACTIVE:
+        return False
     if proj.kind == Project.KIND_PRIVATE:
         return proj.owner_id == user.id
     if proj.kind == Project.KIND_PUBLIC:
@@ -562,6 +648,8 @@ async def patch_project(
 ) -> ProjectOut:
     proj, _ = await _load_visible_project(db, user, project_id)
     await _require_manage(db, user, proj)
+    await _require_manage_locked(db, user, proj)      # R3-7 写点重验
+    _require_active(proj)                             # R3-6 归档闸
     if proj.kind == Project.KIND_PUBLIC:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -603,39 +691,182 @@ async def patch_project(
         defaultEnvironmentId=proj.default_environment_id)
 
 
+# ── 生命周期(§13.1 状态机;M1 落列,流程随本里程碑交付)─────────────
+
+async def _project_out(db, user, proj: Project) -> "ProjectOut":
+    """生命周期端点共用的输出装配(纯值读,锁外)。"""
+    return ProjectOut(
+        id=proj.id, uid=str(proj.project_uid), name=proj.name,
+        kind=proj.kind, description=proj.description,
+        isDefault=proj.is_default, status=proj.status,
+        memberCount=await _member_count(db, proj.id),
+        myRole=await _my_role(db, user, proj.id),
+        defaultEnvironmentId=proj.default_environment_id)
+
+
+@router.post("/{project_id}/archive", response_model=ProjectOut)
+async def archive_project(
+    user: CurrentUser, db: DbSession, project_id: int,
+) -> ProjectOut:
+    """归档(§13.1:active → archived,归档起冻结新写入/新执行 —— 各
+    写入/执行入口的 ``project_not_active`` 闸已在 R3-6/评审四轮收口)。
+
+    门:normal = 项目管理员(锁内重验,与成员写同序);private = 所有者;
+    public 恒 active 不可归档。**默认私有空间不可归档**(trg_user_default_
+    space_invariant 只保存在性;默认空间是场景创建的缺省落点,归档会让
+    该用户所有缺省写入面冻结 —— 须先 set-default 换默认再归档)。"""
+    proj, _ = await _load_visible_project(db, user, project_id)
+    await _require_manage(db, user, proj)
+    if proj.kind == Project.KIND_PUBLIC:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "public_project_protected",
+                    "message": "公共项目不可归档(平台治理对象恒可用)"})
+    await _require_manage_locked(db, user, proj)    # P2-5/P2-8 锁内重验
+    if proj.kind == Project.KIND_PRIVATE:
+        # 私有空间无成员行 → 显式锁项目行串行化生命周期写
+        await db.refresh(proj, with_for_update=True)
+    _require_active(proj)     # 已归档/deleting → 409(状态机单向闸)
+    if proj.kind == Project.KIND_PRIVATE and proj.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "default_space_not_archivable",
+                    "message": "默认私有空间不可归档(它是新建场景等"
+                               "缺省写入的落点);请先切换默认空间"
+                               "(set-default)再归档本空间"})
+    proj.status = Project.STATUS_ARCHIVED
+    await db.commit()
+    await _audit(db, user, "project.archived", proj, {})
+    return await _project_out(db, user, proj)
+
+
+@router.post("/{project_id}/restore", response_model=ProjectOut)
+async def restore_project(
+    user: CurrentUser, db: DbSession, project_id: int,
+) -> ProjectOut:
+    """恢复归档(§13.1:archived → active)。恢复是解冻,不受
+    ``project_not_active`` 闸(该闸管的是「归档中的写」)。
+
+    门与归档同面:normal = 项目管理员;恢复后活跃 normal 须仍有有效
+    管理员 —— API 面(调用者 = 在职 admin)恒满足;直写/竞态由库层
+    延迟触发器 ``trg_project_admin_invariant``(④)在提交期兜底,
+    冲突映射 409 ``project_admin_required``。private = 所有者;
+    public 不可归档故无恢复面。"""
+    proj, _ = await _load_visible_project(db, user, project_id)
+    await _require_manage(db, user, proj)
+    if proj.kind == Project.KIND_PUBLIC:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "public_project_protected",
+                    "message": "公共项目恒 active,无恢复面"})
+    await _require_manage_locked(db, user, proj)
+    if proj.kind == Project.KIND_PRIVATE:
+        await db.refresh(proj, with_for_update=True)
+    if proj.status != Project.STATUS_ARCHIVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "project_not_archived",
+                    "message": f"项目状态为 {proj.status},"
+                               "仅归档项目可恢复"})
+    if proj.kind == Project.KIND_NORMAL:
+        # 人话前置检(与触发器④同口径);提交期触发器兜并发竞态
+        if await count_valid_admins(db, project_id) < 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "project_admin_required",
+                        "message": "恢复后须至少一名有效管理员"
+                                   "(在职、非系统用户)"})
+    proj.status = Project.STATUS_ACTIVE
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        if _is_admin_invariant(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "project_admin_required",
+                        "message": "恢复后须至少一名有效管理员"
+                                   "(提交期校验未过,请先补管理员)"}) from e
+        raise
+    await _audit(db, user, "project.restored", proj, {})
+    return await _project_out(db, user, proj)
+
+
+@router.post("/{project_id}/set-default", response_model=ProjectOut)
+async def set_default_space(
+    user: CurrentUser, db: DbSession, project_id: int,
+) -> ProjectOut:
+    """切换默认私有空间(§4:每用户恰一个默认;唯一权威 =
+    ``uq_projects_private_default`` 部分唯一索引,AC-01)。
+
+    原子换:旧默认先清标记、目标后置(索引即时校验,同事务两步换);
+    目标须为本人 active 私有空间 —— 归档空间不可成为默认(新写入
+    面会全被 ``project_not_active`` 冻结)。非 private(公共项目、
+    普通项目)无默认语义 → 409。"""
+    proj, _ = await _load_visible_project(db, user, project_id)
+    if proj.kind != Project.KIND_PRIVATE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "default_space_private_only",
+                    "message": "默认空间语义仅适用于私有空间"
+                               "(普通/公共项目无默认概念)"})
+    # _load_visible_project 对 private 已是所有者判定(他人不可见 404)
+    _require_active(proj)
+    await db.refresh(proj, with_for_update=True)    # 串行化并发切换
+    if proj.is_default:
+        return await _project_out(db, user, proj)        # 幂等:已是默认
+    from ..services.project_space import get_default_private_project
+    old = await get_default_private_project(db, user.id)
+    if old is not None:
+        old.is_default = False       # 先清旧(即时唯一索引,序敏感)
+    proj.is_default = True
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "default_space_switch_conflict",
+                    "message": "并发切换默认空间冲突(唯一索引竞态),"
+                               "请重试"}) from e
+    await _audit(db, user, "project.default_switched", proj,
+                 {"fromProjectId": old.id if old is not None else None})
+    return await _project_out(db, user, proj)
+
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     user: CurrentUser, db: DbSession, project_id: int,
 ) -> None:
     """删项目(§4/§13):private = 所有者,默认空间专门闸保护
-    (default_space_protected);normal = Admin+(§4 授权删除);公共项目
+    (default_space_protected);normal = 项目成员管理员 ∧ Admin+
+    (§6 投影 ``project.delete = is_ops`` 于管理员分支 —— 授权删除面
+    与授权创建同口径;可见性先行,Admin+ 非成员 404 不旁路);公共项目
     409。有内容 409(project_not_empty,不做级联删除,先清空或迁走);
+    历史台账行(资产导入台账/晋升记录)无独立清理入口,随项目显式收口;
     成员行随 CASCADE 消失(项目没了,成员关系无意义)。"""
-    proj = await _load_project(db, project_id)
+    proj, _ = await _load_visible_project(db, user, project_id)
     if proj.kind == Project.KIND_PRIVATE:
-        # 不可见统一 404(与列表/详情同源)
-        if proj.owner_id != user.id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "not_found",
-                        "message": f"project not found: {project_id}"})
         if proj.is_default:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "default_space_protected",
                         "message": "默认私有空间不可删除;须先原子切换默认"
                                    "空间或走用户处置流程(§4/§13)"})
+    elif proj.kind == Project.KIND_PUBLIC:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "public_project_protected",
+                    "message": "公共项目不可删除"})
     else:
+        # normal:管理面(成员管理员;Admin+ 非成员已被可见性 404 挡住)
+        await _require_manage(db, user, proj)
+        await _require_manage_locked(db, user, proj)  # R3-7 写点重验
         if not has_capability(user, "ops.write"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": "capability_forbidden",
                         "message": "删除普通项目需要技术运营权限(Admin+)"})
-        if proj.kind == Project.KIND_PUBLIC:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "public_project_protected",
-                        "message": "公共项目不可删除"})
     # 内容闸:五张对象表任一挂靠即拒(UPC M2:账户组合进闸,AC-22)
     from sqlalchemy import select as _sel
 
@@ -670,19 +901,39 @@ async def delete_project(
             detail={"code": "project_not_empty",
                     "message": "项目内仍有内容(场景/套件/组合/集成模板"
                                "/报告定义),需先清空或迁走再删除"})
-    await _audit(db, user, "project.deleted", proj, {"name": proj.name})
-    # S8:项目账户随项目删除(FK NO ACTION —— 显式删,凭证是项目的配置
-    # 不是内容,不进内容闸)
+    # 历史台账行随项目显式收口(§14.2 恢复台账 / §7.2 晋升记录):二者
+    # 都 FK 引用项目且非级联,又没有独立清理入口 —— 留在库里会让「内容
+    # 已清空」的项目在提交时撞 NO ACTION FK(M2 删除闸收口)
     from sqlalchemy import delete as _del
 
+    from ..models.project_promotion import ProjectPromotion
+    from ..models.scenario_asset_import import ScenarioAssetImport
+
+    await db.execute(_del(ScenarioAssetImport).where(
+        ScenarioAssetImport.project_id == project_id))
+    await db.execute(_del(ProjectPromotion).where(
+        ProjectPromotion.project_id == project_id))
+    # S8:项目账户随项目删除(FK NO ACTION —— 显式删,凭证是项目的配置
+    # 不是内容,不进内容闸)
     from ..models.auth_account import AuthAccount
     await db.execute(_del(AuthAccount).where(
         AuthAccount.project_id == project_id))
     # M2b Q2:项目令牌随项目删除吊销(令牌行留档,终态只读)
     from .project_tokens import revoke_all_for_project
     await revoke_all_for_project(db, project_id)
+    proj_id, proj_name = proj.id, proj.name      # 提交会过期实例;审计快照先行
     await db.delete(proj)
     await db.commit()
+    # 审计在成功删除之后 —— audit.record 自带 commit,删除失败(回滚)
+    # 时不得留下「已删除」假审计(M2 顺序收口);实例已删,走快照直调
+    from ..services import audit as _audit_svc
+
+    await _audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="project.deleted", resource_type="project",
+        resource_id=str(proj_id), resource_name=proj_name,
+        detail={"name": proj_name})
 
 
 # ── 实例 × 凭证匹配 ────────────────────────
@@ -749,7 +1000,10 @@ async def instance_credential_matches(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found",
                     "message": f"project not found: {project_id}"})
-    can_manage = role == "admin"
+    # 评审五轮 P2-2:与 list_project_credentials 同一投影 —— 归档项目
+    # 管理面冻结(§13.1),canManage=False 且 username 脱敏,不再向
+    # 归档管理员暴露管理能力与账号名
+    can_manage = role == "admin" and proj.status == Project.STATUS_ACTIVE
 
     inst_rows = (await db.execute(
         select(SystemEnvInstance).where(
@@ -804,7 +1058,7 @@ async def instance_credential_matches(
 async def list_members(
     user: CurrentUser, db: DbSession, project_id: int,
 ) -> list[MemberOut]:
-    proj = await _load_project(db, project_id)
+    proj, _ = await _load_visible_project(db, user, project_id)
     await _require_manage(db, user, proj)
     rows = (await db.execute(
         select(ProjectMember, User)
@@ -841,8 +1095,11 @@ async def list_members(
 async def add_member(
     user: CurrentUser, db: DbSession, project_id: int, body: MemberIn,
 ) -> MemberOut:
-    proj = await _load_project(db, project_id)
+    proj, _ = await _load_visible_project(db, user, project_id)
     await _require_manage(db, user, proj)
+    await _require_manage_locked(db, user, proj,          # P1-7 + P2-8
+                                 target_user_id=body.userId)
+    _require_active(proj)                             # R3-6 归档闸
     # 成员行守卫:不变量「private/public 不落成员行」(§4/§20,触发器
     # 兜底直插绕过应用层的写)—— 只有 normal 有成员概念
     if proj.kind != Project.KIND_NORMAL:
@@ -881,8 +1138,11 @@ async def patch_member(
     user: CurrentUser, db: DbSession, project_id: int,
     member_user_id: int, body: MemberPatchIn,
 ) -> MemberOut:
-    proj = await _load_project(db, project_id)
+    proj, _ = await _load_visible_project(db, user, project_id)
     await _require_manage(db, user, proj)
+    await _require_manage_locked(db, user, proj,          # P1-7 + P2-8
+                                 target_user_id=member_user_id)
+    _require_active(proj)                             # R3-6 归档闸
     # 成员行守卫(与 add_member 同闸同码;private/public 不落成员行)
     if proj.kind != Project.KIND_NORMAL:
         raise HTTPException(
@@ -897,15 +1157,19 @@ async def patch_member(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found",
                     "message": f"member not found: {member_user_id}"})
-    # 降级(→ 成员 / 项目用户)都要过「最后一个管理员」保护
+    # 降级(→ 成员 / 项目用户)都要过「最后一个有效管理员」保护 ——
+    # 与 DB 触发器 project_member_admin_invariant 同口径(在职 ∧ 非系统;
+    # M5 收口:统计全部 admin 行会在存在非活跃 admin 时误判,API 放行、
+    # 提交撞触发器 500)
     if (m.role == ProjectMember.ROLE_ADMIN
             and body.role != ProjectMember.ROLE_ADMIN):
-        admins = (await db.execute(select(func.count()).select_from(
-            ProjectMember).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.role == ProjectMember.ROLE_ADMIN))
-        ).scalar_one()
-        if admins <= 1:
+        _m_user = await db.get(User, m.user_id)
+        _m_valid = (_m_user is not None and _m_user.is_active
+                    and not _m_user.is_system)
+        remaining = await count_valid_admins(db, project_id)
+        if _m_valid:
+            remaining -= 1
+        if remaining <= 0:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "last_project_admin",
@@ -914,7 +1178,20 @@ async def patch_member(
     demoted = (m.role == ProjectMember.ROLE_ADMIN
                and body.role != ProjectMember.ROLE_ADMIN)
     m.role = body.role
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        # 评审五轮 P2-5:延迟约束触发器在**提交期**发火 —— 兜底映射
+        # 409(项目行锁已把 API 并发面收掉,此映射覆盖绕过应用预检的
+        # 直写/存量路径),不再以未映射 500 收场
+        if _is_admin_invariant(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "last_project_admin",
+                        "message": "最后一个项目管理员不能降级"
+                                   "(项目不能无人可管)"}) from e
+        raise
     if demoted:
         # M2b Q2:降级的管理员若是项目令牌负责人 → 提醒其余管理员换绑
         from .project_tokens import notify_holder_lost
@@ -934,8 +1211,14 @@ async def patch_member(
 async def remove_member(
     user: CurrentUser, db: DbSession, project_id: int, member_user_id: int,
 ) -> None:
-    proj = await _load_project(db, project_id)
+    proj, _ = await _load_visible_project(db, user, project_id)
     await _require_manage(db, user, proj)
+    await _require_manage_locked(db, user, proj,          # P1-7 + P2-8
+                                 target_user_id=member_user_id)
+    # 评审四轮 P1-1:remove 同样受归档闸(与 add/patch 同口径)——
+    # 公共项目恒 active(恰一行、不可删不可改),B1 遗留行清理通道
+    # 不受影响;归档 normal 项目撤销成员访问 = 管理写,冻结。
+    _require_active(proj)                             # R3-6 归档闸
     # 公共项目**不设** add/patch 守卫同款 409:
     # remove 是 B1 窗口期遗留成员行的唯一 API 补救通道 —— 全闸会把病害
     # 锁进库(can_run_scenario 纯查成员表,残留行即活越权面)。放行删除 =
@@ -949,21 +1232,38 @@ async def remove_member(
             detail={"code": "not_found",
                     "message": f"member not found: {member_user_id}"})
     if m.role == ProjectMember.ROLE_ADMIN:
-        admins = (await db.execute(select(func.count()).select_from(
-            ProjectMember).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.role == ProjectMember.ROLE_ADMIN))
-        ).scalar_one()
-        if admins <= 1:
+        # 末位「有效管理员」保护(与 DB 触发器同口径,M5 收口;被移除行
+        # 自身不计入剩余 —— 有效与否见 project_space.count_valid_admins)
+        remaining = await count_valid_admins(db, project_id)
+        _m_user = await db.get(User, m.user_id)
+        if (_m_user is not None and _m_user.is_active
+                and not _m_user.is_system):
+            remaining -= 1
+        if remaining <= 0:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"code": "last_project_admin",
                         "message": "最后一个项目管理员不能移除"
                                    "(项目不能无人可管)"})
+    # 评审四轮 P2-8:审计**并入最终事务**(commit=False)—— 修前
+    # audit.record 自带 commit 在写点中途提交,释放刚锁定的成员行:
+    # 固定序锁形同虚设,末位管理员预检退化回 TOCTOU(并发交错下以
+    # CheckViolation 500 收场)
     await _audit(db, user, "project.member_removed", proj,
-                 {"userId": member_user_id})
+                 {"userId": member_user_id}, commit=False)
     await db.delete(m)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        # 评审五轮 P2-5:同 patch —— 提交期延迟约束触发器兜底映射 409
+        if _is_admin_invariant(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "last_project_admin",
+                        "message": "最后一个项目管理员不能移除"
+                                   "(项目不能无人可管)"}) from e
+        raise
     # M2b Q2:被移出的成员若是项目令牌负责人 → 提醒其余管理员换绑
     from .project_tokens import notify_holder_lost
     await notify_holder_lost(db, project_id, member_user_id)

@@ -616,10 +616,12 @@ class TestConcurrentInvariants:
 
     async def test_concurrent_default_space_switch(
             self, client: AsyncClient):
-        """默认切换竞争:部分唯一索引 uq_projects_private_default 是
-        并发权威 —— 两笔切换交错,第二笔提交撞索引被拒,每用户恒
-        至多一个默认。「用户级锁、先取消再设置」的服务面纪律属于
-        默认切换端点(§4,随生命周期交付落地)。"""
+        """默认切换竞争(顺序语义面):部分唯一索引 uq_projects_private_
+        default 在语句点拒绝第二笔置默认。注:本用例两事务**先后执行**
+        并非真实交错 —— 真实重叠窗口(两事务均未提交、行锁互斥)见
+        test_upc_review2_authz.py::test_concurrent_default_space_switch_
+        true_interleave(P2-15 收口)。「用户级锁、先取消再设置」的
+        服务面纪律属于默认切换端点(§4,随生命周期交付落地)。"""
         h = await register_and_login(client, "upc_cx_sw")
         pids = []
         for name in ("切换甲", "切换乙"):

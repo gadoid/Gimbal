@@ -113,6 +113,15 @@ class TestProjectCrud:
         pa_uid = await _uid(client, h_admin, "s14_dpa")
         pid = (await _create_project(
             client, h_admin, "s14-dproj", pa_uid))["id"]
+        # 删除面 = 成员管理员 ∧ Admin+(§6 投影 project.delete = is_ops
+        # 于管理员分支;Admin+ 非成员不可见 → 404):由 pa 把 Admin+
+        # 拉入为成员管理员,删除断言用它执行
+        admin_uid = (await client.get(
+            "/api/auth/me", headers=h_admin)).json()["user"]["id"]
+        r = await client.post(f"/api/projects/{pid}/members",
+                              headers=h_pa,
+                              json={"userId": admin_uid, "role": "admin"})
+        assert r.status_code == 201, r.text
 
         # 有内容 → 409 project_not_empty(场景挂靠)
         from sqlalchemy import update as _upd
@@ -165,8 +174,15 @@ class TestProjectCrud:
                 ComposerRunScheme.scenario_id == "sc-s14-d"
             ).values(project_id=_home))
             await db.commit()
+        # 非成员路人删除 → 404(可见性同源,AC-51/D1:普通项目无
+        # Admin+ 旁路,普通用户同样不可见)
         assert (await client.delete(
-            f"/api/projects/{pid}", headers=h_usr)).status_code == 403
+            f"/api/projects/{pid}", headers=h_usr)).status_code == 404
+        # 成员管理员但无 ops.write → 403(授权删除面,§4/§6)
+        r = await client.delete(f"/api/projects/{pid}", headers=h_pa)
+        assert r.status_code == 403, r.text
+        assert r.json()["detail"]["code"] == "capability_forbidden"
+        # 成员管理员 ∧ Admin+ → 清空后删除 204;详情随项目消失
         r = await client.delete(f"/api/projects/{pid}", headers=h_admin)
         assert r.status_code == 204, r.text
         assert (await client.get(
@@ -311,14 +327,119 @@ class TestMemberManagement:
             f"/api/projects/{pid}/members/{pa_uid}", headers=h_pa)
         assert r.status_code == 409 and r.json()["detail"]["code"] == (
             "last_project_admin")
-        # Admin+ 同样受末位保护(保护是结构性约束,不是权限边界)
+        # Admin+ 非成员:可见性同源 404(AC-51/D1 不旁路)—— 平台角色
+        # 不构成成员管理面,末位保护对成员管理员照常(结构性约束)
         r = await client.delete(
             f"/api/projects/{pid}/members/{pa_uid}", headers=h_admin)
-        assert r.status_code == 409, r.text
+        assert r.status_code == 404, r.text
 
-        # 提拔 mb 为 admin 后,移除原 admin 即可
+        # 提拔 mb 为 admin 后,移除原 admin(成员管理员执行)
         await client.patch(f"/api/projects/{pid}/members/{mb_uid}",
                            headers=h_pa, json={"role": "admin"})
         r = await client.delete(
-            f"/api/projects/{pid}/members/{pa_uid}", headers=h_admin)
+            f"/api/projects/{pid}/members/{pa_uid}", headers=h_pa)
         assert r.status_code == 204, r.text
+
+    async def test_adminplus_nonmember_no_manage_bypass(self, client):
+        """评审 H3 回归(AC-51/D1):Admin+ 非成员对普通项目**无任何
+        管理面** —— 列成员/加成员/改角色/删项目与可见性同源 404,
+        不再凭 ID 越权(列表/详情看不到的项目,管理面同样够不着)。"""
+        h_admin = await role_headers(client, "s14_byp_adm", role="admin")
+        _h_pa = await role_headers(client, "s14_byp_pa", role="user")
+        pa_uid = await _uid(client, h_admin, "s14_byp_pa")
+        pid = (await _create_project(
+            client, h_admin, "s14-byp", pa_uid))["id"]
+
+        # 口径基准:详情本身不可见
+        assert (await client.get(
+            f"/api/projects/{pid}", headers=h_admin)).status_code == 404
+        assert (await client.get(
+            f"/api/projects/{pid}/members", headers=h_admin)
+        ).status_code == 404
+        assert (await client.post(
+            f"/api/projects/{pid}/members", headers=h_admin,
+            json={"userId": pa_uid})).status_code == 404
+        assert (await client.patch(
+            f"/api/projects/{pid}/members/{pa_uid}", headers=h_admin,
+            json={"role": "member"})).status_code == 404
+        assert (await client.delete(
+            f"/api/projects/{pid}", headers=h_admin)).status_code == 404
+
+    async def test_last_admin_precheck_counts_valid_only(self, client):
+        """评审 M5 回归:末位预检与 DB 触发器同口径(在职 ∧ 非系统)——
+        存在非活跃 admin 残留行时,降级唯一有效 admin 预检 409,不再
+        「API 放行 → 提交撞触发器 500」。"""
+        h_admin, h_pa, _h_mb, _h_out, pid = await self._mk(client, "s14m5")
+        pa_uid = await _uid(client, h_admin, "s14m5_pa")
+
+        from app.core import db as db_module
+        from app.models.project import Project, ProjectMember
+        from app.models.user import User
+
+        async with db_module.SessionLocal() as s:
+            ghost = User(username="s14m5_ghost", display_name="ghost",
+                         password_hash="x", is_active=False)
+            s.add(ghost)
+            await s.flush()
+            # 触发器:每非系统用户须有默认私有空间 —— 幽灵行同款补齐
+            s.add(Project(name="s14m5-ghost-space", kind="private",
+                          owner_id=ghost.id, is_default=True,
+                          status="active", description=""))
+            await s.flush()
+            s.add(ProjectMember(project_id=pid, user_id=ghost.id,
+                                role="admin"))
+            await s.commit()
+
+        # 名义 admin 行 = 2,有效 admin = 1 —— 降级必须 409(旧口径会
+        # 放行,提交时被延迟约束触发器整体拒绝)
+        r = await client.patch(
+            f"/api/projects/{pid}/members/{pa_uid}",
+            headers=h_pa, json={"role": "member"})
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == "last_project_admin"
+
+    async def test_delete_cleans_history_ledger_rows(self, client):
+        """评审 M2 回归:资产导入台账/晋升记录引用项目且非级联,又无
+        独立清理入口 —— 内容已空的项目删除时随项目显式收口(204 +
+        台账行清零),不再 NO ACTION FK 提交期 500。"""
+        h_admin = await role_headers(client, "s14_lgd_adm", role="admin")
+        h_pa = await role_headers(client, "s14_lgd_pa", role="user")
+        pa_uid = await _uid(client, h_admin, "s14_lgd_pa")
+        pid = (await _create_project(
+            client, h_admin, "s14-lgd", pa_uid))["id"]
+        admin_uid = (await client.get(
+            "/api/auth/me", headers=h_admin)).json()["user"]["id"]
+        r = await client.post(f"/api/projects/{pid}/members",
+                              headers=h_pa,
+                              json={"userId": admin_uid, "role": "admin"})
+        assert r.status_code == 201, r.text
+
+        from sqlalchemy import func, select
+
+        from app.core import db as db_module
+        from app.models.project_promotion import ProjectPromotion
+        from app.models.scenario_asset_import import ScenarioAssetImport
+
+        async with db_module.SessionLocal() as s:
+            s.add(ScenarioAssetImport(
+                project_id=pid, package_id="pkg-lgd",
+                source_scenario_id="sc-lgd-src",
+                request_digest="d" * 64,
+                restored_scenario_id="sc-lgd-restored",
+                restored_scheme_ids=["rs-lgd"], default_scheme_id="rs-lgd",
+                report={}, created_by=pa_uid))
+            s.add(ProjectPromotion(
+                project_id=pid, kind="scenario", source_id="sc-lgd-src",
+                applicant_id=pa_uid, status="pending"))
+            await s.commit()
+
+        r = await client.delete(f"/api/projects/{pid}", headers=h_admin)
+        assert r.status_code == 204, r.text
+        async with db_module.SessionLocal() as s:
+            n1 = (await s.execute(select(func.count()).select_from(
+                ScenarioAssetImport).where(
+                ScenarioAssetImport.project_id == pid))).scalar_one()
+            n2 = (await s.execute(select(func.count()).select_from(
+                ProjectPromotion).where(
+                ProjectPromotion.project_id == pid))).scalar_one()
+            assert n1 == 0 and n2 == 0

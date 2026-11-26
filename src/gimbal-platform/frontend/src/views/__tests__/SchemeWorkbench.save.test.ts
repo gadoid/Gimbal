@@ -15,15 +15,21 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { scenarioId: 'sc-wb' }, query: { scheme: 'rs-002' } }),
   useRouter: () => ({ push }),
 }))
-vi.mock('@/api/http', () => ({ default: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() } }))
+// 评审五轮 P2-7:冲突分支消费**真实错误模块**。ApiError / httpStatusOf
+// 已上提零依赖的 @/api/httpError(http.ts 顶部挂 @/router 整条链,故
+// axios 实例仍 mock,错误形状不再用 vi.hoisted 同形类模拟 —— 测试与
+// 实现同构性由模块单源保证)。
+vi.mock('@/api/http', () => ({
+  default: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() },
+}))
 
 const SCHEME_DEFAULT = {
-  schemeId: 'rs-001', name: '默认方案', isDefault: true,
+  schemeId: 'rs-001', name: '默认方案', isDefault: true, revision: 3,
   dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
   options: { step_from: null, step_to: null, n_runs: 1, parallel: 1, subscribe: null },
 }
 const SCHEME_A = {
-  schemeId: 'rs-002', name: '冒烟', isDefault: false,
+  schemeId: 'rs-002', name: '冒烟', isDefault: false, revision: 7,
   dataSetSelection: [{ datasetId: 'ds-001', rowIndexes: [0] }],
   injectionEntryIds: [], serviceBindings: {},
   options: { step_from: null, step_to: null, n_runs: 2, parallel: 1, subscribe: null },
@@ -74,6 +80,8 @@ describe('SchemeWorkbench 保存链路', () => {
           { datasetId: 'ds-001', rowIndexes: [0] },
           { datasetId: 'ds-000', rowIndexes: [0, 1] },
         ],
+        // 评审五轮 P2-7:CAS 字段随列表快照的 revision 真实上送
+        expectedRevision: SCHEME_A.revision,
       }))
     const body = vi.mocked(api.updateRunScheme).mock.calls[0][2]
     expect(body).not.toHaveProperty('schemeId')
@@ -109,5 +117,91 @@ describe('SchemeWorkbench 保存链路', () => {
     expect(saveDisabled(w)).toBe(true)
     // 默认方案 → 数据区隐藏
     expect(w.find('[data-testid="ds-tile"]').exists()).toBe(false)
+  })
+})
+
+
+// ── 评审四轮 P2-6 + 五轮 P2-7:CAS 冲突闭环(真实错误模块 + revision
+//    断言)───────────────────────────────────────────────────────────
+import { ApiError, httpStatusOf } from '@/api/httpError'
+import { toast } from '@/utils/toast'
+
+describe('SchemeWorkbench 保存 CAS 冲突', () => {
+  async function mountWb() {
+    const w = mount(SchemeWorkbench, { global: { plugins: [] } })
+    await flushPromises()
+    return w
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.spyOn(api, 'listRunSchemes').mockResolvedValue([SCHEME_DEFAULT, SCHEME_A])
+    vi.spyOn(api, 'getScenario').mockResolvedValue({
+      meta: { scenarioId: 'sc-wb', name: 'WB' }, steps: [], stepCount: 1,
+    } as never)
+    vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
+      definition: { steps: [], config: { vars: {}, services: {} } },
+      orchestration: { steps: [], resourceMeta: {} },
+      assertionRegistry: { entries: [] },
+    } as never)
+    vi.spyOn(api, 'listDataSets').mockResolvedValue([DS_0, DS_1])
+    push.mockClear()
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('409 + scheme_revision_conflict → 刷新本地并提示重试', async () => {
+    const refreshSpy = vi.spyOn(api, 'listRunSchemes')
+    void refreshSpy
+    vi.spyOn(api, 'updateRunScheme').mockRejectedValue(
+      new ApiError(409, 'scheme_revision_conflict', '方案已发生变化'))
+    const toastSpy = vi.spyOn(toast, 'error').mockReturnValue(undefined as never)
+    const w = await mountWb()
+    // 保存走选中方案(rs-002)的闭包 draft;请求携带**读取时的
+    // revision**(P2-7:列表快照带 revision,断言请求真的带上 CAS 字段)
+    await (w.vm as unknown as {
+      saveScheme: (e?: unknown) => Promise<void>
+    }).saveScheme()
+    await flushPromises()
+    const body = vi.mocked(api.updateRunScheme).mock.calls.at(-1)?.[2] as
+      { expectedRevision?: number }
+    expect(body.expectedRevision).toBe(SCHEME_A.revision)
+    expect(refreshSpy).toHaveBeenCalled()
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.stringContaining('方案已被他人修改'))
+    vi.restoreAllMocks()
+  })
+
+  it('409 但其它 code(非版本冲突)→ 不进冲突分支,常规报错', async () => {
+    vi.spyOn(api, 'updateRunScheme').mockRejectedValue(
+      new ApiError(409, 'project_not_active', '归档起禁止管理写入'))
+    const toastSpy = vi.spyOn(toast, 'error').mockReturnValue(undefined as never)
+    const w = await mountWb()
+    await (w.vm as unknown as {
+      saveScheme: (e?: unknown) => Promise<void>
+    }).saveScheme()
+    await flushPromises()
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.stringContaining('保存方案失败'))
+    vi.restoreAllMocks()
+  })
+
+  it('httpStatusOf 读 ApiError.status,兼容手搓 {response:{status}}(真实模块)', () => {
+    expect(httpStatusOf(new ApiError(409, 'x', 'y'))).toBe(409)
+    expect(httpStatusOf({ response: { status: 503 } })).toBe(503)
+    expect(httpStatusOf(new Error('plain'))).toBeUndefined()
+  })
+
+  it('重命名随读取 revision 发 expectedRevision', async () => {
+    vi.spyOn(api, 'updateRunScheme').mockResolvedValue(SCHEME_A)
+    vi.mocked(await import('@/utils/confirmAction')).promptAction =
+      vi.fn(async () => '新名字') as never
+    const w = await mountWb()
+    await (w.vm as unknown as { onRename: (s: unknown) => Promise<void> })
+      .onRename({ ...SCHEME_A })
+    await flushPromises()
+    const [ , , body ] = vi.mocked(api.updateRunScheme).mock.calls.at(-1) as
+      [string, string, { name: string; expectedRevision?: number }]
+    expect(body.name).toBe('新名字')
+    expect(body.expectedRevision).toBe(7)
   })
 })

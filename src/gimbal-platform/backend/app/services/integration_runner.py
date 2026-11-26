@@ -476,6 +476,15 @@ async def _load_exec_shape(
 
     scheme = await resolve_for_run(db, scen.scenario_id, scheme_id)
     scheme_payload = (scheme.payload if scheme else {}) or {}
+    # M3 执行装配:组合垫底(集成面,v4 §3.2「_load_exec_shape 返回规范化
+    # scheme_payload —— 合并终值写回该视图,环境标签/订阅指纹/slot
+    # binding 三面自动同源」)。视图副本,**不写回 ORM payload**(方案
+    # wire 形状不含 accountComboId,M2 起绑定唯一事实源 = 显式列)。
+    if scheme is not None:
+        from .account_combo import scheme_bindings_with_combo
+        _merged = await scheme_bindings_with_combo(db, scheme)
+        scheme_payload = dict(scheme_payload)
+        scheme_payload["serviceBindings"] = _merged
     bindings = dict(scheme_payload.get("serviceBindings") or {})
     # P1 取一行:首个选中数据集的首行;未选 = 裸基线
     row_dict: dict = {}
@@ -995,6 +1004,18 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
         try:
             scheme, scheme_payload, bindings, row_dict, _ds_name = \
                 await _load_exec_shape(db, tpl.scheme_id, scen)
+
+            # §20.3 统一装配闸(UPC M3 schedule/execute 面):方案待修复
+            # (blocked)不进入任何装配/凭证解析 —— 当轮 channel 收口
+            # 可见(与 working_preview 同位;worker 在装配前重检,
+            # 与 require_ready 接入约定第 3 步一致,不透传内部 reason)。
+            if scheme is not None and scheme.repair_status == "blocked":
+                return await _finish(
+                    db, inst, tpl, "channel",
+                    f"运行方案「{scheme.name}」处于待修复状态(组合依赖"
+                    "受阻),本轮跳过;请模板维护者先在方案修复入口完成"
+                    "修复",
+                    lease=lease)
 
             # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
             # 不计入入库标准的预览执行不进集成链。external 不受影响

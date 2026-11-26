@@ -207,6 +207,33 @@ async def get_row(
     return row
 
 
+async def resolve_unit_scheme(
+    db: AsyncSession, scenario_id: str, *, scheme_id: str | None,
+    row_spec: Any = None,
+) -> tuple[dict | None, str | None]:
+    """编排**单元**的方案选择(评审四轮 P2-5:预检与执行器共用单源,
+    与 ``graph_dispatch.resolve_graph_units`` 同语义):
+
+    * 显式 ``scheme_id`` → 该方案(找不到 = 引用失效,error 非空);
+    * 仅选行(row_spec,无 schemeId)→ 默认方案;
+    * 都没有 → **裸基线**(None, None)—— 执行器不选方案,预检不得
+      误报 blocked(修前预检走 resolve_for_run 回落默认/首个)。
+
+    返回 ``(scheme, error)``,scheme 为 list_schemes 同形态 DTO
+    (含 ``repairStatus``);error 非空时执行器将 GraphDispatchError。
+    """
+    if scheme_id is None and row_spec is None:
+        return None, None
+    schemes = await list_schemes(db, scenario_id)
+    if scheme_id is not None:
+        scheme = next(
+            (s for s in schemes if s.get("schemeId") == scheme_id), None)
+        if scheme is None:
+            return None, f"scheme not found: {scheme_id}"
+        return scheme, None
+    return next((s for s in schemes if s.get("isDefault")), None), None
+
+
 async def resolve_for_run(
     db: AsyncSession, scenario_id: str, scheme_id: str | None,
 ) -> ComposerRunScheme | None:
@@ -242,13 +269,30 @@ async def update_scheme(
     db: AsyncSession, scenario_id: str, scheme_id: str, *,
     name: str | None, payload: dict | None,
     account_combo_id: Any = _UNSET,
+    expected_revision: int | None = None,
 ) -> dict:
     """方案保存(整稿 PUT)。``account_combo_id``:_UNSET = 调用方未传
     (保留存量);None = 解绑;int = 换绑 —— 绑定与 revision 同事务
     (§16.1)。blocked 方案的绑定改动由 ck_scheme_combo_repair 在库层
     拒绝(普通 PATCH 不得清除阻塞,§20.3)—— 修复命令经
-    ``services.scheme_repair`` 专用路径,不经此处。"""
+    ``services.scheme_repair`` 专用路径,不经此处。
+
+    ``expected_revision``(评审二轮 P2-14,可选 CAS):传入时在恒取的
+    行锁内校验,不匹配抛 ``ValueError("revision_conflict")``;未传
+    维持「最后写入」语义(兼容存量客户端),但评审六轮 P2-3 起写入
+    基于**行锁内重读**的当前值 —— 不再是过期快照上的盲覆盖
+    (「200 但未生效」与 revision 重号一并消除)。"""
     row = await get_row(db, scenario_id, scheme_id)
+    # 评审六轮 P2-3:保存**恒取方案行锁** —— 修前仅 CAS 腿刷新
+    # FOR UPDATE,无 CAS 保存工作在过期快照上:并发 rebind 提交后,
+    # 解绑 PUT 的 ORM 对象仍持旧值,「赋同值」不产生 UPDATE diff →
+    # 200 但绑定未生效,且 revision 从旧值 +1 与并发写共享同号
+    # (破坏后续 CAS token 的唯一性)。行锁位于调用方 combo 校验
+    # (require_combo_bindable 已锁组合行)之后,combo→scheme 全序不变;
+    # 锁内重读后 revision 严格递增。
+    await db.refresh(row, with_for_update=True)
+    if expected_revision is not None and expected_revision != row.revision:
+        raise ValueError("revision_conflict")
     if row.is_default:
         if payload is not None:
             row.payload = _sanitize_default(payload)

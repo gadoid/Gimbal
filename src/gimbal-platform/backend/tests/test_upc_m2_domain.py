@@ -588,41 +588,124 @@ class TestRepairCommandsAndProjection:
                     await s.commit()
                 await s.rollback()
 
+    async def test_repair_command_revision_race_serialized(self, client):
+        """评审 M1 回归:expected_revision 检查-递增在行锁(FOR UPDATE)
+        内串行 —— 同 revision 的两笔并发修复命令恰一笔生效;败者在锁
+        释放后读到已提交终态(ready)被拒,不再双双通过同一 revision
+        后互相覆盖(lost update)。"""
+        import asyncio
+
+        from sqlalchemy import select
+
+        from app.core import db as db_module
+        from app.models.composer_run_scheme import ComposerRunScheme
+        from app.services import scheme_repair
+        from app.services.scheme_repair import RepairCommandError
+
+        h = await register_and_login(client, "m2r_race", "pw123456")
+        uid = await _uid(client, "m2r_race")
+        async with db_module.SessionLocal() as s:
+            space = await default_space_id(s, uid)
+            await s.commit()
+        combo_id = (await client.post(
+            f"/api/projects/{space}/account-combos", headers=h,
+            json={"name": "竞态组合"})).json()["id"]
+        scheme_id = await self._blocked_scheme(
+            client, h, uid=uid, reason="combo_missing")
+        user = type("U", (), {"id": uid, "display_name": "racer"})()
+
+        async with db_module.SessionLocal() as s1,                 db_module.SessionLocal() as s2:
+            sch1 = (await s1.execute(select(ComposerRunScheme).where(
+                ComposerRunScheme.scheme_id == scheme_id))).scalar_one()
+            sch2 = (await s2.execute(select(ComposerRunScheme).where(
+                ComposerRunScheme.scheme_id == scheme_id))).scalar_one()
+            rev = sch1.revision
+            await scheme_repair.rebind_combo(
+                s1, sch1, user=user, combo_id=combo_id,
+                expected_revision=rev)          # 行锁在 s1 未提交事务内
+            lose_task = asyncio.ensure_future(
+                scheme_repair.rebind_combo(
+                    s2, sch2, user=user, combo_id=combo_id,
+                    expected_revision=rev))     # 入口 refresh 挂在行锁上
+            await asyncio.sleep(0.05)           # 让败者先挂进锁队列
+            await s1.commit()                   # 提交并释放锁
+            with pytest.raises(RepairCommandError) as ei:
+                await asyncio.wait_for(lose_task, 10)
+            # 败者锁释放后读到已提交终态:ready → not_blocked(等价拒收,
+            # 与 revision 冲突同一 409 面 —— 关键是不再双双通过)
+            assert ei.value.code == "scheme_not_blocked"
+            await s2.rollback()
+
+        # 恰一笔生效:绑定/状态落定,revision 恰 +1
+        async with db_module.SessionLocal() as s:
+            row = (await s.execute(select(ComposerRunScheme).where(
+                ComposerRunScheme.scheme_id == scheme_id))).scalar_one()
+            assert row.account_combo_id == combo_id
+            assert row.repair_status == "ready"
+            assert row.revision == rev + 1
+
 
 class TestPrecheckRepairGate:
     """§20.3 装配闸最小链路(M2:precheck):blocked 在凭证解析前返回。"""
 
     async def test_blocked_returns_before_credential_resolution(
             self, client: AsyncClient, monkeypatch):
-        from app.core import db as db_module
-        from app.models.composer_run_scheme import ComposerRunScheme
-        from app.services import scheme_repair
+        """§20.3 装配闸 + 评审 P1-2/P2-15 收口:**非属主执行人** + 场景
+        含 ``config.users`` 的真实泄露路径探针 —— blocked 预检对
+        ``resolve_exec_auths``(解密/身份解析)**零调用**;ready 对照腿
+        照常解析(自证探针有效)。修前外层无条件跑 builtin_auth_shadowed,
+        blocked 也会解密 1 个凭证。"""
         from sqlalchemy import select
 
-        h = await register_and_login(client, "m2pre_a", "pw123456")
-        uid = await _uid(client, "m2pre_a")
-        await client.post("/api/scenarios", headers=h,
-                          json=make_draft("sc-m2pre"))
-        scheme_id = await _mk_scheme(client, h, "sc-m2pre", "待修")
+        from app.core import db as db_module
+        from app.models.composer_run_scheme import ComposerRunScheme
+        from app.services import run_prepare, scheme_repair
+        from tests.helpers import mk_normal_project, seed_legacy_users
+
+        h_own = await register_and_login(client, "m2pre_own", "pw123456")
+        h_exec = await register_and_login(client, "m2pre_exec", "pw123456")
+        uid_own = await _uid(client, "m2pre_own")
+        pid = await mk_normal_project("m2pre-proj", {
+            "m2pre_own": "admin", "m2pre_exec": "member"})
+        await client.post(f"/api/scenarios?projectId={pid}",
+                          headers=h_own, json=make_draft("sc-m2pre"))
+        # 存量形态:场景携带明文内置凭证基座(§7 老行)
+        await seed_legacy_users("sc-m2pre", {
+            "qa-legacy": {"username": "u", "password": "p"}})
+        scheme_id = await _mk_scheme(client, h_own, "sc-m2pre", "待修")
+        ready_scheme_id = await _mk_scheme(
+            client, h_own, "sc-m2pre", "ready对照")
         async with db_module.SessionLocal() as s:
             row = (await s.execute(select(ComposerRunScheme).where(
                 ComposerRunScheme.scheme_id == scheme_id))).scalar_one()
             await scheme_repair.mark_blocked(
                 s, row, reason="combo_missing", action="import.blocked",
-                actor_id=uid, actor_name="seed")
+                actor_id=uid_own, actor_name="seed")
             await s.commit()
 
-        # 凭证/注入/环境解析零调用:monkeypatch 三个解析面任一被触即炸
-        import app.services.run_dispatcher as rd
+        calls = {"resolve": 0}
+        orig = run_prepare.resolve_exec_auths
+
+        async def counting(factory, *a, **k):
+            calls["resolve"] += 1
+            return await orig(factory, *a, **k)
+
+        monkeypatch.setattr(run_prepare, "resolve_exec_auths", counting)
         import app.services.env_chain as _ec
+        import app.services.run_dispatcher as rd
 
         def _boom(*a, **k):
             raise AssertionError("blocked 方案不得进入凭证/装配解析")
 
-        monkeypatch.setattr(rd, "filter_injection_entries", _boom)
-        monkeypatch.setattr(_ec, "resolve_execution_tag", _boom)
+        # 独立 MonkeyPatch 实例(解析面炸点只作用于 blocked 腿;ready
+        # 对照腿合法解析,解除后再跑 —— fresh_db 持有的测试级 monkeypatch
+        # 不可整体 undo,见 conftest 注记)
+        mp = pytest.MonkeyPatch()
+        mp.setattr(rd, "filter_injection_entries", _boom)
+        mp.setattr(_ec, "resolve_execution_tag", _boom)
 
-        r = await client.post("/api/run/precheck", headers=h, json=[
+        # 非属主执行人预检 blocked 方案:辅助凭证解析零调用(P1-2)
+        r = await client.post("/api/run/precheck", headers=h_exec, json=[
             {"scenarioId": "sc-m2pre", "schemeId": scheme_id}])
         assert r.status_code == 200, r.text
         [res] = r.json()
@@ -631,6 +714,16 @@ class TestPrecheckRepairGate:
         assert res["repairBlocked"] is True
         assert res["repairCode"] == "scheme_repair_required"
         assert res["repairReason"] == "combo_dependency_invalid"
+        assert calls["resolve"] == 0, "blocked 预检不得解析/解密凭证"
+        mp.undo()
+
+        # ready 对照腿:同一非属主执行人预检 ready 方案 —— 解析照常
+        # 发生(证明探针在位,blocked 的零调用是闸的功劳不是布景失效)
+        r = await client.post("/api/run/precheck", headers=h_exec, json=[
+            {"scenarioId": "sc-m2pre", "schemeId": ready_scheme_id}])
+        assert r.status_code == 200, r.text
+        assert calls["resolve"] >= 1, "ready 对照腿应触发辅助凭证解析"
+
         # 修复面带 revision(§20.3:稳定错误码 + revision)
         async with db_module.SessionLocal() as s:
             row = (await s.execute(select(ComposerRunScheme).where(
@@ -835,10 +928,14 @@ class TestAssetBundleRoundtrip:
         h, _space, _combo, ds_id, _qa = await self._seed_source(client, "c")
         bundle = (await client.get(
             "/api/scenarios/sc-m2x/asset-bundle", headers=h)).json()
-        # 把默认候选指向携带选择的方案 → 恢复整包拒绝
+        # 把默认候选指向携带选择的方案 → 恢复整包拒绝(P1-6:改指同时
+        # 清掉原默认方案的包内标记,defaultSchemeId 是唯一权威)
         bundle["defaultSchemeId"] = next(
             s["schemeId"] for s in bundle["schemes"]
             if not s["isDefault"])
+        bundle["schemes"] = [
+            dict(s, isDefault=(s["schemeId"] == bundle["defaultSchemeId"]))
+            for s in bundle["schemes"]]
 
         h_b = await register_and_login(client, "m2z_b", "pw123456")
         uid_b = await _uid(client, "m2z_b")
@@ -1074,6 +1171,109 @@ class TestAssetBundleRoundtrip:
                 ComposerScenario.project_id == space_b))).scalar_one()
             assert n_import == 1
             assert n_scen == 1
+
+    async def test_blocked_scheme_roundtrip_stays_blocked(self, client):
+        """评审 H1 回归:源侧 blocked 方案随包导出再导入,**不得静默变
+        ready**(§20.3/§14.2:修复状态是资产事实,不把待修复计为可执行)。
+        链:A(绑定组合)→ skipCombos 导 B(blocked)→ 从 B 导出
+        (repairStatus/reason 随包)→ 导 C → 仍 blocked 且零绑定。"""
+        h_a, _space_a, _combo, _ds, _qa = await self._seed_source(client, "bk")
+        bundle_a = (await client.get(
+            "/api/scenarios/sc-m2x/asset-bundle", headers=h_a)).json()
+
+        h_b = await register_and_login(client, "m2x_blkb", "pw123456")
+        uid_b = (await client.get("/api/auth/me", headers=h_b)
+                 ).json()["user"]["id"]
+        from app.core import db as db_module
+
+        async with db_module.SessionLocal() as s:
+            space_b = await default_space_id(s, uid_b)
+            await s.commit()
+        r = await client.post(f"/api/projects/{space_b}/asset-bundles",
+                              headers=h_b, json=dict(bundle_a,
+                                                     skipCombos=True))
+        assert r.status_code == 201, r.text
+        sid_b = r.json()["scenarioId"]
+
+        # 从 B 导出:blocked 状态与原因随包
+        r = await client.get(f"/api/scenarios/{sid_b}/asset-bundle",
+                             headers=h_b)
+        assert r.status_code == 200, r.text
+        bundle_b = r.json()
+        blocked_out = [s for s in bundle_b["schemes"]
+                       if s.get("repairStatus") == "blocked"]
+        assert blocked_out, "blocked 方案的修复状态随包导出"
+        # P2-9:只随授权投影后的原因(内部精确原因与诊断引用不出包)
+        assert blocked_out[0]["repairReason"] == "combo_dependency_invalid"
+        assert "sourceComboRef" not in blocked_out[0]
+
+        # 导 C:不跳过组合 —— 无绑定无映射的源 blocked 仍恢复为 blocked
+        h_c = await register_and_login(client, "m2x_blkc", "pw123456")
+        uid_c = (await client.get("/api/auth/me", headers=h_c)
+                 ).json()["user"]["id"]
+        async with db_module.SessionLocal() as s:
+            space_c = await default_space_id(s, uid_c)
+            await s.commit()
+        r = await client.post(f"/api/projects/{space_c}/asset-bundles",
+                              headers=h_c, json=bundle_b)
+        assert r.status_code == 201, r.text
+        report = r.json()
+        assert report["blockedSchemes"], "blocked 方案恢复后仍 blocked"
+        assert report["restoredBindings"] == 0
+        sid_c = report["scenarioId"]
+        async with db_module.SessionLocal() as s:
+            from sqlalchemy import select
+
+            from app.models.composer_run_scheme import ComposerRunScheme
+
+            rows = (await s.execute(select(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == sid_c))).scalars().all()
+            by_name = {x.name: x for x in rows}
+            qa = by_name["回归方案"]
+            assert qa.repair_status == "blocked"
+            assert qa.repair_reason == "combo_dependency_invalid"
+            assert qa.account_combo_id is None
+            assert by_name["默认方案"].repair_status == "ready"
+
+    async def test_shared_combo_dedup_across_schemes(self, client):
+        """评审 M4 回归:两个方案引用同一源组合 → 恢复侧按 ref 去重只建
+        一份组合,两方案绑定同一目标组合(复用语义与 revision 溯源不
+        破坏;§5/§20.2)。"""
+        h, _space, combo_id, _ds, _qa1 = await self._seed_source(client, "dp")
+        await _mk_scheme(client, h, "sc-m2x", "回归方案B", combo_id=combo_id)
+        bundle = (await client.get(
+            "/api/scenarios/sc-m2x/asset-bundle", headers=h)).json()
+        assert len(bundle["comboDependencies"]) == 2  # 两方案各带依赖项
+
+        h_b = await register_and_login(client, "m2x_dupb", "pw123456")
+        uid_b = (await client.get("/api/auth/me", headers=h_b)
+                 ).json()["user"]["id"]
+        from app.core import db as db_module
+
+        async with db_module.SessionLocal() as s:
+            space_b = await default_space_id(s, uid_b)
+            await s.commit()
+        r = await client.post(f"/api/projects/{space_b}/asset-bundles",
+                              headers=h_b, json=bundle)
+        assert r.status_code == 201, r.text
+        report = r.json()
+        assert report["restoredBindings"] == 2
+        sid_b = report["scenarioId"]
+        async with db_module.SessionLocal() as s:
+            from sqlalchemy import func, select
+
+            from app.models.account_combo import AccountCombo
+            from app.models.composer_run_scheme import ComposerRunScheme
+
+            n = (await s.execute(select(func.count()).select_from(
+                AccountCombo).where(
+                AccountCombo.project_id == space_b))).scalar_one()
+            assert n == 1, "同一源组合按 ref 去重,只建一份"
+            rows = (await s.execute(select(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == sid_b))).scalars().all()
+            bound = {x.name: x.account_combo_id for x in rows}
+            assert bound["回归方案"] is not None
+            assert bound["回归方案"] == bound["回归方案B"]
 
 
 async def _uid(client: AsyncClient, username: str) -> int:

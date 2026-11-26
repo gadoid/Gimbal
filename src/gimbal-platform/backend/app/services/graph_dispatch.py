@@ -59,26 +59,37 @@ async def resolve_graph_units(
                 f"unit {u['ref']!r}: scenario not found: {u['scenarioId']}")
         payload = dict(scen.payload or {})
 
-        # ── 约束 5:方案 + 单行选择 ──────────────────────────────
-        scheme: dict | None = None
-        scheme_id = u.get("schemeId")
-        row_spec = u.get("row")
-        if scheme_id is not None or row_spec is not None:
-            schemes = await scheme_store.list_schemes(db, u["scenarioId"])
-            if scheme_id is not None:
-                scheme = next(
-                    (s for s in schemes if s.get("schemeId") == scheme_id),
-                    None)
-                if scheme is None:
-                    raise GraphDispatchError(
-                        f"unit {u['ref']!r}: scheme not found: {scheme_id}")
-            else:
-                scheme = next(
-                    (s for s in schemes if s.get("isDefault")), None)
+        # ── 约束 5:方案 + 单行选择(评审四轮 P2-5:与预检共用
+        #    resolve_unit_scheme 单源,单元选择语义不再两处漂移)─────
+        scheme, scheme_err = await scheme_store.resolve_unit_scheme(
+            db, u["scenarioId"], scheme_id=u.get("schemeId"),
+            row_spec=u.get("row"))
+        if scheme_err is not None:
+            raise GraphDispatchError(f"unit {u['ref']!r}: {scheme_err}")
+        if scheme is not None and scheme.get("repairStatus") == "blocked":
+            # §20.3 装配闸(评审五轮 P1-1):blocked 方案不得进入执行
+            # 物化 —— 本函数是 validate 预检 / 凭证清单(missing_auth_
+            # aliases)/ materialize_graph(含 worker 侧重物化)的共同
+            # 单源,任一路径都在此拦下,预检与执行契约不再漂移
+            raise GraphDispatchError(
+                f"unit {u['ref']!r}: 方案 {scheme.get('schemeId')} 为 "
+                f"blocked({scheme.get('repairReason') or '装配受阻'}),"
+                "须先修复(§20.3 装配闸)")
+        row_spec = u.get("row")      # 行选择语义归 resolve_unit_scheme,
+                                     # 行内容仍在此处解析
         row_dict: dict = {}
         if row_spec:
             ds_id = row_spec.get("datasetId")
-            ri = int(row_spec.get("rowIndex", 0))
+            try:
+                ri = int(row_spec.get("rowIndex", 0))
+            except (TypeError, ValueError) as e:
+                # 评审五轮 P2-4:非法 rowIndex 是**用户输入错误**,归
+                # GraphDispatchError(4xx 面)—— 普通 ValueError 会被
+                # validate 的基础设施降级分支吞成 degraded warning,
+                # 「预检通过 + 执行期失败」契约失信
+                raise GraphDispatchError(
+                    f"unit {u['ref']!r}: rowIndex 须为整数,收到 "
+                    f"{row_spec.get('rowIndex')!r}") from e
             ds = await find_dataset_by_id(db, ds_id)
             if ds is None or ds.scenario_id != u["scenarioId"]:
                 raise GraphDispatchError(
@@ -119,12 +130,20 @@ async def resolve_graph_units(
                 if entry is not None:
                     composed = compose_injection_scenario(composed, entry)
         unit = u
-        if scheme and scheme.get("serviceBindings"):
-            # 方案的服务绑定随行合入(单元级覆盖同名;存量形态剥离退役字段)
+        # M3 执行装配:组合垫底(Suite 图面,v4 §3.2「resolve_graph_units
+        # 取方案处垫底,图/单元覆盖自然在上」)—— 方案 serviceBindings
+        # 先垫组合条目(显式列 → 条目映射单源),再与单元级合并;
+        # 组合行缺失近不可达(FK NO ACTION + in-use 409),垫底空即
+        # 别名不解析 → 后续缺槽 fail-fast 兜底。
+        if scheme and (scheme.get("serviceBindings")
+                       or scheme.get("accountComboId") is not None):
             from ..schemas.scenario_composer import scrub_retired_bindings
+            from .account_combo import combo_base, pad_bindings
+            scheme_b = pad_bindings(
+                scrub_retired_bindings(scheme.get("serviceBindings")),
+                await combo_base(db, scheme.get("accountComboId")))
             unit = {**u, "serviceBindings": {
-                **scrub_retired_bindings(scheme.get("serviceBindings")),
-                **(u.get("serviceBindings") or {})}}
+                **scheme_b, **(u.get("serviceBindings") or {})}}
         resolved.append({
             "unit": unit,
             "scenario_row": scen,
@@ -292,14 +311,16 @@ async def materialize_graph(
 
     # carry **按单元**构建(carry 上下文按步骤下标索引,不能跨
     # 单元共用);单单元失败降 None 不阻塞。
-    # 逐单元 carry 作用域(单元场景项目;私有区单元 → 执行人个人层)
+    # 逐单元 carry 作用域:单元场景项目(UPC M2 起 scenarios.project_id
+    # NOT NULL —— 旧「project_id 空 = 私有区 → 执行人个人层」分支
+    # 恒不走,评审登记为死分支,M3 清理:个人层 carry 由私有空间
+    # project_id 天然承载,user_id 恒 None)。
     # §8.9 实例档:逐单元执行标签(env_mixed 已派发前拦,单值)下传
     # 作实例键坐标;绑定选别名 → carry 别名键随之切换
     carry_ctxs = await run_prepare.unit_carry_contexts(
         db_module.SessionLocal, [r["composed"] for r in resolved],
         [{"project_id": r["scenario_row"].project_id,
-          "user_id": (owner_id if r["scenario_row"].project_id is None
-                      else None),
+          "user_id": None,
           "env_id": unit_envs.get(r["unit"]["ref"]),
           "bindings": unit_merged_bindings(graph_req, r["unit"])}
          for r in resolved])
@@ -314,8 +335,6 @@ async def materialize_graph(
         if m2_info is None and convert.get("m2"):
             m2_info = convert["m2"]
         converted = (convert.get("converted") or {})
-        # 单元生效绑定(与凭证清单同一份,见 unit_merged_bindings)
-        merged_bindings = unit_merged_bindings(graph_req, r["unit"])
         materialized = materialize_run_copy(
             converted,
             resolved_auths=exec_auths,

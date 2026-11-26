@@ -36,11 +36,12 @@ def _err(e: asset_pkg.AssetBundleError) -> HTTPException:
 async def export_asset_bundle(
     user: CurrentUser, db: DbSession, scenario_id: str,
 ) -> dict:
-    """导出场景资产包(§14.2:定义 + 数据集 + 方案 + 组合依赖;秘密剥离)。"""
+    """导出场景资产包(§14.2:定义 + 数据集 + 方案 + 组合依赖;秘密剥离;
+    评审 P1-1:调用者身份进导出面 —— 非属主数据集行经脱敏单源剥敏感列)。"""
     row = await scenario_store.get_row(db, scenario_id)
     if row is None or not await can_read_scenario_row(db, user, row):
         raise not_found_404("scenario", scenario_id)
-    return await asset_pkg.export_bundle(db, row)
+    return await asset_pkg.export_bundle(db, row, viewer=user)
 
 
 @router.post("/projects/{project_id}/asset-bundles")

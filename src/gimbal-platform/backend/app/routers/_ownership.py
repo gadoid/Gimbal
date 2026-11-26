@@ -208,11 +208,24 @@ async def can(db, user: Any, obj_type: str, verb: str, obj: Any) -> bool:
     from ..services.zone import (my_private_projects, my_project_roles,
                                   public_project_id)
 
-    return can_pure(user, obj_type, verb, obj,
-                    public_project_id=await public_project_id(db),
-                    project_roles=await my_project_roles(db, user.id),
-                    private_project_ids=await my_private_projects(
-                        db, user.id))
+    ok = can_pure(user, obj_type, verb, obj,
+                  public_project_id=await public_project_id(db),
+                  project_roles=await my_project_roles(db, user.id),
+                  private_project_ids=await my_private_projects(
+                      db, user.id))
+    if not ok:
+        return False
+    # §13.1(评审二轮 P1-5):归档起禁止**新写入**与新执行 —— 收敛到表 B
+    # 求值单源,不再只依赖创建闸与权限投影(修前归档项目成员 PUT 仍 200)
+    if verb in ("write", "run"):
+        pid = getattr(obj, "project_id", None)
+        if pid is not None:
+            from ..models.project import Project
+
+            proj = await db.get(Project, pid)
+            if proj is not None and proj.status != Project.STATUS_ACTIVE:
+                return False
+    return True
 
 
 def _user_matches(user: Any, owner_id: int) -> bool:
@@ -245,6 +258,12 @@ async def can_run_scenario(
     旁路)。owner_id 列不再参与(降为审计)。"""
     from ..services.zone import my_private_projects, my_project_roles
 
+    # §13.1(评审二轮 P1-5):归档起禁止新执行 —— 执行授权单源同闸
+    from ..models.project import Project
+
+    proj = await db.get(Project, project_id)
+    if proj is None or proj.status != Project.STATUS_ACTIVE:
+        return False
     if project_id in await my_private_projects(db, user.id):
         return True
     return project_id in await my_project_roles(db, user.id)

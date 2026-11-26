@@ -30,15 +30,18 @@ router = APIRouter(prefix="/query-views", tags=["query-views"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
-def _loader(db: DbSession):
+def _loader(db: DbSession, cred_project_id: "int | None" = None):
     """凭证装载闭包:runner 在凭证闸内按需调用(黑名单键在它之前
     已降级 —— 绝不急切装载,保持"401 拉黑不打 DB"语义)。
 
     重构 + §8.3:``alias`` = 身份条目名 → 条目 ref → 账户(取用不
     校验标签 —— 同标签优先 → system 唯一;解不到 = None,与旧缺行
-    同语义)。"""
+    同语义)。组合 v4 §7.1 点 4(随 UPC M3):``cred_project_id`` 通道
+    —— 非空 = 项目池取用(与执行面同池同序),缺省 = owner 个人池;
+    L1/单飞键在 runner 侧带池维度,个人/项目池不串缓存。"""
     async def load(owner_id: int, alias: str) -> AuthSession | None:
-        picked, _miss, _amb = await _resolve_identities(db, owner_id, [alias])
+        picked, _miss, _amb = await _resolve_identities(
+            db, owner_id, [alias], cred_project_id=cred_project_id)
         if not picked:
             return None
         resolved = await _materialize_identities(db, picked)
@@ -75,9 +78,16 @@ async def get_rows(
     # 二选一;都不给 → query_context_required)
     scenario_id: Annotated[str | None, Query(alias="scenarioId")] = None,
     step_index: Annotated[int | None, Query(alias="stepIndex", ge=0)] = None,
+    # 组合 v4 §7.1(随 UPC M3):方案感知(当前生效方案;缺省回落默认)
+    scheme_id: Annotated[str | None, Query(alias="schemeId")] = None,
+    # §7.1 点 4:凭证池通道(personal 缺省;project 须项目成员资格,
+    # 与执行面 credentialSource 同口径)
+    credential_source: Annotated[str | None, Query(
+        alias="credentialSource", pattern="^(personal|project)$")] = None,
 ) -> dict:
     # ── 地址来源(01-04):显式覆盖优先,上下文解析兜底,双缺拒绝 ──
     ctx_owner_id, ctx_service = user.id, service
+    cred_project_id: "int | None" = None
     if not service_url:
         if scenario_id is None or step_index is None:
             raise HTTPException(status_code=422, detail={
@@ -87,7 +97,7 @@ async def get_rows(
         try:
             ctx = await query_context.resolve_query_context(
                 db, user=user, scenario_id=scenario_id,
-                step_index=step_index)
+                step_index=step_index, scheme_id=scheme_id)
         except query_context.QueryContextError as e:
             raise HTTPException(
                 status_code=e.status,
@@ -99,6 +109,21 @@ async def get_rows(
         # (headers ${auth.<tag>} 引用就是该步执行身份的声明,前端解析)
         if query_alias is None:
             query_alias = ctx.query_alias
+        # §7.1 点 4:项目池资格(请求人须是场景所属普通项目成员 —— 与
+        # 执行面 can_use_project_credentials 同判;显式覆盖通道无场景
+        # 语境 → 恒个人池)
+        if credential_source == "project":
+            from app.services.zone import can_use_project_credentials
+            if ctx.project_id is None or not await can_use_project_credentials(
+                    db, user.id, ctx.project_id):
+                raise HTTPException(status_code=409, detail={
+                    "code": "credential_source_invalid",
+                    "msg": "项目凭证只能用于你所在普通项目的场景"})
+            cred_project_id = ctx.project_id
+    elif credential_source == "project":
+        raise HTTPException(status_code=409, detail={
+            "code": "credential_source_invalid",
+            "msg": "显式 service_url 直连通道无项目语境,项目凭证不可用"})
     click: dict[str, Any] | None = None
     if params:
         try:
@@ -124,8 +149,8 @@ async def get_rows(
         r = await query_view_runner.fetch_rows(
             name, refresh=refresh, service_url=service_url,
             owner_id=ctx_owner_id, query_alias=query_alias,
-            service=ctx_service,
-            load_credential=_loader(db), click_params=click)
+            service=ctx_service, cred_project_id=cred_project_id,
+            load_credential=_loader(db, cred_project_id), click_params=click)
     except query_view_runner.QueryViewError as e:
         raise HTTPException(status_code=e.status,
                             detail={"code": e.code, "msg": e.message}) from e

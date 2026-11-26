@@ -76,7 +76,10 @@ async def test_removed_owner_patch_delete_404(client, plate_mock):
     存在性;修前 owner 直通 = 仍可改/删)。成员内为正控。"""
     admin_h = await register_and_login(client, "om_adm1", "pw123456")
     owner_h, pid, tid = await _mk_project_tpl(
-        client, plate_mock, project="om-p1", owner="om_own1")
+        client, plate_mock, project="om-p1", owner="om_own1",
+        # H3 收口:成员管理面 = 项目成员管理员(Admin+ 非成员 404)——
+        # 平台 admin 以成员管理员身份入项目执行移除
+        extra_members={"om_adm1": "admin"})
     # 正控:属主仍在成员内 → PATCH 可用
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=owner_h,
                            json={"name": "om-p1-tpl-r2"})
@@ -101,7 +104,8 @@ async def test_removed_owner_instance_gated_on_claim(client, plate_mock):
 
     admin_h = await register_and_login(client, "om_adm2", "pw123456")
     owner_h, pid, tid = await _mk_project_tpl(
-        client, plate_mock, project="om-p2", owner="om_own2")
+        client, plate_mock, project="om-p2", owner="om_own2",
+        extra_members={"om_adm2": "admin"})  # H3 收口:成员管理员执行移除
     uid = await _user_id("om_own2")
     inst_id = (await _inst(tid, uid)).id
     r = await client.delete(f"/api/projects/{pid}/members/{uid}",
@@ -129,7 +133,7 @@ async def test_member_removal_hook_pauses_owner_and_subscriber(
     sub_h = await register_and_login(client, "om_sub3", "pw123456")
     owner_h, pid, tid = await _mk_project_tpl(
         client, plate_mock, project="om-p3", owner="om_own3",
-        extra_members={"om_sub3": "member"})
+        extra_members={"om_sub3": "member", "om_adm3": "admin"})
     sub_uid = await _user_id("om_sub3")
     r = await _subscribe(client, sub_h, tid)
     assert r.status_code in (200, 201), r.text
@@ -162,7 +166,8 @@ async def test_instance_cred_project_id_requires_membership(
 
     admin_h = await register_and_login(client, "om_adm4", "pw123456")
     owner_h, pid, tid = await _mk_project_tpl(
-        client, plate_mock, project="om-p4", owner="om_own4")
+        client, plate_mock, project="om-p4", owner="om_own4",
+        extra_members={"om_adm4": "admin"})  # H3 收口:成员管理员执行移除
     uid = await _user_id("om_own4")
     async with db_module.SessionLocal() as db:
         tpl = await db.get(IntegrationTask, tid)

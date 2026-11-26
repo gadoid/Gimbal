@@ -208,3 +208,121 @@ async def test_audit_logs_endpoint_and_trail(client):
                          params={"action": "user.delete"})
     items = r.json()["items"]
     assert items and items[0]["detail"]["disposal"] == "publicize"
+
+
+async def _seed_combo_bound_scheme(client, admin, victim, tag: str):
+    """在 admin 默认空间经 API 建组合 + 场景 + 绑定方案,再整体搬进
+    victim 默认空间(处置面按区判内容;§20.2 延迟复合 FK)。"""
+    from sqlalchemy import select, text as _t, update
+
+    from app.core import db as db_module
+    from app.models.account_combo import AccountCombo
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.models.composer_scenario import ComposerScenario
+    from tests.conftest import seed_identity_fixture
+    from tests.helpers import default_space_id
+
+    uid = (await client.get("/api/auth/me", headers=admin)
+           ).json()["user"]["id"]
+    async with db_module.SessionLocal() as s:
+        admin_space = await default_space_id(s, uid)
+        # 组合条目须指向已登记身份别名(所有者域内登记)
+        await seed_identity_fixture(
+            s, alias=f"p2-h2-{tag}", username="u", password="p",
+            service="fin-service", owner_id=victim["id"])
+        await s.commit()
+    sid = f"sc-p2h2-{tag}"
+    combo_id = (await client.post(
+        f"/api/projects/{admin_space}/account-combos", headers=admin,
+        json={"name": f"处置组合{tag}", "entries": [
+            {"service": "fin-service", "alias": f"p2-h2-{tag}"}]})
+    ).json()["id"]
+    await _mk_scenario(client, admin, sid)
+    r = await client.post(f"/api/scenarios/{sid}/run-schemes",
+                          headers=admin,
+                          json={"name": f"绑定方案{tag}", "isDefault": False,
+                                "accountComboId": combo_id,
+                                "dataSetSelection": [],
+                                "injectionEntryIds": [],
+                                "serviceBindings": {}, "options": {
+                                    "step_from": None, "step_to": None,
+                                    "n_runs": 1, "parallel": 1,
+                                    "subscribe": None}})
+    assert r.status_code == 201, r.text
+
+    async with db_module.SessionLocal() as s:
+        _home = await default_space_id(s, victim["id"])
+        await s.execute(_t(
+            "SET CONSTRAINTS fk_scheme_scenario_zone, "
+            "fk_scheme_combo_zone DEFERRED"))
+        await s.execute(update(ComposerScenario).where(
+            ComposerScenario.scenario_id == sid
+        ).values(owner_id=victim["id"], owner_name=victim["username"],
+                 project_id=_home))
+        await s.execute(update(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid
+        ).values(project_id=_home))
+        await s.execute(update(AccountCombo).where(
+            AccountCombo.id == combo_id
+        ).values(project_id=_home))
+        await s.commit()
+    return sid
+
+
+async def test_disposal_severs_combo_bindings(client):
+    """评审 H2 收口:绑定组合的方案随处置迁出私有空间时,组合绑定解离
+    为 blocked(combo_missing)—— 不再撞 fk_scheme_combo_zone 让删号
+    500;组合本身随私有容器处置消失;publicize 与 transfer 两分支。"""
+    from sqlalchemy import select
+
+    from app.core import db as db_module
+    from app.models.account_combo import AccountCombo
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.models.composer_scenario import ComposerScenario
+    from app.services.zone import public_project_id
+
+    admin = await _admin(client, "p2h2admin")
+
+    # ── publicize:方案迁公共项目,绑定解离 ─────────────────────────
+    victim = await _mk_user(client, admin, "p2_h2_pub")
+    sid = await _seed_combo_bound_scheme(client, admin, victim, "pub")
+    r = await client.request("DELETE", f"/api/users/{victim['id']}",
+                             headers=admin, json={"disposal": "publicize"})
+    assert r.status_code == 204, r.text
+    async with db_module.SessionLocal() as s:
+        scen = (await s.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == sid))).scalar_one()
+        assert scen.project_id == await public_project_id(s)
+        rows = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid))).scalars().all()
+        row = next(x for x in rows if x.name == "绑定方案pub")
+        assert row.repair_status == "blocked"
+        assert row.repair_reason == "combo_missing"
+        assert row.account_combo_id is None
+        assert (await s.execute(select(AccountCombo).where(
+            AccountCombo.project_id == scen.project_id))).scalars().all() == []
+
+    # ── transfer:方案迁受让人空间,绑定解离 ────────────────────────
+    victim2 = await _mk_user(client, admin, "p2_h2_tr_victim")
+    keeper = await _mk_user(client, admin, "p2_h2_tr_keeper")
+    sid2 = await _seed_combo_bound_scheme(client, admin, victim2, "tr")
+    r = await client.request(
+        "DELETE", f"/api/users/{victim2['id']}", headers=admin,
+        json={"disposal": "transfer", "transfer_to": keeper["id"]})
+    assert r.status_code == 204, r.text
+    async with db_module.SessionLocal() as s:
+        from tests.helpers import default_space_id
+
+        _keeper_space = await default_space_id(s, keeper["id"])
+        scen2 = (await s.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == sid2))).scalar_one()
+        assert scen2.project_id == _keeper_space
+        rows2 = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid2))).scalars().all()
+        row2 = next(x for x in rows2 if x.name == "绑定方案tr")
+        assert row2.repair_status == "blocked"
+        assert row2.repair_reason == "combo_missing"
+        assert row2.account_combo_id is None
+        assert (await s.execute(select(AccountCombo).where(
+            AccountCombo.project_id == _keeper_space
+        ))).scalars().all() == []

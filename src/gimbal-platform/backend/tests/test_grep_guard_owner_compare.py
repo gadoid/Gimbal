@@ -73,7 +73,6 @@ _ALLOWLIST: dict[str, int] = {
     # UPC M1(§4/§6):私有空间治理 = 所有者关系(owner_id)判定 —— private
     # 不落成员行,所有者即治理者,与对象属主单判同类终态(delete/管理闸/
     # canManage/canWrite 徽标);个人默认空间处置是个人数据终态
-    'routers/projects.py:if proj.owner_id != user.id:': 1,
     'routers/projects.py:if project.owner_id != user.id:': 1,
     'routers/projects.py:return proj.owner_id == user.id': 2,
     'routers/me.py:ComposerScenario.owner_id == user.id,': 1,
@@ -94,7 +93,6 @@ _ALLOWLIST: dict[str, int] = {
     'routers/suites.py:clauses = [Suite.owner_id == user.id]   # 镜头(含我维护的公共副本)': 1,
     'routers/suites.py:if copy.owner_id != user.id:': 1,
     'routers/suites.py:if ex.owner_id != user.id:': 1,
-    'routers/suites.py:select(func.count()).where(Suite.owner_id == suite.owner_id,': 1,
     'routers/users.py:.where(ComposerScenario.owner_id == user_id)': 3,
     'routers/users.py:AccessToken.holder_id == target.id,': 1,
     'routers/users.py:IntegrationTask.holder_id != user_id))).scalars().all()': 1,

@@ -728,6 +728,29 @@ async def delete_user(
             .values(owner_id=caller.id))
 
     # ── 场景处置(三选一)─────────────────────────────────────────
+    async def _sever_combo_bindings(sids: list[str]) -> None:
+        """组合绑定解离(UPC M2 §20.2/§13):迁出私有空间的方案,其绑定
+        组合留在随容器处置删除的旧私有区 —— 不解离则 fk_scheme_combo_
+        zone 在提交时拒绝(跨区失配/组合已删),管理员删除用户直接 500。
+        按 §20.3 状态机置 blocked(combo_missing)+ 行级修复事件,与
+        处置同事务;不猜测替代组合(受让人空间的重建走资产恢复通道)。"""
+        from ..models.scheme_repair import REASON_COMBO_MISSING
+        from ..services import scheme_repair as _repair
+
+        rows = (await db.execute(
+            select(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id.in_(sids),
+                ComposerRunScheme.account_combo_id.is_not(None))
+        )).scalars().all()
+        for _s in rows:
+            await _repair.mark_blocked(
+                db, _s, reason=REASON_COMBO_MISSING,
+                action="disposal.unbound",
+                request_id=f"user-disposal:{target.id}",
+                actor_id=caller.id, actor_name=caller_label,
+                note=f"user disposal {disposal}: 私有区组合随容器处置,"
+                     "绑定解离待修复")
+
     scenario_ids = list((await db.execute(
         select(ComposerScenario.scenario_id)
         .where(ComposerScenario.owner_id == user_id)
@@ -775,7 +798,10 @@ async def delete_user(
     if disposal == "publicize":
         if _priv_sids:
             # §13:私有场景迁入公共项目(owner_id 置空,署名保留
-            # owner_name 快照);方案行随迁(复合 FK 延迟到提交)
+            # owner_name 快照);方案行随迁(复合 FK 延迟到提交)。
+            # 迁移前先解离组合绑定:绑定组合留旧私有区,不解离则
+            # fk_scheme_combo_zone 提交即拒(H2 处置收口)
+            await _sever_combo_bindings(_priv_sids)
             await db.execute(
                 sa_update(ComposerScenario)
                 .where(ComposerScenario.scenario_id.in_(_priv_sids))
@@ -797,6 +823,9 @@ async def delete_user(
                      or public_transferee.username)
         transferee_label = transferee.display_name or transferee.username
         if _priv_sids:
+            # 同 publicize:迁移前解离组合绑定(组合随旧私有区删除,
+            # 不解离则 fk_scheme_combo_zone 提交即拒)
+            await _sever_combo_bindings(_priv_sids)
             await db.execute(
                 sa_update(ComposerScenario)
                 .where(ComposerScenario.scenario_id.in_(_priv_sids))
@@ -819,9 +848,11 @@ async def delete_user(
                 .values(owner_id=transferee.id,
                         owner_name=transferee_label))
     else:  # purge:私有场景删除(方案/数据集随 store 收);公共/普通
-        # 项目内容不删 —— 用户删除时 owner_id 经 FK SET NULL 归档审计
+        # 项目内容不删 —— 用户删除时 owner_id 经 FK SET NULL 归档审计。
+        # commit=False(评审 P1-3):删除并入处置事务,中途失败整体回滚,
+        # 不留「资源已删、用户仍在」的半程状态
         for sid in _priv_sids:
-            await scenario_store.delete(db, sid)
+            await scenario_store.delete(db, sid, commit=False)
 
     # ── 报告定义处置(S1.6 + UPC §13 分区)────────────────────────
     from ..models.report_definition import ReportDefinitionRow
@@ -926,11 +957,15 @@ async def delete_user(
                 IntegrationTask.holder_id != user_id))).scalars().all()
             for uid in holders:
                 try:
+                    # commit=False(评审三轮 R3-1):处置内通知并入最终
+                    # 事务 —— 修前即时提交会把此前的场景迁移/模板删除
+                    # 提前落库,处置失败时留「用户仍在、资源已部分处置」
                     await create_notification(
                         db, user_id=uid, type_="integration",
                         title=f"集成任务「{tpl.name}」已删除",
                         body="任务属主账号已注销,模板随之删除;"
-                             "卡片会显示「已移除」,可自行删卡")
+                             "卡片会显示「已移除」,可自行删卡",
+                        commit=False)
                 except Exception as e:  # noqa: BLE001
                     logger.warning("users: 注销公示通知失败,处置面继续:{}", e)
                     # 公示是增强,不阻断处置(与 reset_password 通知同
@@ -1014,6 +1049,8 @@ async def delete_user(
                 await db.delete(tpl)
 
     for tpl, how in disposed_tasks:
+        # commit=False(评审 P1-3):处置中的审计与业务写入同一最终事务
+        # —— 中途失败随处置整体回滚,不留「已提交审计但用户仍在」
         await audit_svc.record(
             db, actor_id=caller.id, actor_name=caller_label,
             action="integration.task.dispose",
@@ -1022,7 +1059,8 @@ async def delete_user(
             detail={"disposal": how,
                     "new_owner": (transferee.id if how == "transfer"
                                   and disposal == "transfer" else None),
-                    })
+                    },
+            commit=False)
 
     # 受让人通知(§3.6):并入 resource_transferred —— 场景或集成任务
     # 任一非空即发;正文逐个列出任务及当前状态
@@ -1056,6 +1094,11 @@ async def delete_user(
         sa_delete(AuthAccount).where(AuthAccount.owner_id == user_id))
     await db.execute(
         sa_delete(ConstantEntry).where(ConstantEntry.owner_id == user_id))
+    # 评审三轮 R3-3:普通项目的晋升申请行(applicant_id NO ACTION,不随
+    # 私有容器处置 —— 项目是别人的)按申请人显式收口,覆盖全部状态
+    from ..models.project_promotion import ProjectPromotion
+    await db.execute(sa_delete(ProjectPromotion).where(
+        ProjectPromotion.applicant_id == user_id))
 
     # UPC §13 用户处置:私有容器随账号一并处置(M1 期为空容器;对象
     # 资源迁入 project_id 后升级为依赖处置计划)。owner_id 无 ON DELETE

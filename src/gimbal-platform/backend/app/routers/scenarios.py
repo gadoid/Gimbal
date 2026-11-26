@@ -621,24 +621,18 @@ async def scenario_facets(
     时 scope 不叠加。
 
     ``projectId``:行集收敛到项目快照列(取代 scope/visibility 分桶);
-    读门与 GET /projects/{id} 同口径(成员 ∨ 公共项目 ∨ Admin+),
-    非成员 404 —— facets 是 list 的派生面,门不得松于 list。
+    读门与 GET /projects/{id} **同源谓词**(``can_view_project``:成员 ∨
+    公共 ∨ 私有属主;评审 P2-13:修前残留「Admin+ 旁路」—— 平台管理员
+    凭 ops.write 可读他人私有空间的 facets,与项目详情 404 分裂)。
+    facets 是 list 的派生面,门不得松于 list。
     """
     if project_id is not None:
-        from sqlalchemy import select as _sel
+        from ..models.project import Project
 
-        from ..models.project import Project, ProjectMember
-
-        from ._ownership import has_capability
+        from ..services import project_access as _pa
 
         proj = await db.get(Project, project_id)
-        my_role = None
-        if proj is not None:
-            my_role = (await db.execute(_sel(ProjectMember.role).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user.id))).scalar_one_or_none()
-        if proj is None or (my_role is None and proj.kind != "public"
-                            and not has_capability(user, "ops.write")):
+        if proj is None or not await _pa.can_view_project(db, user.id, proj):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": "not_found",

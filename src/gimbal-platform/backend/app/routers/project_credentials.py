@@ -92,6 +92,17 @@ async def _manage_gate(db: AsyncSession, user, project_id: int) -> Project:
     proj = await _load_normal_project(db, project_id)
     my_role = await _my_role(db, user, proj.id)
     if my_role == "admin":
+        # 评审四轮 P1-2:归档起禁止凭证管理写(§13.1 —— 凭证是执行配置,
+        # 冻结面含替换/删除;运行时探针已证修前归档项目仍可建凭证 201)。
+        # 评审五轮 P2-1:归档闸放在**角色之后** —— 修前非成员访问归档
+        # 项目拿到 409 + 具体状态,访问 active 项目却是 404,归档态成了
+        # 项目存在性/生命周期探针;先角色后 active 让不可见项目恒 404。
+        if proj.status != Project.STATUS_ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "project_not_active",
+                        "message": f"项目状态为 {proj.status},"
+                                   "归档起禁止管理写入(§13.1)"})
         return proj
     if my_role is None:
         raise _not_found(project_id)
@@ -146,7 +157,8 @@ async def list_project_credentials(
         # r5-2.2:Admin+ 非成员同 404 —— 凭证是项目的,读面不因平台
         # 角色放宽(管理面已同口径收口)
         raise _not_found(project_id)
-    can_manage = role == "admin"
+    # 评审四轮 P1-2:归档起冻结管理面,投影与闸同口径
+    can_manage = role == "admin" and proj.status == "active"
     rows = (await db.execute(select(AuthAccount).where(
         AuthAccount.project_id == proj.id).order_by(
             AuthAccount.system, AuthAccount.id))).scalars().all()

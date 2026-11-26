@@ -12,39 +12,17 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
+// 评审五轮 P2-7:错误形状单源上提 httpError.ts(零依赖可单测消费真实
+// 模块);此处转发导出,既有 ``from '@/api/http'`` 调用点不受影响。
+import { ApiError, httpStatusOf } from './httpError'
+
+export { ApiError, httpStatusOf }
+export type { ApiErrorPayload } from './httpError'
 
 interface ApiErrorPayload {
   code?: number
   msg?: string
   detail?: { code?: number | string; msg?: string; message?: string } | string
-}
-
-export class ApiError extends Error {
-  /** 归一错误码:数值(平台信封/HTTP 码)或字符串 detail.code
-   *  (query-views 域错误码如 sut_auth_expired,2026-09-07 spec §7.5)。 */
-  code: number | string
-  status: number
-  /** 结构化 detail 的原样引用(如 copy 409 的 {code, suggestion});
-   *  字符串/数组/缺省 detail 时为 undefined。 */
-  detail?: Record<string, unknown>
-
-  constructor(
-    status: number, code: number | string, msg: string,
-    detail?: Record<string, unknown>,
-  ) {
-    super(msg)
-    this.name = 'ApiError'
-    this.status = status
-    this.code = code
-    this.detail = detail
-  }
-
-  /** B5 切片 1:字符串错误码 typed 判等 —— ``code`` 参数收
-   *  ``ApiErrorCode``(契约生成 union),拼写错编译期暴露;
-   *  数值商务码/未登记串照常返回 false(运行时事实优先)。 */
-  hasCode(code: import('./generated/errorCodes').ApiErrorCode): boolean {
-    return this.code === code
-  }
 }
 
 function extractErrorPayload(err: AxiosError): ApiErrorPayload {
@@ -108,17 +86,7 @@ function normalizeError(err: AxiosError): ApiError {
   return new ApiError(status, code, msg)
 }
 
-/** 从被 reject 的错误上取 HTTP 状态码。
- *
- * 响应拦截器把 axios 错误统一换成了 ``ApiError``(原始 ``err.response``
- * 不再外泄),所以判定 403/404 这类"按状态分流"的调用点必须走这里,
- * 不要自己摸 ``e.response.status`` —— 那样在真实链路上永远读不到。
- * 仍兼容手搓的 ``{ response: { status } }``(单测/非拦截器来源)。 */
-export function httpStatusOf(e: unknown): number | undefined {
-  if (e instanceof ApiError) return e.status
-  const anyErr = e as { status?: number; response?: { status?: number } } | null
-  return anyErr?.status ?? anyErr?.response?.status
-}
+// httpStatusOf 定义随 ApiError 上提 httpError.ts(顶部转发导出)。
 
 const http = axios.create({
   baseURL: '/api',

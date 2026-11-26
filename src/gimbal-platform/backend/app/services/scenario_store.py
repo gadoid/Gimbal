@@ -487,11 +487,16 @@ async def update(
     return out
 
 
-async def delete(db: AsyncSession, scenario_id: str) -> None:
+async def delete(db: AsyncSession, scenario_id: str,
+                 *, commit: bool = True) -> None:
     """Delete a scenario and cascade its datasets.
 
     Raises KeyError on miss.  Uses a single transaction so a failure
     mid-cascade rolls everything back.
+
+    ``commit=False``(评审二轮 P1-3):调用方自持事务(用户处置 purge
+    等)时只写不提交 —— 删除与业务写入统一到调用方的最终事务,中途
+    失败整体回滚,不再留下「资源已删、用户仍在」的半程状态。
     """
     row = await _get_row(db, scenario_id)
     # 重构方案约束 6(单点):场景删除 → 所有含它的 suite 清理编排配置
@@ -536,7 +541,8 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
         sa_delete(SuiteMember).where(SuiteMember.scenario_id == scenario_id)
     )
     await db.delete(row)
-    await db.commit()
+    if commit:
+        await db.commit()
 
 
 

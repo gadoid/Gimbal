@@ -934,12 +934,53 @@ async def dispatch_target(
     _reject_unsupported_run_options(req)   # 未接面显式拒绝
     _validate_step_to(req, steps)
 
+    # ── §20.3 统一装配闸(UPC M3 execute 面)────────────────────────
+    # 方案待修复(blocked)不进入执行装配 —— 先于执行配置/凭证/别名解析
+    # 与执行行创建(AC-45 在单场景面的成立)。JWT 面配方由前端按所选
+    # 方案内联,后端按溯源 scheme_id 复核持久化状态;方案行已删(悬空
+    # 溯源 id)不拦 —— 配方本体是请求给的,与 resolve_for_run §7 既有
+    # 回落口径一致。Suite 直跑成员经此闸 → Conflict 归 skipped(聚合面
+    # 语义:单成员禁跑不掀批次,reason 记 scheme_repair_required)。
+    _gate_scheme = None
+    if (getattr(req, "scheme_id", None)
+            and req.scheme_id != RAW_SCHEME_ID):
+        from .scheme_store import get_row as _scheme_get_row
+        try:
+            _gate_scheme = await _scheme_get_row(
+                db, target.scenario_id, req.scheme_id)
+        except KeyError:
+            _gate_scheme = None      # 悬空溯源 id:配方由请求携带,放行
+        if _gate_scheme is not None and _gate_scheme.repair_status == "blocked":
+            raise Conflict(
+                "scheme_repair_required",
+                "运行方案处于待修复状态(组合依赖受阻),请先在方案"
+                "修复入口完成修复后再执行(§20.3)",
+            )
+
     # 执行配置分层②(§5)与 ④ 重跑快照 → _resolve_dispatch_exec_cfg
     _req_exec_id, _exec_cfg = await _resolve_dispatch_exec_cfg(
         db, user_id, req, target=target, token=token, exec_replay=exec_replay)
 
     # authz M2a S6:绑定校验先行(§8.2 标签解析要吃有效身份集合)
     _bindings = await _validated_bindings(db, req)
+
+    # ── M3 执行装配:组合垫底(单场景 JWT 面,v4 §3.2「prepare/
+    #    dispatcher 后端权威垫底,不依赖前端拼全」)───────────────────
+    # 生效身份 = {**组合条目, **请求绑定}(组合永远垫底,面内覆盖序
+    # 不动);组合条目在保存面已全量校验(§3.2 校验分层),垫底不重验。
+    # 绑定唯一事实源 = 方案显式列 account_combo_id;组合行缺失
+    # (删除竞态;库层 fk_scheme_combo_zone NO ACTION 使 API 面近不可达)
+    # fail-closed 归 identity_combo_missing,不静默缺身份。
+    if _gate_scheme is not None and _gate_scheme.account_combo_id is not None:
+        from .account_combo import combo_base, pad_bindings
+        _combo = await combo_base(db, _gate_scheme.account_combo_id)
+        if _combo.missing:
+            raise Conflict(
+                "identity_combo_missing",
+                f"方案绑定的账户组合 #{_gate_scheme.account_combo_id}"
+                "已不存在,请重新绑定组合(§3.2)",
+            )
+        _bindings = pad_bindings(_bindings, _combo)
 
     # §8.2 标签解析链(三路分流)+ §6.3 环境告警 → _resolve_execution_env
     env_choice, env_warnings, _project_id = await _resolve_execution_env(

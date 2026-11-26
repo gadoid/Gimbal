@@ -5,6 +5,7 @@
 import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
+import { httpStatusOf } from '@/api/httpError'
 import { showError } from '@/utils/errorFallback'
 import { Button } from '@/components/ui/button'
 import {
@@ -91,13 +92,27 @@ async function saveScheme() {
   try {
     // omit(schemeId/isDefault) 用解构实现 — PUT 体不带主键与系统位
     const { schemeId: _s, isDefault: _d, ...body } = draft.value
-    await updateRunScheme(scenarioId, draft.value.schemeId, body)
+    // 评审三轮 P2-10:整稿保存随读取时的 revision 显式 CAS —— 并发
+    // 保存不再是最后写入覆盖
+    const bodyWithCas = { ...body, expectedRevision: draft.value.revision }
+    await updateRunScheme(scenarioId, draft.value.schemeId, bodyWithCas)
     await refresh()
     draft.value = selected.value ? structuredClone(toRaw(selected.value)) : null
     dirty.value = false
     toast.success('方案已保存')
   } catch (e) {
-    toast.error(`保存方案失败:${e instanceof Error ? e.message : String(e)}`)
+    // 评审四轮 P2-6:拦截器抛的是 ApiError(status 字段)—— 用
+    // httpStatusOf 单源取状态;且只对 scheme_revision_conflict 做
+    // 冲突处理(其余 409 不误伤,草稿保留)
+    const err = e as { code?: string }
+    if (httpStatusOf(e) === 409 && err?.code === 'scheme_revision_conflict') {
+      await refresh()
+      draft.value = selected.value ? structuredClone(toRaw(selected.value)) : null
+      dirty.value = false
+      toast.error('方案已被他人修改,已刷新为最新内容,请重新编辑保存')
+    } else {
+      toast.error(`保存方案失败:${e instanceof Error ? e.message : String(e)}`)
+    }
   } finally {
     saving.value = false
   }
@@ -189,11 +204,20 @@ async function onRename(s: SchemeV2) {
   }
   try {
     const { schemeId: _s, isDefault: _d, ...body } = s
-    await updateRunScheme(scenarioId, s.schemeId, { ...body, name: trimmed })
+    // 评审四轮 P2-6:重命名同样按读取时的 revision 显式 CAS
+    await updateRunScheme(scenarioId, s.schemeId,
+                          { ...body, name: trimmed,
+                            expectedRevision: s.revision })
     await refresh()
     toast.success('方案已重命名')
   } catch (e) {
-    toast.error(`重命名失败:${e instanceof Error ? e.message : String(e)}`)
+    if (httpStatusOf(e) === 409 &&
+        (e as { code?: string })?.code === 'scheme_revision_conflict') {
+      await refresh()
+      toast.error('方案已被他人修改,已刷新为最新内容,请重试重命名')
+    } else {
+      toast.error(`重命名失败:${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 }
 

@@ -7120,6 +7120,18 @@
             "title": "Datasetselection",
             "type": "array"
           },
+          "expectedRevision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectedrevision"
+          },
           "injectionEntryIds": {
             "items": {
               "type": "string"
@@ -18203,7 +18215,7 @@
     },
     "/api/projects/{project_id}": {
       "delete": {
-        "description": "删项目(§4/§13):private = 所有者,默认空间专门闸保护\n(default_space_protected);normal = Admin+(§4 授权删除);公共项目\n409。有内容 409(project_not_empty,不做级联删除,先清空或迁走);\n成员行随 CASCADE 消失(项目没了,成员关系无意义)。",
+        "description": "删项目(§4/§13):private = 所有者,默认空间专门闸保护\n(default_space_protected);normal = 项目成员管理员 ∧ Admin+\n(§6 投影 ``project.delete = is_ops`` 于管理员分支 —— 授权删除面\n与授权创建同口径;可见性先行,Admin+ 非成员 404 不旁路);公共项目\n409。有内容 409(project_not_empty,不做级联删除,先清空或迁走);\n历史台账行(资产导入台账/晋升记录)无独立清理入口,随项目显式收口;\n成员行随 CASCADE 消失(项目没了,成员关系无意义)。",
         "operationId": "delete_project_api_projects__project_id__delete",
         "parameters": [
           {
@@ -18679,6 +18691,54 @@
         "summary": "Set Default Account Combo",
         "tags": [
           "account-combos"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/archive": {
+      "post": {
+        "description": "归档(§13.1:active → archived,归档起冻结新写入/新执行 —— 各\n写入/执行入口的 ``project_not_active`` 闸已在 R3-6/评审四轮收口)。\n\n门:normal = 项目管理员(锁内重验,与成员写同序);private = 所有者;\npublic 恒 active 不可归档。**默认私有空间不可归档**(trg_user_default_\nspace_invariant 只保存在性;默认空间是场景创建的缺省落点,归档会让\n该用户所有缺省写入面冻结 —— 须先 set-default 换默认再归档)。",
+        "operationId": "archive_project_api_projects__project_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Archive Project",
+        "tags": [
+          "projects"
         ]
       }
     },
@@ -19577,6 +19637,102 @@
           }
         ],
         "summary": "Analyze",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/restore": {
+      "post": {
+        "description": "恢复归档(§13.1:archived → active)。恢复是解冻,不受\n``project_not_active`` 闸(该闸管的是「归档中的写」)。\n\n门与归档同面:normal = 项目管理员;恢复后活跃 normal 须仍有有效\n管理员 —— API 面(调用者 = 在职 admin)恒满足;直写/竞态由库层\n延迟触发器 ``trg_project_admin_invariant``(④)在提交期兜底,\n冲突映射 409 ``project_admin_required``。private = 所有者;\npublic 不可归档故无恢复面。",
+        "operationId": "restore_project_api_projects__project_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Restore Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/set-default": {
+      "post": {
+        "description": "切换默认私有空间(§4:每用户恰一个默认;唯一权威 =\n``uq_projects_private_default`` 部分唯一索引,AC-01)。\n\n原子换:旧默认先清标记、目标后置(索引即时校验,同事务两步换);\n目标须为本人 active 私有空间 —— 归档空间不可成为默认(新写入\n面会全被 ``project_not_active`` 冻结)。非 private(公共项目、\n普通项目)无默认语义 → 409。",
+        "operationId": "set_default_space_api_projects__project_id__set_default_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Default Space",
         "tags": [
           "projects"
         ]
@@ -20561,6 +20717,39 @@
                 }
               ],
               "title": "Stepindex"
+            }
+          },
+          {
+            "in": "query",
+            "name": "schemeId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schemeid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "credentialSource",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(personal|project)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Credentialsource"
             }
           }
         ],
@@ -21579,7 +21768,7 @@
     },
     "/api/scenarios/facets": {
       "get": {
-        "description": "五维 facets:modules/systems/tags/authors/priorities 可选值+计数。\n\n替代前端「全量拉回 FilterPopover unique」的 M1 过渡形态。PG 走\nGROUP BY + jsonb unnest;SQLite Python 兜底(方言分派同 list)。\nscope 与 list 同口径(§5.1):mine 只统计自己创建的;visibility=public\n时 scope 不叠加。\n\n``projectId``:行集收敛到项目快照列(取代 scope/visibility 分桶);\n读门与 GET /projects/{id} 同口径(成员 ∨ 公共项目 ∨ Admin+),\n非成员 404 —— facets 是 list 的派生面,门不得松于 list。",
+        "description": "五维 facets:modules/systems/tags/authors/priorities 可选值+计数。\n\n替代前端「全量拉回 FilterPopover unique」的 M1 过渡形态。PG 走\nGROUP BY + jsonb unnest;SQLite Python 兜底(方言分派同 list)。\nscope 与 list 同口径(§5.1):mine 只统计自己创建的;visibility=public\n时 scope 不叠加。\n\n``projectId``:行集收敛到项目快照列(取代 scope/visibility 分桶);\n读门与 GET /projects/{id} **同源谓词**(``can_view_project``:成员 ∨\n公共 ∨ 私有属主;评审 P2-13:修前残留「Admin+ 旁路」—— 平台管理员\n凭 ops.write 可读他人私有空间的 facets,与项目详情 404 分裂)。\nfacets 是 list 的派生面,门不得松于 list。",
         "operationId": "scenario_facets_api_scenarios_facets_get",
         "parameters": [
           {
@@ -21980,7 +22169,7 @@
     },
     "/api/scenarios/{scenario_id}/asset-bundle": {
       "get": {
-        "description": "导出场景资产包(§14.2:定义 + 数据集 + 方案 + 组合依赖;秘密剥离)。",
+        "description": "导出场景资产包(§14.2:定义 + 数据集 + 方案 + 组合依赖;秘密剥离;\n评审 P1-1:调用者身份进导出面 —— 非属主数据集行经脱敏单源剥敏感列)。",
         "operationId": "export_asset_bundle_api_scenarios__scenario_id__asset_bundle_get",
         "parameters": [
           {

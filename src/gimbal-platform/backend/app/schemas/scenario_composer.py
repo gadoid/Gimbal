@@ -360,6 +360,10 @@ class RunScheme(BaseModel):
     # 未绑定。方案工作台「保存」随整稿 PUT 生效(v4 §3.4 口径)。
     account_combo_id: int | None = Field(default=None,
                                          alias="accountComboId", ge=1)
+    # 评审 P2-14(可选 CAS):传入时普通保存按 revision 条件更新(与
+    # §20.3 修复命令同一乐观锁面);缺省 = 最后写入(存量客户端兼容)
+    expected_revision: int | None = Field(default=None,
+                                          alias="expectedRevision", ge=1)
     # §8.2(ADR-0003 #21):方案环境链位退役 —— 存量 payload
     # 里的 environmentId 键不再消费(数据保留,读侧忽略)。
     # RunOptions 形状(迁移完成,不再收旧平铺键)

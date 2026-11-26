@@ -97,7 +97,20 @@ async def _load_project(
                     detail={"code": "project_role_readonly",
                             "message": "项目用户只能读和执行项目内容,"
                                        "不能维护组合"})
-    combo_svc._check_capability(proj.kind)  # §7 关闭即 API 拒绝
+    # 评审二轮 P2-8:能力闸的域错误此前只在写路径被翻译 —— 读路径
+    # (列表/详情)未捕获直接 500。统一映射为明确 422(§7:公共项目
+    # 组合面不开放)
+    try:
+        combo_svc._check_capability(proj.kind)  # §7 关闭即 API 拒绝
+    except combo_svc.ComboError as e:
+        raise _combo_error(e) from None
+    if write and proj.status != Project.STATUS_ACTIVE:
+        # 评审三轮 R3-6:归档起禁止管理写入(与创建闸同码 409)
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "project_not_active",
+                    "message": f"项目状态为 {proj.status},"
+                               "归档起禁止管理写入(§13.1)"})
     return proj
 
 

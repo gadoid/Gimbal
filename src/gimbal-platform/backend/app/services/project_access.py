@@ -138,7 +138,8 @@ def effective_permissions(
         if relation == "owner":
             perms.update({
                 "project.read": True,
-                "project.update": True,
+                # §13.1(评审 P1-5):归档起禁止新写入 —— 投影与注释同口径
+                "project.update": active,
                 # 默认空间删除受专门闸保护(§4:默认空间不得直接删除)
                 "project.delete": not project.is_default,
                 "project.execute": active,
@@ -153,10 +154,12 @@ def effective_permissions(
         if my_role == ProjectMember.ROLE_ADMIN:
             perms.update({
                 "project.read": True,
-                "project.update": True,
+                # §13.1(评审 P1-5):归档起禁止新写入
+                "project.update": active,
                 # §4「授权删除」= 平台授权面(与授权创建同口径)
                 "project.delete": is_ops,
-                "project.member.manage": True,
+                # §13.1(评审三轮 R3-6):归档起禁止成员管理写入
+                "project.member.manage": active,
                 "project.execute": active,
                 "project.content.write": active,
                 "project.credential.manage": active,

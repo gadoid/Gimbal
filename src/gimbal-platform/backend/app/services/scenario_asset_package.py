@@ -14,11 +14,16 @@
   - 默认候选**先验证再写入**:携带数据集/注入选择的默认候选导致**零
     提交**(422;含选择的候选不可通过清空字段升为默认,§14.2)。
   - 组合依赖按确定性映射恢复:合法条目 → 目标项目建组合并绑定
-    (ready);显式 ``comboId`` 映射指向存在但**跨区**的组合 →
+    (ready;同一源组合被多方案引用按 ref 去重复用一份);显式
+    ``comboId`` 映射指向存在但**跨区**的组合 →
     blocked ``combo_cross_zone``(诊断记录留目标标识);映射目标不
     存在或 ``skipCombos`` → blocked ``combo_missing``;条目无法合法
     恢复(未登记别名/异基础服务)→ blocked ``combo_dependency_
     invalid``。悬空引用一律不落库;不猜测替代组合、不隐式用默认组合。
+  - 源侧 blocked 方案(随包 ``repairStatus``)无显式映射时**原样重建
+    blocked** —— 修复状态是资产事实:禁止执行的方案往返后不得静默
+    变为可执行(§20.3/§14.2「不把待修复计为可执行」);携带显式
+    映射则按映射显式修复。
   - 恢复产出的方案与修复状态、行级审计(:mod:`scheme_repair`
     ``scheme_repair_events``)同事务写入(AC-46:无半成品)。
 """
@@ -39,9 +44,15 @@ from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_run_scheme import ComposerRunScheme
 from ..models.composer_scenario import ComposerScenario
 from ..models.scenario_asset_import import ScenarioAssetImport
-from ..models.scheme_repair import REASON_COMBO_CROSS_ZONE, REASON_COMBO_MISSING
+from ..models.scheme_repair import (
+    REASON_COMBO_CROSS_ZONE, REASON_COMBO_DEPENDENCY_INVALID,
+    REASON_COMBO_MISSING,
+)
 from . import scheme_repair, scheme_store
-from .scenario_store import create_in_transaction, strip_builtin_credentials
+from .scenario_store import (
+    create_in_transaction, is_foreign_viewer, strip_builtin_credentials,
+    strip_sensitive_columns,
+)
 from .service_aliases import BindingAliasInvalid, validate_binding_aliases
 from .zone import ProjectCreateDenied
 
@@ -84,15 +95,24 @@ def request_digest(bundle: dict) -> str:
     return hashlib.sha256(_canonical(payload).encode()).hexdigest()
 
 
+def _shape_error(why: str) -> AssetBundleError:
+    return AssetBundleError(422, "asset_bundle_shape_invalid",
+                            f"资产包形状不合规:{why}")
+
+
 def _validate_shape(bundle: dict) -> None:
+    """顶层与嵌套形状的边界校验(评审 P2-12):形状错误统一 422,不再
+    让 ``.get`` 打在非对象上产生 500。"""
+    if not isinstance(bundle, dict):
+        raise _shape_error("顶层须为对象")
     if (bundle.get("format") != BUNDLE_FORMAT
             or bundle.get("version") != BUNDLE_VERSION):
         raise AssetBundleError(
             422, "asset_bundle_format_invalid",
             f"资产包须为 {BUNDLE_FORMAT} v{BUNDLE_VERSION}")
-    source = bundle.get("source") or {}
-    if not isinstance(source.get("scenarioId"), str) or not source.get(
-            "scenarioId"):
+    source = bundle.get("source")
+    if not isinstance(source, dict) or not isinstance(
+            source.get("scenarioId"), str) or not source.get("scenarioId"):
         raise AssetBundleError(
             422, "asset_bundle_source_missing",
             "资产包缺源场景标识(source.scenarioId)")
@@ -100,7 +120,101 @@ def _validate_shape(bundle: dict) -> None:
     if not isinstance(schemes, list) or not schemes:
         raise AssetBundleError(
             422, "asset_bundle_schemes_missing", "资产包缺方案清单")
-    if not bundle.get("defaultSchemeId"):
+    seen_sids: set[str] = set()
+    for s in schemes:
+        if not isinstance(s, dict):
+            raise _shape_error("schemes[*] 须为对象")
+        sid = s.get("schemeId")
+        if not isinstance(sid, str) or not sid:
+            raise _shape_error("schemes[*].schemeId 须为非空字符串")
+        if sid in seen_sids:
+            # 评审四轮 P2-3:重复 schemeId 会让默认候选插出两行
+            # is_default=True,撞部分唯一索引变未捕获 IntegrityError
+            raise _shape_error(f"schemes[*].schemeId 重复: {sid!r}")
+        seen_sids.add(sid)
+        # 评审五轮 P2-3:payload 判型**不许 or {} 吞 falsy** —— [] / 0
+        # 会在规范化/落库面炸出 TypeError(非 None 即须为 dict)
+        _payload_raw = s.get("payload")
+        if _payload_raw is not None and not isinstance(_payload_raw, dict):
+            raise _shape_error(
+                f"schemes[{sid!r}].payload 须为对象(收到 "
+                f"{_payload_raw!r})")
+        _payload = _payload_raw if isinstance(_payload_raw, dict) else {}
+        selection = _payload.get("dataSetSelection")
+        if selection is not None:
+            if not isinstance(selection, list) or not all(
+                    isinstance(sel, dict) for sel in selection):
+                raise _shape_error(
+                    f"schemes[{sid!r}].payload.dataSetSelection 须为"
+                    "对象数组(评审 P2-8/四轮 P2-3:非数组会在行级重指"
+                    "迭代时 TypeError → 500)")
+            else:
+                # 评审五轮 P2-3:条目内 datasetId 须为非空字符串 ——
+                # 列表键在重指映射(`in ds_map`)时不可哈希 → TypeError;
+                # rowIndexes 须为整数数组(bool 不计)
+                for sel in selection:
+                    dsid = sel.get("datasetId")
+                    if not isinstance(dsid, str) or not dsid:
+                        raise _shape_error(
+                            f"schemes[{sid!r}].payload.dataSetSelection[*]."
+                            "datasetId 须为非空字符串(收到 "
+                            f"{dsid!r})")
+                    ris = sel.get("rowIndexes")
+                    if ris is not None and (not isinstance(ris, list)
+                                            or not all(
+                        isinstance(x, int) and not isinstance(x, bool)
+                        for x in ris)):
+                        raise _shape_error(
+                            f"schemes[{sid!r}].payload.dataSetSelection[*]."
+                            "rowIndexes 须为整数数组")
+        entries = _payload.get("injectionEntryIds")
+        if entries is not None and (
+                not isinstance(entries, list) or not all(
+                    isinstance(x, str) and x for x in entries)):
+            raise _shape_error(
+                f"schemes[{sid!r}].payload.injectionEntryIds 须为非空"
+                "字符串数组")
+        # 评审五轮 P2-3:旧式 dataSetIds 须为非空字符串数组 —— 标量在
+        # 规范化迭代(`for d in p["dataSetIds"]`)时 TypeError → 500
+        legacy_ids = _payload.get("dataSetIds")
+        if legacy_ids is not None and (not isinstance(legacy_ids, list)
+                                       or not all(
+            isinstance(x, str) and x for x in legacy_ids)):
+            raise _shape_error(
+                f"schemes[{sid!r}].payload.dataSetIds 须为非空字符串数组"
+                f"(收到 {legacy_ids!r})")
+    deps = bundle.get("comboDependencies")
+    if deps is not None:
+        if not isinstance(deps, dict) or not all(
+                isinstance(k, str) and isinstance(v, dict)
+                for k, v in deps.items()):
+            raise _shape_error("comboDependencies 须为 {schemeId: 对象}")
+        for k, v in deps.items():
+            entries = v.get("entries")
+            if entries is not None and not isinstance(entries, list):
+                raise _shape_error(
+                    f"comboDependencies[{k!r}].entries 须为数组"
+                    "(评审 P2-8:非数组会在条目迭代时 TypeError → 500)")
+            ref = v.get("ref")
+            if ref is not None and not isinstance(ref, str):
+                raise _shape_error(
+                    f"comboDependencies[{k!r}].ref 须为字符串"
+                    "(评审 P2-8:非字符串会在 ref 映射时不可哈希 → 500)")
+    mappings = bundle.get("comboIdMappings")
+    if mappings is not None:
+        if not isinstance(mappings, dict) or not all(
+                isinstance(k, str) and isinstance(v, int)
+                and not isinstance(v, bool) and v >= 1
+                for k, v in mappings.items()):
+            raise _shape_error(
+                "comboIdMappings 须为 {schemeId: 正整数组合 id}")
+    datasets = bundle.get("datasets")
+    if datasets is not None:
+        if not isinstance(datasets, list) or not all(
+                isinstance(d, dict) for d in datasets):
+            raise _shape_error("datasets 须为对象数组")
+    if not isinstance(bundle.get("defaultSchemeId"), str) \
+            or not bundle.get("defaultSchemeId"):
         raise AssetBundleError(
             422, "asset_bundle_default_missing",
             "资产包缺默认方案标识(defaultSchemeId)"
@@ -109,14 +223,25 @@ def _validate_shape(bundle: dict) -> None:
 
 # ── 导出 ─────────────────────────────────────────────────────────
 
-async def export_bundle(db: AsyncSession, row: ComposerScenario) -> dict:
+async def export_bundle(db: AsyncSession, row: ComposerScenario, *,
+                        viewer) -> dict:
     """导出场景资产包:定义(剥明文)+ 数据集 + 方案 + 组合依赖。
 
     凭证快照(``definition.config.users``)不外带(§14.2「不导出明文
     秘密」);引用这些别名的场景恢复后由身份解析/预检显形为待修复项
-    —— 历史定义内容保留,秘密不迁移。"""
+    —— 历史定义内容保留,秘密不迁移。
+    评审二轮 P1-1:调用者身份进导出面 —— 非属主(含普通项目成员导出
+    同事场景)的数据集行经**脱敏单源** ``strip_sensitive_columns`` 剥
+    敏感列,谓词与数据集单读同一(``is_foreign_viewer``);属主原样。
+    评审二轮 P2-9:方案修复状态只随**授权投影**后的原因(``projected_
+    reason``/``reasons_for_schemes`` 单源)—— 内部精确原因(combo_
+    missing)与受限诊断引用(sourceComboRef)不随包,维持 AC-44「不
+    可见目标与不存在目标响应不可区分」;恢复侧据此重建 blocked。"""
     payload = dict(row.payload or {})
     strip_builtin_credentials(payload)
+
+    viewer_id = getattr(viewer, "id", viewer)
+    redact_rows = is_foreign_viewer(viewer_id, row.owner_id)
 
     datasets = (await db.execute(
         select(ComposerDataSet).where(
@@ -132,6 +257,9 @@ async def export_bundle(db: AsyncSession, row: ComposerScenario) -> dict:
     combo_cache: dict[int, AccountCombo] = {}
     schemes_out: list[dict] = []
     default_scheme_id = None
+    # 修复状态走授权投影单源(ready → 投影 None,不带字段)
+    projected = await scheme_repair.reasons_for_schemes(
+        db, viewer, list(scheme_rows))
     for s in scheme_rows:
         if s.is_default:
             default_scheme_id = s.scheme_id
@@ -149,11 +277,16 @@ async def export_bundle(db: AsyncSession, row: ComposerScenario) -> dict:
                     "entries": (combo.payload or {}).get("entries") or [],
                 }
                 combo_dependencies[s.scheme_id] = dep
-        schemes_out.append({
+        out = {
             "schemeId": s.scheme_id, "name": s.name,
             "isDefault": bool(s.is_default),
             "payload": scheme_store.normalized(s.payload),
-        })
+        }
+        reason = projected.get(s.scheme_id)
+        if reason is not None:
+            out["repairStatus"] = "blocked"
+            out["repairReason"] = reason
+        schemes_out.append(out)
 
     return {
         "format": BUNDLE_FORMAT, "version": BUNDLE_VERSION,
@@ -163,7 +296,9 @@ async def export_bundle(db: AsyncSession, row: ComposerScenario) -> dict:
         "scenario": payload,
         "datasets": [
             {"datasetId": d.dataset_id, "name": d.name,
-             "description": d.description, "rows": d.rows or [],
+             "description": d.description,
+             "rows": (strip_sensitive_columns(d.rows or [])
+                      if redact_rows else list(d.rows or [])),
              "varUnlocks": d.var_unlocks or []}
             for d in datasets],
         "schemes": schemes_out,
@@ -248,8 +383,11 @@ async def restore_bundle(
     事务重试,恢复契约:失败回滚、重试可继续)。"""
     _validate_shape(bundle)
     digest = request_digest(bundle)
-    package_id = str(bundle.get("packageId") or uuid4().hex)
     source_sid = str(bundle["source"]["scenarioId"])
+    # 评审 P2-11:缺省 packageId 不再掷骰子 —— 由源场景 × 请求摘要派生
+    # 稳定幂等键,同请求重试收敛(同键同摘要 = 重放),不再逐次造新场景
+    package_id = str(bundle.get("packageId")
+                     or f"auto-{source_sid}-{digest[:16]}")
 
     try:
         return await _restore_bundle_once(
@@ -289,14 +427,29 @@ async def _restore_bundle_once(
         # 同键同摘要 = 重放,返回已提交映射
         return _replay_report(hit)
 
-    # ── 默认候选先验证(含选择 → 零提交,§14.2)─────────────────────
+    # ── 先规范化(评审 P2-10:旧式 dataSetIds 形状在此收敛为显式选择
+    #    —— 默认候选校验不再可被「校验后携带选择」的旧形状绕过),后端
+    #    全程使用规范化结果 ─────────────────────────────────────────
+    schemes = [
+        dict(s, payload=scheme_store.normalized(s.get("payload") or {}))
+        for s in bundle["schemes"]
+    ]
+    # ── 默认候选先验证(含选择 → 零提交,§14.2;评审 P1-6:包内默认
+    #    标记与 defaultSchemeId 冲突 → 422,defaultSid 是唯一权威)────
     default_sid = str(bundle["defaultSchemeId"])
-    default_scheme = next((s for s in bundle["schemes"]
+    default_scheme = next((s for s in schemes
                            if s.get("schemeId") == default_sid), None)
     if default_scheme is None:
         raise AssetBundleError(
             422, "asset_bundle_default_missing",
             f"defaultSchemeId {default_sid!r} 不在方案清单中")
+    for s in schemes:
+        if s.get("isDefault") and s.get("schemeId") != default_sid:
+            raise AssetBundleError(
+                422, "asset_bundle_default_conflict",
+                f"方案 {s['schemeId']!r} 自带默认标记,与 defaultSchemeId"
+                f" {default_sid!r} 冲突 —— 默认标识是唯一权威,请修正"
+                "包内标记(§14.2)")
     _dp = default_scheme.get("payload") or {}
     if _dp.get("dataSetSelection") or _dp.get("injectionEntryIds"):
         raise AssetBundleError(
@@ -361,10 +514,21 @@ async def _restore_bundle_once(
     combo_map: dict[str, int | None] = {}     # 旧 schemeId → 目标组合 id
     combo_blocked: dict[str, str] = {}          # 旧 schemeId → 原因码
     blocked_diag: dict[str, dict] = {}
+    ref_combo_map: dict[str, int] = {}        # 源组合 ref → 目标组合 id
+    ref_fingerprint: dict[str, str] = {}      # 源组合 ref → 条目内容指纹
+    # 源侧 blocked 方案(§20.3):无映射时原样重建 blocked,禁止静默
+    # 变 ready(源侧本就无绑定;修复状态是资产事实,不是可丢的注记)。
+    # reason 只随授权投影后的值(P2-9:内部精确原因与诊断引用不出包)
+    source_blocked: dict[str, dict] = {}
+    for s in schemes:
+        if s.get("repairStatus") == "blocked":
+            source_blocked[str(s.get("schemeId"))] = {
+                "reason": s.get("repairReason")}
 
     async def _resolve_combo_for(old_scheme_id: str, dep: dict | None,
                                  ) -> None:
-        # ① 显式映射优先(§14.2「确定性映射可在导入阶段完成」)
+        # ① 显式映射优先(§14.2「确定性映射可在导入阶段完成」;对源侧
+        #    blocked 方案同样生效 —— 调用方显式指认即显式修复,不是猜测)
         mapped = combo_id_mappings.get(old_scheme_id)
         if mapped is not None:
             combo = await db.get(AccountCombo, int(mapped))
@@ -381,6 +545,22 @@ async def _restore_bundle_once(
             combo_map[old_scheme_id] = combo.id
             return
         if dep is None:
+            if old_scheme_id in source_blocked:
+                # 无绑定且无映射的源 blocked 方案 → 原样 blocked
+                # (包内 reason 已是授权投影值;诊断引用不随包,统一
+                # 留空 —— 目标侧诊断只记本次恢复可观察的事实)
+                _src = source_blocked[old_scheme_id]
+                reason = (_src.get("reason")
+                          if _src.get("reason") in (
+                              REASON_COMBO_MISSING,
+                              REASON_COMBO_CROSS_ZONE,
+                              REASON_COMBO_DEPENDENCY_INVALID)
+                          else REASON_COMBO_DEPENDENCY_INVALID)
+                combo_blocked[old_scheme_id] = reason
+                blocked_diag[old_scheme_id] = {
+                    "source_combo_ref": None,
+                    "resolved_combo_id": None, "resolved_project_id": None}
+                return
             combo_map[old_scheme_id] = None
             return
         if skip_combos:
@@ -389,7 +569,20 @@ async def _restore_bundle_once(
                 "source_combo_ref": dep.get("ref"), "resolved_combo_id":
                     None, "resolved_project_id": None}
             return
-        # ② 定义恢复:条目合法 → 目标项目建组合(名冲突 → 确定性后缀)
+        # ② 定义恢复:条目合法 → 目标项目建组合(名冲突 → 确定性后缀);
+        #    同一源组合(ref 相同)被多个方案引用时只建一份 —— 按 ref 去重
+        #    映射复用,保住复用语义与 revision 溯源(§5/§20.2)
+        ref = dep.get("ref")
+        if ref is not None and ref in ref_combo_map:
+            # 评审三轮 P2-9:同 ref 复用前比对规范化内容指纹 —— 两方案
+            # 引用同一 ref 但 entries 不同时不得静默绑到第一个组合
+            if _canonical(dep.get("entries") or []) != ref_fingerprint[ref]:
+                raise AssetBundleError(
+                    422, "asset_bundle_combo_conflict",
+                    f"同一源组合 {ref!r} 在包内携带不同条目内容 —— "
+                    "请修正包内 comboDependencies 或改用显式映射(§14.2)")
+            combo_map[old_scheme_id] = ref_combo_map[ref]
+            return
         if not await _validate_combo_entries(db, dep.get("entries") or []):
             combo_blocked[old_scheme_id] = "combo_dependency_invalid"
             blocked_diag[old_scheme_id] = {
@@ -411,11 +604,21 @@ async def _restore_bundle_once(
             revision=1, updated_by_id=user.id)
         db.add(combo)
         await db.flush()
+        if ref is not None:
+            ref_combo_map[ref] = combo.id
+            ref_fingerprint[ref] = _canonical(dep.get("entries") or [])
         combo_map[old_scheme_id] = combo.id
 
-    for s in bundle["schemes"]:
+    for s in schemes:
         old_scheme_id = str(s.get("schemeId"))
-        if old_scheme_id in combo_deps or old_scheme_id in combo_id_mappings:
+        if old_scheme_id in combo_id_mappings:
+            await _resolve_combo_for(old_scheme_id,
+                                     combo_deps.get(old_scheme_id))
+        elif old_scheme_id in source_blocked:
+            # 源 blocked 优先于矛盾输入(包里同时带 dep):无绑定事实
+            # 权威,dep 不采信 —— 不给「静默变可执行」留缝
+            await _resolve_combo_for(old_scheme_id, None)
+        elif old_scheme_id in combo_deps:
             await _resolve_combo_for(old_scheme_id,
                                      combo_deps.get(old_scheme_id))
         else:
@@ -428,9 +631,9 @@ async def _restore_bundle_once(
     restored_scheme_ids: list[str] = []
     restored_bindings = 0
     blocked_schemes: list[str] = []
-    for s in bundle["schemes"]:
+    for s in schemes:
         old_scheme_id = str(s.get("schemeId"))
-        payload = scheme_store.normalized(s.get("payload") or {})
+        payload = s["payload"]      # 已在入口规范化(P2-10)
         # 数据集引用重指到目标侧铸造后的 ID
         for sel in payload.get("dataSetSelection") or []:
             if isinstance(sel, dict) and sel.get("datasetId") in ds_map:
@@ -449,7 +652,10 @@ async def _restore_bundle_once(
             scheme_id=_minted(used_scheme_ids,
                               f"rs-{uuid4().hex[:10]}"),
             scenario_id=target_sid, project_id=project_id,
-            name=name, is_default=bool(s.get("isDefault")),
+            name=name,
+            # 评审 P1-6:defaultSchemeId 是唯一权威 —— 包内 isDefault
+            # 标记不落库(冲突已在入口 422),报告与库内默认恒一致
+            is_default=(old_scheme_id == default_sid),
             payload=payload,
             repair_status="ready", revision=1,
             account_combo_id=(None if blocked_reason
@@ -479,7 +685,7 @@ async def _restore_bundle_once(
     # ── 幂等台账 + 报告(同事务;AC-46 台账缺失即未发生)─────────────
     default_new = next(
         (nid for old, nid in zip(
-            [str(s.get("schemeId")) for s in bundle["schemes"]],
+            [str(s.get("schemeId")) for s in schemes],
             restored_scheme_ids)
          if old == default_sid), None)
     report = {

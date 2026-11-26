@@ -198,7 +198,9 @@ async def test_rows_params_passes_click_params(client, monkeypatch):
 
     async def fake_fetch(name, *, refresh, service_url, owner_id,
                          query_alias, load_credential, click_params=None,
-                         service=None):
+                         service=None, **_kwargs):
+        # **_kwargs:§7.1 池通道后 fetch_rows 新增 cred_project_id 等
+        # 键 —— 打桩面只断言本例关心的分量,签名不被 seam 锁死
         captured["click"] = click_params
         captured["service"] = service
         return run.RowsResult(name, [], False, "t", False, False)

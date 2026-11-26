@@ -488,6 +488,10 @@ export interface SchemeV2 {
   serviceBindings: Record<string, ServiceBinding>
   options: RunOptions
   /** §8.2:方案不携带环境链位(ADR-0003 #21;存量 payload 键后端停读,读侧忽略) */
+  /** UPC §20.3(评审三轮 P2-10):修复状态与乐观锁版本 —— 保存随
+   *  expectedRevision 显式 CAS,并发保存不再最后写入覆盖 */
+  repairStatus?: 'ready' | 'blocked' | null
+  revision?: number
 }
 
 /** 方案 → 执行配方:把方案锁定的选择/绑定/执行指令物化成 RunRequest,
@@ -518,7 +522,10 @@ export async function createRunScheme(
 }
 export async function updateRunScheme(
   scenarioId: string, schemeId: string,
-  body: Omit<SchemeV2, 'schemeId' | 'isDefault'>,
+  body: Omit<SchemeV2, 'schemeId' | 'isDefault'> & {
+    /** 评审三轮 P2-10:可选 CAS;409 = scheme_revision_conflict */
+    expectedRevision?: number
+  },
 ): Promise<SchemeV2> {
   const { data } = await http.put<SchemeV2>(
     `/scenarios/${enc(scenarioId)}/run-schemes/${enc(schemeId)}`, body)

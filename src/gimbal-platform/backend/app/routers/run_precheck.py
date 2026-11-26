@@ -210,8 +210,12 @@ async def precheck_run(
             db, scen_row, item, token=token,
             user_id=user.id if user is not None else None,
             user=user, slot_map=_slot_map, circled=_circled)
-        one.builtin_auth_shadowed = await builtin_auth_shadowed(
-            user.id if user is not None else None, scen_row)
+        # 评审二轮 P1-2(AC-45 口径):blocked 装配闸先行 —— 辅助的内置
+        # 凭证告警会 resolve_exec_auths 解密执行人身份,repair_blocked 时
+        # 一并跳过,凭证调用数为零
+        if not one.repair_blocked:
+            one.builtin_auth_shadowed = await builtin_auth_shadowed(
+                user.id if user is not None else None, scen_row)
         out.append(one)
     return out
 
@@ -311,7 +315,13 @@ async def _precheck_one(
     payload: dict[str, Any] = scheme_store.normalized(scheme.payload)
     selection = payload.get("dataSetSelection") or []
     entry_ids = payload.get("injectionEntryIds") or []
-    bindings = payload.get("serviceBindings") or {}
+    # M3 执行装配:组合垫底(预检面,v4 §3.2「该处垫底,与执行同基础」)
+    # —— 缺身份/环境判定按生效绑定(组合 < 方案)算,不再把组合条目
+    # 误报成 identity_missing。
+    from ..services.account_combo import combo_base, pad_bindings
+    bindings = pad_bindings(
+        payload.get("serviceBindings") or {},
+        await combo_base(db, scheme.account_combo_id))
 
     # ── 数据集存在性(方案引用 × 本场景名下)─────────────────────
     ds_ids = sorted({s.get("datasetId") for s in selection

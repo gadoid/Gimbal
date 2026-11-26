@@ -106,7 +106,11 @@ async def test_validate_ok_compose(client, monkeypatch):
     assert out["ok"] is True
     assert out["unitCount"] == 2 and out["estimatedRuns"] == 2
     assert out["gates"] == 1 and out["inFlight"] is None
-    assert any(i["code"] == "pass" and i["level"] == "ok" for i in out["items"])
+    # 评审四轮 P2-5:单元未配 schemeId/row = 执行器裸基线语义 ——
+    # 预检给 no_scheme 提示(不再像旧回落那样静默选默认方案),
+    # 因此无「pass」ok 项,但 ok 仍为 True
+    assert any(i["code"] == "no_scheme" and i["level"] == "warn"
+               for i in out["items"])
 
 
 async def test_validate_cycle_reported_before_run(client, monkeypatch):

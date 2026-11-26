@@ -1418,6 +1418,7 @@ export interface RunScheme {
   accountComboId?: number | null
   dataSetIds?: Array<unknown>
   dataSetSelection?: Array<DataSetSelection>
+  expectedRevision?: number | null
   injectionEntryIds?: Array<unknown>
   isDefault?: boolean
   logSub?: unknown
