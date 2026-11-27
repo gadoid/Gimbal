@@ -1134,8 +1134,8 @@
         ]
       ],
       "sites": [
-        "app/routers/exec_configs.py:249",
-        "app/routers/exec_configs.py:398"
+        "app/routers/exec_configs.py:253",
+        "app/routers/exec_configs.py:402"
       ],
       "statuses": [
         409
@@ -1163,7 +1163,7 @@
         ]
       ],
       "sites": [
-        "app/routers/exec_configs.py:233"
+        "app/routers/exec_configs.py:237"
       ],
       "statuses": [
         409
@@ -2246,7 +2246,7 @@
       ],
       "sites": [
         "app/routers/account_combos.py:109",
-        "app/routers/exec_configs.py:207",
+        "app/routers/exec_configs.py:211",
         "app/routers/project_credentials.py:101",
         "app/routers/projects.py:264",
         "app/services/scheme_repair.py:289",
@@ -3513,8 +3513,8 @@
     "app/routers/asset_packages.py:32": "e.code",
     "app/routers/auth_sessions.py:290": "_msg or f\"account '{payload.username}' already exists for system '{payload.system}' in this environment\"",
     "app/routers/auth_sessions.py:410": "_msg or '更新冲突:同系统同环境已存在同名账户'",
-    "app/routers/exec_configs.py:309": "e.code",
-    "app/routers/exec_configs.py:358": "e.code",
+    "app/routers/exec_configs.py:313": "e.code",
+    "app/routers/exec_configs.py:362": "e.code",
     "app/routers/executions.py:1020": "e.code",
     "app/routers/executions.py:1025": "e.code",
     "app/routers/executions.py:761": "f'bad_{prefix}_pair'",

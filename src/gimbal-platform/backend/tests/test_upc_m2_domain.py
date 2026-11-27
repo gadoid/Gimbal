@@ -1294,3 +1294,52 @@ async def mk_proj_member(pid: int, username: str) -> None:
             User.username == username))).scalar_one()
         s.add(ProjectMember(project_id=pid, user_id=uid, role="member"))
         await s.commit()
+
+
+async def test_publish_to_public_generates_ready_for_severed_combo(
+        client: AsyncClient):
+    """复核 P2:发布(公共目标域,组合能力关闭,§7)继承 blocked 即
+    修复死角 —— 副本组合引用已剥(绑定恒剥),「组合依赖受阻」对副本
+    事实不成立:copy_schemes 按依赖事实生成 ready(§20.3「由领域服务
+    按依赖事实生成」;§20.3「继承阻塞**或**在目标域显式修复」的第二
+    分支在公共域结构性不可用)。源方案保持 blocked(本域可显式修复);
+    同域复制腿(test_copy_strips_binding_and_inherits_blocked)不受影响。"""
+    from app.core import db as db_module
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.services import scheme_repair
+    from sqlalchemy import select
+
+    h = await register_and_login(client, "m2pub_a", "pw123456")
+    uid = await _uid(client, "m2pub_a")
+    await client.post("/api/scenarios", headers=h,
+                      json=make_draft("sc-m2pub"))
+    await _mk_scheme(client, h, "sc-m2pub", "公共候选")
+
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-m2pub",
+            ComposerRunScheme.is_default == True))).scalar_one()
+        await scheme_repair.mark_blocked(
+            s, row, reason="combo_missing", action="import.blocked",
+            source_combo_ref="combo:legacy",
+            actor_id=uid, actor_name="m2pub_a")
+        await s.commit()
+
+    r = await client.post("/api/scenarios/sc-m2pub/publish", headers=h)
+    assert r.status_code == 200, r.text
+
+    async with db_module.SessionLocal() as s:
+        src = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-m2pub"))).scalars().all()
+        copy = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-m2pub-public"))
+        ).scalars().all()
+    src_status = {x.name: x.repair_status for x in src}
+    assert src_status["公共候选"] == "ready"        # 源原样(ready 行)
+    assert "blocked" in set(src_status.values()), \
+        "源 blocked 行保持 blocked(本域可显式修复)"
+    assert copy, "公共副本应继承方案行"
+    assert {x.repair_status for x in copy} == {"ready"}, \
+        f"公共副本按依赖事实生成 ready: {[(x.name, x.repair_status) for x in copy]}"
+    assert all(x.repair_reason is None for x in copy)
+    assert all(x.account_combo_id is None for x in copy)

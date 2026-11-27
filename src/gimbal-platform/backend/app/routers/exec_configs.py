@@ -202,13 +202,17 @@ async def _project_gate(db: AsyncSession, user, project_id: int | None,
                 detail={"code": "not_project_admin",
                         "message": "项目执行配置由项目管理员维护"})
     # 归档闸(§13.1 生命周期冻结):先归属/角色后 active —— 不可见恒
-    # 404,归档态不作存在性探针(r5-2.2 同拍,与项目凭证管理门一致)
-    if write and proj.status != Project.STATUS_ACTIVE:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={"code": "project_not_active",
-                    "message": f"项目状态为 {proj.status},"
-                               "归档起禁止执行配置管理写(§13.1)"})
+    # 404,归档态不作存在性探针(r5-2.2 同拍,与项目凭证管理门一致)。
+    # 写面行锁后复查(set-default 同款):归档可在预检与提交之间落定,
+    # 无锁检查存在 TOCTOU 窗口(复核 P2)
+    if write:
+        await db.refresh(proj, with_for_update=True)
+        if proj.status != Project.STATUS_ACTIVE:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={"code": "project_not_active",
+                        "message": f"项目状态为 {proj.status},"
+                                   "归档起禁止执行配置管理写(§13.1)"})
     return project_id
 
 

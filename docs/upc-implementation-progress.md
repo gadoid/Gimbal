@@ -866,3 +866,29 @@ S0 scope / S0 partial —— 均为「布景晚于创建面指纹或合法内容
 与成员门简化后属主比较形状消除);
 全量 `2382 passed / 2 skipped / 0 failed`(真实 PG 15432,xdist);
 Ruff changed 文件零新增;`git diff --check` 干净。
+
+## 3.17 复核轮四:归档闸 TOCTOU 锁行 + 公共副本修复死角(2026-11-27 续)
+
+* **P2 ExecConfig 归档闸 TOCTOU**:`_project_gate` 写面补行锁
+  (`refresh(with_for_update=True)`)后复查 status —— 归档事务可在
+  无锁预检与配置提交之间落定的窗口收口(set-default/delete 同款
+  锁序;读面不锁)。
+* **P2 公共副本修复死角**:发布(copy_schemes)忠实继承 blocked,
+  但公共项目组合能力关闭(§7)→ rebind_combo/confirm_no_combo 均
+  422 → 副本不可修复 + schedule 写点闸拒建任务 = 只能回源修复重
+  发布。按 §20.3「继承阻塞**或**在目标域显式修复」的第二分支在
+  公共域结构性不可用裁定:**组合能力关闭的目标域,副本组合引用
+  已剥(绑定恒剥),「组合依赖受阻」对副本事实不成立 —— copy_
+  schemes 按依赖事实生成 ready**(§20.3「由领域服务按依赖事实生
+  成」;非「普通空绑定清除」—— 普通 PATCH/PUT/保存仍不得清,同域
+  复制仍忠实继承、可在目标域显式修复)。源方案保持 blocked 不受
+  影响。用例:发布携带 blocked 方案的场景 → 公共副本全 ready
+  (reason/combo 位 None)+ 源 blocked 保持;同域复制继承腿
+  (test_copy_strips_binding_and_inherits_blocked)不受影响。
+
+**验证**:定向回归(m2 domain + exec_configs + exec_config 链 46)全绿;
+全量 `2382 passed / 2 skipped / 0 failed`(真实 PG 15432,xdist;+1 =
+发布公共副本 ready 用例);契约快照重生(raise 点行号位移,前端
+生成件 noop);Ruff changed 文件零新增(git stash 真路径 + 项目配置
+对比;/tmp 副本对比受 ruff 配置解析失真,弃用);
+`git diff --check` 干净。
