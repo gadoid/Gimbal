@@ -46,6 +46,8 @@ async def test_exec_config_crud_roundtrip(client, fresh_db):
         "aliases": ["fin-service.merchant-b", "fin-service.sit"],
         "bindings": {"fin-service.merchant-b": "merchant-b"},
         "carryOverrides": {"merchant.grade": "B", "flag.null": None},
+        # §11.4 remove 指针(复核 P1):随 systems 持久化回读
+        "carryRemovals": ["/merchant.grade"],
     }]
     # §8.2:environmentId 链位退役 —— 键被静默忽略,响应无该键
     r = await client.post("/api/exec-configs", headers=u1, json={

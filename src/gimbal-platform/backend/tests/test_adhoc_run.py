@@ -674,6 +674,8 @@ class TestDispatchSplitEquivalence:
             # 分层④:执行配置终值快照(重跑回放依据;空 = 当时无覆盖);
             # 决策 1 阶段 1 起圈定集终值一并落快照(重跑照查)
             "execSlotMap", "execCarryOverrides", "execCircledAliases",
+            # §11.4 remove 快照(复核 P1;空 = 无删除,旧行缺键同义)
+            "execCarryRemovals",
             # 架构终态(2026-11-21):默认环境落地后标签链可解析 →
             # 环境快照键随解析出现(两条派发路径同有,c1==c2 已对拍)
             "environmentId", "environmentSource"}

@@ -92,6 +92,25 @@ class SystemSubConfig(BaseModel):
         default_factory=dict, max_length=64,
         description="{字段: 值} —— 该系统在此业务过程下带的参数;"
                     " null = 显式注入 JSON null")
+    carryRemovals: list[_CarryField] = Field(
+        default_factory=list, max_length=64,
+        description="§11.4 remove 指针(JSON Pointer,相对该服务对象:"
+                    " /headers/legacy 删除该键)—— 值覆盖后按序执行;"
+                    "被删键从生效 carry 对象消失且不回填,高层值覆盖可"
+                    "重新定义")
+
+    @field_validator("carryRemovals")
+    @classmethod
+    def _validate_removal_pointers(cls, v: list[str]) -> list[str]:
+        # §11.4:非法转义/进入数组的路径写面即拒(422)—— 链上不再
+        # 二次容错
+        from ..services.exec_config import decode_carry_removal_pointer
+        for p in v:
+            try:
+                decode_carry_removal_pointer(p)
+            except ValueError as e:
+                raise ValueError(str(e)) from None
+        return v
 
 
 class ExecConfigCreate(BaseModel):

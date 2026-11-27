@@ -9208,6 +9208,17 @@
             "title": "Carryoverrides",
             "type": "object"
           },
+          "carryRemovals": {
+            "description": "§11.4 remove 指针(JSON Pointer,相对该服务对象: /headers/legacy 删除该键)—— 值覆盖后按序执行;被删键从生效 carry 对象消失且不回填,高层值覆盖可重新定义",
+            "items": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Carryremovals",
+            "type": "array"
+          },
           "service": {
             "description": "目录服务名(分组键)",
             "maxLength": 128,

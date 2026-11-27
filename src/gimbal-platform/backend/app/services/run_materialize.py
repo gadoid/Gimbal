@@ -294,6 +294,7 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
             continue  # 服务名解析失败(dispatch 已黄警):整步跳过
         bound = ctx.service_bindings.get(svc) or {}
         candidates = ctx.step_fields.get(i)
+        degraded = candidates is None
         if candidates is None:
             # 降级门控(无锚点存量 step):候选 = 绑定键 ∪ 全局默认键
             candidates = {**bound, **ctx.global_defaults}
@@ -314,10 +315,14 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
         for path, ftype in candidates.items():
             if path in bound:
                 value = bound[path]
-            elif path in ctx.global_defaults:
+            elif degraded and path in ctx.global_defaults:
+                # §11.4(复核 P1):global_defaults 仅剩无锚点降级门控
+                # 的取值源 —— 锚点步骤的生效值全部来自单源合并
+                # (bound;层默认已并入,含删除语义),**不再回填**:
+                # 选中配置删除的键不得经独立 defaults 表回流请求体
                 value = ctx.global_defaults[path]
             else:
-                continue                    # 两层皆无 → 本次不注入
+                continue                    # 绑定无此键(含已删除)→ 不注入
             if value is None:
                 coerced = None              # 绑定显式 null → 显式 JSON null
             elif isinstance(value, str) and "${" in value:

@@ -1038,3 +1038,57 @@ xdist;+2 = 迁移腿/修订腿;暂停覆盖腿并入既有 blocked 流用例,
 xdist;+1 同区三面,s0 同数改口径);契约快照重生(新码
 `target_zone_mismatch` / `explicit_scheme_invalid` 入册);Ruff
 changed 文件零新增(git stash 真路径对比);`git diff --check` 干净。
+
+## 3.22 复核轮九:同区派发独立核对 + 公共模板订阅统一拒 + §11.4 remove 语义与回填消除(2026-11-27 续)
+
+* **派发前独立核对模板与目标同区**(§11.5;复核 P1):上一轮的目标
+  执行权复核(`can_run_scenario`)只验持有人对目标的执行权,不判
+  `tpl.project_id == scen.project_id` —— 存量跨区行即使两边均有权、
+  内容/指纹全未变(指纹不含模板项目),仍可派发。run_instance 在
+  成员门后、目标权复核前补独立同区闸(不同区 → 暂停 made_private,
+  与成员资格/指纹匹配无关);验收用例按「不同区 ∧ 两边均有权 ∧ 指
+  纹已匹配」回归(直移模板行出目标项目后同会话重确认,派发闸拦
+  下,run_case 计数为零);撤权腿保留。同区正向对照改锚定场景
+  (plate 钉定)越闸到执行管线(channel 收口 = 各闸全过)。
+* **公共模板订阅统一拒(属主也不例外)**(§22 AC-50;复核 P2):
+  订阅闸原「非属主拒、属主放行重确认」留下「属主新建自订阅 → 运行
+  闸暂停 public_template → 重确认恢复 → 再暂停」死循环 —— 改为
+  公共模板对所有人 409 `public_template_subscribe_forbidden`;
+  grep 守卫白名单随之收编(属主比较行消失);用例改口径(属主订阅
+  也 409,fork 正路腿保留)。
+* **§11.4 remove 语义落地**(复核 P1;AC-48 链):
+  - **模型/写面**:ExecConfig systems 增 `carryRemovals`(JSON
+    Pointer,相对服务对象;`decode_carry_removal_pointer` ~ 转义
+    解码 → carry 平键,非法转义/空段/数组段写面 422);
+    ExecConfigChoice 增 `carry_removals` + `carry_removals_for`
+    单源裁决。
+  - **链位**:exec 层 = 值覆盖(既有)→ remove 按序删除
+    (`merge_carry_tiers` 增 `exec_removals`,值覆盖后 pop);预览
+    (runs.py resolve_effective_config)/首发(run_dispatcher 经
+    payload `exec_carry_removals`)/重跑(config_json 快照
+    `execCarryRemovals` 回放)三面同源;旧行/旧配方缺键 = 无删除。
+  - **层默认入单源**:`merge_carry_tiers` 每层先铺层默认
+    (`get_defaults`,层内最粗档,服务/实例/别名压过;层间后层压前
+    层 —— 项目默认覆盖公共别名)。此前层默认游离在合并外,仅靠
+    物化层回填进入请求。
+  - **回填消除**:`_apply_carry` 锚点步骤只从单源合并(bound)取值
+    —— `global_defaults` 不再是回填源(选中配置删除的键不得经独立
+    defaults 表回流;§11.4「请求物化器不得再查询独立 defaults 表
+    补值」);global_defaults 快照仅剩无锚点降级门控取值(既有钉死
+    语义)。run_materialize 三个钉旧回填的用例改口径(默认经 bound
+    注入 + 新增「仅 defaults 有、bound 无 = 已删除」不回填反例)。
+  - **验收**(用户指定口径):完整链路一条 —— 双锚点步骤(两服务
+    同名键)+ 层默认公共档 + 公共别名绑定 + 项目默认 + 选中配置
+    remove:预览生效对象与 materialize 请求体都缺该键、其他服务
+    同名键保留、项目默认压公共别名、配置改值覆盖重建被删键;写面
+    指针校验腿(3 非法 422 + 合法 201)。
+* **边界登记**:§11.4「每档(服务/实例/别名档)覆盖对象均可携带
+  remove」—— 本轮 remove 只落在 ExecConfig 层(值表无 remove 表达,
+  需值表/迁移面扩列);低层 remove 随值表模型扩展切片跟进。
+
+**验证**:定向回归(exec_config_chain 16 / exec_configs 42 /
+adhoc 42+ / materialize 36 / w0a 13 / s0 4 / 守卫)全绿;全量
+`2392 passed / 2 skipped / 0 failed`(真实 PG 15432,xdist;+2 =
+§11.4 完整链路 + 指针校验);契约快照重生(`carryRemovals` 入册,
+快照键 `execCarryRemovals` 入 config_json 面);Ruff changed 文件
+14 份规则码计数零漂移;`git diff --check` 干净。

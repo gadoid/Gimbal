@@ -450,7 +450,8 @@ async def preview_effective_config(
     _exec_cfg = None
     try:
         from ..services.exec_config import (
-            ExecConfigNotFound, carry_overrides_for, load_choice)
+            ExecConfigNotFound, carry_overrides_for, carry_removals_for,
+            load_choice)
         _req_exec = body.get("execConfigId")
         if _req_exec is not None and not isinstance(_req_exec, int):
             raise HTTPException(422, detail={
@@ -470,6 +471,7 @@ async def preview_effective_config(
     # §11.2 单选:选定配置的 carry 覆盖 = 「选定执行配置层」;项目 Carry
     # 资源层在 env/carry 链内正交参与,不再合并项目默认配置层(单选已含)
     _exec_carry = carry_overrides_for(_exec_cfg)
+    _exec_removals = carry_removals_for(_exec_cfg)
     # §8.2:标签 = 有效身份(绑定 + 执行配置换用后)标签 > 项目 > 平台
     from ..services import env_chain
     from ..services.service_aliases import exec_auth_aliases_of_definition
@@ -507,7 +509,8 @@ async def preview_effective_config(
         bindings=bindings, user_id=user.id,
         project_id=scen.project_id, environment=env,
         cred_project_id=cred_project_id,
-        slot_map=_slot_map or None, exec_carry_overrides=_exec_carry)
+        slot_map=_slot_map or None, exec_carry_overrides=_exec_carry,
+        exec_carry_removals=_exec_removals)
     return {
         "env": cfg.env,
         "services": cfg.services,

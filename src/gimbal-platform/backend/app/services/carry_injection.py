@@ -72,21 +72,32 @@ async def merge_carry_tiers(
     instance_key: str | None,
     env_id: int | None,
     exec_overrides: dict[str, str | None] | None = None,
+    exec_removals: "list[str] | None" = None,
 ) -> dict[str, dict]:
     """§8.9 键域**单源**合并(执行链 build_carry_context 与预览
     resolve_effective_config 共用 —— 同一函数,链序不可能漂移)。
 
     层内(细压粗):条目(alias_key)> 实例(system × 执行标签 env_id)
-    > 服务(base);层间(tiers 序,粗先细后,字段级覆盖):公共 < 项目;
-    最顶:执行配置覆盖层(``exec_overrides``,null = 显式注入 JSON null,
-    与值表语义同型)。逐 path 返回 ``{"value", "source"}``,source 形如
+    > 服务(base)> **层默认**(§11.4:每容器层依次应用层默认、服务、
+    实例、别名 —— 默认在单源合并内铺底,物化层不再单独回填);层间
+    (tiers 序,粗先细后,字段级覆盖):公共 < 项目;最顶:执行配置
+    覆盖层(``exec_overrides``,null = 显式注入 JSON null,与值表语义
+    同型)。逐 path 返回 ``{"value", "source"}``,source 形如
     ``{scope}:{scopeId}:alias`` / ``:instance:{envId}`` / ``:base`` /
-    ``exec_config`` —— 执行链只取 value,预览消费全部(§5 守则
-    「自证每个值的来路」)。``env_id=None``(标签链全空/导入析出)
-    → 实例档跳过,不猜环境。
+    ``{scope}:{scopeId}:defaults`` / ``exec_config`` —— 执行链只取
+    value,预览消费全部(§5 守则「自证每个值的来路」)。
+    ``env_id=None``(标签链全空/导入析出)→ 实例档跳过,不猜环境。
+
+    §11.4 remove(复核 P1):``exec_removals``(解码后的 carry 平键)
+    在值覆盖之后按序删除 —— 被删键从生效对象消失,预览与物化同源
+    (同一 merged),物化不得再从默认表回填;同层更高档/高层(配置
+    值覆盖)可重新定义已删除的键。
     """
     merged: dict[str, dict] = {}
     for t in tiers:
+        for path, value in (await carry_store.get_defaults(db, t)).items():
+            merged[path] = {"value": value,
+                            "source": f"{t[0]}:{t[1]}:defaults"}
         t_base = await carry_store.get_bindings(db, base, t)
         t_inst = (await carry_store.get_instance_bindings(
             db, instance_key, env_id, t)
@@ -106,6 +117,8 @@ async def merge_carry_tiers(
     if exec_overrides:
         for path, value in exec_overrides.items():
             merged[path] = {"value": value, "source": "exec_config"}
+    for path in exec_removals or []:
+        merged.pop(path, None)
     return merged
 
 
@@ -117,6 +130,7 @@ async def build_carry_context(
     user_id: int | None = None,
     bindings: dict | None = None,
     exec_overrides: dict[str, dict[str, str | None]] | None = None,
+    exec_removals: "dict[str, list[str]] | None" = None,
     env_id: int | None = None,
 ) -> CarryContext:
     """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
@@ -187,6 +201,9 @@ async def build_carry_context(
     tiers: list[tuple[str, int]] = [await carry_store.public_scope(db)]
     if project_id is not None:
         tiers.append(("project", project_id))
+    # 层默认原样快照(§11.4 复核 P1 起仅供**无锚点降级门控**取值 ——
+    # 锚点步骤的默认已随 merge_carry_tiers 入单源合并,物化层不再把
+    # 本快照当回填源:被选中配置删除的键不得从这里回流)
     defaults: dict[str, str | None] = {}
     for t in tiers:
         defaults = {**defaults,
@@ -227,7 +244,8 @@ async def build_carry_context(
                 alias_key=effective_alias(raw, bindings),
                 instance_key=system_of.get(base) or None,
                 env_id=env_id,
-                exec_overrides=(exec_overrides or {}).get(base))
+                exec_overrides=(exec_overrides or {}).get(base),
+                exec_removals=(exec_removals or {}).get(base))
             service_bindings[raw] = {
                 path: m["value"] for path, m in merged.items()}
 

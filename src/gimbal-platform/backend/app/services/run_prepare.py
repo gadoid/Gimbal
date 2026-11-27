@@ -672,6 +672,7 @@ async def prepare_exec(
     cred_project_id: int | None = None,
     slot_overrides: dict[str, str] | None = None,
     exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
+    exec_carry_removals: "dict[str, list[str]] | None" = None,
     skip_carry: bool = False,
 ) -> ExecPrep:
     """准备段统一入口(每次执行一次;逐 case 段保持
@@ -818,6 +819,7 @@ async def prepare_exec(
                     user_id=(owner_id if project_id is None else None),
                     bindings=bindings,
                     exec_overrides=exec_carry_overrides,
+                    exec_removals=exec_carry_removals,
                     env_id=(getattr(environment, "env_id", None)
                             if environment is not None else None))
         except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
@@ -852,6 +854,7 @@ async def resolve_effective_config(
     cred_project_id: int | None = None,
     slot_map: dict[str, str] | None = None,
     exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
+    exec_carry_removals: "dict[str, list[str]] | None" = None,
 ) -> EffectiveConfig:
     """组合环境/地址/条目装载/carry(预览与执行同源;见类注释)。
 
@@ -950,7 +953,8 @@ async def resolve_effective_config(
             alias_key=service_aliases.effective_alias(raw, bindings),
             instance_key=system_of.get(base) or None,
             env_id=carry_env,
-            exec_overrides=(exec_carry_overrides or {}).get(base))
+            exec_overrides=(exec_carry_overrides or {}).get(base),
+            exec_removals=(exec_carry_removals or {}).get(base))
     defaults_out: dict[str, dict] = {}
     for t in tiers:
         t_rows = await carry_store.get_defaults(db, t)

@@ -198,8 +198,14 @@ def _ctx(**over) -> CarryContext:
         step_fields={0: {"$.remark": "string", "$.appCode": "string",
                           "$.count": "integer", "$.flag": "boolean",
                           "$.meta": "object", "$.tpl": "string"}},
+        # §11.4(复核 P1):层默认已并入单源合并(bound)—— 默认值经
+        # bound 注入;global_defaults 仅供无锚点降级门控,不再是物化
+        # 回填源(独立 defaults 表补值 = 禁止路径)
         service_bindings={"fin-service": {"$.remark": "压测-张三",
-                                           "$.count": "3"}},
+                                           "$.count": "3",
+                                           "$.appCode": "TRACE-V2",
+                                           "$.flag": "true",
+                                           "$.meta": "{\"k\": 1}"}},
         global_defaults={"$.appCode": "TRACE-V2", "$.flag": "true",
                           "$.meta": "{\"k\": 1}"},
     )
@@ -214,9 +220,18 @@ class TestCarryFill:
         body = out["steps"][0]["request"]["body"]
         assert body["remark"] == "压测-张三"
 
-    def test_global_default_fills_unbound_path(self):
+    def test_merged_default_fills_unbound_path(self):
         out = materialize_run_copy(_carry_converted(), carry_context=_ctx())
         assert out["steps"][0]["request"]["body"]["appCode"] == "TRACE-V2"
+
+    def test_global_defaults_no_backfill_for_anchored(self):
+        """§11.4:仅存在于独立 defaults 快照、单源合并(bound)没有的
+        键(= 被选中配置删除)不得回填请求体。"""
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            service_bindings={"fin-service": {"$.remark": "压测-张三",
+                                              "$.count": "3"}}))
+        assert "appCode" not in out["steps"][0]["request"]["body"]
+        assert "flag" not in out["steps"][0]["request"]["body"]
 
     def test_body_existing_key_skipped(self):
         src = _carry_converted()
@@ -243,8 +258,8 @@ class TestCarryFill:
 
     def test_coerce_failure_keeps_original_string(self):
         out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
-            service_bindings={"fin-service": {"$.count": "3x"}},
-            global_defaults={"$.meta": "{not-json}"}))
+            service_bindings={"fin-service": {"$.count": "3x",
+                                              "$.meta": "{not-json}"}}))
         body = out["steps"][0]["request"]["body"]
         assert body["count"] == "3x"
         assert body["meta"] == "{not-json}"

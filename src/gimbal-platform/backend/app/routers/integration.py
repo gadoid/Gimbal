@@ -1000,11 +1000,12 @@ async def subscribe_task(
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
     await _subscribable(db, tpl, user)
-    # AC-50:公共模板直接调度拒绝 —— 订阅走「复制、映射并确认」后的
-    # 本域模板(普通项目);属主重确认(自有实例)不受此闸
+    # AC-50(复核 P2):公共模板**统一拒绝订阅**(属主也不例外)——
+    # 属主自订阅新建后只会被运行闸暂停成 public_template(死循环:
+    # 重确认恢复 → 派发闸再暂停);公共模板 = 纯目录面,执行走「复制
+    # 到你的普通项目 → 确认订阅」后的本域模板
     from ..services.zone import public_project_id as _ppid_sub
-    if (tpl.project_id == await _ppid_sub(db)
-            and tpl.owner_id != user.id):
+    if tpl.project_id == await _ppid_sub(db):
         raise _bad("public_template_subscribe_forbidden",
                    "公共模板不能直接订阅:请先复制到你的普通项目,"
                    "复制、映射并确认后订阅(AC-50)", 409)

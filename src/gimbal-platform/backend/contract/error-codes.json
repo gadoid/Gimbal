@@ -352,7 +352,7 @@
     "alias_unavailable": {
       "sites": [
         "app/routers/integration.py:966",
-        "app/routers/integration.py:1031"
+        "app/routers/integration.py:1032"
       ],
       "statuses": [
         503
@@ -481,7 +481,7 @@
       ],
       "sites": [
         "app/routers/suites.py:1007",
-        "app/services/run_dispatcher.py:1394"
+        "app/services/run_dispatcher.py:1408"
       ],
       "statuses": [
         409
@@ -498,8 +498,8 @@
       ],
       "sites": [
         "app/routers/suites.py:1014",
-        "app/services/run_dispatcher.py:1404",
-        "app/services/run_dispatcher.py:1410"
+        "app/services/run_dispatcher.py:1418",
+        "app/services/run_dispatcher.py:1424"
       ],
       "statuses": [
         409
@@ -666,7 +666,7 @@
       "sites": [
         "app/routers/integration.py:333",
         "app/routers/integration.py:557",
-        "app/routers/runs.py:530"
+        "app/routers/runs.py:533"
       ],
       "statuses": [
         422
@@ -762,7 +762,7 @@
     },
     "consent_stale": {
       "sites": [
-        "app/routers/integration.py:1034"
+        "app/routers/integration.py:1035"
       ],
       "statuses": [
         409
@@ -801,14 +801,14 @@
         ]
       ],
       "sites": [
-        "app/routers/integration.py:1043",
+        "app/routers/integration.py:1044",
         "app/routers/query_views.py:119",
         "app/routers/query_views.py:124",
-        "app/routers/runs.py:493",
-        "app/routers/runs.py:501",
+        "app/routers/runs.py:495",
+        "app/routers/runs.py:503",
         "app/routers/suites.py:994",
-        "app/services/run_dispatcher.py:1338",
-        "app/services/run_dispatcher.py:1343"
+        "app/services/run_dispatcher.py:1352",
+        "app/services/run_dispatcher.py:1357"
       ],
       "statuses": [
         409,
@@ -817,7 +817,7 @@
     },
     "credential_source_locked": {
       "sites": [
-        "app/routers/integration.py:1048"
+        "app/routers/integration.py:1049"
       ],
       "statuses": [
         409
@@ -846,25 +846,25 @@
     },
     "dataset_binding_unsupported": {
       "sites": [
-        "app/services/run_dispatcher.py:1492"
+        "app/services/run_dispatcher.py:1506"
       ],
       "statuses": []
     },
     "debug_not_supported": {
       "sites": [
-        "app/services/run_dispatcher.py:1136"
+        "app/services/run_dispatcher.py:1140"
       ],
       "statuses": []
     },
     "debug_single_case": {
       "sites": [
-        "app/services/run_dispatcher.py:1138"
+        "app/services/run_dispatcher.py:1142"
       ],
       "statuses": []
     },
     "debug_single_run": {
       "sites": [
-        "app/services/run_dispatcher.py:1142"
+        "app/services/run_dispatcher.py:1146"
       ],
       "statuses": []
     },
@@ -1008,7 +1008,7 @@
     },
     "duplicate_client_ref": {
       "sites": [
-        "app/services/run_dispatcher.py:1570"
+        "app/services/run_dispatcher.py:1584"
       ],
       "statuses": []
     },
@@ -1080,11 +1080,11 @@
       "sites": [
         "app/routers/run_precheck.py:581",
         "app/routers/runs.py:318",
-        "app/routers/runs.py:485",
+        "app/routers/runs.py:487",
         "app/routers/scenarios.py:219",
         "app/services/adhoc_run.py:256",
         "app/services/adhoc_run.py:315",
-        "app/services/run_dispatcher.py:1250"
+        "app/services/run_dispatcher.py:1254"
       ],
       "statuses": [
         409
@@ -1133,8 +1133,8 @@
         ]
       ],
       "sites": [
-        "app/routers/exec_configs.py:253",
-        "app/routers/exec_configs.py:402"
+        "app/routers/exec_configs.py:272",
+        "app/routers/exec_configs.py:421"
       ],
       "statuses": [
         409
@@ -1148,7 +1148,7 @@
         ]
       ],
       "sites": [
-        "app/routers/runs.py:456"
+        "app/routers/runs.py:457"
       ],
       "statuses": [
         422
@@ -1162,7 +1162,7 @@
         ]
       ],
       "sites": [
-        "app/routers/exec_configs.py:237"
+        "app/routers/exec_configs.py:256"
       ],
       "statuses": [
         409
@@ -1176,8 +1176,8 @@
         ]
       ],
       "sites": [
-        "app/routers/runs.py:461",
-        "app/services/run_dispatcher.py:1175"
+        "app/routers/runs.py:462",
+        "app/services/run_dispatcher.py:1179"
       ],
       "statuses": [
         404
@@ -1185,7 +1185,7 @@
     },
     "exec_config_unsupported": {
       "sites": [
-        "app/services/run_dispatcher.py:1164"
+        "app/services/run_dispatcher.py:1168"
       ],
       "statuses": []
     },
@@ -1271,7 +1271,7 @@
       ],
       "sites": [
         "app/routers/suites.py:1003",
-        "app/services/run_dispatcher.py:1391"
+        "app/services/run_dispatcher.py:1405"
       ],
       "statuses": [
         409
@@ -1354,7 +1354,7 @@
     "identity_not_circled": {
       "sites": [
         "app/routers/run_precheck.py:644",
-        "app/services/run_dispatcher.py:1522"
+        "app/services/run_dispatcher.py:1536"
       ],
       "statuses": []
     },
@@ -1399,14 +1399,14 @@
     },
     "instance_gone": {
       "sites": [
-        "app/services/integration_runner.py:1448",
-        "app/services/integration_runner.py:1528"
+        "app/services/integration_runner.py:1458",
+        "app/services/integration_runner.py:1538"
       ],
       "statuses": []
     },
     "instance_missing": {
       "sites": [
-        "app/routers/integration.py:1052"
+        "app/routers/integration.py:1053"
       ],
       "statuses": [
         500
@@ -1704,7 +1704,7 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:1124"
+        "app/routers/executions.py:1126"
       ],
       "statuses": [
         409
@@ -1732,7 +1732,7 @@
     },
     "no_steps": {
       "sites": [
-        "app/services/run_dispatcher.py:1123"
+        "app/services/run_dispatcher.py:1127"
       ],
       "statuses": []
     },
@@ -1744,8 +1744,8 @@
         ]
       ],
       "sites": [
-        "app/routers/executions.py:1060",
-        "app/routers/executions.py:1077"
+        "app/routers/executions.py:1062",
+        "app/routers/executions.py:1079"
       ],
       "statuses": [
         409
@@ -1765,10 +1765,10 @@
         "app/routers/carry.py:92",
         "app/routers/carry.py:143",
         "app/routers/carry.py:151",
-        "app/routers/exec_configs.py:172",
-        "app/routers/exec_configs.py:182",
-        "app/routers/exec_configs.py:188",
-        "app/routers/exec_configs.py:196",
+        "app/routers/exec_configs.py:191",
+        "app/routers/exec_configs.py:201",
+        "app/routers/exec_configs.py:207",
+        "app/routers/exec_configs.py:215",
         "app/routers/executions.py:108",
         "app/routers/executions.py:270",
         "app/routers/integration.py:545",
@@ -1786,9 +1786,9 @@
         "app/routers/integration.py:904",
         "app/routers/integration.py:955",
         "app/routers/integration.py:1001",
-        "app/routers/integration.py:1102",
-        "app/routers/integration.py:1168",
-        "app/routers/integration.py:1213",
+        "app/routers/integration.py:1103",
+        "app/routers/integration.py:1169",
+        "app/routers/integration.py:1214",
         "app/routers/project_credentials.py:70",
         "app/routers/project_credentials.py:121",
         "app/routers/project_promotions.py:95",
@@ -1864,8 +1864,8 @@
       ],
       "sites": [
         "app/routers/executions.py:986",
-        "app/routers/runs.py:620",
-        "app/routers/runs.py:650",
+        "app/routers/runs.py:623",
+        "app/routers/runs.py:653",
         "app/routers/suites.py:84",
         "app/routers/suites.py:1970",
         "app/routers/suites.py:1974",
@@ -1903,7 +1903,7 @@
       ],
       "sites": [
         "app/routers/carry.py:96",
-        "app/routers/exec_configs.py:200",
+        "app/routers/exec_configs.py:219",
         "app/routers/project_credentials.py:109",
         "app/routers/project_tokens.py:80",
         "app/routers/projects.py:208",
@@ -1922,7 +1922,7 @@
         ]
       ],
       "sites": [
-        "app/routers/runs.py:560"
+        "app/routers/runs.py:563"
       ],
       "statuses": [
         422
@@ -2190,7 +2190,7 @@
       "sites": [
         "app/routers/auth_sessions.py:172",
         "app/routers/carry.py:76",
-        "app/routers/exec_configs.py:166",
+        "app/routers/exec_configs.py:185",
         "app/routers/scenario_filter_groups.py:47"
       ],
       "statuses": [
@@ -2251,7 +2251,7 @@
       ],
       "sites": [
         "app/routers/account_combos.py:109",
-        "app/routers/exec_configs.py:211",
+        "app/routers/exec_configs.py:230",
         "app/routers/project_credentials.py:101",
         "app/routers/projects.py:264",
         "app/services/scheme_repair.py:289",
@@ -2394,7 +2394,7 @@
         ]
       ],
       "sites": [
-        "app/routers/exec_configs.py:176"
+        "app/routers/exec_configs.py:195"
       ],
       "statuses": [
         409
@@ -2443,7 +2443,7 @@
     },
     "public_template_subscribe_forbidden": {
       "sites": [
-        "app/routers/integration.py:1008"
+        "app/routers/integration.py:1009"
       ],
       "statuses": [
         409
@@ -2537,7 +2537,7 @@
       "sites": [
         "app/routers/integration.py:530",
         "app/routers/runs.py:225",
-        "app/services/run_dispatcher.py:1535"
+        "app/services/run_dispatcher.py:1549"
       ],
       "statuses": [
         403,
@@ -2554,7 +2554,7 @@
     },
     "resume_not_allowed": {
       "sites": [
-        "app/routers/integration.py:1233"
+        "app/routers/integration.py:1234"
       ],
       "statuses": [
         409
@@ -2576,13 +2576,13 @@
     },
     "run_options_step_from_unsupported": {
       "sites": [
-        "app/services/run_dispatcher.py:1106"
+        "app/services/run_dispatcher.py:1110"
       ],
       "statuses": []
     },
     "run_options_subscribe_unsupported": {
       "sites": [
-        "app/services/run_dispatcher.py:1112"
+        "app/services/run_dispatcher.py:1116"
       ],
       "statuses": []
     },
@@ -2640,8 +2640,8 @@
         ]
       ],
       "sites": [
-        "app/routers/runs.py:594",
-        "app/routers/runs.py:604"
+        "app/routers/runs.py:597",
+        "app/routers/runs.py:607"
       ],
       "statuses": [
         409
@@ -2655,8 +2655,8 @@
         ]
       ],
       "sites": [
-        "app/routers/runs.py:542",
-        "app/routers/runs.py:553"
+        "app/routers/runs.py:545",
+        "app/routers/runs.py:556"
       ],
       "statuses": [
         422
@@ -2704,12 +2704,12 @@
         "app/routers/integration.py:361",
         "app/routers/integration.py:650",
         "app/routers/integration.py:918",
-        "app/routers/integration.py:1015",
+        "app/routers/integration.py:1016",
         "app/routers/runs.py:388",
         "app/routers/runs.py:394",
-        "app/routers/runs.py:575",
-        "app/routers/runs.py:581",
-        "app/routers/runs.py:642",
+        "app/routers/runs.py:578",
+        "app/routers/runs.py:584",
+        "app/routers/runs.py:645",
         "app/services/integration_runner.py:786",
         "app/services/integration_runner.py:1096",
         "app/services/query_context.py:93",
@@ -3024,13 +3024,13 @@
     },
     "step_to_out_of_range": {
       "sites": [
-        "app/services/run_dispatcher.py:1125"
+        "app/services/run_dispatcher.py:1129"
       ],
       "statuses": []
     },
     "subscription_not_found": {
       "sites": [
-        "app/routers/integration.py:1123"
+        "app/routers/integration.py:1124"
       ],
       "statuses": [
         404
@@ -3255,7 +3255,7 @@
     },
     "target_zone_mismatch": {
       "sites": [
-        "app/routers/integration.py:1019"
+        "app/routers/integration.py:1020"
       ],
       "statuses": [
         409
@@ -3263,8 +3263,8 @@
     },
     "template_gone": {
       "sites": [
-        "app/services/integration_runner.py:1451",
-        "app/services/integration_runner.py:1531"
+        "app/services/integration_runner.py:1461",
+        "app/services/integration_runner.py:1541"
       ],
       "statuses": []
     },
@@ -3406,7 +3406,7 @@
       "sites": [
         "app/routers/suites.py:1028",
         "app/routers/suites.py:1238",
-        "app/services/run_dispatcher.py:1021"
+        "app/services/run_dispatcher.py:1023"
       ],
       "statuses": [
         409
@@ -3543,10 +3543,10 @@
     "app/routers/asset_packages.py:32": "e.code",
     "app/routers/auth_sessions.py:290": "_msg or f\"account '{payload.username}' already exists for system '{payload.system}' in this environment\"",
     "app/routers/auth_sessions.py:410": "_msg or '更新冲突:同系统同环境已存在同名账户'",
-    "app/routers/exec_configs.py:313": "e.code",
-    "app/routers/exec_configs.py:362": "e.code",
-    "app/routers/executions.py:1020": "e.code",
-    "app/routers/executions.py:1025": "e.code",
+    "app/routers/exec_configs.py:332": "e.code",
+    "app/routers/exec_configs.py:381": "e.code",
+    "app/routers/executions.py:1022": "e.code",
+    "app/routers/executions.py:1027": "e.code",
     "app/routers/executions.py:761": "f'bad_{prefix}_pair'",
     "app/routers/executions.py:769": "f'bad_{prefix}_ts'",
     "app/routers/integration.py:369": "e.code",
@@ -3562,9 +3562,9 @@
     "app/routers/runs.py:339": "e.code",
     "app/routers/runs.py:341": "e.code",
     "app/routers/runs.py:446": "e.code",
-    "app/routers/runs.py:692": "e.code",
-    "app/routers/runs.py:708": "e.code",
-    "app/routers/runs.py:710": "e.code",
+    "app/routers/runs.py:695": "e.code",
+    "app/routers/runs.py:711": "e.code",
+    "app/routers/runs.py:713": "e.code",
     "app/routers/scenario_import.py:32": "detail",
     "app/routers/scenarios.py:198": "e.code",
     "app/routers/scenarios.py:444": "e.code",
@@ -3573,9 +3573,9 @@
     "app/routers/suites.py:614": "payload",
     "app/services/account_combo.py:143": "e.code",
     "app/services/plate_client.py:694": "resp.json().get('error', {}).get('code', 'plate_error')",
-    "app/services/run_dispatcher.py:1190": "e.code",
-    "app/services/run_dispatcher.py:1473": "e.code",
-    "app/services/run_dispatcher.py:1511": "code",
+    "app/services/run_dispatcher.py:1194": "e.code",
+    "app/services/run_dispatcher.py:1487": "e.code",
+    "app/services/run_dispatcher.py:1525": "code",
     "app/services/scenario_asset_package.py:721": "e.code",
     "app/services/scenario_import.py:892": "code",
     "app/services/scenario_import.py:962": "code",
@@ -3592,8 +3592,8 @@
       "app/services/project_promotion.py:33 PromotionError",
       "app/services/query_context.py:42 QueryContextError",
       "app/services/query_view_runner.py:46 QueryViewError",
-      "app/services/run_dispatcher.py:4043 NotFound",
-      "app/services/run_dispatcher.py:4050 Conflict",
+      "app/services/run_dispatcher.py:4063 NotFound",
+      "app/services/run_dispatcher.py:4070 Conflict",
       "app/services/run_params.py:43 ParamsError",
       "app/services/scenario_asset_package.py:63 AssetBundleError",
       "app/services/scenario_import.py:55 ImportRejected",

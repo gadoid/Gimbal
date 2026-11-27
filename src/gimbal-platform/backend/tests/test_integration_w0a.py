@@ -435,13 +435,15 @@ async def test_public_template_direct_subscribe_rejected(client):
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "public_template_dispatch_forbidden"
     assert await _inst(tid, uid2) is None
-    # 属主自订阅(重确认)不受闸
+    # 属主自订阅**统一拒**(复核 P2:属主新建自订阅只会被运行闸暂停
+    # 成 public_template 死循环;公共模板 = 纯目录面,执行走复制)
     fp1 = (await client.get(
         f"/api/integration/tasks/{tid}/subscription-summary",
         headers=u1)).json()["fingerprint"]
     r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
                           headers=u1, json={"fingerprint": fp1})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "public_template_subscribe_forbidden"
 
     # 正路:复制场景(fork)→ 建本域模板 → 订阅(复制、映射并确认)
     copy_sid = (await client.post(
@@ -716,6 +718,7 @@ async def test_template_target_same_zone_enforced(client, monkeypatch):
     派发:持有人被移出目标场景所在项目 → 目标执行权复核暂停
     made_private,外呼计数为零(移出前同区正向腿先证明闸不误伤:
     管线越过目标闸到达指纹闸)。"""
+    from app.models.composer_scenario import ComposerScenario
     from app.models.project import ProjectMember
     from app.services import integration_runner as ir
     from app.services.project_space import get_default_private_project
@@ -732,7 +735,8 @@ async def test_template_target_same_zone_enforced(client, monkeypatch):
     pid = await mk_normal_project("np-sz", {"w0a_r": "admin",
                                             "w0a_s": "member"})
     r = await client.post("/api/scenarios", headers=u1,
-                          json=make_draft("sc-sz", steps=STEPS),
+                          json=make_draft("sc-sz", steps=STEPS,
+                                          plate={"svc": "1.0#1"}),
                           params={"projectId": pid})
     assert r.status_code in (200, 201), r.text
 
@@ -765,22 +769,50 @@ async def test_template_target_same_zone_enforced(client, monkeypatch):
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "target_zone_mismatch"
 
-    # ── 派发面(正向对照):分叉行持有人仍持目标项目成员资格 →
-    # 目标执行权复核通过,管线越过目标闸(指纹因模板行写而暂停
-    # template_changed —— 证明到达了目标闸之后的闸面)
+    # ── 派发面(正向对照):模板归回目标项目(同区)+ 指纹重确认 →
+    # 同区闸/目标执行权复核/指纹闸全过,真实外呼执行(STEPS 无凭证
+    # 需求,跑完回 idle —— 证明同区闸不误伤合法派发)
     async with db_module.SessionLocal() as s:
+        tpl = await s.get(IntegrationTask, tid)
+        tpl.project_id = pid
+        scen = (await s.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == "sc-sz"))).scalar_one()
         inst = (await s.execute(select(IntegrationTask).where(
             IntegrationTask.template_id == tid,
             IntegrationTask.holder_id == uid1))).scalars().one()
         inst_id = inst.id
+        await ir.refresh_consent(s, tpl, scen, inst)
+        await s.commit()
+    await ir.run_instance(inst_id)
+    inst = await _inst(tid, uid1)
+    assert inst.state == "idle" and inst.paused_reason == "", \
+        "同区闸不得误伤模板与目标同项目的订阅(不得在闸面暂停)"
+    # 越过同区/目标权/指纹/working 各闸到达执行管线(plate 桩本套件
+    # 不可得 → channel 收口;任何闸面命中都会是 paused 而非 idle)
+    assert inst.run_status == "channel"
+
+    # ── 派发面(复核 P1 终裁):存量跨区分叉行 + 两边均有权 + **指纹
+    # 已匹配**(直移模板行出目标项目后同会话重确认)→ 派发前独立
+    # 同区核对 → 暂停,零派发(不因成员资格或指纹匹配豁免)
+    async with db_module.SessionLocal() as s:
+        tpl = await s.get(IntegrationTask, tid)
+        tpl.project_id = space_id
+        scen = (await s.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == "sc-sz"))).scalar_one()
+        inst = (await s.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tid,
+            IntegrationTask.holder_id == uid1))).scalars().one()
+        await ir.refresh_consent(s, tpl, scen, inst)
+        await s.commit()
     await ir.run_instance(inst_id)
     inst = await _inst(tid, uid1)
     assert inst.state == "paused"
-    assert inst.paused_reason == "template_changed", \
-        "目标执行权复核不得误伤仍有目标项目成员资格的持有人"
+    assert inst.paused_reason == "made_private", \
+        "跨区分叉行即使两边均有权、指纹匹配也必须被同区核对拦下"
+    assert calls["n"] == 0, "跨区分叉行不得触达外呼通道"
 
     # 持有人被移出目标场景所在项目(同事务补守夜人满足 §20 admin
-    # 不变量)→ 派发闸按订阅主体重验目标执行权 → 暂停,零派发
+    # 不变量)→ 撤权腿保持:派发闸再次拦截,零派发
     async with db_module.SessionLocal() as s:
         await s.execute(sa_delete(ProjectMember).where(
             ProjectMember.project_id == pid,
@@ -791,5 +823,5 @@ async def test_template_target_same_zone_enforced(client, monkeypatch):
     inst = await _inst(tid, uid1)
     assert inst.state == "paused"
     assert inst.paused_reason == "made_private", \
-        "被移出目标项目后派发必须被目标执行权复核拦下"
-    assert calls["n"] == 0, "目标执行权失效的派发次数必须为零"
+        "被移出目标项目后派发必须被拦下"
+    assert calls["n"] == 0, "撤权/跨区两腿均不得触达外呼通道"

@@ -1286,6 +1286,16 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     message="模板已转为私有,或持有人已不在模板所属项目"
                             "成员中 —— 执行已暂停;满足条件后请重新确认"
                             "订阅", lease=lease)
+            # §11.5(复核 P1 终裁):派发前**独立核对**模板与目标同区 —
+            # 存量跨区分叉行即使持有人两边均有权、内容/指纹全未变,也
+            # 不得派发(同区是不变量,不因成员资格或指纹匹配而豁免)。
+            if tpl.project_id != scen.project_id:
+                return await _pause_consent_changed(
+                    db, inst, tpl,
+                    paused_reason="made_private",
+                    message="模板与执行目标不在同一项目(§11.5 同区不变"
+                            "量)—— 执行已暂停;请将模板迁入目标项目或"
+                            "重建模板后重新确认订阅", lease=lease)
             # §11.5(复核 P1):派发以订阅主体重验**实际目标**执行权 ——
             # 成员门按模板项目判,拦不住模板与目标分叉的存量行/场景迁
             # 项目后「已不在场景项目」的持有人(指纹不含目标项目成员

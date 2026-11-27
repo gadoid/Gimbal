@@ -83,7 +83,8 @@ class ExecConfig(Base):
     # {"systems": [{"service": 目录服务名,
     #               "aliases": [圈定调用身份条目名],
     #               "bindings": {身份面(别名全名): 条目名},
-    #               "carryOverrides": {字段: 值}}],
+    #               "carryOverrides": {字段: 值},
+    #               "carryRemovals": [remove 指针(§11.4)]}],
     #  "description": 说明文本(≤2048), "tags": [标签(≤20 字,≤32 个)]}
     # (bindings 覆盖条目解析序的配置层;carryOverrides 值内联,
     #  null = 显式注入 JSON null,与 carry_store 语义同型;

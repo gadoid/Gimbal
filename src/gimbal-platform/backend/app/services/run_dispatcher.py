@@ -1004,6 +1004,8 @@ async def dispatch_target(
     # §11.2 单选:选定配置的 carry 覆盖链(④ 重跑直用快照终值)
     _exec_carry = await _resolve_carry_policy(
         db, exec_cfg=_exec_cfg, exec_replay=exec_replay)
+    _exec_removals = await _resolve_carry_removals(
+        db, exec_cfg=_exec_cfg, exec_replay=exec_replay)
     # S8 凭证池裁决(个人池 / 项目池;graph 全单元同项目)→ _resolve_cred_project
     cred_project_id = await _resolve_cred_project(
         db, req, user_id, _scen_project_id)
@@ -1060,7 +1062,8 @@ async def dispatch_target(
             scenario_payload=scenario_payload,
             auth_aliases=auth_aliases, cred_project_id=cred_project_id,
             row_bindings_cfg=row_bindings_cfg, bindings=_bindings,
-            slot_map=_slot_map, exec_carry=_exec_carry, circled=_circled,
+            slot_map=_slot_map, exec_carry=_exec_carry,
+            exec_removals=_exec_removals, circled=_circled,
             req_exec_id=_req_exec_id, env_choice=env_choice,
             env_warnings=env_warnings,
             skipped_while_degraded=skipped_while_degraded,
@@ -1080,6 +1083,7 @@ async def dispatch_target(
         scen_owner_id=_scen_owner_id, scen_project_id=_scen_project_id,
         cred_project_id=cred_project_id, auth_aliases=auth_aliases,
         bindings=_bindings, slot_map=_slot_map, exec_carry=_exec_carry,
+        exec_removals=_exec_removals,
         skip_carry=_skip_carry, env_choice=env_choice)
     await _eq.enqueue(db, execution.id, kind=payload["kind"], payload=payload)
     # 惰性 ensure:lifespan 未跑（测试 ASGITransport 直连）也能驱动队列
@@ -1312,6 +1316,16 @@ async def _resolve_carry_policy(db: AsyncSession, *, exec_cfg,
         return exec_replay.get("carryOverrides") or None
     from .exec_config import carry_overrides_for
     return carry_overrides_for(exec_cfg)
+
+
+async def _resolve_carry_removals(db: AsyncSession, *, exec_cfg,
+                                  exec_replay: dict | None):
+    """§11.4 remove 指针(解码后平键;与 _resolve_carry_policy 同单选
+    语义同快照语义 —— 预览/首发/重跑三面同源,被删键不回填)。"""
+    if (exec_replay or None) is not None:
+        return exec_replay.get("carryRemovals") or None
+    from .exec_config import carry_removals_for
+    return carry_removals_for(exec_cfg)
 
 
 async def _resolve_cred_project(db: AsyncSession, req: RunRequest,
@@ -1646,7 +1660,7 @@ def _dispatch_config_json(
     *, run_id: str, req: RunRequest, target: RunTarget,
     scenario_payload: dict, auth_aliases: list,
     cred_project_id: int | None, row_bindings_cfg: dict, bindings: dict,
-    slot_map: dict, exec_carry, circled, req_exec_id, env_choice,
+    slot_map: dict, exec_carry, exec_removals, circled, req_exec_id, env_choice,
     env_warnings, skipped_while_degraded, params_mode: bool,
     skip_carry: bool, chain: str, trace: dict | None,
 ) -> dict:
@@ -1689,6 +1703,8 @@ def _dispatch_config_json(
         # 为链路溯源(回放不回查该行)
         "execSlotMap": slot_map,
         "execCarryOverrides": exec_carry,
+        # §11.4 remove 指针解码后平键快照(重跑回放同源;旧行缺键 = 无)
+        "execCarryRemovals": exec_removals,
         # 决策 1 圈定即承诺(阶段 1):圈定集终值快照 —— 重跑照查
         # (单一规则不豁免);旧行缺键 = 当时未圈,回放空集 = 跳过。
         "execCircledAliases": sorted(circled),
@@ -1736,7 +1752,7 @@ def _dispatch_job_payload(
     user_id: int, scenario_payload: dict, fanout_datasets: list,
     selected_entries: list, scen_owner_id, scen_project_id,
     cred_project_id: int | None, auth_aliases: list, bindings: dict,
-    slot_map: dict, exec_carry, skip_carry: bool, env_choice,
+    slot_map: dict, exec_carry, exec_removals, skip_carry: bool, env_choice,
 ) -> dict:
     """C11 worker 任务配方(纯装配):dispatch 校验后的完整快照,
     graph 与 cases 两种形态;worker 认领后不回查请求上下文。
@@ -1788,6 +1804,8 @@ def _dispatch_job_payload(
             # 语义与方案引用同款,配置后改不影响已派发执行)
             "slot_map": slot_map,
             "exec_carry_overrides": exec_carry,
+            # §11.4 remove(解码平键;旧配方缺键 = 无删除,回放同源)
+            "exec_carry_removals": exec_removals,
             # 入站参数(设计 决策 3):raw 保留字 →
             # prepare_exec 跳过 carry 上下文构建。升级前入队的旧
             # 配方缺键 = False(缺省不跳),回放语义不受影响。
@@ -2521,6 +2539,7 @@ async def _fanout(
     cred_project_id: int | None = None,
     slot_map: dict[str, str] | None = None,
     exec_carry_overrides: dict[str, dict[str, str | None]] | None = None,
+    exec_carry_removals: "dict[str, list[str]] | None" = None,
     skip_carry: bool = False,
 ) -> None:
     """Per-row × per-repeat compose + convert + 执行器调用(恒 server 链)。
@@ -2656,6 +2675,7 @@ async def _fanout(
                   for k, b in (service_bindings or {}).items()},
         # 分层②:显式选定配置的条目覆盖与 carry 覆盖(纯值随配方)
         slot_overrides=None, exec_carry_overrides=exec_carry_overrides,
+        exec_carry_removals=exec_carry_removals,
         # 入站参数(设计 决策 3):raw 保留字 → 跳过 carry
         skip_carry=skip_carry)
 

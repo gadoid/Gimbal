@@ -1855,6 +1855,7 @@ export interface SystemSubConfig {
   aliases?: Array<unknown>
   bindings?: Record<string, unknown>
   carryOverrides?: Record<string, unknown | null>
+  carryRemovals?: Array<unknown>
   service: unknown
 }
 

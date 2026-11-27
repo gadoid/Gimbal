@@ -125,10 +125,12 @@ async def _seed_default_account(uid: int, username: str, *,
 async def _mk_config(
     uid: int, name: str, *, is_default: bool = False, env_id=None,
     bindings: dict | None = None, carry: dict | None = None,
+    removals: list | None = None, service: str | None = None,
 ) -> int:
-    systems = ([{"service": _BASE, "bindings": bindings or {},
-                 "carryOverrides": carry or {}}]
-               if (bindings or carry) else [])
+    systems = ([{"service": service or _BASE, "bindings": bindings or {},
+                 "carryOverrides": carry or {},
+                 "carryRemovals": removals or []}]
+               if (bindings or carry or removals) else [])
     # §8.2:environment_id 列已退役(0060);env_id 形参保留但忽略
     async with db_module.SessionLocal() as s:
         row = ExecConfig(
@@ -694,3 +696,132 @@ async def test_ac49_design_example_single_select_carries(client, fresh_db):
     rows = ctx.service_bindings[_ALIAS]
     assert rows == {"$.region": "cn", "$.locale": "zh"}, \
         f"AC-49 设计样例失败(timeout 不得出现): {rows}"
+
+
+# ── ⑨ §11.4 层默认入单源 + remove 不回填(复核 P1)────────────────
+
+_REMOVAL_DECL = {"request": {"declarations": [
+    {"name": "legacy", "path": "$.legacy", "type": "string",
+     "state": "carry"},
+    {"name": "region", "path": "$.region", "type": "string",
+     "state": "carry"}]}}
+
+_ANCH_1 = {"kind": "step", "endpoint": "fin.a.get",
+           "call": {"service": _ALIAS, "method": "GET", "path": "/x"},
+           "request": {"kind": "request", "body": {}}, "strategy": []}
+_ANCH_2 = {"kind": "step", "endpoint": "fin.b.get",
+           "call": {"service": "fin-two", "method": "GET", "path": "/y"},
+           "request": {"kind": "request", "body": {}}, "strategy": []}
+
+
+async def test_carry_removal_no_backfill_full_chain(client, plate_mock):
+    """§11.4(复核 P1):global_defaults 不再是物化回填源 —— 层默认
+    并入 merge_carry_tiers 单源(层内细压粗:别名/实例/服务 > 层默认;
+    层间公共 < 项目),remove 在值覆盖后按序删除:
+
+    * 选中配置 remove(/$.legacy)→ 预览 carry 与实际发送前的请求体
+      都缺该键(此前经 global_defaults 回流 = §11.4 禁止的回填路径);
+    * 其他服务(remove 按其系统作用域)同名键保留;
+    * 项目默认覆盖公共别名;
+    * 高层重建:配置改值覆盖重新定义已删除的键。"""
+    from app.services.exec_config import (
+        carry_removals_for, carry_overrides_for, load_choice)
+    from app.services.run_materialize import materialize_run_copy
+    from tests.helpers import mk_normal_project
+
+    plate_mock.fulls["fin.a.get"] = _REMOVAL_DECL
+    plate_mock.fulls["fin.b.get"] = _REMOVAL_DECL
+
+    await register_and_login(client, "ec_rm", "pw123456")
+    uid = await _uid("ec_rm")
+    env = await _default_env_id()
+    async with db_module.SessionLocal() as s:
+        for name, system in ((_BASE, _BASE), ("fin-two", "fin-two")):
+            if (await s.execute(sa.select(Service.id).where(
+                    Service.name == name))).scalar_one_or_none() is None:
+                s.add(Service(name=name, system=system, kind="plate"))
+        s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
+                              env_id=env, ref_mode="default"))
+        s.add(ServiceIdentity(alias_name="fin-two",
+                              base_service="fin-two",
+                              env_id=env, ref_mode="default"))
+        pub = await carry_store.public_scope(s)
+        # 公共层默认(带默认值的字段)+ 公共别名绑定($.region)
+        await carry_store.put_defaults(
+            s, {"$.legacy": "old", "$.region": "cn", "$.keep": "k"},
+            updated_by_id=None, updated_by_name="t", scope=pub)
+        await carry_store.put_bindings(
+            s, _ALIAS, {"$.region": "cn-pub-alias"},
+            updated_by_id=None, updated_by_name="t", scope=pub)
+        await s.commit()
+    # 项目层默认覆盖公共别名(层间:后层压前层)
+    pid = await mk_normal_project("np-ec-rm", {"ec_rm": "admin"})
+    async with db_module.SessionLocal() as s:
+        await carry_store.put_defaults(
+            s, {"$.region": "cn-proj"}, updated_by_id=None,
+            updated_by_name="t", scope=("project", pid))
+        await s.commit()
+
+    # 选中配置:fin-service remove $.legacy(写面直插,指针校验另有 API 腿)
+    cid = await _mk_config(uid, "删除配置", removals=["/$.legacy"])
+    definition = {"steps": [_ANCH_1, _ANCH_2]}
+    async with db_module.SessionLocal() as s:
+        choice = await load_choice(s, uid, None, cid)
+        assert choice is not None and choice.carry_removals == {
+            _BASE: ("$.legacy",)}
+        ctx = await build_carry_context(
+            s, definition, project_id=pid,
+            exec_overrides=carry_overrides_for(choice),
+            exec_removals=carry_removals_for(choice))
+        a = ctx.service_bindings[_ALIAS]     # base = fin-service(remove 作用域)
+        b = ctx.service_bindings["fin-two"]  # base = fin-two(其他服务)
+    # 预览面:生效对象缺已删键,项目默认压公共别名,无关键保留
+    assert "$.legacy" not in a, "选中配置删除的键不得出现在生效对象"
+    assert a["$.region"] == "cn-proj", "项目默认覆盖公共别名"
+    assert a["$.keep"] == "k"
+    assert b["$.legacy"] == "old", "remove 按服务作用域,其他服务保留同名键"
+    assert b["$.region"] == "cn-proj"
+
+    # 实际发送前的请求体(materialize):同样缺该键,不回填
+    case = materialize_run_copy(
+        {"steps": [dict(_ANCH_1), dict(_ANCH_2)]},
+        carry_context=ctx, alias_base_urls={})
+    body1 = case["steps"][0]["request"]["body"]
+    body2 = case["steps"][1]["request"]["body"]
+    assert "legacy" not in body1, "物化请求体不得从默认表回填已删除键"
+    assert body1["region"] == "cn-proj"
+    assert body2["legacy"] == "old", "其他服务请求体保留同名键"
+
+    # 高层重建:配置改为值覆盖 → 重新定义被删除的键(来源 exec_config)
+    async with db_module.SessionLocal() as s:
+        row = await s.get(ExecConfig, cid)
+        row.payload = {"systems": [{"service": _BASE,
+                                    "carryOverrides": {"$.legacy": "cfg-new"}}]}
+        await s.commit()
+        choice2 = await load_choice(s, uid, None, cid)
+        ctx2 = await build_carry_context(
+            s, definition, project_id=pid,
+            exec_overrides=carry_overrides_for(choice2),
+            exec_removals=carry_removals_for(choice2))
+    assert ctx2.service_bindings[_ALIAS]["$.legacy"] == "cfg-new", \
+        "高层值覆盖重新定义已删除的键"
+
+
+async def test_carry_removal_pointer_write_validation(client):
+    """§11.4 写面:remove 指针语法非法(非 / 开头、非法转义、数组段)
+    → 422(carryRemovals 校验)。"""
+    h = await register_and_login(client, "ec_rp", "pw123456")
+    for bad in ("$.legacy", "/~2x", "/a/0"):
+        r = await client.post("/api/exec-configs", headers=h, json={
+            "name": f"bad-{bad}", "systems": [
+                {"service": _BASE, "carryRemovals": [bad]}]})
+        assert r.status_code == 422, f"{bad}: {r.text}"
+    r = await client.post("/api/exec-configs", headers=h, json={
+        "name": "ok-rm", "systems": [
+            {"service": _BASE, "carryRemovals": ["/headers/legacy"]}]})
+    assert r.status_code == 201, r.text
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(sa.select(ExecConfig).where(
+            ExecConfig.principal_id == await _uid("ec_rp"),
+            ExecConfig.name == "ok-rm"))).scalar_one()
+    assert row.payload["systems"][0]["carryRemovals"] == ["/headers/legacy"]

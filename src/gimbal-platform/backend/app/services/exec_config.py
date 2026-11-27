@@ -57,6 +57,10 @@ class ExecConfigChoice:
     # 目录服务名 → {字段: 值|null=显式注入 null}
     carry_overrides: dict[str, dict[str, str | None]] = field(
         default_factory=dict)
+    # 目录服务名 → (carry 键,…)(§11.4 remove 指针解码后的平键;被删
+    # 键从生效 carry 对象消失,预览/物化同源,不再回填)
+    carry_removals: dict[str, tuple[str, ...]] = field(
+        default_factory=dict)
     # 圈定集(条目名并集;空 = 未圈定,执行闸跳过)
     circled: frozenset[str] = field(default_factory=frozenset)
 
@@ -65,11 +69,33 @@ EMPTY_CHOICE = ExecConfigChoice(
     config_id=0, name="", is_default=False, explicit=False)
 
 
+def decode_carry_removal_pointer(pointer: str) -> str:
+    """§11.4 remove 指针(相对服务对象)→ carry 平键:``/headers/legacy``
+    → ``headers.legacy``;``~1``→``/``、``~0``→``~``;非法转义/空段/
+    进入数组的段拒绝(ValueError —— 写面映射 422)。"""
+    import re as _re
+
+    if not isinstance(pointer, str) or not pointer.startswith("/"):
+        raise ValueError(f"remove 指针须以 / 开头: {pointer!r}")
+    parts: list[str] = []
+    for tok in pointer[1:].split("/"):
+        if "~" in tok and _re.search(r"~(?![01])", tok):
+            raise ValueError(f"remove 指针转义非法: {pointer!r}")
+        tok = tok.replace("~1", "/").replace("~0", "~")
+        if not tok or tok.isdigit():
+            raise ValueError(
+                f"remove 指针含空段/数组下标段(进入数组拒绝): {pointer!r}")
+        parts.append(tok)
+    return ".".join(parts)
+
+
 def _flatten(systems: Any) -> tuple[dict[str, str],
                                     dict[str, dict[str, str | None]],
+                                    dict[str, tuple[str, ...]],
                                     frozenset[str]]:
     bindings: dict[str, str] = {}
     carries: dict[str, dict[str, str | None]] = {}
+    removals: dict[str, tuple[str, ...]] = {}
     circled: set[str] = set()
     for s in systems or []:
         if not isinstance(s, dict):
@@ -80,18 +106,23 @@ def _flatten(systems: Any) -> tuple[dict[str, str],
         carry = s.get("carryOverrides")
         if isinstance(carry, dict) and carry:
             carries[str(s.get("service") or "")] = dict(carry)
+        rem = s.get("carryRemovals")
+        if isinstance(rem, list) and rem:
+            removals[str(s.get("service") or "")] = tuple(
+                decode_carry_removal_pointer(p) for p in rem)
         for a in (s.get("aliases") or []):
             if isinstance(a, str) and a.strip():
                 circled.add(a.strip())
-    return bindings, carries, frozenset(circled)
+    return bindings, carries, removals, frozenset(circled)
 
 
 def choice_of_row(row: ExecConfig, *, explicit: bool) -> ExecConfigChoice:
-    bindings, carries, circled = _flatten((row.payload or {}).get("systems"))
+    bindings, carries, removals, circled = _flatten(
+        (row.payload or {}).get("systems"))
     return ExecConfigChoice(
         config_id=row.id, name=row.name, is_default=row.is_default,
         explicit=explicit, bindings=bindings, carry_overrides=carries,
-        circled=circled)
+        carry_removals=removals, circled=circled)
 
 
 async def can_use_project_config(
@@ -157,6 +188,16 @@ def carry_overrides_for(
     if choice is None or not choice.carry_overrides:
         return None
     return choice.carry_overrides
+
+
+def carry_removals_for(
+    choice: ExecConfigChoice | None,
+) -> dict[str, tuple[str, ...]] | None:
+    """选定配置的 carry 删除(§11.4 remove;与 carry_overrides_for 同
+    单选语义 —— 预览与物化同一 merged,被删键不回填)。"""
+    if choice is None or not choice.carry_removals:
+        return None
+    return choice.carry_removals
 
 
 async def project_default_carry_overrides(
