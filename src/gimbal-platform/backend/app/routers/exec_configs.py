@@ -188,8 +188,7 @@ async def _project_gate(db: AsyncSession, user, project_id: int | None,
             raise HTTPException(status.HTTP_404_NOT_FOUND,
                                 detail={"code": "not_found",
                                         "message": "project not found"})
-        return project_id
-    if write and not has_capability(user, "ops.write"):
+    elif write and not has_capability(user, "ops.write"):
         role = (await db.execute(select(ProjectMember.role).where(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id == user.id))).scalar_one_or_none()
@@ -202,6 +201,14 @@ async def _project_gate(db: AsyncSession, user, project_id: int | None,
                 status.HTTP_403_FORBIDDEN,
                 detail={"code": "not_project_admin",
                         "message": "项目执行配置由项目管理员维护"})
+    # 归档闸(§13.1 生命周期冻结):先归属/角色后 active —— 不可见恒
+    # 404,归档态不作存在性探针(r5-2.2 同拍,与项目凭证管理门一致)
+    if write and proj.status != Project.STATUS_ACTIVE:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "project_not_active",
+                    "message": f"项目状态为 {proj.status},"
+                               "归档起禁止执行配置管理写(§13.1)"})
     return project_id
 
 
@@ -227,6 +234,23 @@ def _name_conflict(name: str) -> HTTPException:
         status.HTTP_409_CONFLICT,
         detail={"code": "exec_config_name_exists",
                 "message": f"执行配置名 '{name}' 已存在"})
+
+
+def _integrity_conflict(e: IntegrityError, name: str) -> HTTPException:
+    """按约束名分派(account_integrity_conflict 同款):默认位部分唯一
+    索引(uq_exec_configs_{principal,project}_default)的**并发竞争**
+    与真撞名分开报 —— 调用方可区分「重试」与「改名」。"""
+    orig = getattr(e, "orig", None)
+    cname = str(getattr(orig, "constraint_name", "")
+                or getattr(getattr(orig, "diag", None),
+                           "constraint_name", "") or "")
+    if ("uq_exec_configs_principal_default" in cname
+            or "uq_exec_configs_project_default" in cname):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "exec_config_default_conflict",
+                    "message": "并发切换默认执行配置冲突,请重试"})
+    return _name_conflict(name)
 
 
 async def _clear_default(db: AsyncSession,
@@ -300,7 +324,7 @@ async def create_exec_config(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise _name_conflict(body.name) from e
+        raise _integrity_conflict(e, body.name) from e
     await db.refresh(row)
     return _view(row)
 
@@ -373,7 +397,8 @@ async def set_default_exec_config(
         await db.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "default exec config changed concurrently; retry") from e
+            detail={"code": "exec_config_default_conflict",
+                    "message": "并发切换默认执行配置冲突,请重试"}) from e
     await db.refresh(row)
     return _view(row)
 
@@ -400,7 +425,7 @@ async def copy_exec_config(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise _name_conflict(body.name) from e
+        raise _integrity_conflict(e, body.name) from e
     await db.refresh(row)
     return _view(row)
 

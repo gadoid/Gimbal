@@ -354,18 +354,19 @@ async def test_integration_patch_rebind_blocked_scheme_rejected(
 async def test_integration_subscribe_blocked_default_scheme_rejected(
         client: AsyncClient):
     """订阅确认面:模板未指定方案、默认方案 blocked → 409(§11.5 将生效
-    配方核对;不把阻塞方案确认成可派发订阅)。"""
+    配方核对;不把阻塞方案确认成可派发订阅)。创建面同口径已先拦
+    (创建闸),此腿从 ready 创建后转 blocked 起步。"""
     h = await register_and_login(client, "m3sub_own", "pw123456")
     uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
     sid = await _mk_scenario(client, h, "sc-m3sub", STEPS)
+    tid = (await client.post("/api/integration/tasks", headers=h,
+                             json=_task_body(sid, identityMode="personal"))).json()["id"]
     # 场景创建钩子已物化默认方案 —— 阻断的就是它(将生效配方)
     async with db_module.SessionLocal() as s:
         drow = (await s.execute(select(ComposerRunScheme).where(
             ComposerRunScheme.scenario_id == sid,
             ComposerRunScheme.is_default == True))).scalar_one()  # noqa: E712
     await _block(drow.scheme_id, uid)
-    tid = (await client.post("/api/integration/tasks", headers=h,
-                             json=_task_body(sid, identityMode="personal"))).json()["id"]
     fp = (await client.get(
         f"/api/integration/tasks/{tid}/subscription-summary",
         headers=h)).json()["fingerprint"]
@@ -373,6 +374,61 @@ async def test_integration_subscribe_blocked_default_scheme_rejected(
                           headers=h, json={"fingerprint": fp})
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "scheme_repair_required"
+
+
+async def test_integration_create_unbound_blocked_default_rejected(
+        client: AsyncClient):
+    """§11.5 将生效配方(复核):创建不传 schemeId → 将生效 = 默认方案;
+    默认 blocked → 409(写点闸,不再等订阅/派发)。"""
+    from app.models.integration_task import IntegrationTask
+
+    h = await register_and_login(client, "m3ubd_own", "pw123456")
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    sid = await _mk_scenario(client, h, "sc-m3ubd", STEPS)
+    async with db_module.SessionLocal() as s:
+        drow = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid,
+            ComposerRunScheme.is_default == True))).scalar_one()  # noqa: E712
+    await _block(drow.scheme_id, uid)
+    r = await client.post("/api/integration/tasks", headers=h,
+                          json=_task_body(sid, identityMode="personal",
+                                          name="默认受阻创建"))
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "scheme_repair_required"
+    async with db_module.SessionLocal() as s:
+        n = (await s.execute(select(func.count()).select_from(
+            IntegrationTask).where(
+            IntegrationTask.name == "默认受阻创建"))).scalar_one()
+    assert n == 0, "将生效配方受阻不得创建模板行"
+
+
+async def test_integration_patch_clear_scheme_blocked_default_rejected(
+        client: AsyncClient):
+    """§11.5 将生效配方(复核):PATCH 显式清空 schemeId → 回落默认方案;
+    默认 blocked → 409(写点闸),原显式绑定保留。"""
+    from app.models.integration_task import IntegrationTask
+
+    h = await register_and_login(client, "m3clr_own", "pw123456")
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    sid = await _mk_scenario(client, h, "sc-m3clr", STEPS)
+    bound_id = await _mk_scheme(client, h, sid, "显式绑定")   # 非默认
+    tid = (await client.post("/api/integration/tasks", headers=h,
+                             json=_task_body(sid, identityMode="personal",
+                                             schemeId=bound_id))
+           ).json()["id"]
+    # 阻断默认方案(清空后将生效 = 默认)
+    async with db_module.SessionLocal() as s:
+        drow = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid,
+            ComposerRunScheme.is_default == True))).scalar_one()
+    await _block(drow.scheme_id, uid)
+    r = await client.patch(f"/api/integration/tasks/{tid}", headers=h,
+                           json={"schemeId": ""})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "scheme_repair_required"
+    async with db_module.SessionLocal() as s:
+        kept = (await s.get(IntegrationTask, tid)).scheme_id
+    assert kept == bound_id, "闸拒后原显式绑定不得被清除"
 
 
 async def test_integration_resume_blocked_scheme_rejected(client: AsyncClient):
@@ -393,7 +449,7 @@ async def test_integration_resume_blocked_scheme_rejected(client: AsyncClient):
     async with db_module.SessionLocal() as s:
         drow = (await s.execute(select(ComposerRunScheme).where(
             ComposerRunScheme.scenario_id == sid,
-            ComposerRunScheme.is_default == True))).scalar_one()  # noqa: E712
+            ComposerRunScheme.is_default == True))).scalar_one()
     await _block(drow.scheme_id, uid)
     r = await client.post(
         f"/api/integration/tasks/{tid}/subscription/pause", headers=h)

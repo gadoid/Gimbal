@@ -89,6 +89,7 @@ export const ERROR_CODES = {
   "env_unspecified": true,
   "environment_mixed": true,
   "environment_not_found": true,
+  "exec_config_default_conflict": true,
   "exec_config_invalid": true,
   "exec_config_name_exists": true,
   "exec_config_not_found": true,

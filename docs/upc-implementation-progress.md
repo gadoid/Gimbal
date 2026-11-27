@@ -796,3 +796,38 @@ AccessToken 已是 principal_id 单主体。Integration 同表拆分仍开放
 指纹触面 env_chain/S8/C2/consent_fixes/integration/plate 集成 85)全绿;
 全量见下。AC-50 用例:同内容删建 → template_changed 暂停(指纹未
 确认前不刷新)→ 再订阅恢复。
+
+## 3.15 复核轮二:ExecConfig 归档闸 + 默认位冲突分派 + 0070 回填腿 + schedule 写点收口(2026-11-27 续)
+
+* **P1 ExecConfig 管理写面归档闸**(§13.1):`_project_gate` 文档声称
+  "归档项目拒写"但代码无 status 检查 —— 补闸:write 面在归属/角色
+  判定**之后**复查 `project.status != active → 409 project_not_active`
+  (先角色后 active,归档态不作存在性探针,r5-2.2 同拍;与项目凭证
+  管理门一致)。私有空间属主治理面同受冻结;读面不冻结。负向用例:
+  归档非默认私有空间 → 项目配置创建 409,读照常。
+* **P2 默认位并发冲突误报撞名**:create/copy 的 IntegrityError 原样
+  映射 `exec_config_name_exists` —— 新增 `_integrity_conflict` 按约束
+  名分派(account_integrity_conflict 同款):`uq_exec_configs_*_default`
+  → 409 `exec_config_default_conflict`(并发切换默认,请重试);真撞名
+  仍报 name_exists。set-default 路由的裸字符串 detail 同步规范为
+  {code, message} 结构。契约快照随新错误码重生。
+* **P2 0070 数据回填腿**:`test_0070_backfills_and_cleans_orphans` —
+  时代形状播 (scope, scope_id) 五行(合法 user/project + 孤儿主体/
+  项目/零 id)→ 0070 后 principal_id/project_id 正确回填、三孤儿行
+  清理、合法行保留(形状腿之外的语义腿)。种子用户 is_system=true
+  绕开 user_default_space_required 触发器(该腿不验证用户不变量)。
+* **边界收口 schedule 创建/清空绑定核对默认方案**(§11.5 将生效配方):
+  复核指出创建不传 schemeId、PATCH 显式清空 schemeId 时写点未调
+  `_require_scheme_ready` —— helper 本就受理 None 腿(默认方案),
+  补接线:创建恒调(显式查该行/未绑定查默认);PATCH 清空腿先核对
+  将生效的默认方案再清位。订阅闸用例布景随之改为"ready 创建后转
+  blocked"(创建面已拦),新增两个写点负向(默认受阻创建 409 + 模板
+  行不落库;清空 409 + 原显式绑定保留)。
+* **M5 三项**:维持 §3.13 登记,不在本轮范围。
+
+**验证**:定向回归(装配闸 + 形状 + API 30;契约快照守卫 3)全绿;
+全量 `2381 passed / 2 skipped / 0 failed`(真实 PG 15432,xdist;
++5 = 归档闸/两个 schedule 写点/0070 回填 + 既有拆腿);
+契约快照重生(`exec_config_default_conflict` 新码入册,前端 errorCodes
+生成件同步);Ruff changed 文件零新增(违例数回到 HEAD 基线);
+`git diff --check` 干净。

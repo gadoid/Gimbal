@@ -389,9 +389,9 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         raise _bad("scenario_not_owned",
                    "只能引用你可执行的场景(自己的 / 项目内的)")
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
-    # 场景限定);§20.3 schedule 创建面:显式绑定的方案 blocked → 409。
-    if body.schemeId:
-        await _require_scheme_ready(db, scen, body.schemeId)
+    # 场景限定);§20.3 schedule 创建面(§11.5 将生效配方):显式绑定
+    # 查该行,未绑定 = 默认方案 —— 写点即核对,不再等订阅/派发闸。
+    await _require_scheme_ready(db, scen, body.schemeId or None)
     if principal.is_token:
         # 令牌注册范围闸(§5.4:注册 422;按将生效的方案核对,未指定
         # → 运行期同源回落默认/首个)
@@ -637,7 +637,16 @@ async def patch_task(
         await _require_scheme_ready(db, scen_row, body.schemeId)
         tpl.scheme_id = body.schemeId
     elif body.schemeId is not None:
-        tpl.scheme_id = body.schemeId   # 显式空串 = 清除(维持原语义)
+        # 显式空串 = 清除(维持原语义)。§20.3 schedule 更新执行绑定面
+        # (§11.5 将生效配方):清除后回落**默认方案** —— 写点同闸,
+        # 不再等订阅/派发拦。
+        if tpl.scenario_id:
+            from ..models.composer_scenario import ComposerScenario
+            scen_row = (await db.execute(select(ComposerScenario).where(
+                ComposerScenario.scenario_id == tpl.scenario_id))).scalar()
+            if scen_row is not None:
+                await _require_scheme_ready(db, scen_row, None)
+        tpl.scheme_id = body.schemeId
     if body.resultPolicy in ("latest", "on_change"):
         tpl.result_policy = body.resultPolicy
     if body.visibility in ("private", "public"):

@@ -160,3 +160,64 @@ def test_model_shape_registered_in_metadata():
             "uq_exec_configs_project_default",
             "uq_exec_configs_principal_name",
             "uq_exec_configs_project_name"} <= idx
+
+
+def test_0070_backfills_and_cleans_orphans():
+    """数据回填腿(复核 P2):时代形状播 (scope, scope_id) 行 ——
+    user/project 各合法行 + 指向已删 user/project(含零 id)的孤儿行
+    → 0070 后 principal_id/project_id 正确回填、孤儿行清理、合法行
+    保留。形状腿(test_0070_chain_path_swaps_shape)之外的语义腿。"""
+    from alembic import command
+    from sqlalchemy import create_engine
+
+    from tests.test_migrations import (
+        _cfg,
+        _to_exec_config_era_shape,
+        _upgrade_to,
+        temp_schema,
+    )
+
+    with temp_schema() as (_schema, sync_url):
+        _upgrade_to(sync_url, "0068_upc_resource_containers")
+        _to_exec_config_era_shape(create_engine(sync_url))
+        command.upgrade(_cfg(sync_url), "0069_exec_config_scope_shape")
+        # 时代形状播种:合法 user/project + 孤儿(user→无此 id、
+        # project→无此 id、user→零 id)
+        eng = create_engine(sync_url)
+        with eng.begin() as c:
+            c.execute(text(
+                "INSERT INTO users (username, display_name, password_hash, "
+                "role, is_active, is_system, created_at, updated_at) VALUES "
+                "('ec70u', 'ec70u', 'x', 'user', true, true, now(), now())"))
+            uid = c.execute(text(
+                "SELECT id FROM users WHERE username = 'ec70u'")
+            ).scalar_one()
+            c.execute(text(
+                "INSERT INTO projects (name, kind, description, owner_id, "
+                "created_at) VALUES ('ec70p', 'private', '', :uid, now())"),
+                {"uid": uid})
+            pid = c.execute(text(
+                "SELECT id FROM projects WHERE name = 'ec70p'")).scalar_one()
+            for scope, sid, nm in (("user", uid, "合法-个人"),
+                                   ("project", pid, "合法-项目"),
+                                   ("user", 987000, "孤儿-主体"),
+                                   ("project", 987001, "孤儿-项目"),
+                                   ("user", 0, "孤儿-零id")):
+                c.execute(text(
+                    "INSERT INTO exec_configs (scope, scope_id, name, "
+                    "is_default, payload, created_at, updated_at) VALUES "
+                    "(:s, :sid, :nm, false, '{}', now(), now())"),
+                    {"s": scope, "sid": sid, "nm": nm})
+        eng.dispose()
+
+        command.upgrade(_cfg(sync_url), "0070_exec_config_owner_fk")
+        eng = create_engine(sync_url)
+        try:
+            with eng.begin() as c:
+                data = {r[0]: (r[1], r[2]) for r in c.execute(text(
+                    "SELECT name, principal_id, project_id FROM exec_configs"))}
+        finally:
+            eng.dispose()
+        assert data["合法-个人"] == (uid, None), data
+        assert data["合法-项目"] == (None, pid), data
+        assert not {"孤儿-主体", "孤儿-项目", "孤儿-零id"} & set(data), data

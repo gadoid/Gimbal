@@ -426,3 +426,33 @@ async def test_exec_config_bindings_write_gate(client, fresh_db):
     r = await client.patch(f"/api/exec-configs/{cid}", headers=u,
                            json={"name": "ok-2"})
     assert r.status_code == 200, r.text
+
+
+async def test_exec_config_archived_space_write_frozen(client, fresh_db):
+    """P1(复核):§13.1 归档闸 —— 归档起禁止执行配置管理写(项目变体
+    创建面);读面不受冻结。私有空间属主治理面同受冻结。"""
+    from app.core import db as db_module
+    from sqlalchemy import text as _t
+
+    from .helpers import default_space_id
+
+    h = await register_and_login(client, "cfgarc", "pw123456")
+    async with db_module.SessionLocal() as s:
+        uid = (await s.execute(_t(
+            "SELECT id FROM users WHERE username = 'cfgarc'"))).scalar_one()
+        space = await default_space_id(s, uid)
+    # 默认空间不可归档 —— 另建一个私有空间作被归档样本
+    space = (await client.post("/api/projects", headers=h, json={
+        "name": "归档闸空间", "kind": "private",
+        "description": ""})).json()["id"] or space
+    r = await client.post(f"/api/projects/{space}/archive", headers=h)
+    assert r.status_code in (200, 201), r.text
+    r = await client.post("/api/exec-configs", headers=h, json={
+        "name": "归档空间配置", "scope": "project", "projectId": space,
+        "systems": []})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "project_not_active"
+    # 读面不冻结
+    r = await client.get("/api/exec-configs",
+                         params={"projectId": space}, headers=h)
+    assert r.status_code == 200, r.text
