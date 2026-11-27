@@ -70,8 +70,9 @@ EMPTY_CHOICE = ExecConfigChoice(
 
 
 def decode_carry_removal_pointer(pointer: str) -> str:
-    """§11.4 remove 指针(相对服务对象)→ carry 平键:``/headers/legacy``
-    → ``headers.legacy``;``~1``→``/``、``~0``→``~``;非法转义/空段/
+    """§11.4 remove 指针(相对服务对象)→ **最终请求体路径**:
+    ``/headers/legacy`` → ``headers.legacy``;``~1``→``/``、``~0``→``~``;
+    ``$.`` 前缀值表键写法兼容剥除(寻址统一按体路径);非法转义/空段/
     进入数组的段拒绝(ValueError —— 写面映射 422)。"""
     import re as _re
 
@@ -82,6 +83,8 @@ def decode_carry_removal_pointer(pointer: str) -> str:
         if "~" in tok and _re.search(r"~(?![01])", tok):
             raise ValueError(f"remove 指针转义非法: {pointer!r}")
         tok = tok.replace("~1", "/").replace("~0", "~")
+        if tok.startswith("$."):      # 值表键写法兼容($.headers.legacy)
+            tok = tok[2:]
         if not tok or tok.isdigit():
             raise ValueError(
                 f"remove 指针含空段/数组下标段(进入数组拒绝): {pointer!r}")

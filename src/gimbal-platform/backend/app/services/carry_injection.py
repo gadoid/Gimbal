@@ -88,8 +88,9 @@ async def merge_carry_tiers(
     value,预览消费全部(§5 守则「自证每个值的来路」)。
     ``env_id=None``(标签链全空/导入析出)→ 实例档跳过,不猜环境。
 
-    §11.4 remove(复核 P1):``exec_removals``(解码后的 carry 平键)
-    在值覆盖之后按序删除 —— 被删键从生效对象消失,预览与物化同源
+    §11.4 remove(复核 P1):``exec_removals``(解码后的**请求体路径**)
+    在值覆盖之后按序删除 —— 值表键带 $. 前缀两形并存,按体路径归一
+    匹配,父对象删除连带子键;被删键从生效对象消失,预览与物化同源
     (同一 merged),物化不得再从默认表回填;同层更高档/高层(配置
     值覆盖)可重新定义已删除的键。
     """
@@ -117,9 +118,21 @@ async def merge_carry_tiers(
     if exec_overrides:
         for path, value in exec_overrides.items():
             merged[path] = {"value": value, "source": "exec_config"}
-    for path in exec_removals or []:
-        merged.pop(path, None)
+    for rem_path in exec_removals or []:
+        # §11.4(复核 P1):指针按**最终请求体路径**寻址 —— 值表键可能
+        # 带 $. 前缀(两形并存),按体路径归一匹配;父对象删除连带子键
+        # (设计原例 /headers 连带 $.headers.* / headers.*)
+        for k in [k for k in merged
+                  if (k == rem_path
+                      or k.startswith("$.") and k[2:] == rem_path
+                      or _body_path(k).startswith(rem_path + "."))]:
+            del merged[k]
     return merged
+
+
+def _body_path(key: str) -> str:
+    """值表键 → 最终请求体路径($. 前缀剥除;两形键统一寻址)。"""
+    return key[2:] if key.startswith("$.") else key
 
 
 async def build_carry_context(

@@ -294,18 +294,20 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
             continue  # 服务名解析失败(dispatch 已黄警):整步跳过
         bound = ctx.service_bindings.get(svc) or {}
         candidates = ctx.step_fields.get(i)
-        degraded = candidates is None
         if candidates is None:
-            # 降级门控(无锚点存量 step):候选 = 绑定键 ∪ 全局默认键
-            candidates = {**bound, **ctx.global_defaults}
+            # 降级门控(无锚点存量 step):候选 = 单源合并的生效绑定
+            # (bound —— §11.4 层默认已并入且 remove 已应用;独立
+            # defaults 快照不再补候选,**"已删除"与"没有覆盖"同为
+            # 缺席**,被删键不得回流请求体)
+            candidates = dict(bound)
             if candidates:
                 # 导入落库的无锚点可执行场景曾在此被
                 # 灌全表绑定(orderPage ES 400)。门控语义按测试钉死不动,
                 # 此处仅留遥测 —— 无锚点 + 服务有绑定 = 高危注入面。
                 logger.warning(
                     "carry 降级门控: step[{}] service={!r} 无锚点,候选 = "
-                    "绑定 {} 键 ∪ 全局默认共 {} 键(值原样透传不转换)",
-                    i, svc, len(bound), len(candidates))
+                    "生效绑定 {} 键(值原样透传不转换)",
+                    i, svc, len(candidates))
         request = step.get("request")
         if not isinstance(request, dict):
             continue
@@ -313,16 +315,9 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
         if not isinstance(body, dict):
             continue
         for path, ftype in candidates.items():
-            if path in bound:
-                value = bound[path]
-            elif degraded and path in ctx.global_defaults:
-                # §11.4(复核 P1):global_defaults 仅剩无锚点降级门控
-                # 的取值源 —— 锚点步骤的生效值全部来自单源合并
-                # (bound;层默认已并入,含删除语义),**不再回填**:
-                # 选中配置删除的键不得经独立 defaults 表回流请求体
-                value = ctx.global_defaults[path]
-            else:
-                continue                    # 绑定无此键(含已删除)→ 不注入
+            if path not in bound:
+                continue    # 单源无此键(无覆盖或已删除)→ 不注入、不回填
+            value = bound[path]
             if value is None:
                 coerced = None              # 绑定显式 null → 显式 JSON null
             elif isinstance(value, str) and "${" in value:

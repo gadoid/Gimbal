@@ -233,6 +233,18 @@ class TestCarryFill:
         assert "appCode" not in out["steps"][0]["request"]["body"]
         assert "flag" not in out["steps"][0]["request"]["body"]
 
+    def test_degraded_gate_no_backfill(self):
+        """§11.4(复核 P1):无锚点降级门控候选 = 单源合并(bound,
+        层默认已并入、remove 已应用)—— 独立 defaults 快照不再补
+        候选/取值,「已删除」与「没有覆盖」同为缺席。"""
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            step_fields={},                      # 无锚点:step_fields 缺 0
+            service_bindings={},                 # 生效绑定空(合并后无键)
+            global_defaults={"$.appCode": "TRACE-V2",
+                             "$.flag": "true"}))
+        body = out["steps"][0]["request"]["body"]
+        assert "appCode" not in body and "flag" not in body
+
     def test_body_existing_key_skipped(self):
         src = _carry_converted()
         src["steps"][0]["request"]["body"]["remark"] = "手填值"

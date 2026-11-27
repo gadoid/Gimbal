@@ -1092,3 +1092,36 @@ adhoc 42+ / materialize 36 / w0a 13 / s0 4 / 守卫)全绿;全量
 §11.4 完整链路 + 指针校验);契约快照重生(`carryRemovals` 入册,
 快照键 `execCarryRemovals` 入 config_json 面);Ruff changed 文件
 14 份规则码计数零漂移;`git diff --check` 干净。
+
+## 3.23 复核轮十:降级门控不回填 + 指针/键寻址统一(体路径归一)(2026-11-27 续)
+
+* **无锚点降级门控不再回填**(复核 P1):上轮只收了锚点步骤 ——
+  `_apply_carry` 降级分支候选仍为 `绑定 ∪ global_defaults` 且缺键
+  时取默认值,被删键照样回流请求体。改:候选 = **单源合并生效绑定
+  (bound)** —— 层默认已并入 bound 且 remove 已应用,独立 defaults
+  快照不再补候选/取值,「已删除」与「没有覆盖」同为缺席;取值只剩
+  `path in bound` 一条源。global_defaults 快照在物化层已无消费点
+  (字段保留,仅供上下文/调试),降级遥测文案同步。单元反例:
+  生效绑定空 + defaults 快照有键 → 请求体缺键。
+* **remove 指针与值表键统一寻址**(复核 P1):`/headers/legacy` 解码
+  为平键 `headers.legacy` 而值表键形为 `$.headers.legacy`,字符串
+  精确 pop 删不到;父对象删除 `/headers` 只试同名平键,子项残留。
+  改:**按最终请求体路径归一匹配** —— 指针解码剥 `$.` 前缀兼容写法
+  (`/$.legacy` 仍合法),合并删除按体路径匹配(平键/$ 前缀键两形
+  命中),父对象删除连带子键(`headers` 连带 `headers.*` 两种键形)。
+  设计原例贯穿用例重写:配置走 API(POST /api/exec-configs)→ 预览
+  (resolve_effective_config,与执行同一 merge 单源断言逐值相等)→
+  materialize 请求体断言整形;父对象删除腿(/headers → $.headers.*
+  全消、$.keep 保留)+ 高层重建腿保留。
+
+**验证**:定向回归(exec_config_chain 16 / materialize 37 /
+carry_injection / endpoint_anchoring / import_pipeline)全绿;契约
+快照重生(无 API 形状变化,快照无漂移);Ruff changed 文件规则码
+零新增;`git diff --check` 干净。
+
+**延期登记(AC-48 收尾项)**:§11.4「同一次解析中,低层删除、高层
+重新定义」—— remove 目前只在 ExecConfig 层表达;低层(服务/实例/
+别名档、层默认值表)的删除需值表模型/迁移面扩展(carry 值表增
+remove 表达),完成后以「低层删除 + 高层重新定义同解析」验收
+(现测试的「高层重建」是改配置重跑,不是同一解析内的层间覆盖)。
+列入 §11.4 值表扩展切片,与 AC-49 订阅绑定切片同批排期。
