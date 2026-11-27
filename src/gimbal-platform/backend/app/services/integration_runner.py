@@ -1331,10 +1331,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
         case = materialize_run_copy(
             converted,
             resolved_auths=prep.resolved_auths,
-            built_in_users=prep.built_in_users,
             carry_context=prep.carry_ctx,
             alias_base_urls=prep.alias_base_urls,
-    
+
         )
         with tempfile.TemporaryDirectory(prefix="integration-case-") as td:
             case_path = Path(td) / "case.json"

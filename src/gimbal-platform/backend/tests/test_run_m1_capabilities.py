@@ -211,8 +211,9 @@ async def test_service_binding_auth_merge_keeps_built_in(
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """绑定选条目(S6:svc → svc-qa9;注入键 = 条目名)注入 users,
-    场景内置 users 保留(固定 merge)。"""
+    """绑定选条目(S6:svc → svc-qa9;注入键 = 条目名)注入 users。
+    v2.10 §11.1:执行链不吃内置凭证 —— 场景内置 users 不再保留
+    (明文仅剩导出面 10-14 口径),users 唯一来源 = 凭证池解析。"""
     bob = await _member(client, "bob")
     await _seed_built_in_user(client, bob)
     # S5 失败即中止:绑定条目须在执行人池可解(dispatch 取用检查不走
@@ -247,10 +248,8 @@ async def test_service_binding_auth_merge_keeps_built_in(
     assert r.status_code == 201, r.text
     await _wait(lambda: len(payloads) >= 1)
     users = (payloads[0].get("config") or {}).get("users") or {}
-    assert set(users.keys()) == {"qa1", "svc-qa9"}
-    # 内置 qa1 原样保留
-    assert users["qa1"]["url"] == "http://builtin"
-    # 所选条目注入(键 = 条目名)
+    # 内置 qa1 不再进执行产物(§11.1);所选条目注入保留(键 = 条目名)
+    assert set(users.keys()) == {"svc-qa9"}
     assert users["svc-qa9"]["username"] == "exec-user"
 
 

@@ -136,8 +136,9 @@ async def test_approve_path_grants_carry_provenance(client: AsyncClient):
     r = await client.post("/api/scenarios", headers=h_m,
                           json=_draft_with_ref("sc-ig-prov", "e6"))
     assert r.status_code == 201, r.text
-    from .test_authz_s72_promotions import _put_carry, _put_personal_cfg
-    await _put_personal_cfg(client, h_m, "fin", {"host": "mine"})
+    from .test_authz_s72_promotions import (
+        _put_carry, _put_source_space_cfg)
+    await _put_source_space_cfg(client, h_m, "fin", {"host": "mine"})
     await _put_carry(client, h_adm, "project", "fin",
                      {"host": "proj"}, project_id=pid)
     r = await client.post(f"/api/projects/{pid}/promotions", headers=h_m,
@@ -171,8 +172,8 @@ async def test_withdraw_revoke_is_noop_safe(client: AsyncClient):
     from .test_authz_s72_promotions import _put_carry
     await _put_carry(client, h_adm, "project", "fin",
                      {"host": "proj"}, project_id=pid)
-    from .test_authz_s72_promotions import _put_personal_cfg
-    await _put_personal_cfg(client, h_m, "fin", {"host": "mine"})
+    from .test_authz_s72_promotions import _put_source_space_cfg
+    await _put_source_space_cfg(client, h_m, "fin", {"host": "mine"})
     r = await client.post(f"/api/projects/{pid}/promotions", headers=h_m,
                           json={"kind": "scenario", "sourceId": "sc-ig-wd"})
     assert r.status_code == 201, r.text

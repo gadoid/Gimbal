@@ -338,15 +338,8 @@ async def materialize_graph(
         materialized = materialize_run_copy(
             converted,
             resolved_auths=exec_auths,
-            # authz 主规则:executor(dispatch 的 owner_id)≠ 单元
-            # 属主 ⇒ 内置 users 当空(引用执行不带走作者凭证)。
-            # 源取落库容器 payload(与其余执行链同源)—— composed 是
-            # 合成后的场景形状,definition_from_payload 解不出 users
-            built_in_users=run_prepare.built_in_users(
-                r["scenario_row"].payload, executor_id=owner_id,
-                scenario_owner_id=r["scenario_row"].owner_id,
-                project_kind=await run_prepare.project_kind_of(
-                    db, r["scenario_row"].project_id)),
+            # v2.10 §11.1:执行链不吃内置凭证(禁止资产内嵌秘密,改
+            # 授权凭证引用)—— users 唯一来源 = resolved_auths。
             carry_context=carry_ctxs[i],
             alias_base_urls=unit_urls.get(r["unit"]["ref"], {}),
         )

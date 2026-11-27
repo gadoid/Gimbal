@@ -94,22 +94,17 @@ async def executions_summary(
 
     ``projectId`` = 项目维度聚合:
     行集 = executions.project_id 快照列(全员发起,跨 owner);门 =
-    项目成员 ∨ 公共项目 ∨ Admin+(公共项目例外与 get_project/facets
-    同口径 —— 项目详情页头卡对普通访客可见),
-    非成员 404(不泄露存在性)。"""
+    :func:`can_view_project` 统一谓词(项目成员 ∨ 公共项目 ∨ 私有
+    属主 —— AC-05/AC-51 同源,Admin+ 无旁路,平台管理员不因平台
+    角色看见他人私有/普通项目执行面),
+    不可见 404(不泄露存在性)。"""
     if project_id is not None:
-        from ..models.project import Project, ProjectMember
+        from ..models.project import Project
 
-        from ._ownership import has_capability
+        from ..services.project_access import can_view_project
 
         proj = await session.get(Project, project_id)
-        my_role = None
-        if proj is not None:
-            my_role = (await session.execute(select(ProjectMember.role).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user.id))).scalar_one_or_none()
-        if proj is None or (my_role is None and proj.kind != "public"
-                            and not has_capability(user, "ops.write")):
+        if proj is None or not await can_view_project(session, user.id, proj):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": "not_found",

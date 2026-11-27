@@ -1,17 +1,21 @@
-"""ExecConfig model —— 执行配置(执行配置与运行方案分层-设计方案 §4)。
+"""ExecConfig model —— 执行配置(执行配置与运行方案分层-设计方案 §4;
+v2.10 §5/§11.2/§20 统一归属形状)。
 
 执行配置管「在哪、以谁、带什么业务参数」:场景的外部支撑,跨场景
-共享 → 挂人/组。一套默认 + 若干命名;子配置按系统分组内联 carry
+共享 → 挂人/项目。一套默认 + 若干命名;子配置按系统分组内联 carry
 覆盖(内联式,独立 carry 套装对象已撤销)。
 
 **零凭证值、零地址值**(§4 薄束性质):凭证由池按 (system, 标签,
 条目) 解析、地址由部署表按 (目录服务, 标签) 解析,本表只存引用键
-—— 条目名是名字,跨区可移植(「商户B@UAT」私有区跑解析个人池、
+—— 条目名是名字,跨区可移植(「商户B@UAT」私有空间跑解析个人池、
 项目里跑解析项目池,引用不用换)。
 
-scope 两型同构:``'user' | 'project'``;(scope, scope_id) 同
-carry_binding 的通用维度口径(无 FK)。同 scope 内 name 唯一;默认
-配置至多一行(部分唯一索引,置默认由路由原子切换)。
+归属(§5「单表显式互斥 FK」/ §20 不变量):``principal_id`` 与
+``project_id`` 恰一非空,两真实 FK + XOR CHECK —— 个人行挂主体、
+项目行挂容器,禁止无外键的多态 scope 列(0069 的 (scope, scope_id)
+形状随 0070 退役)。个人配置仍可在任何有权执行的项目中显式使用;
+项目配置仅当前项目可用。同归属侧内 name 唯一;默认配置每侧至多
+一行(部分唯一索引,置默认由路由原子切换)。
 **执行配置不携带环境链位(ADR-0003 #21,§8.2)** —— 执行
 配置不再决定执行标签(迁移 0060 删列)。
 """
@@ -23,10 +27,9 @@ from typing import Any
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    ForeignKey,
     Index,
-    Integer,
     String,
-    UniqueConstraint,
     func,
     text,
 )
@@ -39,22 +42,41 @@ from ._types import JsonVar, UtcDateTime
 class ExecConfig(Base):
     __tablename__ = "exec_configs"
     __table_args__ = (
-        UniqueConstraint("scope", "scope_id", "name",
-                         name="uq_exec_configs_scope_name"),
-        # 默认配置每 scope 至多一行(绑定的链位②载体)
-        Index("uq_exec_configs_default", "scope", "scope_id", unique=True,
-              postgresql_where=text("is_default")),
-        # §11.2 形状闸(UPC M3,库层钉死应用配对纪律):scope 只有两型,
-        # user / project;(scope, scope_id) 与 carry_binding 同通用维度
-        # 口径 —— user 行 scope_id = 用户 id、project 行 = 项目 id,
-        # 恒非空(路由层成对写;直写违例在提交期拒,不为第三形态留缝)。
-        CheckConstraint("scope IN ('user', 'project')",
-                        name="ck_exec_configs_scope"),
+        # §5/§20:单表显式互斥 FK —— 个人/项目恰一非空(XOR),
+        # 归属类型由字段及约束明确
+        CheckConstraint(
+            "(principal_id IS NULL) <> (project_id IS NULL)",
+            name="ck_exec_configs_owner_shape"),
+        # 同侧 name 唯一(替代旧 (scope, scope_id, name) 复合唯一)
+        Index("uq_exec_configs_principal_name", "principal_id", "name",
+              unique=True,
+              postgresql_where=text("principal_id IS NOT NULL")),
+        Index("uq_exec_configs_project_name", "project_id", "name",
+              unique=True,
+              postgresql_where=text("project_id IS NOT NULL")),
+        # 默认配置每侧至多一行(部分唯一索引;谓词须钉住本侧非空 ——
+        # 单列部分唯一索引对 NULL 互不冲突,否则两侧默认可并存)
+        Index("uq_exec_configs_principal_default", "principal_id",
+              unique=True,
+              postgresql_where=text(
+                  "is_default AND principal_id IS NOT NULL")),
+        Index("uq_exec_configs_project_default", "project_id",
+              unique=True,
+              postgresql_where=text(
+                  "is_default AND project_id IS NOT NULL")),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    scope: Mapped[str] = mapped_column(String(16), default="user")
-    scope_id: Mapped[int] = mapped_column(Integer, index=True)
+    # 个人归属(principal 语义,§3):恰与 project_id 之一非空。
+    # NO ACTION(§2.1 同旧凭证行):用户/项目删除显式处置,FK 是校验器
+    principal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", name="fk_exec_configs_principal",
+                   ondelete="NO ACTION"), index=True)
+    # 容器归属:项目行 project_id(公共项目由创建闸拒绝,§7 能力矩阵;
+    # §20「项目资源归属 NOT NULL + FK RESTRICT」+ 处置面显式清理)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", name="fk_exec_configs_project",
+                   ondelete="NO ACTION"), index=True)
     name: Mapped[str] = mapped_column(String(64))
     is_default: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"))

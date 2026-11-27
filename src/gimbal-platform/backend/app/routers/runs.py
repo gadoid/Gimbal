@@ -445,8 +445,8 @@ async def preview_effective_config(
         raise HTTPException(422, detail={
             "code": e.code, "message": e.message,
             "service": e.service, "alias": e.alias}) from None
-    # 分层②:执行配置(显式选定或默认行;预览与执行同源)。区规则与
-    # dispatch 同款:项目区 carry 覆盖仅显式(决策 9);绑定仅显式。
+    # 分层②:执行配置(§11.2 单选 —— 显式 = 本人个人行或当前项目行,
+    # 未显式 = 项目默认行;个人默认不参与后端解析;预览与执行同源)。
     _exec_cfg = None
     try:
         from ..services.exec_config import (
@@ -456,7 +456,7 @@ async def preview_effective_config(
             raise HTTPException(422, detail={
                 "code": "exec_config_invalid",
                 "message": "execConfigId 须是整数"})
-        _exec_cfg = await load_choice(db, user.id, _req_exec)
+        _exec_cfg = await load_choice(db, user.id, scen.project_id, _req_exec)
     except ExecConfigNotFound as e:
         raise HTTPException(404, detail={
             "code": "exec_config_not_found",
@@ -467,12 +467,9 @@ async def preview_effective_config(
         _slot_map = await slot_lookup_overrides(
             db, definition_from_payload(scen.payload or {})
             .get("steps") or [], bindings, _exec_cfg.bindings)
-    _exec_carry = carry_overrides_for(_exec_cfg, scen.project_id)
-    # ⑧ 项目区链:项目默认配置覆盖压显式个人之下(与 dispatch 同款)
-    from ..services.exec_config import (merge_carry_overrides,
-                                        project_carry_overrides)
-    _exec_carry = merge_carry_overrides(
-        await project_carry_overrides(db, scen.project_id), _exec_carry)
+    # §11.2 单选:选定配置的 carry 覆盖 = 「选定执行配置层」;项目 Carry
+    # 资源层在 env/carry 链内正交参与,不再合并项目默认配置层(单选已含)
+    _exec_carry = carry_overrides_for(_exec_cfg)
     # §8.2:标签 = 有效身份(绑定 + 执行配置换用后)标签 > 项目 > 平台
     from ..services import env_chain
     from ..services.service_aliases import exec_auth_aliases_of_definition

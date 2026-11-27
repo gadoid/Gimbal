@@ -152,29 +152,43 @@ def _referenced(definition: dict) -> set[str]:
 
 
 async def _carry_conflicts(
-    db: AsyncSession, services: set[str], project_id: int, applicant_id: int,
+    db: AsyncSession, services: set[str], source_project_id: int | None,
+    target_project_id: int,
 ) -> list[dict]:
-    """两区 carry 解析差(冲突清单):eff_priv = 公共层 < **申请人默认执行
-    配置覆盖**(分层⑥起个人层的新家,决策 8;原个人层行已停读迁移),
-    eff_proj = 公共层 < 项目层;「配置覆盖 ∨ 项目层」绑定的路径里两者
-    不同即冲突(projectValue=None = 项目层缺口)。"""
-    from .exec_config import load_choice
+    """两容器 carry 解析差(冲突清单;§11.2 单选):每容器有效值 =
+    公共层 < 容器 Carry 层 < 容器默认执行配置覆盖(未显式时按项目
+    默认解析 —— **个人默认不参与后端解析**,原「申请人默认执行配置」
+    口径随 §11.2 退役)。绑定的路径里两侧不同即冲突(缺位 = None;
+    ``path in`` 判成员而非 .get —— 显式 JSON null 与缺席是两个事实)。"""
+    from .exec_config import project_default_carry_overrides
 
-    choice = await load_choice(db, applicant_id, None)
-    personal_cfg = (choice.carry_overrides if choice is not None else None) or {}
     out: list[dict] = []
     for svc in sorted(services):
-        pub = await carry_store.get_bindings(db, svc)
-        personal = personal_cfg.get(svc) or {}
-        project = await carry_store.get_bindings(
-            db, svc, scope=("project", project_id))
-        for path in sorted(set(personal) | set(project)):
-            eff_priv = personal.get(path, pub.get(path))
-            eff_proj = project.get(path, pub.get(path))
-            if eff_priv != eff_proj:
+        pub = await carry_store.get_bindings(db, svc) or {}
+        src_layer = (await carry_store.get_bindings(
+            db, svc, scope=("project", source_project_id)) or {}
+        ) if source_project_id is not None else {}
+        tgt_layer = (await carry_store.get_bindings(
+            db, svc, scope=("project", target_project_id)) or {})
+        src_cfg = ((await project_default_carry_overrides(
+            db, source_project_id)) or {}).get(svc) or {}
+        tgt_cfg = ((await project_default_carry_overrides(
+            db, target_project_id)) or {}).get(svc) or {}
+        paths = (set(src_cfg) | set(tgt_cfg)
+                 | set(src_layer) | set(tgt_layer) | set(pub))
+        for path in sorted(str(p) for p in paths):
+            def _eff(layer: dict, cfg: dict):
+                if path in cfg:
+                    return cfg[path]
+                if path in layer:
+                    return layer[path]
+                return pub.get(path)
+            src_v = _eff(src_layer, src_cfg)
+            tgt_v = _eff(tgt_layer, tgt_cfg)
+            if src_v != tgt_v:
                 out.append({
                     "service": svc, "path": path,
-                    "sourceValue": eff_priv, "projectValue": eff_proj,
+                    "sourceValue": src_v, "projectValue": tgt_v,
                 })
     return out
 
@@ -187,7 +201,7 @@ async def _scenario_analysis(
     return {
         "services": sorted(services),
         "conflicts": await _carry_conflicts(
-            db, services, project_id, row.owner_id),
+            db, services, row.project_id, project_id),
     }
 
 

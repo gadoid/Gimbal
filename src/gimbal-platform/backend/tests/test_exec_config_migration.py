@@ -23,14 +23,19 @@ def _to_0053_era(sync_url: str) -> None:
     lines + exec_configs.environment_id —— 该列已随 0060 退役,baseline
     create_all 不再产出,0054 时代仍需)→ 续升 0053。0006/0016/0038 等
     触碰旧表的增量由此可重放(P2-A「时代造形」机制,详见
-    test_migrations._create_retired_tables)。"""
+    test_migrations._create_retired_tables)。0070 起 exec_configs 归属
+    形状换新 —— 0054 时代造数按 (scope, scope_id) 形态,先回时代形状
+    (test_migrations._to_exec_config_era_shape)。"""
     from alembic import command as _command
     from sqlalchemy import create_engine, text
+
+    from .test_migrations import _to_exec_config_era_shape
 
     _command.upgrade(_cfg(sync_url), "0001_baseline")
     _eng = create_engine(sync_url)
     try:
         _create_retired_tables(_eng)
+        _to_exec_config_era_shape(_eng)
         with _eng.begin() as _conn:
             _conn.execute(text(
                 "ALTER TABLE exec_configs"

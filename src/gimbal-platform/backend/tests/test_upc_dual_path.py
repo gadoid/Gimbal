@@ -36,7 +36,7 @@ _COMPARE_TABLES = (
     "suites", "suite_members", "account_combos",
     "integration_tasks", "report_definitions",
     "scheme_repair_events", "scheme_repair_diagnosis",
-    "scenario_asset_imports",
+    "scenario_asset_imports", "exec_configs",
 )
 _TRIGGER_TABLES = ("projects", "project_members", "users")
 

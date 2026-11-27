@@ -32,11 +32,20 @@
 方案在重跑时已 blocked 则拒绝,与 §20.3「执行前重检」一致;绑定按
 config_json 快照回放,不重垫。
 
+**schedule 写点闸**(§20.3「创建、启用、更新执行绑定」;本轮补齐):
+创建(`integration.py` POST tasks,显式 schemeId)、换绑(PATCH
+schemeId)、订阅确认/恢复(subscribe/resume,按**将生效**配方核对
+—— 未指定按默认方案)四写点统一经 `_require_scheme_ready`,
+blocked → 409;派发闸仍在 #7。回归
+`tests/test_upc_m3_assembly_gate.py` schedule 四测。
+
 **读面豁免登记**(装载形态但不解密、不执行,不属 §20.3 受控面):
 集成订阅摘要/指纹(`consent_fingerprint_now` / `subscription_view` /
 `scenario_aliases`)、方案列表/详情(`run_schemes` 列表带 `repairStatus`
-投影)——只读结构信息,凭证秘密零解析。订阅指纹/环境标签消费 #7 的
-规范化视图(垫底终值同源)。
+投影)、令牌范围缺项分类(`access_tokens._task_bindings` 经
+`resolve_for_run` 取方案绑定做缺项归类,不解密不装配)——只读
+结构信息,凭证秘密零解析。订阅指纹/环境标签消费 #7 的规范化视图
+(垫底终值同源)。
 
 **§7.1 落地注记**(随 UPC M3 执行装配):查询面八面全部接入 ——
 `schemeId` 参数(缺省/跨场景/已删经 `resolve_for_run` 回落默认方案;
@@ -78,15 +87,18 @@ workbench 选方案 → 画布取数传参属前端 UI 批次。
 
 ## 4. M3 清单登记(设计细节项;冻结稿章节号,实施前须对照原文)
 
-以下项**属于 M3 范围但依赖设计冻结稿**(01-Gimbal-UPC-v2.10-Design.md,
-不在本仓库;实施前须取原文对照),本表先按进度台账 §3 处置列登记:
+以下项属 M3 范围的表结构/契约细节(冻结稿已在库:
+`docs/01-Gimbal-UPC-v2.10-Design.md`),按实施状态登记:
 
 | 项 | 设计出处 | 当前状态 | 登记说明 |
 |---|---|---|---|
 | AccessToken `principal_id` | §20.1 | 未实施 | 令牌 ↔ 身份主体显式列;现状经 `users`/`kind` 派生。待冻结稿字段语义 |
-| ExecConfig 单表 XOR | §11.2 | 未实施 | 配置引用互斥约束(单表两引用 XOR);现状见 `app/models/exec_config.py` |
+| ExecConfig 单表 XOR + 单选序 | §5/§11.2/§20 | ✅ 已实施(0070) | `principal_id`/`project_id` 两真实 FK + XOR CHECK(`ck_exec_configs_owner_shape`);单选 Explicit > ProjectDefault > None,个人默认仅 UI 预选;`exec_config.use` 面见 `exec_config.can_use_project_config` |
 | Integration 拆表 | §5 终态 / §11.5 | 未实施(单表两层 + `ck_integration_task_shape` 形状约束) | 模板/实例分表,「禁止模板实例同表」;迁移 + 模型 + 全读写点 |
 | 项目删除状态机/默认空间切换端点 | §13.1 | 部分(删除/归档闸已落地,§13.1 状态机全貌 + 默认空间切换端点未实现) | 生命周期收口;「删除与派发竞争」并发用例随其落地 |
+| §11.1 五处旧开关移除 | §11.1/AC-09 | 3/5 已移除;本轮收口 #1 | #1 内置凭证:执行链(dispatch/编排/集成)已不吃内嵌基座(`run_prepare.built_in_users` 仅剩导出面 10-14 口径);#2 私有默认配置覆盖:随 §11.2 单选退役;#3 私有无项目 Carry / #4 私有无项目默认环境 / #5 属主绕过成员门:已移除 |
+| §11.4 Carry remove/递归合并 | §11.4 | 未实施 | `remove`(JSON Pointer,仅对象键路径)与对象递归合并需扩展 carry 值层承载结构(现扁平 `field_path → str\|null`);层序/层内键域/null 注入已符合 |
+| CLI/Agent 执行入口 | §20.3 execute 行 | 不适用(仓内 CLI = Plate 引擎本地直跑,不经平台 Scheme) | 未来若经 HTTP `/runs` 进平台则自动受 #1/#2 闸覆盖;登记表维护约定要求届时显式立行 |
 
 ## 5. 维护约定
 

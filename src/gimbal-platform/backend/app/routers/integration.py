@@ -389,15 +389,9 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         raise _bad("scenario_not_owned",
                    "只能引用你可执行的场景(自己的 / 项目内的)")
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
-    # 场景限定)。
+    # 场景限定);§20.3 schedule 创建面:显式绑定的方案 blocked → 409。
     if body.schemeId:
-        from ..services import scheme_store
-        try:
-            await scheme_store.get_row(db, scen.scenario_id, body.schemeId)
-        except KeyError:
-            raise _bad(
-                "scheme_not_owned",
-                f"执行方案不存在或不属于该场景: {body.schemeId}") from None
+        await _require_scheme_ready(db, scen, body.schemeId)
     if principal.is_token:
         # 令牌注册范围闸(§5.4:注册 422;按将生效的方案核对,未指定
         # → 运行期同源回落默认/首个)
@@ -444,6 +438,41 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
         "fn": "create", "task": tpl.id, "name": tpl.name,
         "scenario_id": tpl.scenario_id, "client_ref": tpl.client_ref})
     return await _tpl_out_full(db, tpl, inst, user)
+
+
+async def _require_scheme_ready(
+    db: AsyncSession, scen: "ComposerScenario", scheme_id: str | None,
+) -> None:
+    """§20.3 schedule 面创建/启用/绑定更新时点的修复闸(派发闸在
+    ``integration_runner.run_instance`` 同位已接,此处补写点 —— blocked
+    的方案不得新建模板绑定、不得换绑、不得订阅确认或恢复)。
+
+    指定 id 须属该场景(与创建闸同码 ``scheme_not_owned``);未指定按
+    **将生效**配方核对(§11.5:未指定 Scheme 按既定默认规则解析),
+    无任何方案 → 放行(空配方面合法)。抛 :class:`SchemeRepairRequired`
+    后统一映射 409 ``scheme_repair_required``,不透传内部原因。"""
+    from ..services import scheme_repair, scheme_store
+    scheme = None
+    if scheme_id:
+        try:
+            scheme = await scheme_store.get_row(
+                db, scen.scenario_id, scheme_id)
+        except KeyError:
+            raise _bad(
+                "scheme_not_owned",
+                f"执行方案不存在或不属于该场景: {scheme_id}") from None
+    else:
+        scheme = await scheme_store.resolve_for_run(
+            db, scen.scenario_id, None)
+    if scheme is None:
+        return
+    try:
+        scheme_repair.require_ready(scheme)
+    except scheme_repair.SchemeRepairRequired:
+        raise _bad(
+            "scheme_repair_required",
+            "运行方案处于待修复状态(组合依赖受阻),请先在方案修复入口"
+            "完成修复(§20.3)", 409) from None
 
 
 async def _scheme_payload_for(
@@ -595,16 +624,17 @@ async def patch_task(
                 await _require_token_scope(
                     db, principal, scen_row, body.schemeId or None)
     if body.schemeId:
-        # S0①(G-A):PATCH 同创建闸,方案必须属于模板场景
+        # S0①(G-A):PATCH 同创建闸,方案必须属于模板场景;
+        # §20.3 schedule 更新执行绑定面:blocked → 409。
         if not tpl.scenario_id:
             raise _bad("scheme_not_owned", "任务未绑定场景,不能设置执行方案")
-        from ..services import scheme_store
-        try:
-            await scheme_store.get_row(db, tpl.scenario_id, body.schemeId)
-        except KeyError:
-            raise _bad(
-                "scheme_not_owned",
-                f"执行方案不存在或不属于该场景: {body.schemeId}") from None
+        # 局部 import:本函数后段可见性块同名导入,模块级名在此不可用
+        from ..models.composer_scenario import ComposerScenario
+        scen_row = (await db.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == tpl.scenario_id))).scalar()
+        if scen_row is None:
+            raise _bad("scenario_not_found", "场景不存在", 404)
+        await _require_scheme_ready(db, scen_row, body.schemeId)
         tpl.scheme_id = body.schemeId
     elif body.schemeId is not None:
         tpl.scheme_id = body.schemeId   # 显式空串 = 清除(维持原语义)
@@ -943,6 +973,9 @@ async def subscribe_task(
         if tpl.scenario_id else None
     if scen is None:
         raise _bad("scenario_not_found", "场景不存在", 404)
+    # §20.3 schedule 启用/重新确认面:将生效方案 blocked → 409 ——
+    # 不把阻塞方案确认成可派发订阅(既有阻塞订阅由派发闸暂停,不自动恢复)。
+    await _require_scheme_ready(db, scen, tpl.scheme_id)
     # P2.2:先按当前内容算指纹并与回传值比对
     try:
         current_fp = await integration_runner.consent_fingerprint_now(
@@ -1142,6 +1175,13 @@ async def resume_my_subscription(
                     "missing_credential 请补配凭证,"
                     "precheck_config 请先修正环境/地址/条目标签配置")
         raise _bad("resume_not_allowed", hint, 409)
+    # §20.3 schedule 启用面:恢复前核对将生效方案 —— blocked → 409
+    # (方案阻塞的实例由派发闸收口为 channel failed,不在 _RESUMABLE 列)。
+    if tpl.scenario_id:
+        scen = (await db.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == tpl.scenario_id))).scalar()
+        if scen is not None:
+            await _require_scheme_ready(db, scen, tpl.scheme_id)
     if inst.state == "paused":
         via = (reason if reason in ("fail_streak", "scope_denied",
                                     "resource_not_allowed")

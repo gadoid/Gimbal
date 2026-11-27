@@ -14949,7 +14949,7 @@
     },
     "/api/exec-configs/{config_id}/default": {
       "post": {
-        "description": "置为默认(user scope = carry 个人默认;project scope = 项目区\ncarry 链的项目配置层)。原子切换:同一事务先清旧默认再置新;部分\n唯一索引兜并发(撞索引 → 409)。",
+        "description": "置为默认(个人侧 = UI 交互预选位,后端执行链不自动解析 ——\n§11.2「个人默认仅交互预选」;项目侧 = 未显式时的项目默认单选位)。\n原子切换:同一事务先清旧默认再置新;部分唯一索引兜并发(撞索引\n→ 409)。",
         "operationId": "set_default_exec_config_api_exec_configs__config_id__default_post",
         "parameters": [
           {
@@ -15344,7 +15344,7 @@
     },
     "/api/executions/summary": {
       "get": {
-        "description": "顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。\n\n口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);\n窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。\n行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。\n\n``projectId`` = 项目维度聚合:\n行集 = executions.project_id 快照列(全员发起,跨 owner);门 =\n项目成员 ∨ 公共项目 ∨ Admin+(公共项目例外与 get_project/facets\n同口径 —— 项目详情页头卡对普通访客可见),\n非成员 404(不泄露存在性)。",
+        "description": "顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。\n\n口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);\n窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。\n行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。\n\n``projectId`` = 项目维度聚合:\n行集 = executions.project_id 快照列(全员发起,跨 owner);门 =\n:func:`can_view_project` 统一谓词(项目成员 ∨ 公共项目 ∨ 私有\n属主 —— AC-05/AC-51 同源,Admin+ 无旁路,平台管理员不因平台\n角色看见他人私有/普通项目执行面),\n不可见 404(不泄露存在性)。",
         "operationId": "executions_summary_api_executions_summary_get",
         "parameters": [
           {

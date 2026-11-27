@@ -260,3 +260,113 @@ async def test_suite_aggregate_member_blocked_skipped(
         n_exec = (await s.execute(select(func.count()).select_from(
             Execution))).scalar_one()
         assert n_exec == 0
+
+
+# ── schedule 面:创建/绑定更新/订阅确认/恢复(§20.3「创建、启用、
+#    更新执行绑定及每次派发均检查」的写点补齐)────────────────────────
+
+async def test_integration_create_blocked_scheme_rejected(client: AsyncClient):
+    """创建模板显式绑定 blocked 方案 → 409 scheme_repair_required,
+    模板行不落库;ready 对照腿放行。"""
+    from app.models.integration_task import IntegrationTask
+
+    h = await register_and_login(client, "m3sch_own", "pw123456")
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    sid = await _mk_scenario(client, h, "sc-m3sch", STEPS)
+    blocked_id = await _mk_scheme(client, h, sid, "受阻")
+    ready_id = await _mk_scheme(client, h, sid, "可用", is_default=True)
+    await _block(blocked_id, uid)
+
+    r = await client.post("/api/integration/tasks", headers=h,
+                          json=_task_body(sid, identityMode="personal",
+                                          schemeId=blocked_id, name="绑受阻方案"))
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "scheme_repair_required"
+    async with db_module.SessionLocal() as s:
+        n = (await s.execute(select(func.count()).select_from(
+            IntegrationTask).where(
+            IntegrationTask.name == "绑受阻方案"))).scalar_one()
+    assert n == 0, "blocked 绑定不得创建模板行"
+
+    r = await client.post("/api/integration/tasks", headers=h,
+                          json=_task_body(sid, identityMode="personal",
+                                          schemeId=ready_id, name="绑可用方案"))
+    assert r.status_code in (200, 201), r.text
+
+
+async def test_integration_patch_rebind_blocked_scheme_rejected(
+        client: AsyncClient):
+    """换绑 blocked 方案(PATCH schemeId)→ 409;原绑定不被覆盖。"""
+    h = await register_and_login(client, "m3ptc_own", "pw123456")
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    sid = await _mk_scenario(client, h, "sc-m3ptc", STEPS)
+    ready_id = await _mk_scheme(client, h, sid, "先绑", is_default=True)
+    blocked_id = await _mk_scheme(client, h, sid, "后换")
+    await _block(blocked_id, uid)
+    tid = (await client.post("/api/integration/tasks", headers=h,
+                             json=_task_body(sid, identityMode="personal", schemeId=ready_id))
+           ).json()["id"]
+    r = await client.patch(f"/api/integration/tasks/{tid}", headers=h,
+                           json={"schemeId": blocked_id})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "scheme_repair_required"
+    # 库内绑定未被覆盖
+    from app.models.integration_task import IntegrationTask
+
+    async with db_module.SessionLocal() as s:
+        bound = (await s.execute(select(IntegrationTask.scheme_id).where(
+            IntegrationTask.id == tid))).scalar_one()
+    assert bound == ready_id
+
+
+async def test_integration_subscribe_blocked_default_scheme_rejected(
+        client: AsyncClient):
+    """订阅确认面:模板未指定方案、默认方案 blocked → 409(§11.5 将生效
+    配方核对;不把阻塞方案确认成可派发订阅)。"""
+    h = await register_and_login(client, "m3sub_own", "pw123456")
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    sid = await _mk_scenario(client, h, "sc-m3sub", STEPS)
+    # 场景创建钩子已物化默认方案 —— 阻断的就是它(将生效配方)
+    async with db_module.SessionLocal() as s:
+        drow = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid,
+            ComposerRunScheme.is_default == True))).scalar_one()  # noqa: E712
+    await _block(drow.scheme_id, uid)
+    tid = (await client.post("/api/integration/tasks", headers=h,
+                             json=_task_body(sid, identityMode="personal"))).json()["id"]
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=h, json={"fingerprint": fp})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "scheme_repair_required"
+
+
+async def test_integration_resume_blocked_scheme_rejected(client: AsyncClient):
+    """恢复面:可恢复暂停(fail_streak)在恢复前核对将生效方案 ——
+    blocked → 409,实例保持暂停。"""
+    h = await register_and_login(client, "m3res_own", "pw123456")
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    sid = await _mk_scenario(client, h, "sc-m3res", STEPS)
+    tid = (await client.post("/api/integration/tasks", headers=h,
+                             json=_task_body(sid, identityMode="personal"))).json()["id"]
+    # 先订阅(方案 ready)→ 手动暂停(可恢复类)→ 方案转 blocked → 恢复 409
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=h, json={"fingerprint": fp})
+    assert r.status_code in (200, 201), r.text
+    async with db_module.SessionLocal() as s:
+        drow = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == sid,
+            ComposerRunScheme.is_default == True))).scalar_one()  # noqa: E712
+    await _block(drow.scheme_id, uid)
+    r = await client.post(
+        f"/api/integration/tasks/{tid}/subscription/pause", headers=h)
+    assert r.status_code in (200, 201), r.text
+    r = await client.post(f"/api/integration/tasks/{tid}/subscription/resume",
+                          headers=h)
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "scheme_repair_required"

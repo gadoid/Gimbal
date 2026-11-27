@@ -734,7 +734,8 @@ async def delete_user(
         zone 在提交时拒绝(跨区失配/组合已删),管理员删除用户直接 500。
         按 §20.3 状态机置 blocked(combo_missing)+ 行级修复事件,与
         处置同事务;不猜测替代组合(受让人空间的重建走资产恢复通道)。"""
-        from ..models.scheme_repair import REASON_COMBO_MISSING
+        from ..models.scheme_repair import (
+            ACTION_DISPOSAL_BLOCKED, REASON_COMBO_MISSING)
         from ..services import scheme_repair as _repair
 
         rows = (await db.execute(
@@ -745,7 +746,8 @@ async def delete_user(
         for _s in rows:
             await _repair.mark_blocked(
                 db, _s, reason=REASON_COMBO_MISSING,
-                action="disposal.unbound",
+                # §20.3 状态机边名与常量同源(处置动作码漂移收口)
+                action=ACTION_DISPOSAL_BLOCKED,
                 request_id=f"user-disposal:{target.id}",
                 actor_id=caller.id, actor_name=caller_label,
                 note=f"user disposal {disposal}: 私有区组合随容器处置,"
@@ -1094,6 +1096,11 @@ async def delete_user(
         sa_delete(AuthAccount).where(AuthAccount.owner_id == user_id))
     await db.execute(
         sa_delete(ConstantEntry).where(ConstantEntry.owner_id == user_id))
+    # v2.10 §5:个人执行配置 = 主体资源( principal_id NO ACTION,
+    # 与旧凭证行同口径)—— 用户删除显式收口
+    from ..models.exec_config import ExecConfig
+    await db.execute(sa_delete(ExecConfig).where(
+        ExecConfig.principal_id == user_id))
     # 评审三轮 R3-3:普通项目的晋升申请行(applicant_id NO ACTION,不随
     # 私有容器处置 —— 项目是别人的)按申请人显式收口,覆盖全部状态
     from ..models.project_promotion import ProjectPromotion

@@ -23,6 +23,11 @@ def upgrade() -> None:
     bind = op.get_bind()
     from sqlalchemy import inspect
 
+    cols = {c["name"] for c in inspect(bind).get_columns("exec_configs")}
+    # 0070 起模型退役 (scope, scope_id)(fresh 基线无此列)—— 时代守卫:
+    # 旧形状(含 0053 era 造形)才补挂;新形状链腿本迁移空转,由 0070 换形
+    if "scope" not in cols:
+        return
     checks = {c["name"] for c in inspect(bind)
               .get_check_constraints("exec_configs")}
     if "ck_exec_configs_scope" not in checks:

@@ -205,7 +205,7 @@ async def precheck_run(
                 scheme_found=False, scheme_valid=False,
             ))
             continue
-        _slot_map, _circled = await _item_slot_map(db, user, item)
+        _slot_map, _circled = await _item_slot_map(db, user, item, scen_row)
         one = await _precheck_one(
             db, scen_row, item, token=token,
             user_id=user.id if user is not None else None,
@@ -220,17 +220,21 @@ async def precheck_run(
     return out
 
 
-async def _item_slot_map(db, user, item: PrecheckItem) -> tuple[dict[str, str],
-                                                                frozenset[str]]:
-    """§8.5 ``PrecheckItem.execConfigId``:按执行配置口径预检 —— 换用
-    slot_map 折进有效身份集合(与派发同一折叠);圈定集(决策 1 阶段 1)
-    一并带回(advisory 差集在 ``_precheck_one`` 算)。不可加载 = 忽略
-    (他人配置/已删:执行配置自身页面暴露,这里不连坐)。"""
+async def _item_slot_map(db, user, item: PrecheckItem,
+                         scen_row) -> tuple[dict[str, str],
+                                            frozenset[str]]:
+    """§8.5 ``PrecheckItem.execConfigId``:按执行配置口径预检(§11.2
+    单选 —— 显式须本人个人行或当前项目行)—— 换用 slot_map 折进有效
+    身份集合(与派发同一折叠);圈定集(决策 1 阶段 1)一并带回
+    (advisory 差集在 ``_precheck_one`` 算)。不可加载 = 忽略(他人
+    配置/已删/无 use 权限:执行配置自身页面暴露,这里不连坐,派发面
+    fail-closed 兜底)。"""
     if item.exec_config_id is None or user is None:
         return {}, frozenset()
     try:
         from ..services.exec_config import load_choice
-        cfg = await load_choice(db, user.id, item.exec_config_id)
+        cfg = await load_choice(db, user.id, scen_row.project_id,
+                                item.exec_config_id)
     except Exception as e:  # noqa: BLE001 — 预检不因配置不可加载而连坐
         logger.warning("run_precheck: 执行配置加载失败,该配置跳过鉴权预检:{}", e)
         return {}, frozenset()

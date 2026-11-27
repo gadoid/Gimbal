@@ -132,7 +132,7 @@ async def _mk_config(
     # §8.2:environment_id 列已退役(0060);env_id 形参保留但忽略
     async with db_module.SessionLocal() as s:
         row = ExecConfig(
-            scope="user", scope_id=uid, name=name, is_default=is_default,
+            principal_id=uid, name=name, is_default=is_default,
             payload={"systems": systems})
         s.add(row)
         await s.commit()
@@ -164,23 +164,30 @@ async def test_load_choice_flatten_and_isolation(client, fresh_db):
         carry={"grade": "B", "nil": None})
 
     async with db_module.SessionLocal() as s:
-        ch = await load_choice(s, a, cid)
+        ch = await load_choice(s, a, None, cid)
         assert ch is not None and ch.explicit
         assert ch.bindings == {_ALIAS: "merchant-b"}
         assert ch.carry_overrides == {_BASE: {"grade": "B", "nil": None}}
         # 跨人显式选定 → NotFound(个人数据不泄露存在性)
         try:
-            await load_choice(s, b, cid)
+            await load_choice(s, b, None, cid)
             raise AssertionError("expected ExecConfigNotFound")
         except ExecConfigNotFound:
             pass
-        # None → 默认行;无默认行 → None
-        assert await load_choice(s, a, None) is None
-    await _mk_config(a, "默认", is_default=True)
+        # §11.2:个人默认不参与后端自动解析 —— 未显式 + 无项目语境 = None
+        assert await load_choice(s, a, None, None) is None
+    # 项目默认腿:建项目默认行,未显式 → 该行(explicit=False)
+    from app.models.project import Project
     async with db_module.SessionLocal() as s:
-        ch = await load_choice(s, a, None)
-        assert ch is not None and not ch.explicit
-        assert await load_choice(s, b, None) is None
+        pid = (await s.execute(sa.select(Project.id).where(
+            Project.kind == "private").limit(1))).scalar_one()
+        s.add(ExecConfig(project_id=pid, name="项目默认", is_default=True))
+        await s.commit()
+    async with db_module.SessionLocal() as s:
+        ch = await load_choice(s, a, pid, None)
+        assert ch is not None and not ch.explicit and ch.is_default
+        # 其他项目语境不回落他行
+        assert await load_choice(s, a, None, None) is None
 
 
 # ── ②·5 §8.10:aliases(圈定调用身份)管理范围语义 —— 不进摊平 ──────
@@ -192,7 +199,7 @@ async def test_aliases_not_flattened_into_choice(client, fresh_db):
     uid = await _uid("ec_al")
     async with db_module.SessionLocal() as s:
         row = ExecConfig(
-            scope="user", scope_id=uid, name="圈定套", is_default=False,
+            principal_id=uid, name="圈定套", is_default=False,
             payload={"systems": [{"service": _BASE, "aliases": [_ALIAS],
                                   "bindings": {_ALIAS: "merchant-b"}}]})
         s.add(row)
@@ -200,7 +207,7 @@ async def test_aliases_not_flattened_into_choice(client, fresh_db):
         cid = row.id
 
     async with db_module.SessionLocal() as s:
-        ch = await load_choice(s, uid, cid)
+        ch = await load_choice(s, uid, None, cid)
         assert ch is not None and ch.explicit
         # 摊平值对象无 aliases 位;bindings 照常
         assert not hasattr(ch, "aliases")
@@ -209,19 +216,17 @@ async def test_aliases_not_flattened_into_choice(client, fresh_db):
 
 # ── ③ 决策 9:carry 覆盖的区规则 ───────────────────────────────────
 
-async def test_carry_overrides_zone_rule(client, fresh_db):
+async def test_carry_overrides_single_select(client, fresh_db):
+    """§11.2 单选:选定配置(显式或项目默认)的 carry 即「选定执行配置
+    层」—— 决策 9 的区规则随单选退役(选定行就是全部配置层)。"""
     await register_and_login(client, "ec_z", "pw123456")
     uid = await _uid("ec_z")
     explicit = await _mk_config(uid, "显式", carry={"k": "v"})
-    await _mk_config(uid, "默认", is_default=True, carry={"k": "v"})
     async with db_module.SessionLocal() as s:
-        ch_e = await load_choice(s, uid, explicit)
-        ch_d = await load_choice(s, uid, None)   # 默认链 = 默认行(explicit=False)
-    assert carry_overrides_for(ch_e, None) == {_BASE: {"k": "v"}}
-    assert carry_overrides_for(ch_d, None) == {_BASE: {"k": "v"}}   # 私有区:默认也吃
-    assert carry_overrides_for(ch_e, 42) == {_BASE: {"k": "v"}}     # 项目区:显式吃
-    assert carry_overrides_for(ch_d, 42) is None                    # 项目区:默认不吃
-    assert carry_overrides_for(None, None) is None
+        ch_e = await load_choice(s, uid, None, explicit)
+        assert ch_e is not None
+        assert carry_overrides_for(ch_e) == {_BASE: {"k": "v"}}
+        assert carry_overrides_for(None) is None
 
 
 async def test_carry_override_layer_beats_tiers(client, fresh_db):
@@ -520,7 +525,7 @@ async def test_project_zone_carry_chain_with_project_config(
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
 
-    # ① 默认链(无显式个人):项目配置覆盖生效(压项目层/公共层)
+    # ① 默认链(§11.2:未显式 = 项目默认行):项目配置覆盖生效
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-ec-pc", dataSetIds=[]))
     assert r.status_code == 201, r.text
@@ -528,14 +533,14 @@ async def test_project_zone_carry_chain_with_project_config(
     cfg = await _last_cfg()
     assert cfg["execCarryOverrides"] == {_BASE: {"$.pv": "proj-cfg"}}
 
-    # ② 显式选定个人配置:个人覆盖压项目配置之上(字段级合并)
+    # ② 显式选定个人配置:单选整体替换项目默认配置(§11.2 验收例
+    # AC-49:三字段各自来自所选行;项目 Carry 资源层仍另参链)
     r = await client.post("/api/runs", headers=h, json=_run_payload(
         scenarioId="sc-ec-pc", dataSetIds=[], execConfigId=personal))
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 2)
     cfg = await _last_cfg()
-    assert cfg["execCarryOverrides"] == {_BASE: {"$.pv": "proj-cfg",
-                                                 "mine": "personal"}}
+    assert cfg["execCarryOverrides"] == {_BASE: {"mine": "personal"}}
 
 
 # ── ⑦ 重跑回放终值(§7:配置后改不影响历史执行)──────────────────
@@ -594,9 +599,9 @@ async def test_integration_never_resolves_exec_config(
 
     calls: list[int] = []
 
-    async def _spy(db, user_id, config_id):
+    async def _spy(db, user_id, project_id, config_id):
         calls.append(user_id)
-        return await _load_choice_orig(db, user_id, config_id)
+        return await _load_choice_orig(db, user_id, project_id, config_id)
 
     _load_choice_orig = _ec.load_choice
     monkeypatch.setattr(_ec, "load_choice", _spy)

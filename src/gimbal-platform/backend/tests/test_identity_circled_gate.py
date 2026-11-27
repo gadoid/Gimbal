@@ -70,15 +70,36 @@ async def _acct(uid: int, alias: str, *, default: bool = False) -> None:
 
 async def _mk_config(uid: int, aliases: list[str], *, default: bool = False,
                      name: str = "圈定") -> int:
-    """种执行配置行(systems[].aliases = 圈定集)。"""
+    """种个人执行配置行(systems[].aliases = 圈定集)。"""
     async with db_module.SessionLocal() as db:
-        cfg = ExecConfig(scope="user", scope_id=uid, name=name,
-                        is_default=default,
-                        payload={"systems": [{"service": "s8-alias",
-                                              "aliases": aliases}]})
+        cfg = ExecConfig(principal_id=uid, name=name,
+                         is_default=default,
+                         payload={"systems": [{"service": "s8-alias",
+                                               "aliases": aliases}]})
         db.add(cfg)
         await db.commit()
         return cfg.id
+
+
+async def _mk_project_default_config(project_id: int, aliases: list[str],
+                                     *, name: str = "圈定") -> int:
+    """种项目默认执行配置行(§11.2 项目默认单选的载体)。"""
+    async with db_module.SessionLocal() as db:
+        cfg = ExecConfig(project_id=project_id, name=name,
+                         is_default=True,
+                         payload={"systems": [{"service": "s8-alias",
+                                               "aliases": aliases}]})
+        db.add(cfg)
+        await db.commit()
+        return cfg.id
+
+
+async def _scenario_project_id(sid: str) -> int:
+    async with db_module.SessionLocal() as db:
+        from app.models.composer_scenario import ComposerScenario
+        return (await db.execute(sa.select(
+            ComposerScenario.project_id).where(
+            ComposerScenario.scenario_id == sid))).scalar_one()
 
 
 async def _mk_scenario(client, h, sid: str, steps: list[dict]) -> str:
@@ -138,11 +159,14 @@ async def test_dispatch_rejects_uncircled(client, plate_mock, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_default_row_circled_governs(client, plate_mock, monkeypatch):
-    """默认行圈定同样承诺(与绑定层「默认不吃」的刻意差异):不带
-    execConfigId 派发 → load_choice 落默认行 → 同码 409。"""
+async def test_project_default_row_circled_governs(
+        client, plate_mock, monkeypatch):
+    """§11.2 项目默认单选:项目默认行的圈定同样承诺 —— 不带
+    execConfigId 派发 → load_choice 落**项目默认行** → 同码 409。
+    个人默认不参与后端自动解析(§11.2 签核项),该腿已由项目默认承载。"""
     h, uid, ds_id = await _setup_pair(client, "circ2", "sc-circ-2")
-    await _mk_config(uid, ["s8-alias", "qa1"], default=True, name="常设")
+    pid = await _scenario_project_id("sc-circ-2")
+    await _mk_project_default_config(pid, ["s8-alias", "qa1"], name="常设")
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
     from app.services import run_dispatcher as rd

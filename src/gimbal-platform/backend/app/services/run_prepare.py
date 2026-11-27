@@ -509,11 +509,11 @@ def built_in_user_aliases(scenario_payload: dict | None) -> list[str]:
 
 
 def zone_allows_direct(project_kind: str | None) -> bool:
-    """场景内置凭证(``config.users``)只在**私有空间**生效(UPC M2:
-    私有区 = 真实私有空间容器,kind 判定;旧「project_id 空」口径随
-    资源迁移退役);普通项目 / 公共区一律不生效 —— 凭证只来自执行人
-    的账户装载。地址无区规则(恒来自环境部署表),本判定只剩内置凭证
-    语义。None = 未知归属,fail-closed 不生效。"""
+    """场景内置凭证(``config.users``)的存量区判定 —— **仅剩导出面
+    消费**(10-14 口径:属主导出携带自有明文)。v2.10 §11.1 起执行链
+    一律不吃内置凭证(禁止资产内嵌秘密,改授权凭证引用):执行 /
+    Suite 编排 / 集成 / 查询链不再传 ``built_in_users``。None =
+    未知归属,fail-closed 不生效。"""
     return project_kind == "private"
 
 
@@ -536,8 +536,10 @@ def built_in_users(
     """场景 definition.config.users —— 仅当执行人 == 场景属主、且场景在
     私有区时返回。
 
-    authz 主规则:其余(订阅执行 / 非属主导出 /
-    suite 跑他人成员;引用执行面已退场,ADR-0003 #20)一律当空。
+    **v2.10 §11.1:执行链已退役** —— 执行 / Suite 编排 / 集成 / 查询
+    链一律不传内置基座(users 唯一来源 = 凭证池解析);本函数仅剩
+    **导出面**消费(10-14 口径:属主导出携带自有明文,数据可携性
+    非执行语义)。其余(非属主导出等)一律当空。
     **fail-closed**:两参必填,任一为 None(属主已删的孤儿场景、
     调用方漏传)同样当空 —— None = 无主数据,不判直接放行会形成
     越权窗口。作者即席提供 payload 的路径(草稿预览、临时调用)
@@ -709,9 +711,9 @@ async def prepare_exec(
 
     definition = definition_from_payload(scenario_payload)
     steps = definition.get("steps") or []
-    # authz 主规则:executor(owner_id = 凭证池归属,即执行人)≠
-    # 场景属主 ⇒ 内置 users 基座当空
-    # UPC M2:内置凭证判**私有空间**(kind 轴)—— 经 db_factory 短会话
+    # 内置凭证基座(v2.10 §11.1):执行链不再消费 —— 唯一读者是导出
+    # 物化面(10-14 口径,属主自有数据可携带);此处仍随 prep 产出。
+    # UPC M2:区判定 = 私有空间 kind 轴,经 db_factory 短会话
     async with db_factory() as _s:
         _proj_kind = await project_kind_of(_s, project_id)
     prep = ExecPrep(
@@ -805,9 +807,9 @@ async def prepare_exec(
     else:
         try:
             async with db_factory() as s:
-                # S4:carry 作用域 = 公共项目层 < (项目层 ∨ 执行人个人层;
-                # 项目区不吃个人层 —— 区模型收敛裁定);分层②:执行配置
-                # 覆盖层压在场景显式之下、层序之上(区规则由调用方裁)。
+                # §11.4:carry 层序 = 公共项目层 < 当前项目层 < 选定执行
+                # 配置覆盖(exec_overrides;个人层已退役 —— §11.2 个人
+                # 默认仅 UI 预选,后端不解析)。
                 # §8.9 实例档:执行标签 env(与地址③同一 EnvChoice;
                 # env_id=None = 标签链全空 → 实例档跳过)
                 prep.carry_ctx = await build_carry_context(

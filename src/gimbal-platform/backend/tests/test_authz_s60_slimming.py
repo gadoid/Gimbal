@@ -231,8 +231,11 @@ _ZONE_CFG = {"services": {"fin-service": "http://authored"},
                                    "token_type": "Bearer"}}}
 
 
-async def test_private_zone_keeps_direct_and_builtin(
+async def test_private_zone_keeps_direct_builtin_retired(
         client, plate_mock: PlateMock, monkeypatch):
+    """私有区:authored 直连地址保留(地址面不在 §11.1 五开关清单);
+    内置凭证执行链已退役(v2.10 §11.1 —— 禁止资产内嵌秘密,改授权
+    凭证引用,私有区属主也不例外;明文仅剩导出面 10-14 口径)。"""
     plate_mock.behaviour = "echo"
     h = await _member(client, "s60priv")
     await _seed(client, h, "sc-s60-priv", config=_ZONE_CFG)
@@ -245,7 +248,7 @@ async def test_private_zone_keeps_direct_and_builtin(
     await _wait(lambda: len(cases) >= 1)
     cfg = cases[0]["config"]
     assert cfg["services"]["fin-service"] == "http://authored"
-    assert "builtin" in cfg["users"]
+    assert "builtin" not in cfg["users"]
 
 
 async def test_project_zone_ignores_direct_and_builtin(

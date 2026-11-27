@@ -644,7 +644,9 @@ class TestFinalProductsNoAuthorCredentials:
     async def test_suite_graph_unit_for_non_owner(
             self, client: AsyncClient, monkeypatch):
         """suite graph 编排:非属主组装出的单元场景无作者 config.users;
-        属主组装照旧带。"""
+        属主组装同样无 —— v2.10 §11.1 起执行链不吃内置凭证(禁止资产
+        内嵌秘密,改授权凭证引用),属主执行也一样走凭证池;明文仅剩
+        导出面携带(10-14 口径,见 test_export_owner)。"""
         import json
 
         from sqlalchemy import select as sa_select
@@ -668,7 +670,8 @@ class TestFinalProductsNoAuthorCredentials:
         assert _SECRET not in json.dumps(foreign, default=str)
         async with db_module.SessionLocal() as s:
             own = await graph_dispatch.materialize_graph(s, ids["fp_gro"], spec)
-        assert own["units"][0]["scenario"]["config"]["users"] == _SECRET_USERS
+        # 新契约(§11.1):属主执行的编排单元同样不带内嵌基座
+        assert own["units"][0]["scenario"]["config"]["users"] == {}
 
     async def test_single_run_case_file_for_ref_executor(
             self, client: AsyncClient, monkeypatch):

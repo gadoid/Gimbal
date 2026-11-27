@@ -5,7 +5,8 @@ PUT 语义 = 整体替换(行集 diff:删缺键、upsert 在键);调用方负责
 authz M2a S4 作用域分层:读写都带 ``scope``(('project', 项目id) |
 ('user', 用户id);公共项目行 = 旧全局层);``scope=None``(缺省)= 公共
 项目层 —— 与旧「全局表」语义同型,存量调用方零改动。tier 合并在
-``carry_injection.build_carry_context``(公共层 < 项目/个人层)。
+``carry_injection.build_carry_context``(公共层 < 项目层 < 选定执行
+配置覆盖;个人层已退役 —— §11.2 个人默认仅 UI 预选)。
 """
 from __future__ import annotations
 

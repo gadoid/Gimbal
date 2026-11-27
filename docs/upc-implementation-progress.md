@@ -627,3 +627,84 @@ xdist;+3 = 导出保护);契约快照重生(scanned_files 189→190 合法
 3. **M4**:ProjectLayout + 模块注册;裁定 §9 路径形态(§3 表第 4 行);AC-52。
 4. **M5(准入另设)**:先场景清单导出保护,再重建 dev 库;§14.2 全清单恢复;
    独立 DDL 升级验证全量复验(§20.4 断言套件)。
+---
+
+## 3.12 冻结稿入库后的契约收口轮(2026-11-27,P0 三项 + schedule 写点 + P2)
+
+冻结稿(`docs/01-Gimbal-UPC-v2.10-Design.md`,`c1446fe7` 入库)解除
+「待稿裁定」阻塞后的第一批契约收口;同步修评估报告列出的越权面。
+
+### P0-1 executions 项目聚合 Admin+ 旁路(AC-05/AC-51)
+
+`executions_summary` 的 projectId 维度门改 `can_view_project` 统一
+谓词(删手写成员查询 + ops.write 旁路)—— Admin+ 不再看见他人私有
+/普通项目执行聚合;非成员恒 404。`batch-summary` 逐执行属主过滤,
+无旁路(核对确认)。回归 `tests/test_executions.py` 10/10。
+
+### P0-2 §11.1#1 内置凭证执行链退役
+
+- **裁定**:写边界早有 `plaintext_users_rejected` 禁新内嵌(阶段 2);
+  本轮让**执行链**(dispatch / Suite 编排 / 集成)不再消费存量内嵌
+  基座 —— `materialize_run_copy` 的 users 唯一来源 = `resolved_auths`;
+  `graph_dispatch`/`run_dispatcher`/`integration_runner` 三链摘除
+  `built_in_users` 传参。
+- **导出面保留**(10-14 口径,属主自有数据可携带,非执行语义;
+  `scenarios.py` 导出物化 + `prep.built_in_users` 注明「仅剩导出面
+  消费」)。属主编排物化同改断言(`test_public_content_strips_
+  credentials` 属主腿 users == {},负向腿不动);
+  `test_authz_s60_slimming` 私有区腿改「authored 直连保留、内置退
+  役」(地址面不在 §11.1 五开关清单)。
+
+### P0-3 §11.2 ExecConfig 单选 + 单表 XOR FK(0070)
+
+- **0070 迁移**:`exec_configs` 换 `principal_id`/`project_id` 两真实
+  FK(NO ACTION)+ XOR CHECK(`ck_exec_configs_owner_shape`)+
+  同侧 name/默认部分唯一索引(谓词钉本侧非空 —— 单列部分索引对
+  NULL 互不冲突);(scope, scope_id) 多态列退役。孤儿配置行(无外键
+  时代合法残留)回填前显式清理。0069 加时代守卫(fresh 基线无 scope 列
+  空转);era 造形 `_strip_exec_config_owner_shape` /
+  `_to_exec_config_era_shape` 让 0069→0070 增量真实重放
+  (`_strip_upc_shapes` 同步覆盖 exec_configs)。
+- **处置收口**:私有容器处置清项目配置(`dispose_private_assets`);
+  用户删除清个人配置(principal_id NO ACTION,与旧凭证行同口径)。
+- **单选序**(`exec_config.load_choice`):显式 = 本人个人行 ∨ 当前
+  项目行(归属错/不存在/无 use → 404 fail-closed 不降级);未显式 =
+  **项目默认行**;**个人默认不参与后端解析**(签核项)。`exec_config.
+  use` 与 read 区分:项目配置 use = 容器执行面
+  (`can_use_project_config`:private 属主 ∨ normal 成员 ∧ active;
+  公共恒 False —— §7 关闭)。私有空间项目配置写面 = 属主(§7 开)。
+- **carry 链收敛**:决策 9 区规则退役 —— 选定配置(显式或项目默认)
+  的覆盖即「选定执行配置层」(公共 < 项目 Carry 资源 < 选定配置);
+  AC-49「显式个人替换整个项目默认,仍继承项目 Carry」。
+- **晋升冲突对照**(`_carry_conflicts`):两侧有效值 = 公共 < 容器
+  Carry 层 < 容器默认执行配置覆盖(`path in` 判成员,显式 null 与
+  缺席分立);s72 测试改由源空间容器默认配置承载。
+- **调用点**:dispatch(场景坐标提前解析)/预览/预检(项目语境入参)
+  / 晋升;路由 DTO 保持 scope/projectId 形状映射新列。
+- **回归**:形状闸 4 测(直写 XOR/FK 拒 + 链腿 0069→0070 真实换形
+  + 模型登记)、双路径(增列 `exec_configs` 对照)、
+  `test_migrations` 全量、链 36 例、圈定门 8 例、s72 8 例。
+
+### P1 schedule 写点修复闸(§20.3「创建、启用、更新执行绑定」)
+
+`integration.py` 增 `_require_scheme_ready`(指定 id 必属场景同码
+`scheme_not_owned`;未指定按将生效默认配方核对):创建(显式绑定)、
+PATCH 换绑、subscribe(将生效)、resume(恢复前核对)四写点统一
+blocked → 409;派发闸仍在 run_instance。登记表 §1 后补「schedule
+写点闸」注记。回归 4 新测 + integration 全量 19/19。
+
+### P2 收尾
+
+处置动作码漂移:users.py 处置解离改用
+`scheme_repair.ACTION_DISPOSAL_BLOCKED` 常量(状态机边名同源);
+`run_prepare`/`carry_store` 旧口径注释清理(个人层退役/单选链);
+登记表补账:§11.1 五开关状态、§11.4 remove 未实施、CLI/Agent 行、
+`access_tokens._task_bindings` 读面豁免行。
+
+**验证**:全量 `2371 passed / 2 skipped / 0 failed`(真实 PG 15432,xdist;+4 = schedule 闸四测,装配闸文件 10 测);
+契约快照重生(错误码 sites 随新 raise 点合法漂移,前端生成件 noop);
+`git diff --check` 干净。
+
+**开放项登记**(不变):§11.4 remove/递归合并(carry 值层结构,
+登记表 §4 行)、AccessToken principal_id(§20.1)、Integration 拆表
+(§5 终态)、§13.1 状态机全貌端点、M4 前端、M5 重建准入。

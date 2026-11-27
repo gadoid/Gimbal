@@ -47,11 +47,11 @@ def materialize_run_copy(
 ) -> dict[str, Any]:
     """返回物化后的深拷贝;入参不可变(纯函数)。
 
-    * users:**唯一来源** = ``built_in_users``(属主规则已裁定:执行人 ≠
-      场景属主即为空)+ resolved_auths 按别名覆盖/追加。``converted.config.
-      users``(plate convert 原样带回的作者内置凭证)一律丢弃 —— 此前以它
-      为合并基座,非属主时 built_in_users 虽空,作者明文仍从 converted 进
-      最终产物(导出 / suite 编排 / 订阅执行全部泄漏)
+    * users:resolved_auths 按别名覆盖/追加;``built_in_users`` 仅剩
+      **导出面**消费(10-14 口径:属主导出携带自有明文),执行链
+      一律不传(v2.10 §11.1:禁止资产内嵌秘密,改授权凭证引用)。
+      ``converted.config.users``(plate convert 原样带回的作者内置
+      凭证)一律被 ``_apply_users`` 覆盖丢弃
     * services:**③ 环境部署地址**(仅对 steps 实际引用的 service 键
       生效;② authored 层随架构终态退役,物化副本从空起步 —— 区规则
       的直连/清空区分随层退役消失,全区域一态)。``alias_base_urls``

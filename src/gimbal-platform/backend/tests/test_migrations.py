@@ -158,6 +158,46 @@ def _strip_upc_shapes(eng) -> None:
         for t in ("scenario_asset_imports", "scheme_repair_diagnosis",
                   "scheme_repair_events", "account_combos"):
             conn.exec_driver_sql(f"DROP TABLE IF EXISTS {t} CASCADE")
+        # v2.10 §11.2(0070):exec_configs 回 0053 时代形状 —— 单表互斥
+        # FK 的增量分支真实重放(XOR 换形/回填/旧列退役)
+        _strip_exec_config_owner_shape(conn)
+
+
+def _strip_exec_config_owner_shape(conn) -> None:
+    """exec_configs 摘除 0070 新形状、放回 (scope, scope_id) 时代形态:
+    新列(连带 FK/部分唯一索引 CASCADE)与新 CHECK 先摘,再补旧两列、
+    旧复合唯一约束与旧默认部分唯一索引。仅测试造形用。"""
+    conn.exec_driver_sql(
+        "ALTER TABLE exec_configs "
+        "DROP CONSTRAINT IF EXISTS ck_exec_configs_owner_shape")
+    conn.exec_driver_sql(
+        "ALTER TABLE exec_configs DROP COLUMN IF EXISTS principal_id CASCADE")
+    conn.exec_driver_sql(
+        "ALTER TABLE exec_configs DROP COLUMN IF EXISTS project_id CASCADE")
+    conn.exec_driver_sql(
+        "ALTER TABLE exec_configs "
+        "ADD COLUMN IF NOT EXISTS scope VARCHAR(16) NOT NULL DEFAULT 'user'")
+    conn.exec_driver_sql(
+        "ALTER TABLE exec_configs "
+        "ADD COLUMN IF NOT EXISTS scope_id INTEGER NOT NULL DEFAULT 0")
+    conn.exec_driver_sql(
+        "ALTER TABLE exec_configs "
+        "DROP CONSTRAINT IF EXISTS uq_exec_configs_scope_name")
+    conn.exec_driver_sql(
+        "ALTER TABLE exec_configs "
+        "ADD CONSTRAINT uq_exec_configs_scope_name "
+        "UNIQUE (scope, scope_id, name)")
+    conn.exec_driver_sql(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_exec_configs_default "
+        "ON exec_configs (scope, scope_id) WHERE is_default")
+
+
+def _to_exec_config_era_shape(eng) -> None:
+    """0069/0070 链腿的时代起点(独立于 _strip_upc_shapes 的局部造形):
+    把 baseline(当前模型 = 0070 新形状)的 exec_configs 还原到
+    0053 时代,使两迁移的真实增量可重放。"""
+    with eng.begin() as conn:
+        _strip_exec_config_owner_shape(conn)
 
 
 def _create_retired_tables(eng) -> None:
@@ -816,10 +856,11 @@ def _to_0039_shape(eng) -> None:
             "DROP COLUMN is_platform_template")
         conn.exec_driver_sql("DROP TABLE project_members")
         # S7.2:project_promotions FK 挡 DROP projects —— 先卸(重塑
-        # 0039 形态,该表本不存在);UPC M2 表同理先卸
+        # 0039 形态,该表本不存在);UPC M2 表同理先卸;0070 起
+        # exec_configs.project_id FK 同样挡 DROP —— 一并先卸
         for t in ("project_promotions", "scenario_asset_imports",
                   "scheme_repair_diagnosis", "scheme_repair_events",
-                  "account_combos"):
+                  "account_combos", "exec_configs"):
             conn.exec_driver_sql(f"DROP TABLE IF EXISTS {t} CASCADE")
         conn.exec_driver_sql("DROP TABLE projects")
 
@@ -2171,6 +2212,9 @@ def test_0066_incremental_model_align():
         _upgrade_to(sync_url, "0065_execution_row_run_error")
         eng = create_engine(sync_url)
         try:
+            # 时代造形:baseline 按当前模型(0070 新形状)建表 —— 0065
+            # 时代造数(era 列直插)需先回 (scope, scope_id) 形态
+            _to_exec_config_era_shape(eng)
             with eng.begin() as c:
                 # baseline 抢先建出的三表 → 改回迁移建表形态
                 c.exec_driver_sql(

@@ -105,6 +105,11 @@ async def dispose_private_assets(db: AsyncSession, project_ids: list[int]) -> No
         ScenarioAssetImport.project_id.in_(project_ids)))
     await db.execute(sa_delete(ProjectPromotion).where(
         ProjectPromotion.project_id.in_(project_ids)))
+    # v2.10 §5:项目执行配置 = 容器配置(project_id NO ACTION FK,
+    # 0070 起)—— 随容器显式收口,个人行(principal_id)不受影响
+    from ..models.exec_config import ExecConfig
+    await db.execute(sa_delete(ExecConfig).where(
+        ExecConfig.project_id.in_(project_ids)))
     # 场景的三个 NO ACTION 引用者先收口,再删场景本体
     from ..models.permission import UserStar
     from ..models.scenario_endpoint_ref import ScenarioEndpointRef

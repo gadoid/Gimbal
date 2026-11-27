@@ -957,9 +957,15 @@ async def dispatch_target(
                 "修复入口完成修复后再执行(§20.3)",
             )
 
-    # 执行配置分层②(§5)与 ④ 重跑快照 → _resolve_dispatch_exec_cfg
+    # authz W6 执行人 ≠ 属主的脱敏上下文 + S4/S8 坐标 → _load_scenario_context
+    # (提前:§11.2 单选解析需要场景项目坐标 —— 显式项目配置/项目默认兜底)
+    _scen, _scen_owner_id, _scen_project_id = await _load_scenario_context(
+        db, target, user_id)
+
+    # 执行配置分层②(§11.2 单选)与 ④ 重跑快照 → _resolve_dispatch_exec_cfg
     _req_exec_id, _exec_cfg = await _resolve_dispatch_exec_cfg(
-        db, user_id, req, target=target, token=token, exec_replay=exec_replay)
+        db, user_id, req, target=target, token=token, exec_replay=exec_replay,
+        scen_project_id=_scen_project_id)
 
     # authz M2a S6:绑定校验先行(§8.2 标签解析要吃有效身份集合)
     _bindings = await _validated_bindings(db, req)
@@ -997,13 +1003,9 @@ async def dispatch_target(
     # 必须随任务下发 —— worker 不回查请求上下文(配方快照语义)。
     _skip_carry = (getattr(req, "scheme_id", None) == RAW_SCHEME_ID)
 
-    # authz W6 执行人 ≠ 属主的脱敏上下文 + S4/S8 坐标 → _load_scenario_context
-    _scen, _scen_owner_id, _scen_project_id = await _load_scenario_context(
-        db, target, user_id)
-    # 分层②决策 9 carry 覆盖链(④ 重跑直用快照终值)→ _resolve_carry_policy
+    # §11.2 单选:选定配置的 carry 覆盖链(④ 重跑直用快照终值)
     _exec_carry = await _resolve_carry_policy(
-        db, exec_cfg=_exec_cfg, exec_replay=exec_replay,
-        scen_project_id=_scen_project_id)
+        db, exec_cfg=_exec_cfg, exec_replay=exec_replay)
     # S8 凭证池裁决(个人池 / 项目池;graph 全单元同项目)→ _resolve_cred_project
     cred_project_id = await _resolve_cred_project(
         db, req, user_id, _scen_project_id)
@@ -1145,10 +1147,12 @@ def _validate_debug_request(req: RunRequest, *, total_runs: int) -> None:
 async def _resolve_dispatch_exec_cfg(
     db: AsyncSession, user_id: int, req: RunRequest, *, target: RunTarget,
     token: object | None, exec_replay: dict | None,
+    scen_project_id: int | None,
 ) -> tuple:
-    """执行配置分层②(设计方案 §5):JWT 手动场景执行吃执行配置(显式
-    选定或默认行);令牌(同指纹不变量)/编排 graph(单元自治)/临时
-    调用不吃 —— 显式携带而不可用即拒,不静默忽略(似生效未生效)。
+    """执行配置 §11.2 单选:JWT 手动场景执行吃执行配置(显式选定本人
+    个人行或当前项目行;未显式 → 项目默认行;个人默认不参与后端自动
+    解析);令牌(同指纹不变量)/编排 graph(单元自治)/临时调用不吃
+    —— 显式携带而不可用即拒,不静默忽略(似生效未生效)。
     ④ 分层:``exec_replay``(重跑)传入终值快照 —— 不回查配置行、
     不走解析(§7:配置后改不影响历史执行)。返回 (req_exec_id, exec_cfg)。
     """
@@ -1167,7 +1171,8 @@ async def _resolve_dispatch_exec_cfg(
         return _req_exec_id, None
     from .exec_config import ExecConfigNotFound, load_choice
     try:
-        _exec_cfg = await load_choice(db, user_id, _req_exec_id)
+        _exec_cfg = await load_choice(
+            db, user_id, scen_project_id, _req_exec_id)
     except ExecConfigNotFound as e:
         raise NotFound("exec_config_not_found", str(e)) from None
     return _req_exec_id, _exec_cfg
@@ -1288,9 +1293,8 @@ async def _load_scenario_context(db: AsyncSession, target: RunTarget,
                                  user_id: int):
     """authz W6 的执行上下文:载入场景行取属主/项目坐标。
     临时调用(adhoc):payload 由调用者即席提供,执行人即作者 —— 显式
-    记为本人(built_in_users fail-closed,None 会把作者自己的也当空)。
-    返回 (scen, scen_owner_id, scen_project_id);S4:carry 作用域第二层
-    (项目层;adhoc/私有区 = None → 个人层)。
+    记为本人。返回 (scen, scen_owner_id, scen_project_id);S4:carry
+    作用域第二层(项目层;adhoc = None)。
     """
     _scen = (await get_row(db, target.scenario_id)
              if getattr(target, "kind", "scenario") == "scenario"
@@ -1301,22 +1305,15 @@ async def _load_scenario_context(db: AsyncSession, target: RunTarget,
 
 
 async def _resolve_carry_policy(db: AsyncSession, *, exec_cfg,
-                                exec_replay: dict | None,
-                                scen_project_id: int | None):
-    """分层②决策 9:项目区个人 carry 覆盖「默认不吃、显式吃」(裁决
-    单源 exec_config.carry_overrides_for,预览同款);⑧ 项目区链的
-    项目默认配置覆盖层压在显式个人之下(§5:显式个人 > 项目配置 >
-    项目层 > 公共层);④ 重跑直用快照终值(区规则在首发已裁,
-    不二次裁决)。
-    """
+                                exec_replay: dict | None):
+    """§11.2 单选:选定配置的 carry 覆盖即「选定执行配置层」(裁决单源
+    exec_config.carry_overrides_for,预览同款;④ 重跑直用快照终值,
+    不二次裁决)。项目 Carry 资源层(公共 < 项目)在 build_carry_context
+    内正交参与,不在此合并。"""
     if (exec_replay or None) is not None:
         return exec_replay.get("carryOverrides") or None
-    from .exec_config import (carry_overrides_for,
-                              merge_carry_overrides,
-                              project_carry_overrides)
-    _exec_carry = carry_overrides_for(exec_cfg, scen_project_id)
-    _proj_ov = await project_carry_overrides(db, scen_project_id)
-    return merge_carry_overrides(_proj_ov, _exec_carry)
+    from .exec_config import carry_overrides_for
+    return carry_overrides_for(exec_cfg)
 
 
 async def _resolve_cred_project(db: AsyncSession, req: RunRequest,
@@ -1774,10 +1771,8 @@ def _dispatch_job_payload(
             "datasets": fanout_datasets,
             "injections": selected_entries,
             "owner_id": user_id,
-            # authz W6:场景属主随任务下发,内置凭证主规则在
-            # _fanout → prepare_exec 判(executor ≠ 属主 ⇒ 当空);
-            # adhoc(临时调用)= 执行人本人(即席 payload,属主显式
-            # 记为本人;built_in_users fail-closed,None 一律当空)
+            # 场景属主随任务下发(执行授权/通知面用;§11.1 起执行链
+            # 不再消费内置凭证,此值不再决定 users 基座)
             "scenario_owner_id": scen_owner_id,
             # S2.1:环境随配方下发(地址 ③ 层并入部署表)
             "env_snapshot": env_choice.snapshot(),
@@ -2680,11 +2675,9 @@ async def _fanout(
             >= settings.PLATE_BREAKER_THRESHOLD
         )
 
-    # 内置认证(definition.config.users)是 users 合并的保留基座 —— plate
-    # /convert 的产物可能剥掉平台视图字段,凭证合并不依赖 converted
-    # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
-    # (N1:基座取值移入 run_prepare,此处消费 prep 产物)
-    built_in_users = prep.built_in_users
+    # v2.10 §11.1:执行链不吃内置凭证(禁止资产内嵌秘密,改授权凭证
+    # 引用)—— users 合并唯一来源 = resolved_auths(prep.built_in_users
+    # 仅剩导出面消费,10-14 口径)。
 
     # carry 预解析(spec §4.1):dispatch 阶段一次,run 内快照一致 —
     # 绑定/契约编辑的生效边界是下次执行。构建在 run_prepare 内完成
@@ -2769,12 +2762,11 @@ async def _fanout(
                     await _record_m2_hash_once(
                         db_factory, execution_id, m2_info, plate_state)
                     # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
-                    # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
+                    # users 合并(§11.1:仅注入覆盖;内置基座已退役)与
                     # services 物化(authored > ③ 环境部署地址)。
                     composed_exec = materialize_run_copy(
                         converted,
                         resolved_auths=row_exec_auths,
-                        built_in_users=built_in_users,
                         carry_context=carry_ctx,
                         alias_base_urls=prep.alias_base_urls,
                     )

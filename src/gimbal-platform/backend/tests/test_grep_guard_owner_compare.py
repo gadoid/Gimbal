@@ -42,6 +42,11 @@ _ALLOWLIST: dict[str, int] = {
 #  AuthSession→AuthAccount 系同域改名,个人凭证数据类不变)
     'routers/access_tokens.py:.where(AuthAccount.owner_id == holder)': 1,
     'routers/activity.py:.where(Execution.owner_id == user.id)': 1,
+    # UPC §11.2(2026-11-27):exec_config.use 面的属主语义 —— 个人配置
+    # 仅本人可选;私有空间项目配置写/用面 = 属主(项目_access 三件套
+    # 的对象级用例,谓词单源仍归 can_view_project/effective_permissions)
+    'routers/exec_configs.py:if proj.owner_id != user.id:': 1,
+    'services/exec_config.py:return proj.owner_id == user_id': 1,
     # 凭证治理阶段 2(2026-11-20)/架构一致性轮(2026-11-21):身份草稿的
     # 账户可见性 = 本人池 ∪ 场景项目池(pool_clause 单点;只决定「能否
     # 引用该账户」,不是权限闸放宽 —— 执行仍按 credentialSource 解析)。

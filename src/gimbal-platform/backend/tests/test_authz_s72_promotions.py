@@ -49,12 +49,22 @@ async def _put_carry(
     assert r.status_code == 200, r.text
 
 
-async def _put_personal_cfg(
+async def _put_source_space_cfg(
     client: AsyncClient, headers: dict, service: str, entries: dict,
 ) -> None:
-    """个人缺省 carry 写进**默认执行配置**(分层⑥:个人层的新家,
-    决策 8 —— 原 scope=user 写面已 422 退役)。整组替换该服务的覆盖。"""
-    rows = (await client.get("/api/exec-configs", headers=headers)).json()
+    """源侧覆盖写进**申请人默认私有空间的容器默认执行配置**(§11.2
+    单选:个人默认不参与后端解析,晋升冲突对照的源侧有效值 = 源容器
+    默认执行配置)。整组替换该服务的覆盖。"""
+    from app.core import db as db_module
+
+    from .helpers import default_space_id
+
+    me = (await client.get("/api/auth/me", headers=headers)).json()
+    uid = me["user"]["id"]
+    async with db_module.SessionLocal() as db:
+        space = await default_space_id(db, uid)
+    rows = (await client.get("/api/exec-configs", headers=headers,
+                             params={"projectId": space})).json()
     dft = next((c for c in rows if c["isDefault"]), None)
     entry = {"service": service, "bindings": {}, "carryOverrides": entries}
     if dft is not None:
@@ -64,7 +74,8 @@ async def _put_personal_cfg(
                                headers=headers, json={"systems": merged})
     else:
         r = await client.post("/api/exec-configs", headers=headers, json={
-            "name": "默认", "isDefault": True, "systems": [entry]})
+            "name": "源空间默认", "scope": "project", "projectId": space,
+            "isDefault": True, "systems": [entry]})
     assert r.status_code in (200, 201), r.text
 
 
@@ -79,16 +90,16 @@ def _draft_with_carry(scenario_id: str) -> dict:
 
 class TestAnalyze:
     async def test_member_analyze_conflict_detection(self, client: AsyncClient):
-        """个人层与项目层同路径不同值 → 冲突;公共层同值无冲突。"""
+        """源空间容器默认配置与项目层同路径不同值 → 冲突;公共层同值无冲突。"""
         h_m = await role_headers(client, "s72_am", role="user")
         h_adm = await role_headers(client, "s72_aad", role="user")
         pid = await _mk_project(
             "s72-ana", members={"s72_am": "member", "s72_aad": "admin"})
         await client.post("/api/scenarios", headers=h_m,
                           json=_draft_with_carry("sc-s72-ana"))
-        # 申请人默认执行配置 fin.host=prod(个人层新家);项目层
+        # 源空间容器默认执行配置 fin.host=prod(§11.2 单选);项目层
         # fin.host=prod-proj → 冲突
-        await _put_personal_cfg(client, h_m, "fin",
+        await _put_source_space_cfg(client, h_m, "fin",
                                 {"host": "prod", "token": "t1"})
         await _put_carry(client, h_adm, "project", "fin",
                          {"host": "prod-proj"}, project_id=pid)
@@ -204,7 +215,7 @@ class TestApprovalFlow:
             "s72-flow", members={"s72_fm": "member", "s72_fad": "admin"})
         await client.post("/api/scenarios", headers=h_m,
                           json=_draft_with_carry("sc-s72-f"))
-        await _put_personal_cfg(client, h_m, "fin",
+        await _put_source_space_cfg(client, h_m, "fin",
                                 {"host": "prod", "token": "t1"})
         await _put_carry(client, h_adm, "project", "fin",
                          {"host": "prod-proj"}, project_id=pid)
