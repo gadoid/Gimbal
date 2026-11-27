@@ -786,10 +786,11 @@ carries,选定腿 + 全链合成腿双断言)。
 
 ### 复核旧快照项勘误(不改代码)
 
-复核 M3 段引用 `exec_config.py:51 scope_id`、`AccessToken
-user_id/holder_id 双主体` 为既有偏差 —— 均为旧快照:0070 已以
-principal_id/project_id 双真实 FK + XOR CHECK 替代 scope/scope_id;
-AccessToken 已是 principal_id 单主体。Integration 同表拆分仍开放
+复核 M3 段引用 `exec_config.py:51 scope_id` 为旧快照 —— 0070 已以
+principal_id/project_id 双真实 FK + XOR CHECK 替代 scope/scope_id。
+**勘误(上轮本节误判)**:AccessToken 的 `user_id`/`holder_id` 双主体
+**仍是现状** —— 0070 改的是 ExecConfig,AccessToken 未动;§20.1
+principal_id 收口项维持登记(§3.12)。Integration 同表拆分仍开放
 (§3.12 登记项)。
 
 **验证**:定向回归(装配闸/查询面 19;W0a + exec_config 链 20;
@@ -831,3 +832,37 @@ AccessToken 已是 principal_id 单主体。Integration 同表拆分仍开放
 契约快照重生(`exec_config_default_conflict` 新码入册,前端 errorCodes
 生成件同步);Ruff changed 文件零新增(违例数回到 HEAD 基线);
 `git diff --check` 干净。
+
+## 3.16 复核轮三:AC-50 owner 自订阅收口 + 台账勘误 + AC-49 调度一致性登记(2026-11-27 续)
+
+* **AC-50 指纹闸覆盖私有所有者自订阅**(v2.10 §22 验收矩阵):派发前
+  指纹比对原条件 `holder != tpl.owner_id`(v1.4 §2 旧口径 owner 豁免)
+  与「旧订阅因 UID 变化保持暂停」冲突 —— 收口为
+  `consent_gate = holder is not None`(成员门语义不变:私有模板仅
+  属主、普通项目按成员、公共不走成员门)。既有依赖豁免的布景两处
+  随之修正:W0a 主链 owner 腿改为「同暂停 + owner 再订阅恢复」;
+  consent_fixes 的 alias_default_credentials 用例暴露创建面指纹晚于
+  布景的陈旧性(部署地址/凭证命中集入指纹)—— 补 owner 重确认两步。
+  AC-50 用例同步改造为设计指定向量:**同业务 ID、名称、revision、
+  内容**重建(占回原 scheme_id,唯一约束随删行释放)+ owner 自订阅
+  腿(私有模板独立用例)+ 成员腿。
+* **台账勘误(§3.14 事实错误)**:AccessToken 的 user_id/holder_id
+  双主体仍是现状 —— 0070 改的是 ExecConfig,AccessToken 未动;
+  §20.1 principal_id 收口项维持登记(§3.12)。
+* **AC-49 调度一致性 —— 登记待裁定**(不做臆测实施):§11.2 要求
+  「预览、执行和调度使用同一选择结果」,而集成链显式**不消费**
+  ExecConfig(结构性守卫 test_integration_never_resolves_exec_config,
+  「同一模板全订阅者同一指纹」不变量)。两种收敛路径待裁定:
+  (a) 调度订阅面绑定执行配置(§11.2「调度订阅明确绑定所需个人配置」
+  —— 需 IntegrationTask 增列 + 订阅面/指纹扩展,里程碑级);
+  (b) 显式登记「集成调度豁免 ExecConfig」边界,守卫即裁定。
+  复核原文只指出未闭环,未指定方向;与同指纹不变量的取舍须人工裁定。
+
+**验证**:定向回归(W0a 7;consent_fixes 13;integration/S8/env_chain/
+C2/webhook_tokens 70;S0 4;grep 守卫 2)全绿;既有依赖 owner 豁免的
+布景四处修正(W0a 主链 owner 腿 / consent_fixes alias_credentials /
+S0 scope / S0 partial —— 均为「布景晚于创建面指纹或合法内容变更后
+补 owner 重确认」,非放宽闸);grep 守卫白名单收编两行(consent 门
+与成员门简化后属主比较形状消除);
+全量 `2382 passed / 2 skipped / 0 failed`(真实 PG 15432,xdist);
+Ruff changed 文件零新增;`git diff --check` 干净。

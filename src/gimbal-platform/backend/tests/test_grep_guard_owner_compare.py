@@ -148,8 +148,6 @@ _ALLOWLIST: dict[str, int] = {
     'services/integration_runner.py:reg = next((i for i in insts if i.holder_id == old_holder), None)': 1,
     'services/integration_runner.py:if row_dict and inst.holder_id != scen.owner_id:': 1,
     'services/integration_runner.py:_member_ok = inst.holder_id == tpl.owner_id': 1,
-    'services/integration_runner.py:(_tpl_kind == "normal" and inst.holder_id == tpl.owner_id)))': 1,
-    'services/integration_runner.py:and inst.holder_id != tpl.owner_id)': 1,
     'services/integration_runner.py:if _token is not None and inst.holder_id == tpl.owner_id:': 1,
     'services/integration_runner.py:IntegrationTask.holder_id == user_id,': 1,
     'services/integration_runner.py:IntegrationTask.holder_id != tpl.owner_id,': 2,

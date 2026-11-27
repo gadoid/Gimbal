@@ -2,8 +2,9 @@
 
 - ①收口:列表/详情/卡片 GET 无写入副作用;未订阅 run → 409;
   subscribe/退订幂等,重订须重新确认(指纹刷新);
-- ③同意闸:owner 改 cron / 别名 base_url 变更 → 订阅者实例
-  paused/template_changed + 通知持有人;owner 自有实例不受闸;
+- ③同意闸:owner 改 cron / 别名 base_url 变更 → 实例(订阅者与
+  **owner 自有实例同受闸 —— AC-50 私有所有者自订阅覆盖**)
+  paused/template_changed + 通知持有人;
   重新确认(再订阅)恢复;别名查询失败 → run=channel 收口,
   不翻 template_changed、不跳过比对(失败口径反例);
 - ⑤联动:public→private → 非 owner 实例 paused/made_private + 通知,
@@ -136,11 +137,18 @@ async def test_subscribe_flow_and_gate(client):
     assert inst.paused_reason == "template_changed"
     assert await _notify_count(uid2, "重新确认") >= 1
 
-    # owner 自有实例不受闸(照常执行,无 template_changed)
+    # owner 自有实例同受闸(AC-50 私有所有者自订阅覆盖):内容变更后
+    # 照样 template_changed 暂停
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
     assert r.status_code == 200, r.text
     inst1 = await _inst(tid, await _user_id("w0a_alice"))
-    assert inst1.paused_reason != "template_changed"
+    assert inst1.state == "paused"
+    assert inst1.paused_reason == "template_changed"
+    # owner 重新确认(再订阅)恢复
+    r = await _subscribe(client, u1, tid)
+    assert r.status_code == 200, r.text
+    inst1 = await _inst(tid, await _user_id("w0a_alice"))
+    assert inst1.state == "idle" and inst1.paused_reason == ""
 
     # 重新确认 = 再订阅:刷新指纹并恢复调度
     r = await _subscribe(client, u2, tid)
@@ -268,13 +276,16 @@ async def test_unstamped_instance_treated_as_unconfirmed(client):
 
 
 async def test_scheme_delete_recreate_same_content_reconfirms(client):
-    """AC-50(复核 P1):删默认方案、**同内容**重建并置默认 —— 内容
-    七要素全同,但不可变 scheme_uid 换代 → 订阅指纹翻转 → 派发前
-    暂停(template_changed,零派发),再订阅恢复(新身份知情)。"""
+    """AC-50(复核 P1):删默认方案、以**相同业务 ID、名称、revision 和
+    内容**在同一场景重建(设计 §22 验收矩阵指定向量)—— 内容七要素
+    全同,但不可变 scheme_uid 换代 → 订阅指纹翻转 → 派发前暂停
+    (template_changed,零派发)。覆盖私有所有者自订阅(本腿)与普通
+    项目其他成员订阅(u2 腿);再订阅恢复(新身份知情)。"""
     u1 = await register_and_login(client, "w0a_g", "pw123456")
     u2 = await register_and_login(client, "w0a_h", "pw123456")
     await _mk_scenario(client, u1, "sc-w0d")
     tid = await _mk_task(client, u1, "sc-w0d")
+    uid1 = await _user_id("w0a_g")
     uid2 = await _user_id("w0a_h")
     r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
@@ -288,23 +299,27 @@ async def test_scheme_delete_recreate_same_content_reconfirms(client):
         row = (await s.execute(select(ComposerRunScheme).where(
             ComposerRunScheme.scenario_id == _scen_id,
             ComposerRunScheme.is_default == True))).scalar_one()
-        old_uid, payload, name = (row.scheme_uid, dict(row.payload or {}),
-                                  row.name)
+        old_uid = row.scheme_uid
+        # 设计指定向量:同业务 ID(scheme_id)、同名称、同 revision、
+        # 同内容(绑定/数据集/组合位全同)—— 唯一约束随删行释放,重建
+        # 行占回同一业务 ID,仅 uid 换代
+        old = {"scheme_id": row.scheme_id,
+               "scenario_id": row.scenario_id,
+               "project_id": row.project_id, "name": row.name,
+               "is_default": True, "payload": dict(row.payload or {}),
+               "account_combo_id": row.account_combo_id,
+               "repair_status": "ready", "revision": row.revision}
         await s.delete(row)
         await s.flush()
-        # 同内容重建:绑定/数据集/组合位全同,新业务 id + 新 uid
-        import uuid as _uuid
-
-        clone = ComposerRunScheme(
-            scheme_id=f"rs-{_uuid.uuid4().hex[:12]}",
-            scenario_id=row.scenario_id, project_id=row.project_id,
-            name=name, is_default=True, payload=payload,
-            repair_status="ready")
+        clone = ComposerRunScheme(**old)
         s.add(clone)
         await s.commit()
         new_uid = clone.scheme_uid
+    assert str(clone.scheme_id) == str(old["scheme_id"]), \
+        "重建必须占回同一业务 ID(设计指定向量)"
     assert str(new_uid) != str(old_uid), "重建必须换代 uid(AC-50 前提)"
 
+    # 成员订阅腿(普通项目其他成员):零派发暂停
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
     assert r.status_code == 200, r.text
     inst = await _inst(tid, uid2)
@@ -312,8 +327,54 @@ async def test_scheme_delete_recreate_same_content_reconfirms(client):
     assert inst.paused_reason == "template_changed"
     assert inst.consent_fingerprint == fp0     # 未确认前不刷新
 
-    # 重新确认 = 再订阅:新身份被订阅者知情,恢复调度
-    r = await _subscribe(client, u2, tid)
+    # 私有所有者自订阅腿(AC-50 指定覆盖):owner 实例同样暂停
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
     assert r.status_code == 200, r.text
-    inst = await _inst(tid, uid2)
-    assert inst.state == "idle" and inst.paused_reason == ""
+    inst1 = await _inst(tid, uid1)
+    assert inst1.state == "paused"
+    assert inst1.paused_reason == "template_changed"
+
+    # 重新确认 = 再订阅:新身份被知情,恢复调度(两腿各恢复)
+    for h, u_ in ((u2, uid2), (u1, uid1)):
+        r = await _subscribe(client, h, tid)
+        assert r.status_code == 200, r.text
+        inst = await _inst(tid, u_)
+        assert inst.state == "idle" and inst.paused_reason == ""
+
+
+async def test_scheme_recreate_pauses_private_owner_self_subscription(client):
+    """AC-50 私有所有者自订阅腿:私有模板(引用本人私有场景),删默认
+    方案以同业务 ID 同内容重建 → owner 自有实例派发前暂停
+    (template_changed;此前 owner 豁免的旧口径与验收矩阵冲突,已收口)。"""
+    u1 = await register_and_login(client, "w0a_i", "pw123456")
+    await _mk_scenario(client, u1, "sc-w0e")
+    r = await client.post("/api/integration/tasks", headers=u1,
+                          json=_task_body("sc-w0e", visibility="private",
+                                          scenarioId="sc-w0e",
+                                          identityMode="personal"))
+    assert r.status_code in (200, 201), r.text
+    tid = r.json()["id"]
+    uid1 = await _user_id("w0a_i")
+
+    from app.models.composer_run_scheme import ComposerRunScheme
+
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-w0e",
+            ComposerRunScheme.is_default == True))).scalar_one()
+        old = {"scheme_id": row.scheme_id,
+               "scenario_id": row.scenario_id,
+               "project_id": row.project_id, "name": row.name,
+               "is_default": True, "payload": dict(row.payload or {}),
+               "account_combo_id": row.account_combo_id,
+               "repair_status": "ready", "revision": row.revision}
+        await s.delete(row)
+        await s.flush()
+        s.add(ComposerRunScheme(**old))
+        await s.commit()
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "template_changed"

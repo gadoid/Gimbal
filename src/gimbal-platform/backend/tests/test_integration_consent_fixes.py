@@ -392,6 +392,14 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
     # 回默认方案;svc2 条目无账户可解 → run 暂停 missing_credential
     await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
                        json={"schemeId": ""})
+    # AC-50:owner 自有实例同受指纹闸 —— 部署地址布景晚于创建面指纹
+    # (别名地址集入指纹),先重确认再验 missing_credential 腿
+    _fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u1)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u1, json={"fingerprint": _fp})
+    assert r.status_code == 200, r.text
     await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
     async with dbm.SessionLocal() as db:
         inst = (await db.execute(_sel(IntegrationTask).where(
@@ -411,6 +419,14 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
             password_enc=fernet_encrypt("p"), is_default=True))
         await db.commit()
     await ir.revive_paused_instances(user_id=uid)
+    # 凭证默认命中集变化(补账户)→ 指纹翻转(S5/D4:换绑 = 订阅者应
+    # 知情;owner 自有实例同受闸,AC-50)→ 先重确认再验物化注入腿
+    _fp2 = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u1)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u1, json={"fingerprint": _fp2})
+    assert r.status_code == 200, r.text
     captured = {}
 
     def _fake(converted, **kwargs):

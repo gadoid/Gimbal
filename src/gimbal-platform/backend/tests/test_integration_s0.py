@@ -186,6 +186,14 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
     assert captured[0] == {}
 
     await _point_scheme("rs-own")
+    # AC-50:owner 自有实例同受指纹闸 —— 换绑本场景方案 = 确认过的
+    # 内容变更,重确认后再验注入
+    _fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=h, json={"fingerprint": _fp})
+    assert r.status_code == 200, r.text
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
     assert r.status_code == 200, r.text
     assert captured[-1] == {"who": "me"}
@@ -210,6 +218,14 @@ async def test_partial_missing_credential_pauses(client):
             service="svc", owner_id=uid)
         await db.commit()
 
+    # AC-50:owner 自有实例同受指纹闸 —— 凭证布景晚于创建面指纹
+    # (别名凭证默认命中集入指纹),重确认后验 missing_credential
+    _fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=h)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=h, json={"fingerprint": _fp})
+    assert r.status_code == 200, r.text
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
     assert r.status_code == 200, r.text
 

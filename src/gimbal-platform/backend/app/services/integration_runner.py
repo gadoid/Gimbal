@@ -1140,16 +1140,19 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                         pause_reason=at_svc.PAUSE_RESOURCE_NOT_ALLOWED,
                         lease=lease)
 
-            # W0a③:订阅知情同意闸 —— 非 owner 的 personal 实例执行前比对
-            # 内容指纹,不一致 → paused/template_changed 并通知持有人重新
-            # 确认;owner 自有实例不受此闸。指纹的别名地址/凭证默认命中走
-            # 主会话(指纹投影自取):查询失败按失败口径收口(本轮不执行
-            # run=channel —— 不以空集算指纹、不跳过比对)。执行注入面
-            # (地址③层/carry)由下方 prepare_exec 独立构建(失败降级语义)
-            # —— 指纹与执行是两个关注点,失败策略不同(评审 §3.1A 定案;
-            # 此前地址集与物化共用一份,归一后物化改吃 prep.alias_base_urls)。
-            consent_gate = (inst.holder_id is not None
-                            and inst.holder_id != tpl.owner_id)
+            # W0a③:订阅知情同意闸 —— personal 实例执行前比对内容指纹,
+            # 不一致 → paused/template_changed 并通知持有人重新确认。
+            # **AC-50(v2.10 §22 验收矩阵):闸覆盖私有所有者自订阅与普通
+            # 项目其他成员订阅** —— 确认过的对象(内容七要素 + 方案身份)
+            # 变了,owner 也不例外(此前 owner 豁免是 v1.4 §2 旧口径,
+            # 与「旧订阅因 UID 变化保持暂停」冲突,已收口)。指纹的别名
+            # 地址/凭证默认命中走主会话(指纹投影自取):查询失败按失败
+            # 口径收口(本轮不执行 run=channel —— 不以空集算指纹、不跳过
+            # 比对)。执行注入面(地址③层/carry)由下方 prepare_exec 独立
+            # 构建(失败降级语义)—— 指纹与执行是两个关注点,失败策略
+            # 不同(评审 §3.1A 定案;此前地址集与物化共用一份,归一后
+            # 物化改吃 prep.alias_base_urls)。
+            consent_gate = inst.holder_id is not None
             # P2.3:非 owner 实例只在 public 模板上执行。W0a⑤ 的联动暂停
             # 只覆盖转私有那一刻 idle 的行 —— 运行中实例跑完回 idle 会被
             # _claim_due 再认领、missing_credential/auth_failed 暂停的实例
@@ -1159,9 +1162,8 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
 
             # S8:普通项目模板对仍是项目成员的持有人放行(「成员也可以
             # 订阅」);非成员(被移出项目)按转私有同口径暂停。
-            # 成员复核**不豁免 owner** ——
-            # 普通项目模板的属主被移出项目后,自有实例同样暂停(指纹闸
-            # consent_gate 仍 owner 豁免:自有内容无需自我确认,但成员
+            # 成员复核不豁免 owner ——
+            # 普通项目模板的属主被移出项目后,自有实例同样暂停(成员
             # 门按持有者判,属主身份不替代成员关系)。
             # UPC M2:私有空间模板(真实容器)与旧私有模板同语义 ——
             # 无成员闸;公共模板走下方公共分支。成员闸只对**普通项目**
@@ -1171,9 +1173,7 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
             _tpl_proj_row = (await db.get(_Proj, tpl.project_id)
                              if tpl.project_id is not None else None)
             _tpl_kind = _tpl_proj_row.kind if _tpl_proj_row else None
-            _member_gate = (inst.holder_id is not None and (
-                consent_gate or                       # 非 owner 持有(P2.3/S8 原面)
-                (_tpl_kind == "normal" and inst.holder_id == tpl.owner_id)))
+            _member_gate = inst.holder_id is not None
             _member_ok = False
             if _member_gate:
                 if _tpl_kind == "private":
