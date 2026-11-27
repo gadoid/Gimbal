@@ -541,13 +541,26 @@ async def _load_exec_shape(
     方案载荷、服务绑定、数据集首行(S0① 场景归属收口)、数据集名。
     W1 起 scheme_id 直传(创建前置预览无模板行)。
 
-    方案选择段改调 :func:`scheme_store.resolve_for_run`(M1 归一:入站
-    调用取方案走同一实现,不再留两份) —— 回落语义(跨场景/已删 →
-    默认 → 首个 → None)由它承载。"""
+    方案选择段(§11.5 复核 P1:未绑定/显式绑定分流):未指定 → 既定
+    默认选择规则(:func:`scheme_store.resolve_for_run` 的回落语义);
+    **显式指定 → 须属本场景,失效(缺失/跨场景)不回落默认、直接报
+    IntegrationRunError("explicit_scheme_invalid")** —— 调度面收到即
+    暂停订阅,禁止改跑默认方案(冻结稿明文禁止;订阅面在绑定闸后
+    不会对失效行算指纹)。"""
     from .run_prepare import find_dataset_by_id
     from .scheme_store import resolve_for_run
 
-    scheme = await resolve_for_run(db, scen.scenario_id, scheme_id)
+    if scheme_id:
+        scheme = (await db.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scheme_id == scheme_id,
+            ComposerRunScheme.scenario_id == scen.scenario_id
+        ))).scalar_one_or_none()
+        if scheme is None:
+            raise IntegrationRunError(
+                "explicit_scheme_invalid",
+                f"执行方案引用已失效(缺失或不属于目标场景): {scheme_id}")
+    else:
+        scheme = await resolve_for_run(db, scen.scenario_id, None)
     scheme_payload = (scheme.payload if scheme else {}) or {}
     # M3 执行装配:组合垫底(集成面,v4 §3.2「_load_exec_shape 返回规范化
     # scheme_payload —— 合并终值写回该视图,环境标签/订阅指纹/slot
@@ -1082,6 +1095,21 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
         if scen is None:
             raise IntegrationRunError(
                 "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
+        # §11.5(复核 P1):显式 Scheme 失效(缺失/已移动/跨场景)→
+        # **暂停订阅**,禁止改跑默认方案 —— 先于形态装载(装载的回落
+        # 语义只服务未绑定),与 blocked 闸同位零派发;修正模板绑定后
+        # 重新确认(template_changed ∈ 重确认恢复集合)。
+        if tpl.scheme_id:
+            _hit = (await db.execute(select(ComposerRunScheme).where(
+                ComposerRunScheme.scheme_id == tpl.scheme_id,
+                ComposerRunScheme.scenario_id == scen.scenario_id
+            ))).scalar_one_or_none()
+            if _hit is None:
+                return await _pause_consent_changed(
+                    db, inst, tpl,
+                    paused_reason="template_changed",
+                    message="执行方案引用已失效(缺失或不属于目标场景),"
+                            "请修正模板绑定后重新确认订阅", lease=lease)
         # 执行前段(形态装载/只读闸/同意闸/prepare_exec)整段兜底:
         # 非凭证类异常(数据库抖动、装载查询失败、plate 其它故障)裸抛
         # 会被 _spawn 吞成 warning,实例卡 running 到租约回收(≈15
@@ -1258,6 +1286,25 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     message="模板已转为私有,或持有人已不在模板所属项目"
                             "成员中 —— 执行已暂停;满足条件后请重新确认"
                             "订阅", lease=lease)
+            # §11.5(复核 P1):派发以订阅主体重验**实际目标**执行权 ——
+            # 成员门按模板项目判,拦不住模板与目标分叉的存量行/场景迁
+            # 项目后「已不在场景项目」的持有人(指纹不含目标项目成员
+            # 关系,场景与模板都不改版时指纹不变)。同区新行此闸与成员
+            # 门同真,纯增量复核。
+            if inst.holder_id is not None:
+                from ..routers._ownership import can_run_scenario as _crs
+
+                _holder = await db.get(User, inst.holder_id)
+                if _holder is None or not await _crs(
+                        db, _holder, scenario_id=scen.scenario_id,
+                        owner_id=scen.owner_id,
+                        project_id=scen.project_id):
+                    return await _pause_consent_changed(
+                        db, inst, tpl,
+                        paused_reason="made_private",
+                        message="持有人已无目标场景执行权(模板已转为私有,"
+                                "或已不在目标项目成员中)—— 执行已暂停;"
+                                "满足条件后请重新确认订阅", lease=lease)
             # S2.1:模板环境(指纹与执行同一份,不吃持有人偏好)
             try:
                 tpl_env = await _template_env(db, scen, scheme_payload)

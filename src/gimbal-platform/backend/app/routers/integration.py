@@ -388,6 +388,20 @@ async def create_task(body: TaskIn, principal: PrincipalIn,
             owner_id=scen.owner_id, project_id=scen.project_id):
         raise _bad("scenario_not_owned",
                    "只能引用你可执行的场景(自己的 / 项目内的)")
+    # §11.5(复核 P1):模板与实际执行目标**同区** —— 私有模板缺省落
+    # 注册者默认私有空间;目标场景在普通/公共项目(可执行判放行的
+    # 「项目内可跑」面)时必须显式指定 projectId 将模板落入同区,否则
+    # 创建即拒绝。否则模板与目标分叉:派发成员门只看模板项目、指纹
+    # 不含目标项目成员关系,持有人被移出场景项目后仍可调度。
+    if body.visibility == "private" and body.projectId is None:
+        from ..services.project_space import get_default_private_project
+        _space = await get_default_private_project(db, user.id)
+        if _space is None or scen.project_id != _space.id:
+            raise _bad(
+                "scenario_not_in_project",
+                "模板与执行目标须同区(§11.5):普通项目场景须显式指定"
+                " projectId 把模板落入同一项目;缺省只接受你私有空间内"
+                "的场景", 422)
     # S0①(个人侧方案 G-A):方案必须属于该场景(run_precheck 同款
     # 场景限定);§20.3 schedule 创建面(§11.5 将生效配方):显式绑定
     # 查该行,未绑定 = 默认方案 —— 写点即核对,不再等订阅/派发闸。
@@ -999,6 +1013,13 @@ async def subscribe_task(
         if tpl.scenario_id else None
     if scen is None:
         raise _bad("scenario_not_found", "场景不存在", 404)
+    # §11.5(复核 P1):确认面同区闸 —— 模板与实际执行目标必须落在同
+    # 一执行项目(存量分叉行在此拦下;目标迁项目后旧订阅不可再确认)
+    if tpl.project_id is not None and scen.project_id != tpl.project_id:
+        raise _bad(
+            "target_zone_mismatch",
+            "模板与执行目标不在同一项目(§11.5):请将模板迁入目标项目"
+            "或重建模板后再确认订阅", 409)
     # §20.3 schedule 启用/重新确认面:将生效方案 blocked → 409 ——
     # 不把阻塞方案确认成可派发订阅(既有阻塞订阅由派发闸暂停,不自动恢复)。
     await _require_scheme_ready(db, scen, tpl.scheme_id)

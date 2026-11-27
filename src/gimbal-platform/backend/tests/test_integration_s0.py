@@ -177,11 +177,26 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
             row.scheme_id = scheme_id
             await db.commit()
 
+    # ── 腿 A:显式 Scheme 失效(指向他场景)→ 暂停,零派发(§11.5
+    # 复核 P1:「显式 Scheme 缺失、已移动、跨场景或 blocked 时暂停,
+    # 禁止改跑默认方案」—— 此前该腿按回落默认断言,属被禁行为)
+    from .test_integration_w0a import _arm_dispatch_counter
+    calls = _arm_dispatch_counter(monkeypatch)
     await _point_scheme("rs-foreign")
-    # §11.5:模板行写(schemeId 重指)= 模板版本推进(入指纹)——
-    # 同会话重确认(不走订阅面:订阅面绑定闸会拒绝他场景 schemeId,
-    # 本腿验证的是 runner 级回落纵深防御,不是订阅闸)
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
+    assert r.status_code == 200, r.text
+    async with db_module.SessionLocal() as db:
+        inst_row = (await db.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+    assert inst_row.state == "paused"
+    assert inst_row.paused_reason == "template_changed"
+    assert len(captured) == 0, "跨场景显式 Scheme 不得回落默认方案执行"
+    assert calls["n"] == 0, "跨场景显式 Scheme 派发次数必须为零"
+
+    # ── 腿 B:未绑定 → 既定默认选择规则照常回落(§11.5 只禁显式
+    # 失效回落;模板行写 = 版本推进,同会话重确认)
     from app.models.composer_scenario import ComposerScenario as _CS
+    await _point_scheme("")
     async with db_module.SessionLocal() as db:
         tpl_row = await db.get(IntegrationTask, tid)
         scen = (await db.execute(_sel(_CS).where(
@@ -193,7 +208,7 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
     assert r.status_code == 200, r.text
     # compose 被调到 = 没有因幽灵别名停在凭证段;注入变量为空 =
-    # 他场景数据集未注入
+    # 默认方案(无数据集)未注入他场景数据集
     assert len(captured) == 1
     assert captured[0] == {}
 

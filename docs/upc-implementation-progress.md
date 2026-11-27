@@ -999,3 +999,42 @@ xdist;+2 = 迁移腿/修订腿;暂停覆盖腿并入既有 blocked 流用例,
 零派发两用例换通道计数);
 契约快照重生(仅代码位点行号移动,无新码);Ruff changed 文件零新
 增(git stash 真路径对比);`git diff --check` 干净。
+
+## 3.21 复核轮八:模板与目标同区三面收口 + 显式 Scheme 失效禁回落(2026-11-27 续)
+
+* **模板与实际执行目标同区(创建/确认/派发三面)**(v2.10 §11.5
+  「可调度订阅必须绑定可执行项目中的本地模板…实际目标、模板及所属
+  Scheme 必须落在同一执行项目」;复核 P1):此前创建面仅在显式传入
+  projectId 时核对场景同区,省略时「项目内可跑」的普通项目场景 +
+  私有模板落默认私有空间形成分叉 —— 派发成员门只看模板项目、指纹
+  不含目标项目成员关系,持有人被移出场景项目后场景与模板都不改版、
+  指纹不变,照常调度。收口:
+  - **创建面**:私有模板缺省 projectId 只接受注册者默认私有空间内
+    的场景;目标在普通/公共项目 → 422 `scenario_not_in_project`
+    引导显式指定同区 projectId(显式路径既有核对不变);
+  - **确认面**:模板与目标不同区 → 409 `target_zone_mismatch`
+    (存量分叉行在此拦下,不可再确认);
+  - **派发面**:run_instance 成员门后新增**按订阅主体的目标执行权
+    复核**(`can_run_scenario`,§11.5「派发以订阅主体重新校验模板
+    读取、目标执行」)—— 分叉存量行/场景迁项目后成员门拦不住的
+    「已不在场景项目」持有人在此暂停 made_private;同区新行与成员
+    门同真,纯增量复核。
+* **显式 Scheme 失效禁回落默认**(§11.5「显式 Scheme 缺失、已移动、
+  跨场景或 blocked 时暂停,禁止改跑默认方案」;复核 P1):方案装载
+  未绑定/显式绑定分流 —— 未指定照常走既定默认选择规则(resolve_
+  for_run 回落);**显式 id 须属本场景,失效直接报
+  IntegrationRunError("explicit_scheme_invalid")**,run_instance 先
+  于形态装载核对 → 暂停 template_changed(零派发,与 blocked 闸同
+  位),订阅面绑定闸既有 422 拦失效确认。上轮 s0 用例把「跨场景
+  scheme 直改 + 刷指纹 + 期望默认回落」写成断言,属被禁行为 —— 改
+  口径三腿:跨场景显式 → 暂停 + run_case 计数为零;清绑定(未绑定)
+  → 默认回落照常;显式有效 → 正常注入。
+* **验收用例**:同区三面一条(test_template_target_same_zone_
+  enforced:创建 422/201 两腿 + 确认 409 + 派发正向对照
+  (template_changed = 越过目标闸)+ 移出项目 → made_private 零
+  外呼);s0 三腿见上。
+
+**验证**:全量 `2389 passed / 2 skipped / 0 failed`(真实 PG 15432,
+xdist;+1 同区三面,s0 同数改口径);契约快照重生(新码
+`target_zone_mismatch` / `explicit_scheme_invalid` 入册);Ruff
+changed 文件零新增(git stash 真路径对比);`git diff --check` 干净。

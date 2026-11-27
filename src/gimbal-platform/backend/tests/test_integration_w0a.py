@@ -705,3 +705,91 @@ async def test_fingerprint_scheme_revision_bump_requires_reconfirm(client):
     r = await _subscribe(client, u1, tid)
     assert r.status_code == 200, r.text
     assert (await _inst(tid, uid1)).state == "idle"
+
+
+async def test_template_target_same_zone_enforced(client, monkeypatch):
+    """§11.5(复核 P1):模板与实际执行目标**同区** —— 三面收口。
+
+    创建:普通项目场景省略 projectId → 422(模板不得落默认私有空间
+    与目标分叉);显式指定同区 projectId → 201。确认:存量分叉行
+    (模板行直移私有空间模拟)再订阅 → 409 target_zone_mismatch。
+    派发:持有人被移出目标场景所在项目 → 目标执行权复核暂停
+    made_private,外呼计数为零(移出前同区正向腿先证明闸不误伤:
+    管线越过目标闸到达指纹闸)。"""
+    from app.models.project import ProjectMember
+    from app.services import integration_runner as ir
+    from app.services.project_space import get_default_private_project
+    from sqlalchemy import delete as sa_delete
+
+    from tests.helpers import add_project_admin, mk_normal_project, seed_service_runtime
+    from tests.test_integration_w0a import _arm_dispatch_counter
+
+    calls = _arm_dispatch_counter(monkeypatch)
+    await seed_service_runtime("svc")
+    u1 = await register_and_login(client, "w0a_r", "pw123456")
+    uid1 = await _user_id("w0a_r")
+    await register_and_login(client, "w0a_s", "pw123456")
+    pid = await mk_normal_project("np-sz", {"w0a_r": "admin",
+                                            "w0a_s": "member"})
+    r = await client.post("/api/scenarios", headers=u1,
+                          json=make_draft("sc-sz", steps=STEPS),
+                          params={"projectId": pid})
+    assert r.status_code in (200, 201), r.text
+
+    # ── 创建面:普通项目场景 + 缺省 projectId → 422(同区闸)
+    r = await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "SZ", "scenarioId": "sc-sz", "identityMode": "personal",
+        "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
+        "visibility": "private"})
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "scenario_not_in_project"
+
+    # 显式指定同区 projectId → 创建成功
+    r = await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "SZ", "scenarioId": "sc-sz", "projectId": pid,
+        "identityMode": "personal",
+        "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
+        "visibility": "private"})
+    assert r.status_code == 201, r.text
+    tid = r.json()["id"]
+
+    # ── 确认面:存量分叉行(模板行直移注册者私有空间,模拟旧数据
+    # 的「私有模板 + 普通项目目标」)再订阅 → 409
+    async with db_module.SessionLocal() as s:
+        space_id = (await get_default_private_project(s, uid1)).id
+        tpl = await s.get(IntegrationTask, tid)
+        tpl.project_id = space_id
+        await s.commit()
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u1, json={"fingerprint": "stale"})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "target_zone_mismatch"
+
+    # ── 派发面(正向对照):分叉行持有人仍持目标项目成员资格 →
+    # 目标执行权复核通过,管线越过目标闸(指纹因模板行写而暂停
+    # template_changed —— 证明到达了目标闸之后的闸面)
+    async with db_module.SessionLocal() as s:
+        inst = (await s.execute(select(IntegrationTask).where(
+            IntegrationTask.template_id == tid,
+            IntegrationTask.holder_id == uid1))).scalars().one()
+        inst_id = inst.id
+    await ir.run_instance(inst_id)
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "template_changed", \
+        "目标执行权复核不得误伤仍有目标项目成员资格的持有人"
+
+    # 持有人被移出目标场景所在项目(同事务补守夜人满足 §20 admin
+    # 不变量)→ 派发闸按订阅主体重验目标执行权 → 暂停,零派发
+    async with db_module.SessionLocal() as s:
+        await s.execute(sa_delete(ProjectMember).where(
+            ProjectMember.project_id == pid,
+            ProjectMember.user_id == uid1))
+        await add_project_admin(s, pid)
+        await s.commit()
+    await ir.run_instance(inst_id)
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "made_private", \
+        "被移出目标项目后派发必须被目标执行权复核拦下"
+    assert calls["n"] == 0, "目标执行权失效的派发次数必须为零"
