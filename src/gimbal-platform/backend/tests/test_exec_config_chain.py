@@ -645,3 +645,52 @@ async def test_integration_never_resolves_exec_config(
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
     assert r.status_code == 200, r.text
     assert calls == []    # 集成链从未触达执行配置解析
+
+
+# ── AC-49 设计样例(v2.10 §11.2 验收例,复核 P1-2 锁定)───────────────
+
+async def test_ac49_design_example_single_select_carries(client, fresh_db):
+    """项目 Carry 给 region、项目默认 ExecConfig 给 timeout、显式个人
+    配置仅给 locale —— 结果保留 region 和 locale,timeout 缺席:
+    项目默认配置层**不并入**显式选定(单选已含,§11.2 Explicit >
+    ProjectDefault);项目 Carry 资源层正交参与(§11.4)。"""
+    await register_and_login(client, "ec_ac49", "pw123456")
+    uid = await _uid("ec_ac49")
+    env = await _default_env_id()
+    async with db_module.SessionLocal() as s:
+        s.add(ServiceIdentity(alias_name=_ALIAS, base_service=_BASE,
+                              env_id=env, ref_mode="default"))
+        await s.commit()
+    explicit_id = await _mk_config(uid, "显式", carry={"$.locale": "zh"})
+    async with db_module.SessionLocal() as s:
+        from app.models.project import Project
+
+        pid = (await s.execute(sa.select(Project.id).where(
+            Project.kind == "private").limit(1))).scalar_one()
+        # 项目默认 ExecConfig:timeout(选定时不得并入)
+        s.add(ExecConfig(
+            project_id=pid, name="项目默认", is_default=True,
+            payload={"systems": [{"service": _BASE,
+                                  "carryOverrides": {"$.timeout": "60"}}]}))
+        # 项目 Carry 值层:region
+        await carry_store.put_bindings(
+            s, _BASE, {"$.region": "cn"},
+            updated_by_id=None, updated_by_name="t",
+            scope=("project", pid))
+        await s.commit()
+
+    # 选定腿:§11.2 Explicit 胜 ProjectDefault —— timeout 不入选定层
+    async with db_module.SessionLocal() as s:
+        ch = await load_choice(s, uid, pid, explicit_id)
+        assert ch is not None and ch.explicit
+        carry = carry_overrides_for(ch)
+        assert carry == {_BASE: {"$.locale": "zh"}}, \
+            f"项目默认配置层不得并入显式选定: {carry}"
+
+    # 合成腿:公共(无)< 项目层(region)< 选定配置覆盖(locale)
+    async with db_module.SessionLocal() as s:
+        ctx = await build_carry_context(
+            s, {"steps": [_STEP]}, project_id=pid, exec_overrides=carry)
+    rows = ctx.service_bindings[_ALIAS]
+    assert rows == {"$.region": "cn", "$.locale": "zh"}, \
+        f"AC-49 设计样例失败(timeout 不得出现): {rows}"

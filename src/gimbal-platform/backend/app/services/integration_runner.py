@@ -413,6 +413,7 @@ def consent_fingerprint_of(
     scen_payload: dict, scheme_payload: dict, row_dict: dict,
     cron: str, alias_urls: dict, *, alias_creds: dict | None = None,
     slot_bindings: dict | None = None,
+    scheme_identity: dict | None = None,
 ) -> str:
     """订阅知情同意的内容指纹(小设计 §2.2.1)。
 
@@ -447,6 +448,12 @@ def consent_fingerprint_of(
                          or {})},
         "scheme": {k: scheme_payload.get(k) for k in (
             "serviceBindings", "dataSetSelection", "dataSetIds")},
+        # 方案身份投影(AC-50,复核 P1):内容七要素之外记录不可变
+        # ``scheme_uid`` 与组合溯源(id+name+revision —— account_combo
+        # 修订纪律的既有声明)。删原方案同内容重建 = 新 uid → 指纹变
+        # → 重新确认;换绑组合/组合条目变更(+revision)同理 —— M2
+        # 已提供不可变身份,下游按内容辨认的缺口在此收口。
+        "scheme_identity": scheme_identity,
         "dataset_row": row_dict,
         "cron": cron,
         "base_urls": dict(alias_urls or {}),
@@ -458,6 +465,26 @@ def consent_fingerprint_of(
     }
     return hashlib.sha256(
         _canonical_json(projection).encode("utf-8")).hexdigest()
+
+
+async def _scheme_identity_of(
+    db, scheme: ComposerRunScheme | None,
+) -> dict | None:
+    """订阅指纹的方案身份投影(:func:`consent_fingerprint_of` 的输入;
+    无方案 → None)。组合行按 id 取当前溯源快照 —— 订阅确认与派发前
+    复核的同一取数实现(:func:`_load_exec_shape`),修订在两处看到同一值。"""
+    if scheme is None:
+        return None
+    from ..models.account_combo import AccountCombo
+
+    combo = (await db.get(AccountCombo, scheme.account_combo_id)
+             if scheme.account_combo_id is not None else None)
+    return {
+        "schemeUid": scheme.scheme_uid,
+        "combo": ({"id": combo.id, "name": combo.name,
+                   "revision": combo.revision}
+                  if combo is not None else None),
+    }
 
 
 async def _load_exec_shape(
@@ -624,7 +651,7 @@ async def consent_fingerprint_now(
 ) -> str:
     """当前内容指纹(**只算不写**)—— 订阅摘要与 subscribe 的「确认的
     必须是看到的那份」比对共用(P2.2)。别名查询失败向上抛(503 口径)。"""
-    _, scheme_payload, bindings, row_dict, _ = await _load_exec_shape(
+    scheme, scheme_payload, bindings, row_dict, _ = await _load_exec_shape(
         db, tpl.scheme_id, scen)
     alias_urls = await _alias_urls_of(
         db, scen.payload, await _template_env(db, scen, scheme_payload))
@@ -636,7 +663,8 @@ async def consent_fingerprint_now(
                                             row_dict)
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
-        alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
+        alias_urls, alias_creds=hits, slot_bindings=slot_bindings,
+        scheme_identity=await _scheme_identity_of(db, scheme))
 
 
 async def refresh_consent(
@@ -654,9 +682,11 @@ async def refresh_consent(
 async def consent_fingerprint_now_shape(
     db, tpl: IntegrationTask, scen: ComposerScenario,
     scheme_payload: dict, row_dict: dict, bindings: dict,
+    scheme_identity: dict | None = None,
 ) -> str:
     """consent_fingerprint_now 的 shape 直传变体(subscription_view
-    已装载过执行形态,不重复查;口径与 now 完全一致)。"""
+    已装载过执行形态,不重复查;口径与 now 完全一致 —— 身份投影随
+    shape 传入,与装载行同源)。"""
     alias_urls = await _alias_urls_of(
         db, scen.payload, await _template_env(db, scen, scheme_payload))
     from .service_aliases import credential_alias_hits
@@ -667,7 +697,8 @@ async def consent_fingerprint_now_shape(
                                             row_dict)
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
-        alias_urls, alias_creds=hits, slot_bindings=slot_bindings)
+        alias_urls, alias_creds=hits, slot_bindings=slot_bindings,
+        scheme_identity=scheme_identity)
 
 
 async def subscription_view(db, tpl: IntegrationTask) -> dict:
@@ -687,13 +718,14 @@ async def subscription_view(db, tpl: IntegrationTask) -> dict:
     if scen is None:
         raise IntegrationRunError(
             "scenario_not_found", f"场景不存在: {tpl.scenario_id}")
-    _, scheme_payload, bindings, row_dict, dataset_name = \
+    scheme, scheme_payload, bindings, row_dict, dataset_name = \
         await _load_exec_shape(db, tpl.scheme_id, scen)
     aliases = await _auth_aliases_of(db, scen.payload, bindings)
     alias_urls = await _alias_urls_of(
         db, scen.payload, await _template_env(db, scen, scheme_payload))
     fp = await consent_fingerprint_now_shape(
-        db, tpl, scen, scheme_payload, row_dict, bindings)
+        db, tpl, scen, scheme_payload, row_dict, bindings,
+        scheme_identity=await _scheme_identity_of(db, scheme))
     meta_plate = (((definition_from_payload(scen.payload) or {}).get("meta") or {})
                   .get("plate") or {})
     steps = []
@@ -1182,7 +1214,8 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     scen.payload, scheme_payload, row_dict,
                     tpl.trigger_cron, alias_urls, alias_creds=hits,
                     slot_bindings=await _slot_bindings_of(
-                        db, tpl, scen, scheme_payload, row_dict))
+                        db, tpl, scen, scheme_payload, row_dict),
+                    scheme_identity=await _scheme_identity_of(db, scheme))
                 if (inst.consent_fingerprint or "") != fp:
                     return await _pause_consent_changed(
                         db, inst, tpl,

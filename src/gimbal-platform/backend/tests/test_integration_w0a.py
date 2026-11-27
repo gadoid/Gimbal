@@ -265,3 +265,55 @@ async def test_unstamped_instance_treated_as_unconfirmed(client):
     inst = await _inst(tid, uid2)
     assert inst.state == "paused" and inst.paused_reason == "template_changed"
 
+
+
+async def test_scheme_delete_recreate_same_content_reconfirms(client):
+    """AC-50(复核 P1):删默认方案、**同内容**重建并置默认 —— 内容
+    七要素全同,但不可变 scheme_uid 换代 → 订阅指纹翻转 → 派发前
+    暂停(template_changed,零派发),再订阅恢复(新身份知情)。"""
+    u1 = await register_and_login(client, "w0a_g", "pw123456")
+    u2 = await register_and_login(client, "w0a_h", "pw123456")
+    await _mk_scenario(client, u1, "sc-w0d")
+    tid = await _mk_task(client, u1, "sc-w0d")
+    uid2 = await _user_id("w0a_h")
+    r = await _subscribe(client, u2, tid)
+    assert r.status_code == 200, r.text
+    fp0 = (await _inst(tid, uid2)).consent_fingerprint
+
+    from app.models.composer_run_scheme import ComposerRunScheme
+
+    async with db_module.SessionLocal() as s:
+        from app.models.integration_task import IntegrationTask as _IT
+        _scen_id = (await s.get(_IT, tid)).scenario_id   # 任务挂发布副本场景
+        row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == _scen_id,
+            ComposerRunScheme.is_default == True))).scalar_one()
+        old_uid, payload, name = (row.scheme_uid, dict(row.payload or {}),
+                                  row.name)
+        await s.delete(row)
+        await s.flush()
+        # 同内容重建:绑定/数据集/组合位全同,新业务 id + 新 uid
+        import uuid as _uuid
+
+        clone = ComposerRunScheme(
+            scheme_id=f"rs-{_uuid.uuid4().hex[:12]}",
+            scenario_id=row.scenario_id, project_id=row.project_id,
+            name=name, is_default=True, payload=payload,
+            repair_status="ready")
+        s.add(clone)
+        await s.commit()
+        new_uid = clone.scheme_uid
+    assert str(new_uid) != str(old_uid), "重建必须换代 uid(AC-50 前提)"
+
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid2)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "template_changed"
+    assert inst.consent_fingerprint == fp0     # 未确认前不刷新
+
+    # 重新确认 = 再订阅:新身份被订阅者知情,恢复调度
+    r = await _subscribe(client, u2, tid)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid2)
+    assert inst.state == "idle" and inst.paused_reason == ""

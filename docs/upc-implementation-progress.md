@@ -757,3 +757,42 @@ query_alias 消歧矛盾、备份漏公共资产/verify 名不副实/非原子�
 
 **验证**:M3 定向回归绿(装配闸 + 查询面 19;生命周期/处置/查询路由
 /auth 会话 73);全量回归见下。
+
+## 3.14 外部静态复核两项 P1(2026-11-27 续)
+
+### P1-1 订阅指纹纳入方案不可变身份(AC-50 收口,本轮修复)
+
+复核属实:consent_fingerprint 投影只覆盖内容七要素,不含 M2 已建的
+不可变 ``scheme_uid`` 与组合溯源 —— 删原方案同内容重建(新 uid)指纹
+不变,订阅者确认过的对象已换代,AC-50 要求暂停/零派发/重确认。
+修复:指纹投影新增 ``scheme_identity`` = ``{schemeUid, combo:{id,name,
+revision}}``(account_combo.py 修订纪律本就声明「订阅指纹记录
+id+name+revision 溯源」);三个计算点同源 —— ``consent_fingerprint_
+now``(订阅确认比对)、``consent_fingerprint_now_shape``(订阅摘要,
+经 subscription_view 装载行)、run_instance 派发前比对 —— 与既有
+template_changed 暂停闸合流,无需新增暂停路径。存量指纹(旧格式)按
+不一致处理 = 多一次重确认,方向安全。
+
+### P1-2 显式配置未整份替换项目默认 —— 复核结论:已收口(上轮)
+
+复核引用的合并点(run_dispatcher:1318 / runs.py:472)与
+`merge_carry_overrides`/`project_carry_overrides` 全库已无残留 ——
+上轮 §11.2 单选改造即本项修法(选定唯一 ExecConfig + 项目 Carry
+资源层在 build_carry_context 正交参与)。本轮以 AC-49 设计样例
+端到端用例锁定:项目 Carry(region)+ 项目默认配置(timeout)+
+显式个人配置(locale)→ 终值 = {region, locale},timeout 缺席
+(test_exec_config_chain.py::test_ac49_design_example_single_select_
+carries,选定腿 + 全链合成腿双断言)。
+
+### 复核旧快照项勘误(不改代码)
+
+复核 M3 段引用 `exec_config.py:51 scope_id`、`AccessToken
+user_id/holder_id 双主体` 为既有偏差 —— 均为旧快照:0070 已以
+principal_id/project_id 双真实 FK + XOR CHECK 替代 scope/scope_id;
+AccessToken 已是 principal_id 单主体。Integration 同表拆分仍开放
+(§3.12 登记项)。
+
+**验证**:定向回归(装配闸/查询面 19;W0a + exec_config 链 20;
+指纹触面 env_chain/S8/C2/consent_fixes/integration/plate 集成 85)全绿;
+全量见下。AC-50 用例:同内容删建 → template_changed 暂停(指纹未
+确认前不刷新)→ 再订阅恢复。

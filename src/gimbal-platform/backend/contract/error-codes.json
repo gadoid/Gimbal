@@ -1379,8 +1379,8 @@
     },
     "instance_gone": {
       "sites": [
-        "app/services/integration_runner.py:1299",
-        "app/services/integration_runner.py:1379"
+        "app/services/integration_runner.py:1332",
+        "app/services/integration_runner.py:1412"
       ],
       "statuses": []
     },
@@ -1394,7 +1394,7 @@
     },
     "instance_not_found": {
       "sites": [
-        "app/services/integration_runner.py:988"
+        "app/services/integration_runner.py:1020"
       ],
       "statuses": []
     },
@@ -2673,8 +2673,8 @@
         "app/routers/runs.py:575",
         "app/routers/runs.py:581",
         "app/routers/runs.py:642",
-        "app/services/integration_runner.py:688",
-        "app/services/integration_runner.py:997",
+        "app/services/integration_runner.py:719",
+        "app/services/integration_runner.py:1029",
         "app/services/query_context.py:93",
         "app/services/run_dispatcher.py:882"
       ],
@@ -3217,14 +3217,14 @@
     },
     "template_gone": {
       "sites": [
-        "app/services/integration_runner.py:1302",
-        "app/services/integration_runner.py:1382"
+        "app/services/integration_runner.py:1335",
+        "app/services/integration_runner.py:1415"
       ],
       "statuses": []
     },
     "template_removed": {
       "sites": [
-        "app/services/integration_runner.py:991"
+        "app/services/integration_runner.py:1023"
       ],
       "statuses": []
     },
