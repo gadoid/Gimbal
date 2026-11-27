@@ -821,6 +821,15 @@ async def run_task(task_id: int, principal: PrincipalIn, db: DbSession) -> dict:
             raise _bad(
                 "token_owner_mismatch",
                 "令牌属主与任务属主不一致,不能触发他人任务", 403)
+    # AC-50(复核 P1 终裁):公共模板对**属主和非属主**都禁止直接调度
+    # —— 执行走「复制到本域 → 确认订阅」后的模板;属主自有的公共模板
+    # 实例同样不经手动触发/定时领取直接派发
+    from ..services.zone import public_project_id as _ppid_run
+    if tpl.project_id == await _ppid_run(db):
+        raise _bad(
+            "public_template_dispatch_forbidden",
+            "公共模板不能直接调度(AC-50):请先复制到你的普通项目并"
+            "确认订阅", 409)
     # A-4/W6 手动面前置闸(版本模型 §6):working 预览场景 409 拒触发,
     # 在建实例/占冷却之前;调度路径由 integration_runner 内部同款闸兜底。
     if tpl.scenario_id:
@@ -1038,9 +1047,9 @@ async def subscribe_task(
     inst.consent_fingerprint = current_fp
     inst.consented_at = _ir_now()
     was_reconfirm = (inst.state == "paused" and inst.paused_reason in
-                     ("template_changed", "made_private"))
+                     ("template_changed", "made_private", "scheme_blocked"))
     if inst.state == "paused" and inst.paused_reason in (
-            "template_changed", "made_private"):
+            "template_changed", "made_private", "scheme_blocked"):
         inst.state = "idle"
         inst.paused_reason = ""
         inst.last_error = ""

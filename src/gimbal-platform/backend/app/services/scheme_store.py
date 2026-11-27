@@ -348,9 +348,6 @@ async def copy_schemes(
     UPC M2(§5.1/§20.3):**绑定恒剥**(副本 = 新建,不携带组合引用);
     **阻塞继承** —— 源 blocked 则副本 blocked(同原因),普通复制
     不得通过空绑定清除 blocked;源 ready(含空绑定)副本 ready。
-    **例外(复核 P2)**:组合能力关闭的目标域(公共项目,§7)无修复
-    面,继承 blocked 即死角 —— 副本组合引用已剥,按依赖事实生成
-    ready(见循环内注记);源方案保持 blocked。
     新 scheme_uid 由库默认生成(不可复用身份,删除重建是新身份)。
     """
     await db.execute(sa_delete(ComposerRunScheme).where(
@@ -361,32 +358,18 @@ async def copy_schemes(
         select(ComposerRunScheme)
         .where(ComposerRunScheme.scenario_id == src_scenario_id)
     )).scalars().all()
-    # 复制继承的第二分支("或在目标域显式修复",§20.3)在组合能力关闭
-    # 的目标域(公共项目,§7)结构性不可用 —— 副本组合引用已剥(绑定
-    # 恒剥),「组合依赖受阻」对副本**事实不成立**:按依赖事实生成
-    # ready(§20.3「由领域服务按依赖事实生成」;非"普通空绑定清除"
-    # —— 普通 PATCH/PUT/保存仍不得清,同域复制仍忠实继承,可在目标
-    # 域显式修复)。复核 P2:继承 blocked 到公共副本 = 修复死角(源
-    # 修好前无法建集成任务),源方案不受影响、保持 blocked。
-    from ..models.project import Project as _Proj
-    from ..policies import capability_enabled as _cap_enabled
-
-    _dst_proj = await db.get(_Proj, dst_pid)
-    _combo_cap = (_cap_enabled(_dst_proj.kind, "account_combo")
-                  if _dst_proj is not None else True)
     for r in rows:
-        status_, reason_ = r.repair_status, r.repair_reason
-        if not _combo_cap and status_ == "blocked":
-            status_, reason_ = "ready", None
         db.add(ComposerRunScheme(
             scheme_id=await _next_scheme_id(db),
             scenario_id=dst_scenario_id, name=r.name,
             project_id=dst_pid,
             is_default=r.is_default,
-            # 绑定恒剥;阻塞继承(ready 保持 ready;能力关闭的目标域
-            # 按副本依赖事实生成 ready —— 见上)
-            repair_status=status_,
-            repair_reason=reason_,
+            # 绑定恒剥;阻塞继承(ready 保持 ready)—— §20.3「发布、
+            # 复制不得自动把 blocked 改为 ready」(复核 P1 终裁:继承
+            # 修复死角由闸面承接 —— blocked 副本不可建任务/订阅,调度
+            # 遇之暂停;回源修复后重发布)
+            repair_status=r.repair_status,
+            repair_reason=r.repair_reason,
             payload=dict(r.payload or {}),
         ))
 

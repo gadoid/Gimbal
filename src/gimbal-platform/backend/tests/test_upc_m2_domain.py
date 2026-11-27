@@ -1298,11 +1298,10 @@ async def mk_proj_member(pid: int, username: str) -> None:
 
 async def test_publish_to_public_generates_ready_for_severed_combo(
         client: AsyncClient):
-    """复核 P2:发布(公共目标域,组合能力关闭,§7)继承 blocked 即
-    修复死角 —— 副本组合引用已剥(绑定恒剥),「组合依赖受阻」对副本
-    事实不成立:copy_schemes 按依赖事实生成 ready(§20.3「由领域服务
-    按依赖事实生成」;§20.3「继承阻塞**或**在目标域显式修复」的第二
-    分支在公共域结构性不可用)。源方案保持 blocked(本域可显式修复);
+    """§20.3 终裁(复核 P1):发布继承 blocked,不得自动改 ready ——
+    公共副本忠实继承(同原因);组合引用已剥(绑定恒剥);源方案
+    blocked 保持。修复死角由闸面承接:blocked 副本不可建任务/订阅,
+    调度遇之暂停 scheme_blocked;回源修复后重发布。
     同域复制腿(test_copy_strips_binding_and_inherits_blocked)不受影响。"""
     from app.core import db as db_module
     from app.models.composer_run_scheme import ComposerRunScheme
@@ -1339,7 +1338,11 @@ async def test_publish_to_public_generates_ready_for_severed_combo(
     assert "blocked" in set(src_status.values()), \
         "源 blocked 行保持 blocked(本域可显式修复)"
     assert copy, "公共副本应继承方案行"
-    assert {x.repair_status for x in copy} == {"ready"}, \
-        f"公共副本按依赖事实生成 ready: {[(x.name, x.repair_status) for x in copy]}"
-    assert all(x.repair_reason is None for x in copy)
+    # §20.3 终裁(复核 P1):发布、复制不得自动把 blocked 改为 ready
+    # —— 公共副本逐行保真继承(源 ready 行保持 ready、blocked 行保持
+    # blocked);修复死角由闸面承接(blocked 副本不可建任务/订阅,调度
+    # 遇之暂停;回源修复后重发布)
+    copy_status = {x.name: x.repair_status for x in copy}
+    assert copy_status["默认方案"] == "blocked", copy_status
+    assert copy_status["公共候选"] == "ready", copy_status
     assert all(x.account_combo_id is None for x in copy)

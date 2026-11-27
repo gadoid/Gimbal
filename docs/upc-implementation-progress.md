@@ -921,3 +921,38 @@ failed`(真实 PG 15432,xdist;+2 = 公共直订拒绝/私有 owner 腿);
 契约快照重生(`public_template_subscribe_forbidden` 新码入册,前端
 errorCodes 同步);Ruff changed 文件 13 份零新增(git stash 真路径
 对比,违例总数 133 = 133);`git diff --check` 干净。
+
+## 3.19 复核轮六:AC-50 终裁三条 —— 公共模板全禁直调/发布复制忠实继承 blocked/调度遇 blocked 立即暂停(2026-11-27 续)
+
+* **公共模板对属主和非属主都禁止直接调度**(§22 AC-50 终裁;上轮只
+  收口了订阅面):手动触发端点补闸 —— 公共项目模板 run → 409
+  `public_template_dispatch_forbidden`(**属主也不例外**);运行闸
+  公共分支改全暂停(原"属主豁免"删除):公共模板任何持有行 → 派发
+  前暂停 `public_template`,零派发。执行走「复制 → 本域模板 → 确认
+  订阅」;公共模板成为纯目录面。
+* **发布、复制不得自动把 blocked 方案改为 ready**(§20.3 终裁,
+  **勘误回退 §3.17 的 P2 裁定**):copy_schemes 恢复忠实逐行继承
+  (blocked 保持 blocked 同原因,ready 保持 ready)—— 上轮"能力关
+  闭目标域按依赖事实生成 ready"与终裁冲突,撤销;修复死角由闸面
+  承接:blocked 公共副本不可建任务/订阅(schedule 写点闸),调度遇
+  之暂停,回源修复后重发布。
+* **调度遇到 blocked 立即暂停订阅**(§22「显式 Scheme 失效...均暂停,
+  无外部派发,修复后需重新确认」终裁细化):run_instance 的 blocked
+  分支从「当轮 channel 收口后照常调度」改为 **paused/
+  scheme_blocked**(先于任何装配/凭证解析,零派发);scheme_blocked
+  ∉ _RESUMABLE(resume 409 引导),订阅路由重确认恢复集合补
+  scheme_blocked(闸核对 ready 后放行)。
+* **验收**(用户指定口径):新增两用例 —— ① 公共模板手动触发(属主
+  ∧非属主)409 + 定时领取运行闸暂停,**断言外部派发次数为零**(零
+  Execution 行);② blocked 暂停修复流:订阅 → 源方案置 blocked →
+  手动触发暂停 scheme_blocked 零派发 → 定时领取同口径 → resume 409
+  → 修复(confirm_no_combo)→ 再订阅恢复。既有 channel 收口用例改
+  口径(assembly gate),发布继承用例改逐行保真断言,made_private
+  channel 语义保留给可见性/成员路径。
+
+**验证**:定向回归(W0a 10;assembly gate 14;m2 域;consent_fixes
+13)全绿;全量 `2384 passed / 2 skipped / 0 failed`(真实 PG 15432,
+xdist;+2 终裁验收);契约快照重生
+(`public_template_dispatch_forbidden` 新码入册);Ruff changed 文件
+零新增(git stash 真路径对比);grep 守卫白名单计数随成员门公共分支
+删除同步(2→1);`git diff --check` 干净。

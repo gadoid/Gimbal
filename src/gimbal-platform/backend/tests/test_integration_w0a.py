@@ -413,9 +413,10 @@ async def test_public_template_direct_subscribe_rejected(client):
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "public_template_subscribe_forbidden"
     assert await _inst(tid, uid2) is None
-    # 直接 run → 409 引导订阅(零实例零派发)
+    # 直接 run → 409(AC-50 终裁:公共模板直调先于订阅闸拒绝)
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
-    assert r.status_code == 409 and "subscription_required" in r.text, r.text
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "public_template_dispatch_forbidden"
     assert await _inst(tid, uid2) is None
     # 属主自订阅(重确认)不受闸
     fp1 = (await client.get(
@@ -443,3 +444,118 @@ async def test_public_template_direct_subscribe_rejected(client):
     assert r.status_code == 200, r.text
     inst2 = await _inst(tid2, uid2)
     assert inst2 is not None and inst2.consent_fingerprint
+
+
+async def test_public_template_direct_dispatch_forbidden_owner_too(client):
+    """AC-50 终裁验收(复核 P1):公共模板对**属主和非属主**都禁止直接
+    调度 —— 手动触发 409(属主也不例外);定时领取(调度认领)在
+    运行闸暂停 public_template;**外部派发次数为零**(零 Execution 行,
+    plate 未被触达)。执行走复制后的本域模板。"""
+    u1 = await register_and_login(client, "w0a_m", "pw123456")
+    u2 = await register_and_login(client, "w0a_n", "pw123456")
+    await _mk_scenario(client, u1, "sc-w0g")
+    tid = await _mk_task(client, u1, "sc-w0g")     # visibility=public 模板
+    uid1 = await _user_id("w0a_m")
+
+    # 手动触发:属主与非属主都 409(零派发)
+    for h, tag in ((u1, "属主"), (u2, "非属主")):
+        r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
+        assert r.status_code == 409, f"{tag}: {r.text}"
+        assert r.json()["detail"]["code"] == "public_template_dispatch_forbidden"
+
+    # 定时领取(调度认领路径):属主自有实例 → 运行闸暂停,零派发
+    from app.models.composer_run_scheme import ComposerRunScheme  # noqa: F401
+    from app.services import integration_runner as ir
+
+    async with db_module.SessionLocal() as s:
+        tpl = await s.get(IntegrationTask, tid)
+        inst = await ir.ensure_instance(tpl, holder_id=uid1)
+        inst_id = inst.id
+    await ir.run_instance(inst_id)
+    async with db_module.SessionLocal() as s:
+        from app.models.execution import Execution
+        from sqlalchemy import func as _func
+
+        inst = await s.get(IntegrationTask, inst_id)
+        n_exec = (await s.execute(
+            select(_func.count()).select_from(Execution))).scalar_one()
+    assert inst.state == "paused"
+    assert inst.paused_reason == "public_template"
+    assert n_exec == 0, "公共模板直接调度不得产生任何外部派发"
+
+
+async def test_blocked_scheme_pauses_subscription_until_reconfirm(client):
+    """AC-50 终裁验收(复核 P1):调度遇 blocked 立即暂停订阅
+    (scheme_blocked,零派发,手动触发与定时领取同口径);修复后须
+    重新确认 —— resume 409 引导,再订阅(闸核对 ready)恢复派发。"""
+    from app.models.execution import Execution
+    from app.services import integration_runner as ir
+
+    u1 = await register_and_login(client, "w0a_o", "pw123456")
+    tid = await mk_normal_template(client, u1, owner="w0a_o",
+                                   member="w0a_o", sid="sc-w0h",
+                                   steps=STEPS)
+    uid1 = await _user_id("w0a_o")
+    r = await _subscribe(client, u1, tid)
+    assert r.status_code == 200, r.text
+
+    # 订阅后源方案被显式处置置 blocked(Ready→Blocked 状态机边)
+    from app.models.composer_run_scheme import ComposerRunScheme
+
+    async with db_module.SessionLocal() as s:
+        drow = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-w0h",
+            ComposerRunScheme.is_default == True))).scalar_one()
+        blocked_id = drow.scheme_id
+    from app.services import scheme_repair
+
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scheme_id == blocked_id))).scalar_one()
+        await scheme_repair.mark_blocked(
+            s, row, reason="combo_missing", action="import.blocked",
+            actor_id=uid1, actor_name="w0a_o")
+        await s.commit()
+
+    # 手动触发 → 立即暂停,零派发
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "scheme_blocked"
+    from sqlalchemy import func as _func
+
+    async with db_module.SessionLocal() as s:
+        n_exec = (await s.execute(
+            select(_func.count()).select_from(Execution))).scalar_one()
+    assert n_exec == 0, "blocked 方案派发次数必须为零"
+
+    # 定时领取同口径:回 idle 后再认领仍被闸暂停
+    async with db_module.SessionLocal() as s:
+        row = await s.get(IntegrationTask, (await _inst(tid, uid1)).id)
+        row.state = "idle"
+        await s.commit()
+        tpl = await s.get(IntegrationTask, tid)
+        inst2 = await ir.ensure_instance(tpl, holder_id=uid1)
+    await ir.run_instance(inst2.id)
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "scheme_blocked"
+
+    # 修复前 resume → 409 引导重新确认(scheme_blocked ∉ _RESUMABLE)
+    r = await client.post(
+        f"/api/integration/tasks/{tid}/subscription/resume", headers=u1)
+    assert r.status_code == 409 and "resume_not_allowed" in r.text, r.text
+
+    # 修复(rebind 同区组合走 confirm_no_combo 语义;此处以服务层
+    # mark 修复态 ready 模拟修复完成)→ 重新确认订阅 → 恢复派发资格
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scheme_id == blocked_id))).scalar_one()
+        await scheme_repair.confirm_no_combo(
+            s, row, user=type("U", (), {"id": uid1})(),
+            reason="测试修复", expected_revision=row.revision)
+        await s.commit()
+    r = await _subscribe(client, u1, tid)
+    assert r.status_code == 200, r.text
+    assert (await _inst(tid, uid1)).state == "idle"

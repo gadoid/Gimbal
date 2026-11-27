@@ -1038,15 +1038,18 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                 await _load_exec_shape(db, tpl.scheme_id, scen)
 
             # §20.3 统一装配闸(UPC M3 schedule/execute 面):方案待修复
-            # (blocked)不进入任何装配/凭证解析 —— 当轮 channel 收口
-            # 可见(与 working_preview 同位;worker 在装配前重检,
+            # (blocked)不进入任何装配/凭证解析 —— **立即暂停订阅**
+            # (复核 P1 终裁:不再当轮 channel 收口后继续调度;修复后
+            # 须重新确认 —— 非 _RESUMABLE,resume 409 引导再订阅);
+            # 零派发(先于任何装配/凭证解析,与 working_preview 同位;
             # 与 require_ready 接入约定第 3 步一致,不透传内部 reason)。
             if scheme is not None and scheme.repair_status == "blocked":
-                return await _finish(
-                    db, inst, tpl, "channel",
-                    f"运行方案「{scheme.name}」处于待修复状态(组合依赖"
-                    "受阻),本轮跳过;请模板维护者先在方案修复入口完成"
-                    "修复",
+                return await _pause_consent_changed(
+                    db, inst, tpl,
+                    paused_reason="scheme_blocked",
+                    message=f"运行方案「{scheme.name}」处于待修复状态"
+                            "(组合依赖受阻),执行已暂停;请在方案修复"
+                            "入口完成修复后重新确认订阅",
                     lease=lease)
 
             # A-4/W6(版本模型 §6):声明 working 的场景拒绝触发集成 ——
@@ -1181,9 +1184,9 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     # 转私有前的订阅者(漏网路径)按 made_private 收口
                     _member_ok = inst.holder_id == tpl.owner_id
                 elif _tpl_kind == "public":
-                    # AC-50:公共模板无订阅面(复制、映射并确认后订阅)
-                    # —— 持有人只可能是属主;存量漏网行同口径收口
-                    _member_ok = inst.holder_id == tpl.owner_id
+                    # AC-50(复核 P1 终裁):公共模板对属主和非属主都
+                    # 禁止直接调度 —— 持有人一律暂停,零派发
+                    _member_ok = False
                 else:  # normal:成员闸(属主身份不替代成员关系)
                     from ..services.zone import can_use_project_credentials
                     _member_ok = await can_use_project_credentials(

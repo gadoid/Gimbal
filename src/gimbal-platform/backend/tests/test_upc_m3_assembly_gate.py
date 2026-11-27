@@ -222,8 +222,11 @@ async def test_preview_blocked_scheme_refuses_assembly(
 
 async def test_integration_run_blocked_scheme_channel_finish(
         client: AsyncClient):
-    """集成面:模板方案 blocked → 当轮 channel 收口(实例 failed +
-    人话原因),先于任何装配/凭证解析(与 working_preview 同位)。"""
+    """集成面:模板方案 blocked → **立即暂停订阅**(paused/
+    scheme_blocked,复核 P1 终裁:不再当轮 channel 收口后继续调度),
+    先于任何装配/凭证解析(与 working_preview 同位);外部派发次数
+    为零。修复后须重新确认(scheme_blocked ∉ _RESUMABLE)。"""
+    from app.models.execution import Execution
     from app.models.integration_task import IntegrationTask
     from app.services import integration_runner as ir
 
@@ -251,9 +254,13 @@ async def test_integration_run_blocked_scheme_channel_finish(
         tpl = (await s.execute(select(IntegrationTask).where(
             IntegrationTask.id == tid))).scalar_one()
         inst = await ir.ensure_instance(tpl, holder_id=tpl.owner_id)
-        out = await ir.run_instance(inst.id)
-    assert out["status"] == "failed", out
-    assert "待修复" in (out.get("error") or ""), out
+        await ir.run_instance(inst.id)
+        inst = await s.get(IntegrationTask, inst.id)
+        n_exec = (await s.execute(select(func.count()).select_from(
+            Execution))).scalar_one()
+    assert inst.state == "paused"
+    assert inst.paused_reason == "scheme_blocked"
+    assert n_exec == 0, "blocked 方案不得派发(零外部派发)"
 
 
 # ── execute 面:Suite 直跑成员(default 方案 blocked → skipped)────

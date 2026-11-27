@@ -27,7 +27,7 @@ from app.core import db as db_module
 from app.models.composer_scenario import ComposerScenario
 from app.models.integration_task import IntegrationTask
 from app.models.user import User
-from tests.helpers import make_draft, register_and_login
+from tests.helpers import make_draft, mk_normal_project, register_and_login
 from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
@@ -75,12 +75,15 @@ def _task_body(sid: str, **over) -> dict:
     return body
 
 
-async def _mk_scenario(client, h, sid: str, plate: dict) -> None:
+async def _mk_scenario(client, h, sid: str, plate: dict, *,
+                       project_id: int | None = None) -> None:
     from .helpers import seed_service_runtime
     await seed_service_runtime("jira-svc")   # M3 §8.5:定时路径硬门地址落点
     r = await client.post("/api/scenarios", headers=h,
                           json=make_draft(sid, steps=ANCHORED_STEPS,
-                                          plate=plate, system=["jira"]))
+                                          plate=plate, system=["jira"]),
+                          params=({"projectId": project_id}
+                                  if project_id is not None else {}))
     assert r.status_code in (200, 201), r.text
     from .inbound_fixtures import publish_scenario
 
@@ -364,18 +367,31 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
     from .helpers import seed_service_runtime
     await seed_service_runtime("svc2")   # M3 §8.5:定时路径硬门地址落点
     u1 = await register_and_login(client, "cfa_a", "pw123456")
+    # AC-50 新模型:普通项目模板(公共模板属主直调也已禁)
+    from tests.helpers import mk_normal_project
+
+    await register_and_login(client, "cfa_b", "pw123456")
+    _pid = await mk_normal_project("np-cfa", {"cfa_a": "admin",
+                                              "cfa_b": "member"})
     r = await client.post("/api/scenarios", headers=u1, json=make_draft(
         "sc-cfa", steps=[{
             "kind": "step",
             "call": {"protocol": "http", "service": "svc2",
+                     "method": "GET", "path": "/x", "headers": {}}},
+            {"kind": "step",
+             "call": {"protocol": "http", "service": "svc2",
+                      "method": "GET", "path": "/y", "headers": {}}},
+            ] if False else [{
+            "kind": "step",
+            "call": {"protocol": "http", "service": "svc2",
                      "method": "GET", "path": "/x", "headers": {}},
-            "request": {"kind": "request", "body": {}}, "strategy": []}]))
+            "request": {"kind": "request", "body": {}}, "strategy": []}]),
+        params={"projectId": _pid})
     assert r.status_code in (200, 201), r.text
-    from .inbound_fixtures import publish_scenario
-
-    await publish_scenario("sc-cfa")
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-cfa"))).json()["id"]
+    tid = (await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "cfa", "scenarioId": "sc-cfa", "identityMode": "personal",
+        "projectId": _pid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})).json()["id"]
 
     async with dbm.SessionLocal() as db:
         env = (await db.execute(_sel(Environment.id).where(
@@ -404,8 +420,8 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
         from tests.helpers import scenario_project_id
 
         db.add(ComposerRunScheme(
-            scheme_id="rs-cfa", scenario_id="sc-cfa-public", name="s",
-            project_id=await scenario_project_id(db, "sc-cfa-public"),
+            scheme_id="rs-cfa", scenario_id="sc-cfa", name="s",
+            project_id=await scenario_project_id(db, "sc-cfa"),
             payload={"serviceBindings": {"svc2": {"alias": "svc2-other"}}}))
         await db.commit()
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
@@ -425,7 +441,8 @@ async def test_alias_default_credentials_unified(client, plate_mock, monkeypatch
         f"/api/integration/tasks/{tid}/subscription-summary",
         headers=u1)).json()["fingerprint"]
     r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
-                          headers=u1, json={"fingerprint": _fp})
+                          headers=u1, json={"fingerprint": _fp,
+                          "credentialSource": "personal"})
     assert r.status_code == 200, r.text
     await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
     async with dbm.SessionLocal() as db:
@@ -476,9 +493,13 @@ async def test_integration_passes_carry_context_to_materialize(
     import app.services.carry_injection as ci
 
     u1 = await register_and_login(client, "cfx_a", "pw123456")
-    await _mk_scenario(client, u1, "sc-cfx", {"jira": "1.0#1"})
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-cfx"))).json()["id"]
+    _npid = await mk_normal_project("np-cfx", {"cfx_a": "admin"})
+    await _mk_scenario(client, u1, "sc-cfx", {"jira": "1.0#1"},
+                       project_id=_npid)
+    tid = (await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "cf", "scenarioId": "sc-cfx", "identityMode": "personal",
+        "projectId": _npid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})).json()["id"]
 
     captured = {}
 
@@ -517,9 +538,13 @@ async def test_prepare_infra_failure_finishes_channel(
     monkeypatch.setattr(rp, "prepare_exec", _boom)
     plate_mock.fulls.update(FULLS)
     u1 = await register_and_login(client, "cfx_b", "pw123456")
-    await _mk_scenario(client, u1, "sc-cfy", {"jira": "1.0#1"})
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-cfy"))).json()["id"]
+    _npid = await mk_normal_project("np-cfy", {"cfx_b": "admin"})
+    await _mk_scenario(client, u1, "sc-cfy", {"jira": "1.0#1"},
+                       project_id=_npid)
+    tid = (await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "cf", "scenarioId": "sc-cfy", "identityMode": "personal",
+        "projectId": _npid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})).json()["id"]
 
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
     assert r.status_code == 200, r.text
@@ -548,9 +573,13 @@ async def test_main_session_sql_error_finishes_channel(
 
     plate_mock.fulls.update(FULLS)
     u1 = await register_and_login(client, "cfx_c", "pw123456")
-    await _mk_scenario(client, u1, "sc-cfz", {"jira": "1.0#1"})
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-cfz"))).json()["id"]
+    _npid = await mk_normal_project("np-cfz", {"cfx_c": "admin"})
+    await _mk_scenario(client, u1, "sc-cfz", {"jira": "1.0#1"},
+                       project_id=_npid)
+    tid = (await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "cf", "scenarioId": "sc-cfz", "identityMode": "personal",
+        "projectId": _npid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})).json()["id"]
 
     # 补丁在创建后打:_load_exec_shape 也被创建面摘要(_tpl_out_full →
     # auth_aliases_view)复用,打早了连任务都建不出来;此处只覆盖
@@ -585,9 +614,13 @@ async def test_manual_run_passes_lease(client, plate_mock, monkeypatch):
     monkeypatch.setattr(ir, "run_instance", _fake_run)
     plate_mock.fulls.update(FULLS)
     u1 = await register_and_login(client, "cfx_d", "pw123456")
-    await _mk_scenario(client, u1, "sc-cfw", {"jira": "1.0#1"})
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-cfw"))).json()["id"]
+    _npid = await mk_normal_project("np-cfw", {"cfx_d": "admin"})
+    await _mk_scenario(client, u1, "sc-cfw", {"jira": "1.0#1"},
+                       project_id=_npid)
+    tid = (await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "cf", "scenarioId": "sc-cfw", "identityMode": "personal",
+        "projectId": _npid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})).json()["id"]
 
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
     assert r.status_code == 200, r.text
