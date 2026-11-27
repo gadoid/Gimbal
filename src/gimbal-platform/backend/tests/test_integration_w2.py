@@ -34,16 +34,18 @@ async def test_delete_notifies_subscribers(client):
     """G-E:owner 删除个人模板 → 订阅者收到人话通知(不再是只见「过期」)。"""
     u1 = await register_and_login(client, "w2_a", "pw123456")
     u2 = await register_and_login(client, "w2_b", "pw123456")
-    r = await client.post("/api/scenarios", headers=u1,
-                          json=make_draft("sc-w2", steps=STEPS))
-    assert r.status_code in (200, 201), r.text
-    from .inbound_fixtures import publish_scenario
+    from tests.helpers import mk_normal_project
 
-    await publish_scenario("sc-w2")   # S1.3:公共模板引用公共副本
+    pid = await mk_normal_project("np-w2", {"w2_a": "admin",
+                                            "w2_b": "member"})
+    r = await client.post("/api/scenarios", headers=u1,
+                          json=make_draft("sc-w2", steps=STEPS),
+                          params={"projectId": pid})
+    assert r.status_code in (200, 201), r.text
     r = await client.post("/api/integration/tasks", headers=u1, json={
-        "name": "W2", "scenarioId": "sc-w2-public", "identityMode": "personal",
-        "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
-        "visibility": "public"})
+        "name": "W2", "scenarioId": "sc-w2", "identityMode": "personal",
+        "projectId": pid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
     r = await _subscribe(client, u2, tid)

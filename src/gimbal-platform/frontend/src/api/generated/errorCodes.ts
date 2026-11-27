@@ -191,6 +191,7 @@ export const ERROR_CODES = {
   "public_project_no_tokens": true,
   "public_project_promote_forbidden": true,
   "public_project_protected": true,
+  "public_template_subscribe_forbidden": true,
   "query_context_required": true,
   "query_credential_required": true,
   "query_identity_ambiguous": true,

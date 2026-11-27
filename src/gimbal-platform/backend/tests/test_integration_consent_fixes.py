@@ -87,6 +87,36 @@ async def _mk_scenario(client, h, sid: str, plate: dict) -> None:
     await publish_scenario(sid)
 
 
+async def _mk_normal_tid(client, h, sid: str, plate: dict, *,
+                         owner: str, member: str) -> int:
+    """AC-50 新模型布景:普通项目模板(属主 = 项目 admin 成员,订阅者
+    = member)。公共模板直订已拒(AC-50),订阅语义用例迁此。"""
+    from tests.helpers import mk_normal_project
+
+    await mk_normal_project(f"np-{sid}", {owner: "admin", member: "member"})
+    from .helpers import seed_service_runtime
+    await seed_service_runtime("jira-svc")
+    r = await client.post("/api/scenarios", headers=h,
+                          json=make_draft(sid, steps=ANCHORED_STEPS,
+                                          plate=plate, system=["jira"]),
+                          params={"projectId": await _normal_pid(f"np-{sid}")})
+    assert r.status_code in (200, 201), r.text
+    r = await client.post("/api/integration/tasks", headers=h, json={
+        "name": "fixes", "scenarioId": sid, "identityMode": "personal",
+        "projectId": await _normal_pid(f"np-{sid}"),
+        "triggerCron": "*/5 * * * *", "resultPolicy": "latest"})
+    assert r.status_code in (200, 201), r.text
+    return r.json()["id"]
+
+
+async def _normal_pid(name: str) -> int:
+    from sqlalchemy import select as _sel
+    from app.models.project import Project
+    async with db_module.SessionLocal() as db:
+        return (await db.execute(_sel(Project.id).where(
+            Project.name == name))).scalar_one()
+
+
 async def _user_id(username: str) -> int:
     async with db_module.SessionLocal() as db:
         return (await db.execute(select(User).where(
@@ -195,9 +225,8 @@ async def test_fingerprint_covers_meta_plate(client, plate_mock):
     plate_mock.fulls.update(FULLS)
     u1 = await register_and_login(client, "fix_c", "pw123456")
     u2 = await register_and_login(client, "fix_d", "pw123456")
-    await _mk_scenario(client, u1, "sc-fix2", {"jira": "1.0#1"})
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-fix2"))).json()["id"]
+    tid = await _mk_normal_tid(client, u1, "sc-fix2", {"jira": "1.0#1"},
+                               owner="fix_c", member="fix_d")
     uid2 = await _user_id("fix_d")
     await _subscribe(client, u2, tid)
 
@@ -226,9 +255,8 @@ async def test_fingerprint_covers_carry_field_states(client, plate_mock):
     plate_mock.fulls.update(FULLS)
     u1 = await register_and_login(client, "fs_a", "pw123456")
     u2 = await register_and_login(client, "fs_b", "pw123456")
-    await _mk_scenario(client, u1, "sc-fs", {"jira": "1.0#1"})
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-fs"))).json()["id"]
+    tid = await _mk_normal_tid(client, u1, "sc-fs", {"jira": "1.0#1"},
+                               owner="fs_a", member="fs_b")
     uid2 = await _user_id("fs_b")
     await _subscribe(client, u2, tid)
     fp1 = (await client.get(
@@ -263,9 +291,8 @@ async def test_subscribe_with_stale_fingerprint_409(client, plate_mock):
     plate_mock.fulls.update(FULLS)
     u1 = await register_and_login(client, "fix_e", "pw123456")
     u2 = await register_and_login(client, "fix_f", "pw123456")
-    await _mk_scenario(client, u1, "sc-fix3", {"jira": "1.0#1"})
-    tid = (await client.post("/api/integration/tasks", headers=u1,
-                             json=_task_body("sc-fix3"))).json()["id"]
+    tid = await _mk_normal_tid(client, u1, "sc-fix3", {"jira": "1.0#1"},
+                               owner="fix_e", member="fix_f")
     uid2 = await _user_id("fix_f")
 
     fp1 = (await client.get(
@@ -579,12 +606,18 @@ async def test_made_private_gate_covers_leak_paths(client, plate_mock):
 
     plate_mock.fulls.update(FULLS)
     u1 = await register_and_login(client, "fix_g", "pw123456")
-    u2 = await register_and_login(client, "fix_h", "pw123456")
+    await register_and_login(client, "fix_h", "pw123456")   # 建用户
     await _mk_scenario(client, u1, "sc-fix4", {"jira": "1.0#1"})
     tid = (await client.post("/api/integration/tasks", headers=u1,
                              json=_task_body("sc-fix4"))).json()["id"]
+    uid1 = await _user_id("fix_g")
     uid2 = await _user_id("fix_h")
-    await _subscribe(client, u2, tid)
+    # 公共模板自 AC-50 起无订阅面 —— 漏网路径以 legacy 行直插模拟
+    async with db_module.SessionLocal() as db:
+        db.add(IntegrationTask(
+            name="legacy", owner_id=uid1, template_id=tid,
+            holder_id=uid2, state="idle", enabled=True))
+        await db.commit()
     inst_id = (await _inst(tid, uid2)).id
 
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,

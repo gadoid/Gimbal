@@ -977,6 +977,14 @@ async def subscribe_task(
     if tpl is None:
         raise _bad("not_found", "功能不存在", 404)
     await _subscribable(db, tpl, user)
+    # AC-50:公共模板直接调度拒绝 —— 订阅走「复制、映射并确认」后的
+    # 本域模板(普通项目);属主重确认(自有实例)不受此闸
+    from ..services.zone import public_project_id as _ppid_sub
+    if (tpl.project_id == await _ppid_sub(db)
+            and tpl.owner_id != user.id):
+        raise _bad("public_template_subscribe_forbidden",
+                   "公共模板不能直接订阅:请先复制到你的普通项目,"
+                   "复制、映射并确认后订阅(AC-50)", 409)
     scen = (await db.execute(select(ComposerScenario).where(
         ComposerScenario.scenario_id == tpl.scenario_id))).scalar() \
         if tpl.scenario_id else None
@@ -1023,12 +1031,12 @@ async def subscribe_task(
                 inst.state = "idle"
                 inst.paused_reason = ""
                 inst.next_run_at = datetime.now(timezone.utc)
-    try:
-        await integration_runner.refresh_consent(db, tpl, scen, inst)
-    except Exception as e:  # noqa: BLE001 — 订阅面失败口径:503,不留半确认
-        await db.rollback()
-        raise _bad("alias_unavailable",
-                   f"服务地址解析失败,暂不能订阅: {e}", 503) from None
+    # P1(复核):保存**已通过与回传值比对**的那次指纹 —— refresh_
+    # consent 的二次重算会打开「比对后、入库前」窗口:方案在该窗口被
+    # 同业务 ID 重建时,用户确认的 A、入库的 B,派发闸对 B 无感
+    from ..services.integration_runner import _now as _ir_now
+    inst.consent_fingerprint = current_fp
+    inst.consented_at = _ir_now()
     was_reconfirm = (inst.state == "paused" and inst.paused_reason in
                      ("template_changed", "made_private"))
     if inst.state == "paused" and inst.paused_reason in (

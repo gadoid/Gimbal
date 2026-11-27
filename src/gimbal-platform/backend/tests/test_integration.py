@@ -389,18 +389,24 @@ async def test_personal_mode_lifecycle(client):
     u1 = await register_and_login(client, "p1_alice", "pw123456")
     u2 = await register_and_login(client, "p1_bob", "pw123456")
 
-    # 个人模板:场景带 POST 步骤(平台模式会拒)→ 201
+    # 普通项目模板(AC-50 新模型:成员订阅;公共模板直订已拒):
+    # 场景带 POST 步骤(平台模式会拒)→ 201
+    from tests.helpers import mk_normal_project
+
+    pid = await mk_normal_project("np-p1", {"p1_alice": "admin",
+                                            "p1_bob": "member"})
     draft = make_draft("sc-p1", steps=[{
         "kind": "step",
         "call": {"protocol": "http", "service": "svc",
                  "method": "POST", "path": "/push", "headers": {}},
         "request": {"kind": "request", "body": {}}, "strategy": []}])
-    r = await client.post("/api/scenarios", headers=u1, json=draft)
+    r = await client.post("/api/scenarios", headers=u1, json=draft,
+                          params={"projectId": pid})
     assert r.status_code in (200, 201), r.text
-    # S1.3:公共模板须引用公共副本 —— 先发布(= 复制)再建任务
-    await client.post("/api/scenarios/sc-p1/publish", headers=u1)
-    r = await client.post("/api/integration/tasks", headers=u1, json=_task_body(
-        "sc-p1-public", identityMode="personal", visibility="public"))
+    r = await client.post("/api/integration/tasks", headers=u1, json={
+        "name": "p1", "scenarioId": "sc-p1", "identityMode": "personal",
+        "projectId": pid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
 

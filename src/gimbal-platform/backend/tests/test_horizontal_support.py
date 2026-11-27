@@ -288,7 +288,7 @@ class TestIntegrationTimeline:
 
     async def test_subscription_lifecycle_events(self, client, plate_mock):
         from tests.test_integration_consent_fixes import (
-            ANCHORED_STEPS, FULLS, _subscribe, _task_body,
+            FULLS, _mk_normal_tid, _subscribe,
         )
         plate_mock.fulls.update(FULLS)
         await register_and_login(client, "il_first", "il_firstpass123")
@@ -296,19 +296,10 @@ class TestIntegrationTimeline:
                                            "il_ownerpass123")
         h_sub = await register_and_login(client, "il_sub", "il_subpass123")
         sub_id = await _uid("il_sub")
-        r = await client.post(
-            "/api/scenarios", headers=h_owner,
-            json=make_draft("sc-il-1", steps=ANCHORED_STEPS,
-                            plate={"jira": "1.0#1"},
-                            system=["jira"]))
-        assert r.status_code in (200, 201), r.text
-        from .inbound_fixtures import publish_scenario
-
-        await publish_scenario("sc-il-1")   # S1.3:公共模板引用副本
-        r = await client.post("/api/integration/tasks", headers=h_owner,
-                              json=_task_body("sc-il-1", name="il-fn",))
-        assert r.status_code in (200, 201), r.text
-        tid = r.json()["id"]
+        # AC-50 新模型:普通项目模板成员订阅
+        tid = await _mk_normal_tid(client, h_owner, "sc-il-1",
+                                   {"jira": "1.0#1"},
+                                   owner="il_owner", member="il_sub")
         r = await _subscribe(client, h_sub, tid)
         assert r.status_code == 200, r.text
         assert len(await _activity_rows(sub_id, "integration.subscribed")) == 1

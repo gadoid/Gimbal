@@ -371,3 +371,41 @@ async def add_project_admin(db, project_id: int) -> None:
         User.username == NIGHT_ADMIN))).scalar_one()
     db.add(ProjectMember(project_id=project_id, user_id=uid,
                          role=ProjectMember.ROLE_ADMIN))
+
+
+async def mk_normal_template(
+    client, owner_h: dict, *, owner: str, member: str, sid: str,
+    steps: list, name: str = "普通模板",
+) -> int:
+    """AC-50 订阅面布景:普通项目模板 —— 属主 = 项目 admin 成员,
+    订阅者 = member 成员(可见性靠项目成员资格,visibility 隐私;
+    公共模板自 AC-50 起不能被非属主直接订阅)。
+
+    建 普通项目(双方入成员)→ 项目内场景 → 模板(引用原件)。
+    返回模板 id。"""
+    from app.core import db as db_module
+    from app.models.user import User
+    from sqlalchemy import select as _sel
+
+    for _svc in {str((st.get("call") or {}).get("service") or "")
+                 for st in steps if isinstance(st, dict)}:
+        if _svc:
+            await seed_service_runtime(_svc)
+    pid = await mk_normal_project(f"np-{sid}",
+                                  {owner: "admin", member: "member"})
+    # 布景前置:用户须已注册(register_and_login 由调用方完成)
+    async with db_module.SessionLocal() as s:
+        for uname in (owner, member):
+            assert (await s.execute(_sel(User.id).where(
+                User.username == uname))).scalar() is not None, \
+                f"mk_normal_template 前置:用户 {uname} 须先注册"
+    draft = make_draft(sid, steps=steps)
+    r = await client.post("/api/scenarios", headers=owner_h, json=draft,
+                          params={"projectId": pid})
+    assert r.status_code in (200, 201), r.text
+    r = await client.post("/api/integration/tasks", headers=owner_h, json={
+        "name": name, "scenarioId": sid, "identityMode": "personal",
+        "projectId": pid, "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})
+    assert r.status_code in (200, 201), r.text
+    return r.json()["id"]

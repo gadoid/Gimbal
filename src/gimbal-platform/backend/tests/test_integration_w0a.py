@@ -21,7 +21,8 @@ from app.models.integration_task import IntegrationTask
 from app.models.permission import Notification
 from app.models import Service
 from app.models.user import User
-from tests.helpers import make_draft, register_and_login
+from tests.helpers import (make_draft, mk_normal_template,
+                           register_and_login)
 from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
@@ -97,8 +98,10 @@ async def test_subscribe_flow_and_gate(client):
     template_changed 暂停+通知 → 再订阅恢复 → 退订删行。"""
     u1 = await register_and_login(client, "w0a_alice", "pw123456")
     u2 = await register_and_login(client, "w0a_bob", "pw123456")
-    await _mk_scenario(client, u1, "sc-w0a")
-    tid = await _mk_task(client, u1, "sc-w0a")
+    # AC-50 新模型:普通项目模板(成员订阅);公共模板直订已被拒
+    tid = await mk_normal_template(client, u1, owner="w0a_alice",
+                                   member="w0a_bob", sid="sc-w0a",
+                                   steps=STEPS)
     uid2 = await _user_id("w0a_bob")
 
     # ①未订阅 run → 409;列表/卡片/详情 GET 不播种
@@ -171,8 +174,9 @@ async def test_base_url_change_triggers_template_changed(client):
     地址只来自部署表,别名 base_url 已删)。"""
     u1 = await register_and_login(client, "w0a_c", "pw123456")
     u2 = await register_and_login(client, "w0a_d", "pw123456")
-    await _mk_scenario(client, u1, "sc-w0b")
-    tid = await _mk_task(client, u1, "sc-w0b")
+    tid = await mk_normal_template(client, u1, owner="w0a_c",
+                                   member="w0a_d", sid="sc-w0b",
+                                   steps=STEPS)
     uid2 = await _user_id("w0a_d")
 
     from .helpers import seed_deployment
@@ -204,8 +208,9 @@ async def test_alias_query_failure_is_channel_not_consent(client, monkeypatch):
 
     u1 = await register_and_login(client, "w0a_e", "pw123456")
     u2 = await register_and_login(client, "w0a_f", "pw123456")
-    await _mk_scenario(client, u1, "sc-w0c")
-    tid = await _mk_task(client, u1, "sc-w0c")
+    tid = await mk_normal_template(client, u1, owner="w0a_e",
+                                   member="w0a_f", sid="sc-w0c",
+                                   steps=STEPS)
     uid2 = await _user_id("w0a_f")
     await _subscribe(client, u2, tid)
 
@@ -231,7 +236,12 @@ async def test_visibility_private_pauses_subscribers(client):
     tid = await _mk_task(client, u1, "sc-w0d")
     uid1 = await _user_id("w0a_g")
     uid2 = await _user_id("w0a_h")
-    await _subscribe(client, u2, tid)
+    # 公共模板自 AC-50 起无订阅面 —— 联动暂停机制以 legacy 行直插模拟
+    async with db_module.SessionLocal() as db:
+        db.add(IntegrationTask(
+            name="legacy", owner_id=uid1, template_id=tid,
+            holder_id=uid2, state="idle", enabled=True))
+        await db.commit()
 
     r = await client.patch(f"/api/integration/tasks/{tid}", headers=u1,
                            json={"visibility": "private"})
@@ -247,18 +257,19 @@ async def test_visibility_private_pauses_subscribers(client):
                            json={"visibility": "public"})
     assert r.status_code == 200, r.text
     assert (await _inst(tid, uid2)).state == "paused"
-    # 重新确认(再订阅)恢复
+    # 转回 public 后重订阅:新模型下公共模板无订阅面(409,须复制)
     r = await _subscribe(client, u2, tid)
-    assert r.status_code == 200, r.text
-    assert (await _inst(tid, uid2)).state == "idle"
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "public_template_subscribe_forbidden"
 
 
 async def test_unstamped_instance_treated_as_unconfirmed(client):
     """未留指纹的实例(存量残留/异常路径)→ 按未确认处理:暂停待确认。"""
     u1 = await register_and_login(client, "w0a_i", "pw123456")
     u2 = await register_and_login(client, "w0a_j", "pw123456")
-    await _mk_scenario(client, u1, "sc-w0e")
-    tid = await _mk_task(client, u1, "sc-w0e")
+    tid = await mk_normal_template(client, u1, owner="w0a_i",
+                                   member="w0a_j", sid="sc-w0e",
+                                   steps=STEPS)
     uid2 = await _user_id("w0a_j")
 
     # 直插无指纹实例(模拟清理遗漏的存量行)
@@ -283,8 +294,9 @@ async def test_scheme_delete_recreate_same_content_reconfirms(client):
     项目其他成员订阅(u2 腿);再订阅恢复(新身份知情)。"""
     u1 = await register_and_login(client, "w0a_g", "pw123456")
     u2 = await register_and_login(client, "w0a_h", "pw123456")
-    await _mk_scenario(client, u1, "sc-w0d")
-    tid = await _mk_task(client, u1, "sc-w0d")
+    tid = await mk_normal_template(client, u1, owner="w0a_g",
+                                   member="w0a_h", sid="sc-w0d",
+                                   steps=STEPS)
     uid1 = await _user_id("w0a_g")
     uid2 = await _user_id("w0a_h")
     r = await _subscribe(client, u2, tid)
@@ -378,3 +390,56 @@ async def test_scheme_recreate_pauses_private_owner_self_subscription(client):
     inst = await _inst(tid, uid1)
     assert inst.state == "paused"
     assert inst.paused_reason == "template_changed"
+
+
+async def test_public_template_direct_subscribe_rejected(client):
+    """AC-50(复核 P1):公共模板直接订阅/调度拒绝 —— 订阅走「复制、
+    映射并确认」后的本域模板;公共模板上成员零实例零派发;属主重
+    确认不受闸。"""
+    u1 = await register_and_login(client, "w0a_k", "pw123456")
+    u2 = await register_and_login(client, "w0a_l", "pw123456")
+    await _mk_scenario(client, u1, "sc-w0f")
+    tid = await _mk_task(client, u1, "sc-w0f")   # visibility=public 模板
+    uid2 = await _user_id("w0a_l")
+
+    # 可见但不可订阅
+    r = await client.get(f"/api/integration/tasks/{tid}", headers=u2)
+    assert r.status_code == 200, r.text
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u2)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u2, json={"fingerprint": fp})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "public_template_subscribe_forbidden"
+    assert await _inst(tid, uid2) is None
+    # 直接 run → 409 引导订阅(零实例零派发)
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u2)
+    assert r.status_code == 409 and "subscription_required" in r.text, r.text
+    assert await _inst(tid, uid2) is None
+    # 属主自订阅(重确认)不受闸
+    fp1 = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u1)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u1, json={"fingerprint": fp1})
+    assert r.status_code == 200, r.text
+
+    # 正路:复制场景(fork)→ 建本域模板 → 订阅(复制、映射并确认)
+    copy_sid = (await client.post(
+        "/api/scenarios/sc-w0f-public/copy", headers=u2)
+    ).json()["meta"]["scenarioId"]
+    r = await client.post("/api/integration/tasks", headers=u2, json={
+        "name": "fork 模板", "scenarioId": copy_sid,
+        "identityMode": "personal", "triggerCron": "*/5 * * * *",
+        "resultPolicy": "latest"})
+    assert r.status_code in (200, 201), r.text
+    tid2 = r.json()["id"]
+    fp2 = (await client.get(
+        f"/api/integration/tasks/{tid2}/subscription-summary",
+        headers=u2)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid2}/subscribe",
+                          headers=u2, json={"fingerprint": fp2})
+    assert r.status_code == 200, r.text
+    inst2 = await _inst(tid2, uid2)
+    assert inst2 is not None and inst2.consent_fingerprint

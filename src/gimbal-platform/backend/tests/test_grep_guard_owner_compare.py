@@ -147,7 +147,10 @@ _ALLOWLIST: dict[str, int] = {
     'services/integration_runner.py:mine = next((i for i in insts if i.holder_id == new_holder), None)': 1,
     'services/integration_runner.py:reg = next((i for i in insts if i.holder_id == old_holder), None)': 1,
     'services/integration_runner.py:if row_dict and inst.holder_id != scen.owner_id:': 1,
-    'services/integration_runner.py:_member_ok = inst.holder_id == tpl.owner_id': 1,
+    # AC-50(2026-11-27):公共模板无订阅面 —— 成员门私有/公共两分支
+    # 同形(仅属主);订阅闸拒非属主直订
+    'services/integration_runner.py:_member_ok = inst.holder_id == tpl.owner_id': 2,
+    'routers/integration.py:and tpl.owner_id != user.id):': 1,
     'services/integration_runner.py:if _token is not None and inst.holder_id == tpl.owner_id:': 1,
     'services/integration_runner.py:IntegrationTask.holder_id == user_id,': 1,
     'services/integration_runner.py:IntegrationTask.holder_id != tpl.owner_id,': 2,

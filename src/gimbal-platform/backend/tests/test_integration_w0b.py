@@ -46,18 +46,22 @@ async def _inst(tpl_id: int, holder: int) -> IntegrationTask | None:
             IntegrationTask.holder_id == holder))).scalar()
 
 
-async def _mk_task(client, h, sid: str, **over) -> int:
-    r = await client.post("/api/scenarios", headers=h,
-                          json=make_draft(sid, steps=AUTH_STEPS))
-    assert r.status_code in (200, 201), r.text
-    # S1.3:公共模板引用公共副本 —— 建场景即发布(= 复制)
-    from .inbound_fixtures import publish_scenario
+async def _mk_task(client, h, sid: str, *, owner: str,
+                   members: list[str], **over) -> int:
+    """AC-50 新模型:普通项目模板(属主 = 项目 admin;members = 成员,
+    成员可见可订阅)。公共模板直订已拒(AC-50)。"""
+    from tests.helpers import mk_normal_project
 
-    await publish_scenario(sid)
-    body = {"name": "W0b", "scenarioId": f"{sid}-public",
-            "identityMode": "personal",
-            "triggerCron": "*/5 * * * *", "resultPolicy": "latest",
-            "visibility": "public"}
+    pid = await mk_normal_project(
+        f"np-{sid}", {owner: "admin",
+                      **{m: "member" for m in members}})
+    r = await client.post("/api/scenarios", headers=h,
+                          json=make_draft(sid, steps=AUTH_STEPS),
+                          params={"projectId": pid})
+    assert r.status_code in (200, 201), r.text
+    body = {"name": "W0b", "scenarioId": sid, "identityMode": "personal",
+            "projectId": pid,
+            "triggerCron": "*/5 * * * *", "resultPolicy": "latest"}
     body.update(over)
     r = await client.post("/api/integration/tasks", headers=h, json=body)
     assert r.status_code == 201, r.text
@@ -75,7 +79,8 @@ async def test_consumer_fields_lifecycle(client):
     补凭证后 missing 清空。"""
     u1 = await register_and_login(client, "w0b_a", "pw123456")
     u2 = await register_and_login(client, "w0b_b", "pw123456")
-    tid = await _mk_task(client, u1, "sc-w0b1")
+    tid = await _mk_task(client, u1, "sc-w0b1", owner="w0b_a",
+                         members=["w0b_b"])
     uid2 = await _user_id("w0b_b")
 
     item = await _item(client, u2, tid)
@@ -83,7 +88,14 @@ async def test_consumer_fields_lifecycle(client):
     assert item["subscribed"] is False
     assert item["instance"] is None
 
-    r = await _subscribe(client, u2, tid)
+    # 本人池通道:显式 personal(普通项目模板缺省 = 项目池,S8 模板缺省)
+    fp = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u2)).json()["fingerprint"]
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u2,
+                          json={"fingerprint": fp,
+                                "credentialSource": "personal"})
     assert r.status_code == 200, r.text
     item = await _item(client, u2, tid)
     assert item["subscribed"] is True
@@ -104,7 +116,8 @@ async def test_cards_carry_consumer_fields(client):
     """④:卡片出参带 authAliases / missingCredentials(W3 凭证引导)。"""
     u1 = await register_and_login(client, "w0b_d", "pw123456")
     u2 = await register_and_login(client, "w0b_e", "pw123456")
-    tid = await _mk_task(client, u1, "sc-w0b3")
+    tid = await _mk_task(client, u1, "sc-w0b3", owner="w0b_d",
+                         members=["w0b_e"])
     r = await _subscribe(client, u2, tid)
     assert r.status_code == 200, r.text
     r = await client.post("/api/integration/cards", headers=u2,
@@ -123,7 +136,8 @@ async def test_pause_resume_and_revive_scope(client):
     u1 = await register_and_login(client, "w0b_f", "pw123456")
     u2 = await register_and_login(client, "w0b_g", "pw123456")
     u3 = await register_and_login(client, "w0b_h", "pw123456")
-    tid = await _mk_task(client, u1, "sc-w0b4")
+    tid = await _mk_task(client, u1, "sc-w0b4", owner="w0b_f",
+                         members=["w0b_g", "w0b_h"])
     uid2 = await _user_id("w0b_g")
     await _subscribe(client, u2, tid)
 
@@ -184,7 +198,8 @@ async def test_fail_streak_auto_pause_and_resume(client):
 
     u1 = await register_and_login(client, "w0b_i", "pw123456")
     u2 = await register_and_login(client, "w0b_j", "pw123456")
-    tid = await _mk_task(client, u1, "sc-w0b5")
+    tid = await _mk_task(client, u1, "sc-w0b5", owner="w0b_i",
+                         members=["w0b_j"])
     uid2 = await _user_id("w0b_j")
     await _subscribe(client, u2, tid)
     inst_id = (await _inst(tid, uid2)).id
@@ -242,7 +257,8 @@ async def test_fail_streak_notifies_holder_only(client):
     u1 = await register_and_login(client, "w0b_sn1", "pw123456")
     u2 = await register_and_login(client, "w0b_sn2", "pw123456")
     await role_headers(client, "w0b_snadm", role="admin")
-    tid = await _mk_task(client, u1, "sc-w0bsn")
+    tid = await _mk_task(client, u1, "sc-w0bsn", owner="w0b_sn1",
+                         members=["w0b_sn2"])
     uid1, uid2 = await _user_id("w0b_sn1"), await _user_id("w0b_sn2")
     uid_adm = await _user_id("w0b_snadm")
     await _subscribe(client, u2, tid)
@@ -269,7 +285,8 @@ async def test_pause_resume_owner_rows(client):
     """W4:个人模式 owner 自有实例走订阅面端点暂停/恢复 —— 集成页
     owner 行的暂停/恢复按钮即此口径(authz C1:平台行分支退役)。"""
     u1 = await register_and_login(client, "w0b_k", "pw123456")
-    tid_o = await _mk_task(client, u1, "sc-w0b7")
+    tid_o = await _mk_task(client, u1, "sc-w0b7", owner="w0b_k",
+                           members=["w0b_k"])
     uid1 = await _user_id("w0b_k")
     r = await client.post(
         f"/api/integration/tasks/{tid_o}/subscription/pause", headers=u1)

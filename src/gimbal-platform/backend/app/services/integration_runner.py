@@ -1180,12 +1180,21 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     # UPC M2:私有空间模板 —— 仅空间所有者可执行;
                     # 转私有前的订阅者(漏网路径)按 made_private 收口
                     _member_ok = inst.holder_id == tpl.owner_id
+                elif _tpl_kind == "public":
+                    # AC-50:公共模板无订阅面(复制、映射并确认后订阅)
+                    # —— 持有人只可能是属主;存量漏网行同口径收口
+                    _member_ok = inst.holder_id == tpl.owner_id
                 else:  # normal:成员闸(属主身份不替代成员关系)
                     from ..services.zone import can_use_project_credentials
                     _member_ok = await can_use_project_credentials(
                         db, inst.holder_id, tpl.project_id)
-            if (_member_gate and _tpl_kind != "public"
-                    and not _member_ok):
+            if _member_gate and not _member_ok:
+                if _tpl_kind == "public":
+                    return await _pause_consent_changed(
+                        db, inst, tpl,
+                        paused_reason="public_template",
+                        message="公共模板不能直接调度(AC-50):请先复制"
+                                "到你的普通项目并确认订阅", lease=lease)
                 return await _pause_consent_changed(
                     db, inst, tpl,
                     paused_reason="made_private",

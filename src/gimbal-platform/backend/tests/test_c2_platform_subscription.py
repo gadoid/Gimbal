@@ -20,7 +20,7 @@ from app.core import db as db_module
 from app.models.integration_task import IntegrationTask
 from app.models.user import User
 from app.services import integration_runner as ir
-from tests.helpers import make_draft, register_and_login
+from tests.helpers import make_draft, register_and_login, mk_normal_project
 from tests.test_integration_consent_fixes import ANCHORED_STEPS, FULLS, _subscribe
 from tests.test_scenario_composer_plate_integration import (  # noqa: F401 — 模块级导入即 fixture 注册
     PlateMock, plate_mock,
@@ -132,23 +132,34 @@ async def _mk_platform_template(client: AsyncClient, plate_mock: PlateMock,
 class TestPlatformTemplateSubscription:
     async def test_template_change_pauses_and_reconfirm_revives(
             self, client: AsyncClient, plate_mock: PlateMock):
-        """订阅平台模板 → 属主改场景 → 实例暂停 template_changed →
-        重新确认(新指纹)恢复执行。"""
-        tid, ctx = await _mk_platform_template(client, plate_mock)
+        """属主改模板 → 实例暂停 template_changed → 重新确认(新指纹)
+        恢复执行(AC-50 新模型:普通项目模板成员订阅;公共模板直订已拒)。"""
+        plate_mock.fulls.update(FULLS)
+        h_own = await register_and_login(client, "c2_own")
         h_sub = await register_and_login(client, "c2_sub")
         uid_sub = await _uid("c2_sub")
+        pid = await mk_normal_project("np-c2a", {"c2_own": "admin",
+                                                 "c2_sub": "member"})
+        r = await client.post("/api/scenarios", headers=h_own, json=make_draft(
+            "sc-c2", steps=ANCHORED_STEPS, plate={"jira": "1.0#1"},
+            system=["jira"]), params={"projectId": pid})
+        assert r.status_code in (200, 201), r.text
+        r = await client.post("/api/integration/tasks", headers=h_own, json={
+            "name": "c2-np-tpl", "scenarioId": "sc-c2",
+            "identityMode": "personal", "projectId": pid,
+            "triggerCron": "*/5 * * * *", "resultPolicy": "latest"})
+        assert r.status_code in (200, 201), r.text
+        tid = r.json()["id"]
 
         r = await _subscribe(client, h_sub, tid)
         assert r.status_code in (200, 201), r.text
         inst = await _inst(tid, uid_sub)
         assert inst is not None and inst.consent_fingerprint
 
-        # 模板被改:触发周期变更(指纹七要素之「周期」;Admin+ 维护
-        # 平台模板的常规动作)
-        async with db_module.SessionLocal() as s:
-            tpl_row = await s.get(IntegrationTask, tid)
-            tpl_row.trigger_cron = "*/10 * * * *"
-            await s.commit()
+        # 模板被改:触发周期变更(指纹七要素之「周期」;属主管理面)
+        r = await client.patch(f"/api/integration/tasks/{tid}",
+                               headers=h_own, json={"triggerCron": "*/10 * * * *"})
+        assert r.status_code == 200, r.text
 
         await ir.run_instance(inst.id)
         inst = await _inst(tid, uid_sub)
@@ -163,21 +174,29 @@ class TestPlatformTemplateSubscription:
 
     async def test_legacy_instance_keeps_running_after_migration(
             self, client: AsyncClient, plate_mock: PlateMock):
-        """R1 钉:0038 双条件改写(personal ∧ public)后,存量订阅实例
-        照常执行 —— 不触发 made_private(那正是只改 identity_mode 的
-        事故形态)。"""
+        """R1 钉(AC-50 修订):0038 双条件改写(personal ∧ public)后,
+        存量订阅实例不触发 made_private(那正是只改 identity_mode 的
+        事故形态)—— 但公共模板直订/直调已按 AC-50 收口:非属主持有行
+        由运行闸暂停 public_template(零派发,须复制后订阅)。"""
         tid, _ = await _mk_platform_template(client, plate_mock,
                                              sid="sc-c2b")
-        h_sub = await register_and_login(client, "c2_sub2")
+        await register_and_login(client, "c2_sub2")   # 建用户(legacy 行直插用)
         uid_sub = await _uid("c2_sub2")
-        r = await _subscribe(client, h_sub, tid)
-        assert r.status_code in (200, 201), r.text
+        # AC-50:公共模板无订阅面 —— legacy 行直插(迁移残留模拟)
+        async with db_module.SessionLocal() as s:
+            s.add(IntegrationTask(
+                name="legacy", owner_id=await _uid("c2_own"),
+                template_id=tid, holder_id=uid_sub,
+                state="idle", enabled=True))
+            await s.commit()
         inst = await _inst(tid, uid_sub)
+        assert inst is not None
 
         await ir.run_instance(inst.id)
         inst = await _inst(tid, uid_sub)
-        # 指纹一致 + 场景公共:不因可见性暂停(R1:visibility 改写钉)
+        # 不按 made_private 误伤(R1 visibility 改写钉);AC-50 闸收口
         assert inst.paused_reason != "made_private"
+        assert inst.paused_reason == "public_template"
         assert inst.paused_reason != "template_changed"
 
 
@@ -266,10 +285,14 @@ async def test_subscriber_run_strips_dataset_sensitive_columns(
     from .helpers import seed_service_runtime
     await seed_service_runtime("jira-svc")   # M3 §8.5:定时路径硬门地址落点
     h_own = await register_and_login(client, "c2_dso")
+    h_sub = await register_and_login(client, "c2_dss")
+    pid = await mk_normal_project("np-c2ds", {"c2_dso": "admin",
+                                              "c2_dss": "member"})
     draft = make_draft("sc-c2ds", steps=ANCHORED_STEPS,
                        plate={"jira": "1.0#1"}, system=["jira"])
     draft["definition"]["config"]["vars"] = {"amount": 1, "password": ""}
-    r = await client.post("/api/scenarios", headers=h_own, json=draft)
+    r = await client.post("/api/scenarios", headers=h_own, json=draft,
+                          params={"projectId": pid})
     assert r.status_code in (200, 201), r.text
     r = await client.post("/api/scenarios/sc-c2ds/data-sets", headers=h_own,
                           json={"name": "ds", "rows": [
@@ -280,23 +303,13 @@ async def test_subscriber_run_strips_dataset_sensitive_columns(
             ComposerRunScheme.scenario_id == "sc-c2ds"))).scalars().first()
         sch.payload = {**(sch.payload or {}), "dataSetIds": [ds_id]}
         await s.commit()
-    from tests.inbound_fixtures import publish_scenario
+    r = await client.post("/api/integration/tasks", headers=h_own, json={
+        "name": "c2-ds-tpl", "scenarioId": "sc-c2ds",
+        "identityMode": "personal", "projectId": pid,
+        "triggerCron": "*/5 * * * *", "resultPolicy": "latest"})
+    assert r.status_code in (200, 201), r.text
+    tid = r.json()["id"]
 
-    await publish_scenario("sc-c2ds")
-    async with db_module.SessionLocal() as s:
-        from app.services.zone import public_project_id
-
-        tpl = IntegrationTask(
-            name="c2-ds-tpl", owner_id=await _uid("c2_dso"),
-            project_id=await public_project_id(s),
-            scenario_id="sc-c2ds", target_system="jira",
-            trigger_cron="*/5 * * * *", result_policy="latest",
-            card_template="status")
-        s.add(tpl)
-        await s.commit()
-        tid = tpl.id
-
-    h_sub = await register_and_login(client, "c2_dss")
     r = await _subscribe(client, h_sub, tid)
     assert r.status_code in (200, 201), r.text
     inst = await _inst(tid, await _uid("c2_dss"))
@@ -330,30 +343,24 @@ async def test_subscriber_run_product_has_no_author_credentials(
     from .helpers import seed_service_runtime
     await seed_service_runtime("jira-svc")   # M3 §8.5:定时路径硬门地址落点
     h_own = await register_and_login(client, "c2_fpo")
+    h_sub = await register_and_login(client, "c2_fps")
+    pid = await mk_normal_project("np-c2fp", {"c2_fpo": "admin",
+                                              "c2_fps": "member"})
     draft = make_draft("sc-c2fp", steps=ANCHORED_STEPS,
                        plate={"jira": "1.0#1"}, system=["jira"])
-    r = await client.post("/api/scenarios", headers=h_own, json=draft)
+    r = await client.post("/api/scenarios", headers=h_own, json=draft,
+                          params={"projectId": pid})
     assert r.status_code in (200, 201), r.text
     from tests.helpers import seed_legacy_users
     await seed_legacy_users("sc-c2fp", {
         "jira-svc": {"url": "https://jira", "username": "author-acct",
                      "password": secret}})
-    from tests.inbound_fixtures import publish_scenario
-
-    await publish_scenario("sc-c2fp")
-    async with db_module.SessionLocal() as s:
-        from app.services.zone import public_project_id
-
-        tpl = IntegrationTask(
-            name="c2-fp-tpl", owner_id=await _uid("c2_fpo"),
-            project_id=await public_project_id(s),
-            scenario_id="sc-c2fp", target_system="jira",
-            trigger_cron="*/5 * * * *", result_policy="latest",
-            card_template="status")
-        s.add(tpl)
-        await s.commit()
-        tid = tpl.id
-    h_sub = await register_and_login(client, "c2_fps")
+    r = await client.post("/api/integration/tasks", headers=h_own, json={
+        "name": "c2-fp-tpl", "scenarioId": "sc-c2fp",
+        "identityMode": "personal", "projectId": pid,
+        "triggerCron": "*/5 * * * *", "resultPolicy": "latest"})
+    assert r.status_code in (200, 201), r.text
+    tid = r.json()["id"]
     r = await _subscribe(client, h_sub, tid)
     assert r.status_code in (200, 201), r.text
     inst = await _inst(tid, await _uid("c2_fps"))

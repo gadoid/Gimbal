@@ -892,3 +892,32 @@ Ruff changed 文件零新增;`git diff --check` 干净。
 生成件 noop);Ruff changed 文件零新增(git stash 真路径 + 项目配置
 对比;/tmp 副本对比受 ruff 配置解析失真,弃用);
 `git diff --check` 干净。
+
+## 3.18 复核轮五:AC-50 公共模板订阅面收口 + 订阅指纹同读入库(2026-11-27 续)
+
+* **P1 公共模板直接订阅绕过复制/映射/确认**(§22 AC-50):订阅入口补
+  闸 —— 公共项目模板非属主 subscribe → 409
+  `public_template_subscribe_forbidden`(属主重确认不受闸);运行时
+  成员门公共分支收口(原 `_tpl_kind != "public"` 豁免删除):公共模板
+  非属主持有行 → 派发前暂停 `public_template`(零派发,存量漏网行
+  同口径)。正路 = 复制(fork)→ 建本域模板 → 确认订阅,用例钉住。
+* **P1 订阅指纹同读入库**:subscribe 原流程「consent_fingerprint_now
+  比对 → refresh_consent 二次重算入库」在两读之间方案可被同业务 ID
+  重建 —— 用户确认 A、入库 B,派发闸对 B 无感。改为保存**已通过与
+  回传值比对的那次指纹**(consented_at 同拍写入);refresh_consent
+  保留给创建面。
+* **测试迁移(新订阅模型)**:W0a/W0b/W2/consent_fixes/C2/horizontal
+  订阅语义用例从「公共模板直订」迁到普通项目模板(成员订阅;新
+  helpers:`mk_normal_template` / w0b `_mk_task` 重构 / consent_fixes
+  `_mk_normal_tid`);公共模板上的 legacy 行用例(转私有联动/漏网/
+  转移订阅实例)改为直插行模拟;新增公共直订拒绝 + 零派发 + fork 正
+  路用例;grep 守卫白名单收编三行(成员门公共分支同形 + 订阅闸)。
+  R1 钉(0038 迁移)随 AC-50 修订:存量非属主公共行 = public_
+  template 暂停(非 made_private 误伤语义保持)。
+
+**验证**:定向回归(W0a 8;W0b 6;W2 + horizontal + S0 + consent_fixes
++ C2 + s16 转移 + 守卫)全绿;全量 `2384 passed / 2 skipped / 0
+failed`(真实 PG 15432,xdist;+2 = 公共直订拒绝/私有 owner 腿);
+契约快照重生(`public_template_subscribe_forbidden` 新码入册,前端
+errorCodes 同步);Ruff changed 文件 13 份零新增(git stash 真路径
+对比,违例总数 133 = 133);`git diff --check` 干净。

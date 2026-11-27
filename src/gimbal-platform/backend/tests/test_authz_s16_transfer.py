@@ -154,9 +154,10 @@ class TestIntegrationTemplateTransfer:
 
         h_m = await role_headers(client, "s16_im", role="user")
         h_new = await role_headers(client, "s16_inew", role="user")
-        h_sub = await role_headers(client, "s16_isub", role="user")
+        # 建订阅者用户(实例行直插用;公共模板无订阅面,AC-50)
+        await role_headers(client, "s16_isub", role="user")
         h_adm = await role_headers(client, "s16_iadm", role="admin")
-        # 场景发布 → 公共模板引用副本
+        # 场景发布 → 公共模板引用副本(transfer = 仅公共项目模板的面)
         await client.post("/api/scenarios", headers=h_m,
                           json=make_draft("sc-s16-ig"))
         from tests.inbound_fixtures import publish_scenario
@@ -168,13 +169,21 @@ class TestIntegrationTemplateTransfer:
             "visibility": "public"})
         assert r.status_code == 201, r.text
         tid = r.json()["id"]
-        # 订阅者建实例(fingerprint 取自摘要,与显式订阅入口同款)
-        fp = (await client.get(
-            f"/api/integration/tasks/{tid}/subscription-summary",
-            headers=h_sub)).json()["fingerprint"]
-        r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
-                              headers=h_sub, json={"fingerprint": fp})
-        assert r.status_code == 200, r.text
+        # 订阅实例:公共模板自 AC-50 起无订阅面 —— legacy 行直插模拟
+        # (转移语义钉的是「订阅实例保留/维护者自有实例清除」)
+        from app.core import db as db_module
+        from app.models.user import User as _U
+        from sqlalchemy import select as _sel
+
+        async with db_module.SessionLocal() as db:
+            sub_uid = (await db.execute(_sel(_U.id).where(
+                _U.username == "s16_isub"))).scalar_one()
+            db.add(IntegrationTask(
+                name="legacy", owner_id=(await db.get(
+                    IntegrationTask, tid)).owner_id,
+                template_id=tid, holder_id=sub_uid,
+                state="idle", enabled=True))
+            await db.commit()
 
         new_uid = await _uid(client, h_adm, "s16_inew")
         tpl = await _row(IntegrationTask, id=tid)
