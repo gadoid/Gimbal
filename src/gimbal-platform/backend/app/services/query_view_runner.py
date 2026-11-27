@@ -213,6 +213,22 @@ def drop_credential(owner_id: int, alias: str) -> None:
                       and ck[2][:2] == (owner_id, alias))
 
 
+def drop_project_pool(project_id: int) -> None:
+    """项目凭证写面的缓存失效钩子(project_credentials 路由调用):
+    项目池键 ``(场景属主, alias, pool)`` 的属主维度 = 场景执行身份,
+    路由处拿不到 —— 按**池维度**整池清(凭证变更频率低,粗粒度换
+    正确):清 会话 + 401 拉黑 + L1 行集(cred 分量末位 = pool)。"""
+    for k in [k for k in _cred_sessions
+              if isinstance(k, tuple) and len(k) == 3 and k[2] == project_id]:
+        _cred_sessions.pop(k, None)
+    for k in [k for k in _cred_dead
+              if isinstance(k, tuple) and len(k) == 3 and k[2] == project_id]:
+        _cred_dead.discard(k)
+    _cache.drop_where(lambda ck: isinstance(ck, tuple) and len(ck) == 3
+                      and isinstance(ck[2], tuple) and len(ck[2]) == 3
+                      and ck[2][2] == project_id)
+
+
 def _bump_breaker(name: str) -> None:
     br = _view_breaker.get(name) or {"fails": 0, "open_until": 0.0}
     br["fails"] += 1

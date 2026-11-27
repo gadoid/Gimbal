@@ -708,3 +708,52 @@ blocked → 409;派发闸仍在 run_instance。登记表 §1 后补「schedule
 **开放项登记**(不变):§11.4 remove/递归合并(carry 值层结构,
 登记表 §4 行)、AccessToken principal_id(§20.1)、Integration 拆表
 (§5 终态)、§13.1 状态机全貌端点、M4 前端、M5 重建准入。
+
+## 3.13 复核轮:外部复审七项的 M3 收口 + M5 三项登记(2026-11-27 续)
+
+外部复审列出七项(默认空间并发×2、项目凭证缓存、JWT 闸绕过、
+query_alias 消歧矛盾、备份漏公共资产/verify 名不副实/非原子写)。
+逐条复核**全部属实**;按里程碑归属拆分:M3 四项本轮收口,M5 三项
+(均在 scenario_inventory.py 导出保护面)登记待 M5 准入切片。
+
+### M3 收口(本轮)
+
+* **默认空间生命周期并发窗口**(§3.11.3 落地点的锁序补漏):
+  set-default 的 `_require_active` 移到 `refresh(with_for_update=True)`
+  **之后**(修前归档可在预检与加锁之间提交,归档空间仍被置默认);
+  private 项目删除补行锁 + 锁后复查 `is_default`(修前并发 set-default
+  可越过"默认空间不可删";DB 层 `uq_projects_private_default` 谓词
+  不含 status、不拦删除,应用层是唯一防线)。
+* **项目凭证写面清查询缓存**(§7.1 点 4 项目池通道):
+  `query_view_runner.drop_project_pool(project_id)` 新钩子 —— 项目池
+  键 `(场景属主, alias, pool)` 的属主维度路由处拿不到,按**池分量**
+  整池清(会话 + 401 拉黑 + L1 行集);`project_credentials._after_write`
+  接线(创建/改密/默认位/删除同清,与 auth_sessions 个人钩子同闭环)。
+* **JWT 面 blocked 闸服务端强制**(§20.3):dispatch 闸从"仅显式
+  schemeId 可解析才复核"改为 `resolve_for_run` 单源取**生效方案**
+  (显式可解析 = 该行;缺省/悬空/跨场景 = 默认方案)—— 与令牌面
+  `_apply_scheme_recipe`/查询面同口径,schemeId 缺省不再绕闸;唯一
+  免闸 = `raw` 保留字(显式零方案意图)。悬空 id 用例口径随之更新
+  (回落默认 ready → 放行腿)+ 新增缺省绕闸负向。
+* **显式 query_alias 消歧**(§7.1 点 3):`resolve_query_context` 增
+  `query_alias` 参数,显式点名胜出(显式 > 步骤直接身份 > 生效别名)
+  且先行短路多直接身份 422 —— 修前路由先解析上下文后应用显式别名,
+  报 422 的文案"请改用明确的 query_alias"所指通路实际不通。
+
+### M5 三项登记(待准入切片,均在 M5 前置件导出保护面)
+
+1. **公共化资产漏出备份 manifest**:users.py publicize 对私有迁公共
+   与已是公共的场景都置 `owner_id=None`(署名留 owner_name 快照),
+   而 `scenario_inventory.export_inventory` 把**全部** owner=None 行
+   当"整删残留"(`reason: owner_missing`)跳过导出 —— 公共场景及
+   公开化场景不进备份包。修法方向:owner=None 行按系统视角导出
+   (全保真对公共内容成立)或以 owner_name 快照参与。
+2. **verify_inventory 名不副实**:签名只收 `out_dir`,不接 db —— 只
+   校验备份目录自身完整性(包体存在 + 摘要一致),证明不了恢复后
+   库内容完整;M5 序列④"对账"需接恢复后库连接做内容级比对。
+3. **备份落盘非原子**:包体逐个直接 `write_text` 终路径、manifest
+   最后写 —— 中途崩溃留旧 manifest + 部分新包(半截 JSON 还会让
+   verify 的 json.loads 崩);应临时目录写完 + rename 原子替换。
+
+**验证**:M3 定向回归绿(装配闸 + 查询面 19;生命周期/处置/查询路由
+/auth 会话 73);全量回归见下。

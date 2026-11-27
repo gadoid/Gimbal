@@ -811,8 +811,8 @@ async def set_default_space(
                     "message": "默认空间语义仅适用于私有空间"
                                "(普通/公共项目无默认概念)"})
     # _load_visible_project 对 private 已是所有者判定(他人不可见 404)
-    _require_active(proj)
     await db.refresh(proj, with_for_update=True)    # 串行化并发切换
+    _require_active(proj)   # 锁后复查:归档可在预检与加锁之间提交(§4)
     if proj.is_default:
         return await _project_out(db, user, proj)        # 幂等:已是默认
     from ..services.project_space import get_default_private_project
@@ -847,6 +847,9 @@ async def delete_project(
     成员行随 CASCADE 消失(项目没了,成员关系无意义)。"""
     proj, _ = await _load_visible_project(db, user, project_id)
     if proj.kind == Project.KIND_PRIVATE:
+        # 行锁后复查默认位:并发 set-default 可在预检后提交,预检不含锁
+        # 会漏掉「删除前刚成为默认」的窗口(§4 每用户恰一默认)
+        await db.refresh(proj, with_for_update=True)
         if proj.is_default:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

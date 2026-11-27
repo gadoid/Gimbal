@@ -936,20 +936,18 @@ async def dispatch_target(
 
     # ── §20.3 统一装配闸(UPC M3 execute 面)────────────────────────
     # 方案待修复(blocked)不进入执行装配 —— 先于执行配置/凭证/别名解析
-    # 与执行行创建(AC-45 在单场景面的成立)。JWT 面配方由前端按所选
-    # 方案内联,后端按溯源 scheme_id 复核持久化状态;方案行已删(悬空
-    # 溯源 id)不拦 —— 配方本体是请求给的,与 resolve_for_run §7 既有
-    # 回落口径一致。Suite 直跑成员经此闸 → Conflict 归 skipped(聚合面
-    # 语义:单成员禁跑不掀批次,reason 记 scheme_repair_required)。
+    # 与执行行创建(AC-45 在单场景面的成立)。闸按 §7 选择口径取**生效
+    # 方案**(resolve_for_run 单源,与令牌面 _apply_scheme_recipe/查询面
+    # 同款回落):显式 id 可解析 = 该行;缺省/悬空/跨场景 = 默认方案
+    # —— schemeId 缺省不再是可绕过闸的"纯溯源"字段(服务端强制)。
+    # 唯一免闸 = "raw" 保留字(显式零方案意图)。Suite 直跑成员经此闸
+    # → Conflict 归 skipped(聚合面语义:单成员禁跑不掀批次,reason
+    # 记 scheme_repair_required)。
     _gate_scheme = None
-    if (getattr(req, "scheme_id", None)
-            and req.scheme_id != RAW_SCHEME_ID):
-        from .scheme_store import get_row as _scheme_get_row
-        try:
-            _gate_scheme = await _scheme_get_row(
-                db, target.scenario_id, req.scheme_id)
-        except KeyError:
-            _gate_scheme = None      # 悬空溯源 id:配方由请求携带,放行
+    if getattr(req, "scheme_id", None) != RAW_SCHEME_ID:
+        from .scheme_store import resolve_for_run as _scheme_resolve_for_run
+        _gate_scheme = await _scheme_resolve_for_run(
+            db, target.scenario_id, getattr(req, "scheme_id", None))
         if _gate_scheme is not None and _gate_scheme.repair_status == "blocked":
             raise Conflict(
                 "scheme_repair_required",

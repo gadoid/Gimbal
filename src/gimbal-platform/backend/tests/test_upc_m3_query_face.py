@@ -181,6 +181,38 @@ async def test_query_context_call_user_direct_ref(client, monkeypatch):
         await s.rollback()
 
 
+async def test_query_context_explicit_alias_disambiguates_multi_direct(
+        client, monkeypatch):
+    """§7.1 消歧通路:步骤多直接身份 + 调用方显式 query_alias 点名
+    → 不再 422 query_identity_ambiguous,按点名身份解析(错误文案
+    "请改用明确的 query_alias" 的实际通路 —— 消歧在上下文单源内短路)。"""
+    from app.services import query_context as qc
+
+    _install_plate(monkeypatch, _IDX)
+    h = await register_and_login(client, "q71f_own")
+    uid = await _uid(client, h)
+    async with db_module.SessionLocal() as s:
+        await seed_identity_fixture(
+            s, alias=ALIAS, username="u", password="p",
+            service="svc", owner_id=uid,
+            env_name="查询环境", login_url=None,
+            base_url="https://svc-deploy.internal")
+        await s.commit()
+    await _save_scenario(client, h, "sc-q71f", [{
+        "call": {"kind": "call", "protocol": "http", "service": "svc",
+                 "method": "GET", "path": "/a", "user": ALIAS,
+                 "headers": {"X-Tok": "${auth.other-alias.token}"}},
+        "request": {"kind": "request", "body": {}},
+    }])
+    async with db_module.SessionLocal() as s:
+        user = type("U", (), {"id": uid})()
+        ctx = await qc.resolve_query_context(
+            s, user=user, scenario_id="sc-q71f", step_index=0,
+            query_alias=ALIAS)
+        assert ctx.query_alias == ALIAS      # 显式点名胜出(消歧)
+        await s.rollback()
+
+
 # ── 池通道与缓存隔离(§7.1 点 4)────────────────────────────────────
 
 async def test_rows_credential_source_project_channel(client, monkeypatch):
@@ -228,3 +260,25 @@ async def test_pool_dimension_isolates_sessions_and_cache():
     for ck in ("v1", None, project_key), ("v1", None, personal_key):
         _e, fresh = run._cache.lookup(ck)
         assert not fresh, f"池变体缓存未清: {ck}"
+
+
+async def test_drop_project_pool_clears_pool_channel():
+    """项目凭证写面钩子:drop_project_pool 按**池分量**整池清 ——
+    项目池键的属主维度 = 场景执行身份(凭证路由处拿不到),同
+    (owner, alias) 的个人池键与其它项目池键不误伤。"""
+    personal_key = (7, ALIAS, None)
+    project_key = (9, ALIAS, 3)     # 场景属主 9(≠凭证管理员 7)的项目池
+    other_pool_key = (7, ALIAS, 4)
+    run._cred_sessions[personal_key] = object()
+    run._cred_sessions[project_key] = object()
+    run._cred_sessions[other_pool_key] = object()
+    run._cred_dead.add(project_key)
+    run._cache.put(("v1", None, project_key), (["r"], False), "2026-01-01")
+
+    run.drop_project_pool(3)
+    assert project_key not in run._cred_sessions
+    assert project_key not in run._cred_dead
+    _e, fresh = run._cache.lookup(("v1", None, project_key))
+    assert not fresh, "项目池 L1 行集未清"
+    assert personal_key in run._cred_sessions
+    assert other_pool_key in run._cred_sessions

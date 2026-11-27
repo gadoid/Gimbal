@@ -97,7 +97,8 @@ async def get_rows(
         try:
             ctx = await query_context.resolve_query_context(
                 db, user=user, scenario_id=scenario_id,
-                step_index=step_index, scheme_id=scheme_id)
+                step_index=step_index, scheme_id=scheme_id,
+                query_alias=query_alias)
         except query_context.QueryContextError as e:
             raise HTTPException(
                 status_code=e.status,
@@ -105,10 +106,9 @@ async def get_rows(
         service_url = ctx.service_url
         ctx_owner_id = ctx.owner_id
         ctx_service = ctx.service
-        # 查询身份缺省 = 步骤生效别名(执行视角);显式 query_alias 优先
-        # (headers ${auth.<tag>} 引用就是该步执行身份的声明,前端解析)
-        if query_alias is None:
-            query_alias = ctx.query_alias
+        # 查询身份单源解析(显式 query_alias > 步骤直接身份 > 生效别名
+        # —— 显式别名同时是 §7.1 多直接身份的消歧手段,在上下文内短路)
+        query_alias = ctx.query_alias
         # §7.1 点 4:项目池资格(请求人须是场景所属普通项目成员 —— 与
         # 执行面 can_use_project_credentials 同判;显式覆盖通道无场景
         # 语境 → 恒个人池)

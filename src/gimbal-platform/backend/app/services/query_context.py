@@ -11,17 +11,19 @@ rows 路由的前提(query_views.py 路由 docstring)——「service_url 由
 * 执行标签:``env_chain.resolve_execution_tag``(身份 > 项目默认 >
   平台默认;混拼 409,与派发侧硬拦同口径);
 * 地址:``service_aliases.deployment_urls`` 部署表单源(authz M2a S6);
-* 查询身份兜底:步骤服务的生效别名(``effective_alias`` —— 执行视角
-  = 查询视角的既有裁定不变;headers ``${auth.<tag>}`` 引用仍由前端
-  解析后经 ``query_alias`` 显式覆盖,此处只做缺省);
+* 查询身份:显式 ``query_alias`` > 步骤直接身份 > 步骤服务生效别名
+  (``effective_alias`` —— 执行视角 = 查询视角的既有裁定不变;
+  headers ``${auth.<tag>}`` 引用由前端解析后经 ``query_alias`` 显式
+  点名,同时也是多直接身份的消歧通路);
 * ``owner_id`` = 场景属主:查询凭证按**执行身份**装载(与派发侧
   prepare_exec 同视角 —— 成员查询项目场景,用的也是场景执行身份)。
 
 组合 v4 §7.1(方案感知,随 UPC M3 执行装配接入):绑定基础从定义级
 改为「schemeId 解析 + 组合垫底」(查询视角 = 执行视角);§20.3 装配闸
-(blocked 不进装配);步骤多直接身份不猜测(422 ``query_identity_
-ambiguous``,复用 ``auth_ref_scan.step_auth_refs`` —— 含 ``call.user``
-直引)。**未保存编辑态不参与**:后端只认库中方案行。
+(blocked 不进装配);步骤多直接身份且未显式点名不猜测(422
+``query_identity_ambiguous``,复用 ``auth_ref_scan.step_auth_refs``
+—— 含 ``call.user`` 直引;显式 ``query_alias`` 点名即消歧)。
+**未保存编辑态不参与**:后端只认库中方案行。
 """
 from __future__ import annotations
 
@@ -58,13 +60,14 @@ class QueryContext:
     service: str              # 步骤服务键(service_mismatch 校验面)
     service_url: str          # 当前执行标签的部署地址
     owner_id: int             # 查询凭证装载按场景执行身份
-    query_alias: str | None   # 缺省查询别名(显式 query_alias 优先)
+    query_alias: str | None   # 查询身份(显式点名 > 步骤直接身份 > 生效别名)
     project_id: "int | None" = None   # 凭证池通道(S8 项目池资格判定)
 
 
 async def resolve_query_context(
     db: AsyncSession, *, user, scenario_id: str, step_index: int,
     scheme_id: "str | None" = None,
+    query_alias: "str | None" = None,
 ) -> QueryContext:
     """已保存场景 + 步骤位 → 查询地址与身份(全链服务端解析)。
 
@@ -76,6 +79,11 @@ async def resolve_query_context(
     回落);未保存编辑态不参与 —— 解析到的是库中方案行的上一次保存
     内容。blocked 方案先于一切身份/标签/地址解析拒绝(§20.3,与执行
     面同码 409);查询 L1/单飞键随 (view, 凭证) 不串台(见 runner)。
+
+    ``query_alias``(调用方显式点名):身份优先级最高(显式 > 步骤直接
+    身份 > 生效别名),**同时是 §7.1 多直接身份的消歧手段** —— 给了
+    显式别名就按它走,不再因步骤声明多直接身份 422(错误文案
+    "请改用明确的 query_alias" 指的就是这条通路)。
     """
     from ..routers._ownership import can_read_scenario_row
 
@@ -113,10 +121,11 @@ async def resolve_query_context(
             "入口完成修复(§20.3)", status=409)
 
     # ── 步骤直接身份(§7.1 点 2/3):step_auth_refs 复用(${auth.*}
-    #    模板 ∪ call.user 直引)。多直接身份无法唯一判定 → 422,不取
-    #    第一个(前端 headers 首命中就是「取第一个」,这里替它挡住)。
+    #    模板 ∪ call.user 直引)。多直接身份且调用方未点名 → 422,不取
+    #    第一个(前端 headers 首命中就是「取第一个」,这里替它挡住;
+    #    显式 query_alias 是文案指名的消歧通路,先行短路)。
     direct_refs = step_auth_refs(step)
-    if len(direct_refs) > 1:
+    if len(direct_refs) > 1 and not query_alias:
         raise QueryContextError(
             "query_identity_ambiguous",
             f"步骤 #{step_index} 声明了多个直接身份({direct_refs}),"
@@ -130,7 +139,9 @@ async def resolve_query_context(
     else:
         bindings = (definition.get("config") or {}).get("serviceBindings")
 
-    if len(direct_refs) == 1:
+    if query_alias:
+        alias = query_alias        # 显式点名(消歧;优先级最高)
+    elif len(direct_refs) == 1:
         alias = direct_refs[0]     # 步骤声明的直接身份优先(执行视角)
     else:
         alias = effective_alias(svc, bindings)

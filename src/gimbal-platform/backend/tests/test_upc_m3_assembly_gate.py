@@ -89,9 +89,10 @@ async def test_dispatch_target_blocked_scheme_rejected_before_assembly(
 
 async def test_dispatch_target_stale_scheme_id_recipes_from_request(
         client: AsyncClient, monkeypatch):
-    """悬空溯源 schemeId(方案已删/他属)不拦 —— 配方本体由请求携带
-    (resolve_for_run §7 回落口径):闸跳过、执行照常入队(此腿只验
-    「闸不过度拦截」,执行成败与闸无关,断言拿到 executionId)。"""
+    """悬空溯源 schemeId(方案已删/他属)按 §7 回落**默认方案**复核闸
+    (与令牌面/查询面同口径):默认方案 ready → 闸放行、执行照常入队
+    (此腿只验「回落复核不过度拦截」,执行成败与闸无关,断言拿到
+    executionId;blocked 默认方案的拦截腿 = 下一个用例)。"""
     from app.schemas.scenario_composer import RunRequest
     from app.services import run_dispatcher
 
@@ -113,10 +114,41 @@ async def test_dispatch_target_stale_scheme_id_recipes_from_request(
         except run_dispatcher.Conflict as e:
             # 唯一不允许的是闸码本身;其它 Conflict 只证明闸已放行
             assert e.code != "scheme_repair_required", \
-                "悬空溯源 id 不应触发装配闸"
+                "悬空溯源 id 经默认方案复核(ready)不应触发装配闸"
             pytest.fail(f"布景意外: {e.code}")
         # 执行行已建(闸放行;后续阶段与本断言无关)
         assert resp.execution_id > 0
+
+
+async def test_dispatch_target_blocked_default_scheme_rejected_without_scheme_id(
+        client: AsyncClient):
+    """schemeId 缺省不再绕过闸:默认方案 blocked → dispatch Conflict
+    scheme_repair_required(§7 回落单源,与令牌面/查询面同口径 ——
+    服务端强制,不依赖客户端诚实传溯源字段)。"""
+    from app.schemas.scenario_composer import RunRequest
+    from app.services import run_dispatcher
+
+    h = await register_and_login(client, "m3ex_own2", "pw123456")
+    uid = (await client.get("/api/auth/me", headers=h)).json()["user"]["id"]
+    await client.post("/api/scenarios", headers=h,
+                      json=make_draft("sc-m3ex2", steps=STEPS))
+    # 场景创建钩子已物化默认方案(ready);置 blocked
+    async with db_module.SessionLocal() as s:
+        default_row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-m3ex2",
+            ComposerRunScheme.is_default == True))).scalar_one()  # noqa: E712
+    await _block(default_row.scheme_id, uid)
+
+    async with db_module.SessionLocal() as s:
+        from app.models.user import User
+
+        user_id = (await s.execute(select(User.id).where(
+            User.username == "m3ex_own2"))).scalar_one()
+        req = RunRequest(scenarioId="sc-m3ex2")     # 不带 schemeId
+        with pytest.raises(run_dispatcher.Conflict) as ei:
+            await run_dispatcher.dispatch_run(s, user_id, req)
+            await s.commit()
+        assert ei.value.code == "scheme_repair_required"
 
 
 # ── execute 面:令牌执行(_apply_scheme_recipe)────────────────────

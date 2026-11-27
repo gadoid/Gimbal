@@ -127,7 +127,12 @@ async def _get_cred(db: AsyncSession, project_id: int, cid: int) -> AuthAccount:
 
 async def _after_write(db: AsyncSession, user, proj: Project, op: str,
                        a) -> None:
-    """审计 + 复活钩子(best-effort,均不阻断写面)。"""
+    """审计 + 查询面缓存失效 + 复活钩子(best-effort,均不阻断写面)。"""
+    # 查询面项目池键 (场景属主, alias, pool) 随凭证写面整体作废
+    # (创建/改密/默认位/删除同清 —— 与 auth_sessions 个人钩子同闭环;
+    # 池维度整清,路由处无场景属主维度)
+    from ..services import query_view_runner as _qvr
+    _qvr.drop_project_pool(proj.id)
     await _audit(db, user, "project.credential.write", proj, {
         "op": op, "credentialId": a.id,
         "system": a.system, "username": a.username})
