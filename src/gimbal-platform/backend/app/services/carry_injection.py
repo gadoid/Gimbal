@@ -73,6 +73,7 @@ async def merge_carry_tiers(
     env_id: int | None,
     exec_overrides: dict[str, str | None] | None = None,
     exec_removals: "list[str] | None" = None,
+    defaults_by_tier: "dict[tuple[str, int], dict] | None" = None,
 ) -> dict[str, dict]:
     """§8.9 键域**单源**合并(执行链 build_carry_context 与预览
     resolve_effective_config 共用 —— 同一函数,链序不可能漂移)。
@@ -96,7 +97,12 @@ async def merge_carry_tiers(
     """
     merged: dict[str, dict] = {}
     for t in tiers:
-        for path, value in (await carry_store.get_defaults(db, t)).items():
+        # 层默认查询可由调用方按层预取(defaults_by_tier —— 本函数被
+        # 逐服务调用,层默认与服务无关,不预取 = 服务数 × 层数 N+1)
+        t_def = (defaults_by_tier or {}).get(t)
+        if t_def is None:
+            t_def = await carry_store.get_defaults(db, t)
+        for path, value in t_def.items():
             merged[path] = {"value": value,
                             "source": f"{t[0]}:{t[1]}:defaults"}
         t_base = await carry_store.get_bindings(db, base, t)
@@ -217,10 +223,13 @@ async def build_carry_context(
     # 层默认原样快照(§11.4 复核 P1 起仅供**无锚点降级门控**取值 ——
     # 锚点步骤的默认已随 merge_carry_tiers 入单源合并,物化层不再把
     # 本快照当回填源:被选中配置删除的键不得从这里回流)
+    # 层默认按层预取一次(逐服务调用 merge —— 层默认与服务无关,
+    # 不预取 = 服务数 × 层数 N+1);global_defaults 快照 = 各层并集
+    tier_defaults = {t: await carry_store.get_defaults(db, t)
+                     for t in tiers}
     defaults: dict[str, str | None] = {}
     for t in tiers:
-        defaults = {**defaults,
-                    **await carry_store.get_defaults(db, t)}
+        defaults = {**defaults, **tier_defaults[t]}
     raw_services: dict[str, None] = {}
     for step in raw_steps:
         if not isinstance(step, dict):
@@ -258,7 +267,8 @@ async def build_carry_context(
                 instance_key=system_of.get(base) or None,
                 env_id=env_id,
                 exec_overrides=(exec_overrides or {}).get(base),
-                exec_removals=(exec_removals or {}).get(base))
+                exec_removals=(exec_removals or {}).get(base),
+                defaults_by_tier=tier_defaults)
             service_bindings[raw] = {
                 path: m["value"] for path, m in merged.items()}
 

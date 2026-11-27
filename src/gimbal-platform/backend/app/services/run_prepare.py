@@ -945,6 +945,10 @@ async def resolve_effective_config(
             sa_select(DBService.name, DBService.system).where(
                 DBService.name.in_(bases_known)))).all())
     carry_env = env.env_id if env is not None else None
+    # 层默认按层预取一次(逐服务调用 merge —— 层默认与服务无关,
+    # 不预取 = 服务数 × 层数 N+1;下方 defaults_out 同源复用)
+    tier_defaults = {t: await carry_store.get_defaults(db, t)
+                     for t in tiers}
     for raw, base in base_of.items():
         if base is None:
             continue
@@ -954,11 +958,11 @@ async def resolve_effective_config(
             instance_key=system_of.get(base) or None,
             env_id=carry_env,
             exec_overrides=(exec_carry_overrides or {}).get(base),
-            exec_removals=(exec_carry_removals or {}).get(base))
+            exec_removals=(exec_carry_removals or {}).get(base),
+            defaults_by_tier=tier_defaults)
     defaults_out: dict[str, dict] = {}
     for t in tiers:
-        t_rows = await carry_store.get_defaults(db, t)
-        for path, value in t_rows.items():
+        for path, value in tier_defaults[t].items():
             defaults_out[path] = {"value": value,
                                   "source": f"{t[0]}:{t[1]}"}
 

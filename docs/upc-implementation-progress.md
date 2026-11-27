@@ -1125,3 +1125,29 @@ carry_injection / endpoint_anchoring / import_pipeline)全绿;契约
 remove 表达),完成后以「低层删除 + 高层重新定义同解析」验收
 (现测试的「高层重建」是改配置重跑,不是同一解析内的层间覆盖)。
 列入 §11.4 值表扩展切片,与 AC-49 订阅绑定切片同批排期。
+
+## 3.24 复核轮十一:remove 寻址复核确认 + 层默认预取消 N+1(2026-11-27 续)
+
+* **remove 指针寻址(复核 P1)—— 复核确认已在 861bbf11 闭环**:
+  本轮评审证据对应 §3.22(bb18dbcd)状态;§3.23(861bbf11)已把
+  合并删除改为**按最终请求体路径归一匹配**(`$.headers.legacy` 与
+  平键两形命中 + 父对象连带子键),设计原例 `/headers/legacy` 的
+  完整链路用例(配置 API → 预览 → materialize 请求体)当时已改用
+  设计原例指针并验证通过 —— 「测试改用 /$.legacy 绕开冻结稿样例」
+  的状态不再成立。解码产物 = 体路径(寻址单形),仅合并匹配做两形
+  归一,`$.` 前缀指针写法保留兼容。
+* **P2(AC-48 部分完成)—— 延期登记维持**:remove 只在 ExecConfig
+  层表达;各保留层 remove + 对象同类型递归合并 = §11.4 值表扩展
+  切片(§3.23 已登记,与 AC-49 订阅绑定切片同批排期)。层默认入
+  单源、删除后不回填两点方向确认。
+* **层默认查询 N+1(Low)**:`merge_carry_tiers` 被逐服务调用,层
+  默认与服务无关 —— 每服务 × 每层重复查询。增 `defaults_by_tier`
+  预取参数(缺省 = 旧行为,直调方兼容);两个调用方
+  (build_carry_context / resolve_effective_config)按层预取一次
+  传入,层默认查询从 服务数 × 层数 降为 层数;build_carry_context
+  的 global_defaults 并集与预览 defaults_out 同源复用同一预取。
+
+**验证**:定向回归(exec_config_chain 16 / carry_injection /
+materialize / carry_api / adhoc 105)全绿;全量 `2393 passed /
+2 skipped / 0 failed`(真实 PG 15432,xdist);Ruff changed 文件
+规则码零漂移;`git diff --check` 干净。
