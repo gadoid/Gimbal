@@ -956,3 +956,46 @@ xdist;+2 终裁验收);契约快照重生
 (`public_template_dispatch_forbidden` 新码入册);Ruff changed 文件
 零新增(git stash 真路径对比);grep 守卫白名单计数随成员门公共分支
 删除同步(2→1);`git diff --check` 干净。
+
+## 3.20 复核轮七:强制暂停原因防改写 + 指纹身份/版本补齐 + 零派发断言换真实通道(2026-11-27 续)
+
+* **手动暂停不得覆盖强制暂停原因**(复核 P1):手动暂停写点对**已
+  处于强制暂停**(非 _RESUMABLE 家族:scheme_blocked /
+  template_changed / made_private / public_template / token_* /
+  missing_credential)的订阅改为幂等保持原原因 —— 此前重按手动暂停
+  会把 scheme_blocked 改写成 manual,方案修复后普通恢复入口(方案
+  已 ready)即可回 idle,绕过重新确认;指纹同值时派发前比对也补不
+  回这次确认。resume 提示语补 scheme_blocked / public_template 引导。
+* **确认指纹补齐身份/版本组**(v2.10 §11.5「实际目标项目、模板及
+  版本、实际 Scheme 及修订、组合 ID 及修订」;复核 P1):指纹投影
+  新增 ``target``(实际目标项目 id + **不可复用 project_uid** + 本地
+  模板行 id/版本 ``updated_at``),``scheme_identity`` 增
+  ``schemeRevision`` —— 同 UID 目标迁移、模板行修订(含未入内容投
+  影的管理字段:名称/映射/令牌绑定)、方案重排修订不再靠内容碰巧
+  不变而漏确认。三个计算点(订阅摘要/重确认/派发前)同一算法;
+  ``target`` 按 ``scen.project_id`` 解析(目标迁移态与模板行项目分
+  叉时取真实目标);``updated_at`` 显式 SELECT 取数(同会话写模板
+  行后 ORM 侧该属性被卸载待服务端回填,同步读 = MissingGreenlet;
+  显式 SELECT 自动 autoflush,订阅/派发两侧同值)。
+* **零派发断言换真实外呼通道**(复核 P2):run_instance 本就不写
+  Execution 行,「零 Execution 行」是恒真断言 —— 两用例改在实际对
+  外执行通道(channels.run_case)装调用计数,覆盖手动触发与定时领
+  取两条路径。
+* **验收用例**(用户指定口径):① 迁移腿 —— 场景+方案行+模板行整
+  体迁往另一普通项目(复合 FK SET CONSTRAINTS DEFERRED 同事务迁
+  移;断言 scheme_uid/修订/内容不变)旧订阅派发即暂停
+  template_changed、旧预览指纹再确认 409、新指纹重确认恢复;② 修
+  订腿 —— 同 payload 重存(内容逐字相同,revision+1 唯一变化)旧
+  订阅暂停、旧预览 409、重确认恢复;③ 暂停覆盖腿 —— blocked 暂停
+  后重按手动暂停,原因保持 scheme_blocked,修复后 resume 仍 409,
+  再订阅才恢复。
+* **既有用例收编**(新闸的正确暴露):state_mapping 直写模板行、
+  s0 schemeId 直改模板行两用例在模板行写后补同会话重确认
+  (refresh_consent;s0 直改腿不走订阅面 —— 订阅绑定闸会拒绝他场景
+  schemeId,该腿验证 runner 级回落纵深防御)。
+
+**验证**:全量 `2388 passed / 2 skipped / 0 failed`(真实 PG 15432,
+xdist;+2 = 迁移腿/修订腿;暂停覆盖腿并入既有 blocked 流用例,
+零派发两用例换通道计数);
+契约快照重生(仅代码位点行号移动,无新码);Ruff changed 文件零新
+增(git stash 真路径对比);`git diff --check` 干净。

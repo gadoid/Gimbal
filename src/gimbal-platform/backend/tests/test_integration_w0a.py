@@ -12,20 +12,20 @@
 - 未留指纹的存量/异常实例 → 按未确认处理(暂停待确认)。
 """
 from __future__ import annotations
+
 import pytest  # noqa: E402
-
-from sqlalchemy import select
-
 from app.core import db as db_module
+from app.models import Service
 from app.models.integration_task import IntegrationTask
 from app.models.permission import Notification
-from app.models import Service
 from app.models.user import User
-from tests.helpers import (make_draft, mk_normal_template,
-                           register_and_login)
+from sqlalchemy import select
+
+from tests.helpers import make_draft, mk_normal_template, register_and_login
 from tests.test_scenario_composer_plate_integration import (  # noqa: F401
     plate_mock,
 )
+
 
 async def _subscribe(client, h, tid: int):
     """显式订阅 —— 先取摘要回传 fingerprint(P2.2 必填,缺失 422)。"""
@@ -76,6 +76,23 @@ async def _user_id(username: str) -> int:
     async with db_module.SessionLocal() as db:
         return (await db.execute(select(User).where(
             User.username == username))).scalars().one().id
+
+
+def _arm_dispatch_counter(monkeypatch) -> dict:
+    """在实际对外执行通道(channels.run_case)装调用计数(复核 P2:
+    run_instance 不写 Execution 行,零派发必须数真实外呼入口,不是
+    执行记录行数)。包装真实实现,闸失效时行为不变、计数可见。"""
+    from app.services import integration_runner as ir
+
+    calls = {"n": 0}
+    real = ir.channels.run_case
+
+    async def _counting(case_path, *a, **kw):
+        calls["n"] += 1
+        return await real(case_path, *a, **kw)
+
+    monkeypatch.setattr(ir.channels, "run_case", _counting)
+    return calls
 
 
 async def _inst(tpl_id: int, holder: int) -> IntegrationTask | None:
@@ -446,11 +463,14 @@ async def test_public_template_direct_subscribe_rejected(client):
     assert inst2 is not None and inst2.consent_fingerprint
 
 
-async def test_public_template_direct_dispatch_forbidden_owner_too(client):
+async def test_public_template_direct_dispatch_forbidden_owner_too(
+        client, monkeypatch):
     """AC-50 终裁验收(复核 P1):公共模板对**属主和非属主**都禁止直接
     调度 —— 手动触发 409(属主也不例外);定时领取(调度认领)在
-    运行闸暂停 public_template;**外部派发次数为零**(零 Execution 行,
-    plate 未被触达)。执行走复制后的本域模板。"""
+    运行闸暂停 public_template;**外部派发次数为零**(真实外呼通道
+    channels.run_case 调用计数,复核 P2:Execution 行不是外呼事实)。
+    执行走复制后的本域模板。"""
+    calls = _arm_dispatch_counter(monkeypatch)
     u1 = await register_and_login(client, "w0a_m", "pw123456")
     u2 = await register_and_login(client, "w0a_n", "pw123456")
     await _mk_scenario(client, u1, "sc-w0g")
@@ -462,9 +482,9 @@ async def test_public_template_direct_dispatch_forbidden_owner_too(client):
         r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
         assert r.status_code == 409, f"{tag}: {r.text}"
         assert r.json()["detail"]["code"] == "public_template_dispatch_forbidden"
+    assert calls["n"] == 0, "公共模板手动触发不得触达外呼通道"
 
     # 定时领取(调度认领路径):属主自有实例 → 运行闸暂停,零派发
-    from app.models.composer_run_scheme import ComposerRunScheme  # noqa: F401
     from app.services import integration_runner as ir
 
     async with db_module.SessionLocal() as s:
@@ -472,23 +492,19 @@ async def test_public_template_direct_dispatch_forbidden_owner_too(client):
         inst = await ir.ensure_instance(tpl, holder_id=uid1)
         inst_id = inst.id
     await ir.run_instance(inst_id)
-    async with db_module.SessionLocal() as s:
-        from app.models.execution import Execution
-        from sqlalchemy import func as _func
-
-        inst = await s.get(IntegrationTask, inst_id)
-        n_exec = (await s.execute(
-            select(_func.count()).select_from(Execution))).scalar_one()
+    inst = await _inst(tid, uid1)
     assert inst.state == "paused"
     assert inst.paused_reason == "public_template"
-    assert n_exec == 0, "公共模板直接调度不得产生任何外部派发"
+    assert calls["n"] == 0, "公共模板定时领取不得触达外呼通道"
 
 
-async def test_blocked_scheme_pauses_subscription_until_reconfirm(client):
+async def test_blocked_scheme_pauses_subscription_until_reconfirm(
+        client, monkeypatch):
     """AC-50 终裁验收(复核 P1):调度遇 blocked 立即暂停订阅
     (scheme_blocked,零派发,手动触发与定时领取同口径);修复后须
-    重新确认 —— resume 409 引导,再订阅(闸核对 ready)恢复派发。"""
-    from app.models.execution import Execution
+    重新确认 —— resume 409 引导,再订阅(闸核对 ready)恢复派发。
+    零派发断言数真实外呼通道(channels.run_case,复核 P2)。"""
+    calls = _arm_dispatch_counter(monkeypatch)
     from app.services import integration_runner as ir
 
     u1 = await register_and_login(client, "w0a_o", "pw123456")
@@ -523,12 +539,16 @@ async def test_blocked_scheme_pauses_subscription_until_reconfirm(client):
     inst = await _inst(tid, uid1)
     assert inst.state == "paused"
     assert inst.paused_reason == "scheme_blocked"
-    from sqlalchemy import func as _func
 
-    async with db_module.SessionLocal() as s:
-        n_exec = (await s.execute(
-            select(_func.count()).select_from(Execution))).scalar_one()
-    assert n_exec == 0, "blocked 方案派发次数必须为零"
+    # 复核 P1:强制暂停原因不得被手动暂停改写 —— 已暂停(scheme_blocked)
+    # 再调手动暂停,原因保持 scheme_blocked(否则修复后原因已是
+    # manual,普通恢复即可回 idle,绕过重新确认)
+    r = await client.post(
+        f"/api/integration/tasks/{tid}/subscription/pause", headers=u1)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "scheme_blocked", "手动暂停不得覆盖强制暂停原因"
 
     # 定时领取同口径:回 idle 后再认领仍被闸暂停
     async with db_module.SessionLocal() as s:
@@ -541,6 +561,7 @@ async def test_blocked_scheme_pauses_subscription_until_reconfirm(client):
     inst = await _inst(tid, uid1)
     assert inst.state == "paused"
     assert inst.paused_reason == "scheme_blocked"
+    assert calls["n"] == 0, "blocked 方案两条触发路径均不得触达外呼通道"
 
     # 修复前 resume → 409 引导重新确认(scheme_blocked ∉ _RESUMABLE)
     r = await client.post(
@@ -556,6 +577,131 @@ async def test_blocked_scheme_pauses_subscription_until_reconfirm(client):
             s, row, user=type("U", (), {"id": uid1})(),
             reason="测试修复", expected_revision=row.revision)
         await s.commit()
+    r = await _subscribe(client, u1, tid)
+    assert r.status_code == 200, r.text
+    assert (await _inst(tid, uid1)).state == "idle"
+
+
+async def test_fingerprint_target_project_change_requires_reconfirm(client):
+    """§11.5(复核 P1):确认指纹包含**实际目标项目**(id + 不可复用
+    project_uid)—— 同 Scheme UID 的目标迁移(场景+方案行+模板行迁往
+    另一普通项目,uid/修订/内容都不变)旧订阅派发即暂停、旧预览指纹
+    再确认 409;补齐指纹重新确认后才可恢复。"""
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.models.composer_scenario import ComposerScenario
+    from app.models.project import Project
+    from sqlalchemy import text as sa_text
+
+    from tests.helpers import mk_normal_project
+
+    u1 = await register_and_login(client, "w0a_p", "pw123456")
+    tid = await mk_normal_template(client, u1, owner="w0a_p",
+                                   member="w0a_p", sid="sc-w0i", steps=STEPS)
+    uid1 = await _user_id("w0a_p")
+    fp_old = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u1)).json()["fingerprint"]
+    r = await _subscribe(client, u1, tid)
+    assert r.status_code == 200, r.text
+
+    # 目标迁移(无独立端点,按行模拟):场景 + 方案行 + 模板行整体迁往
+    # 另一普通项目 —— Scheme 行原样随迁(与「删除重建换 UID」相对的
+    # 迁移语义);复合 FK 可延迟,同事务 DEFER 后迁父行再随迁子行
+    pid_b = await mk_normal_project("np-w0i-b", {"w0a_p": "admin"})
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-w0i",
+            ComposerRunScheme.is_default == True))).scalar_one()
+        ident_before = (row.scheme_uid, row.revision, dict(row.payload))
+        proj_b = await s.get(Project, pid_b)
+        assert proj_b is not None and proj_b.project_uid
+        scen = (await s.execute(select(ComposerScenario).where(
+            ComposerScenario.scenario_id == "sc-w0i"))).scalar_one()
+        from app.models.integration_task import IntegrationTask
+        tpl = await s.get(IntegrationTask, tid)
+        await s.execute(
+            sa_text("SET CONSTRAINTS fk_scheme_scenario_zone DEFERRED"))
+        scen.project_id = pid_b
+        for sch in (await s.execute(select(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == "sc-w0i"))).scalars().all():
+            sch.project_id = pid_b
+        tpl.project_id = pid_b
+        await s.commit()
+        s.expire_all()
+        row2 = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-w0i",
+            ComposerRunScheme.is_default == True))).scalar_one()
+        assert (row2.scheme_uid, row2.revision, dict(row2.payload)) == \
+            ident_before, "迁移不改 Scheme 身份/修订/内容"
+
+    # 旧订阅派发 → 目标指纹不符 → 暂停 template_changed(须重新确认)
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "template_changed"
+
+    # 旧预览指纹再确认 → 409(事务内重算不一致,保持原状态)
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u1, json={"fingerprint": fp_old})
+    assert r.status_code == 409, r.text
+
+    # 新指纹重新确认 → 恢复派发资格
+    r = await _subscribe(client, u1, tid)
+    assert r.status_code == 200, r.text
+    assert (await _inst(tid, uid1)).state == "idle"
+
+
+async def test_fingerprint_scheme_revision_bump_requires_reconfirm(client):
+    """§11.5(复核 P1):确认指纹包含**实际 Scheme 修订** —— 内容逐字
+    相同、仅修订推进(+1)同样触发重确认:旧订阅派发即暂停、旧预览
+    指纹再确认 409;新指纹重新确认后恢复。"""
+    from app.models.composer_run_scheme import ComposerRunScheme
+    from app.services import scheme_store
+
+    u1 = await register_and_login(client, "w0a_q", "pw123456")
+    tid = await mk_normal_template(client, u1, owner="w0a_q",
+                                   member="w0a_q", sid="sc-w0j", steps=STEPS)
+    uid1 = await _user_id("w0a_q")
+    fp_old = (await client.get(
+        f"/api/integration/tasks/{tid}/subscription-summary",
+        headers=u1)).json()["fingerprint"]
+    r = await _subscribe(client, u1, tid)
+    assert r.status_code == 200, r.text
+
+    # 修订推进而不改内容:同 payload 重存(内容投影逐字节相同,
+    # revision +1 是唯一变化 —— 指纹必须感知,否则重排/修复命令
+    # 无从触发重确认)
+    async with db_module.SessionLocal() as s:
+        row = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == "sc-w0j",
+            ComposerRunScheme.is_default == True))).scalar_one()
+        uid_before, rev_before, payload_before = (
+            row.scheme_uid, row.revision, dict(row.payload))
+        sid_before = row.scheme_id   # commit 后行过期,先取业务 ID
+        await scheme_store.update_scheme(
+            s, "sc-w0j", sid_before, name=None, payload=payload_before)
+        await s.commit()
+        s.expire_all()
+        row2 = (await s.execute(select(ComposerRunScheme).where(
+            ComposerRunScheme.scheme_id == sid_before))).scalar_one()
+        assert row2.revision == rev_before + 1
+        assert row2.scheme_uid == uid_before
+        assert row2.payload == payload_before, "内容不变,仅修订推进"
+
+    # 旧订阅派发 → 指纹不符(schemeRevision)→ 暂停 template_changed
+    r = await client.post(f"/api/integration/tasks/{tid}/run", headers=u1)
+    assert r.status_code == 200, r.text
+    inst = await _inst(tid, uid1)
+    assert inst.state == "paused"
+    assert inst.paused_reason == "template_changed"
+
+    # 旧预览指纹再确认 → 409(事务内重算不一致)
+    r = await client.post(f"/api/integration/tasks/{tid}/subscribe",
+                          headers=u1, json={"fingerprint": fp_old})
+    assert r.status_code == 409, r.text
+
+    # 新指纹重新确认 → 恢复派发资格
     r = await _subscribe(client, u1, tid)
     assert r.status_code == 200, r.text
     assert (await _inst(tid, uid1)).state == "idle"

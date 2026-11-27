@@ -414,6 +414,7 @@ def consent_fingerprint_of(
     cron: str, alias_urls: dict, *, alias_creds: dict | None = None,
     slot_bindings: dict | None = None,
     scheme_identity: dict | None = None,
+    target_identity: dict | None = None,
 ) -> str:
     """订阅知情同意的内容指纹(小设计 §2.2.1)。
 
@@ -429,6 +430,13 @@ def consent_fingerprint_of(
     (R3,实现勿再纠结):plate 接口定义(git 评审、全员共享同一份,
     纳入只会全员频繁重确认)、名称/描述等展示性字段。canonical
     JSON(sort_keys)→ sha256 hex。
+
+    v2.10 §11.5(复核 P1):身份/版本组 —— ``target``(实际目标项目
+    id + 不可复用 project_uid、模板行 id 及其版本)与 ``scheme_identity``
+    (scheme_uid + scheme 修订 + 组合 id/name/revision)。同 UID 目标
+    迁移、模板行修订(含未入内容投影的管理字段)、方案重排修订均
+    触发重新确认;与内容七要素同哈希,三个计算点(订阅摘要/重确认/
+    派发前)同一算法。
     """
     definition = definition_from_payload(scen_payload) or {}
     steps = []
@@ -449,11 +457,18 @@ def consent_fingerprint_of(
         "scheme": {k: scheme_payload.get(k) for k in (
             "serviceBindings", "dataSetSelection", "dataSetIds")},
         # 方案身份投影(AC-50,复核 P1):内容七要素之外记录不可变
-        # ``scheme_uid`` 与组合溯源(id+name+revision —— account_combo
-        # 修订纪律的既有声明)。删原方案同内容重建 = 新 uid → 指纹变
-        # → 重新确认;换绑组合/组合条目变更(+revision)同理 —— M2
-        # 已提供不可变身份,下游按内容辨认的缺口在此收口。
+        # ``scheme_uid``、**方案修订**(§11.5「实际 Scheme 及修订」——
+        # 修订推进即版本变化,重排/修复命令 +1 同样触发重确认)与组合
+        # 溯源(id+name+revision —— account_combo 修订纪律的既有声明)。
+        # 删原方案同内容重建 = 新 uid → 指纹变 → 重新确认;换绑组合/
+        # 组合条目变更(+revision)同理 —— M2 已提供不可变身份,下游
+        # 按内容辨认的缺口在此收口。
         "scheme_identity": scheme_identity,
+        # 目标身份投影(§11.5「实际目标项目、模板及版本」):实际执行
+        # 项目(不可复用 project_uid)+ 本地模板行 id/版本 —— 同 UID
+        # 目标迁移、模板行修订(含未入内容投影的管理字段)不再靠内容
+        # 碰巧不变而漏确认。
+        "target": target_identity,
         "dataset_row": row_dict,
         "cron": cron,
         "base_urls": dict(alias_urls or {}),
@@ -481,9 +496,40 @@ async def _scheme_identity_of(
              if scheme.account_combo_id is not None else None)
     return {
         "schemeUid": scheme.scheme_uid,
+        "schemeRevision": scheme.revision,
         "combo": ({"id": combo.id, "name": combo.name,
                    "revision": combo.revision}
                   if combo is not None else None),
+    }
+
+
+async def _target_identity_of(
+    db, tpl: IntegrationTask, scen: ComposerScenario,
+    proj_row=None,
+) -> dict | None:
+    """订阅指纹的目标身份投影(§11.5):实际目标项目(id + 不可复用
+    ``project_uid``,§13.2)+ 本地模板行 id 及版本(行 ``updated_at``,
+    任何模板行写 = 版本推进)。同 UID 目标迁移、模板管理字段修订
+    (名称/映射/令牌绑定等未入内容投影的写)不再漏确认。"""
+    if scen is None:
+        return None
+    from ..models.project import Project as _Proj
+
+    proj = proj_row if proj_row is not None else await db.get(
+        _Proj, scen.project_id)
+    # updated_at 显式取数(同步 ORM 读不安全):同会话写模板行(含
+    # onupdate 服务端时间戳)后,该属性被卸载待服务端回填,同步读 =
+    # MissingGreenlet;显式 SELECT 自动先 autoflush,读到本次写入推进
+    # 后的版本 —— 订阅面与派发面同值同口径。
+    updated = (await db.execute(
+        select(IntegrationTask.updated_at).where(
+            IntegrationTask.id == tpl.id))).scalar_one_or_none()
+    return {
+        "projectId": scen.project_id,
+        "projectUid": (str(proj.project_uid) if proj is not None else None),
+        "templateId": tpl.id,
+        "templateVersion": (updated.isoformat() if updated is not None
+                            else None),
     }
 
 
@@ -651,6 +697,10 @@ async def consent_fingerprint_now(
 ) -> str:
     """当前内容指纹(**只算不写**)—— 订阅摘要与 subscribe 的「确认的
     必须是看到的那份」比对共用(P2.2)。别名查询失败向上抛(503 口径)。"""
+    # 目标身份先取快照:别名/绑定查询可能中途提交并使 ORM 行过期
+    # (过期属性的同步读 = MissingGreenlet),快照必须落袋于任何
+    # 内部 await 之前。
+    target_identity = await _target_identity_of(db, tpl, scen)
     scheme, scheme_payload, bindings, row_dict, _ = await _load_exec_shape(
         db, tpl.scheme_id, scen)
     alias_urls = await _alias_urls_of(
@@ -664,7 +714,8 @@ async def consent_fingerprint_now(
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
         alias_urls, alias_creds=hits, slot_bindings=slot_bindings,
-        scheme_identity=await _scheme_identity_of(db, scheme))
+        scheme_identity=await _scheme_identity_of(db, scheme),
+        target_identity=target_identity)
 
 
 async def refresh_consent(
@@ -686,7 +737,9 @@ async def consent_fingerprint_now_shape(
 ) -> str:
     """consent_fingerprint_now 的 shape 直传变体(subscription_view
     已装载过执行形态,不重复查;口径与 now 完全一致 —— 身份投影随
-    shape 传入,与装载行同源)。"""
+    shape 传入,与装载行同源)。目标身份同样先取快照(内部 await
+    可能提交并使行过期,见 consent_fingerprint_now)。"""
+    target_identity = await _target_identity_of(db, tpl, scen)
     alias_urls = await _alias_urls_of(
         db, scen.payload, await _template_env(db, scen, scheme_payload))
     from .service_aliases import credential_alias_hits
@@ -698,7 +751,8 @@ async def consent_fingerprint_now_shape(
     return consent_fingerprint_of(
         scen.payload, scheme_payload, row_dict, tpl.trigger_cron,
         alias_urls, alias_creds=hits, slot_bindings=slot_bindings,
-        scheme_identity=scheme_identity)
+        scheme_identity=scheme_identity,
+        target_identity=target_identity)
 
 
 async def subscription_view(db, tpl: IntegrationTask) -> dict:
@@ -1227,7 +1281,10 @@ async def run_instance(instance_id: int, *, lease=None) -> dict:
                     tpl.trigger_cron, alias_urls, alias_creds=hits,
                     slot_bindings=await _slot_bindings_of(
                         db, tpl, scen, scheme_payload, row_dict),
-                    scheme_identity=await _scheme_identity_of(db, scheme))
+                    scheme_identity=await _scheme_identity_of(db, scheme),
+                    # 目标身份按 scen.project_id 解析(同 db.get 缓存命中,
+                    # 目标迁移态与 tpl.project_id 分叉时也取真实目标)
+                    target_identity=await _target_identity_of(db, tpl, scen))
                 if (inst.consent_fingerprint or "") != fp:
                     return await _pause_consent_changed(
                         db, inst, tpl,

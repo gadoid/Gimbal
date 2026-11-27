@@ -533,6 +533,13 @@ async def test_state_mapping_cursor_roundtrip(client, monkeypatch):
     async with db_module.SessionLocal() as s:
         tpl = await s.get(IntegrationTask, tid)
         tpl.state_mapping = {"updated_at": "since"}   # 输出键 → 状态键
+        # §11.5:模板行写 = 模板版本推进(入指纹)—— 同会话重确认订阅
+        from app.models.composer_scenario import ComposerScenario
+        scen = (await s.execute(_sel(ComposerScenario).where(
+            ComposerScenario.scenario_id == tpl.scenario_id))).scalar_one()
+        inst0 = (await s.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+        await ir.refresh_consent(s, tpl, scen, inst0)
         await s.commit()
 
     # 直接驱动 _finish:命中键回写、未命中不动

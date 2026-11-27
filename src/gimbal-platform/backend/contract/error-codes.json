@@ -1393,8 +1393,8 @@
     },
     "instance_gone": {
       "sites": [
-        "app/services/integration_runner.py:1344",
-        "app/services/integration_runner.py:1424"
+        "app/services/integration_runner.py:1401",
+        "app/services/integration_runner.py:1481"
       ],
       "statuses": []
     },
@@ -1408,7 +1408,7 @@
     },
     "instance_not_found": {
       "sites": [
-        "app/services/integration_runner.py:1020"
+        "app/services/integration_runner.py:1074"
       ],
       "statuses": []
     },
@@ -1782,7 +1782,7 @@
         "app/routers/integration.py:987",
         "app/routers/integration.py:1081",
         "app/routers/integration.py:1147",
-        "app/routers/integration.py:1184",
+        "app/routers/integration.py:1192",
         "app/routers/project_credentials.py:70",
         "app/routers/project_credentials.py:121",
         "app/routers/project_promotions.py:95",
@@ -2548,7 +2548,7 @@
     },
     "resume_not_allowed": {
       "sites": [
-        "app/routers/integration.py:1203"
+        "app/routers/integration.py:1212"
       ],
       "statuses": [
         409
@@ -2704,8 +2704,8 @@
         "app/routers/runs.py:575",
         "app/routers/runs.py:581",
         "app/routers/runs.py:642",
-        "app/services/integration_runner.py:719",
-        "app/services/integration_runner.py:1029",
+        "app/services/integration_runner.py:773",
+        "app/services/integration_runner.py:1083",
         "app/services/query_context.py:93",
         "app/services/run_dispatcher.py:882"
       ],
@@ -3248,14 +3248,14 @@
     },
     "template_gone": {
       "sites": [
-        "app/services/integration_runner.py:1347",
-        "app/services/integration_runner.py:1427"
+        "app/services/integration_runner.py:1404",
+        "app/services/integration_runner.py:1484"
       ],
       "statuses": []
     },
     "template_removed": {
       "sites": [
-        "app/services/integration_runner.py:1023"
+        "app/services/integration_runner.py:1077"
       ],
       "statuses": []
     },

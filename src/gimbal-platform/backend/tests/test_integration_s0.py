@@ -178,6 +178,18 @@ async def test_runner_scopes_scheme_and_dataset_to_scenario(
             await db.commit()
 
     await _point_scheme("rs-foreign")
+    # §11.5:模板行写(schemeId 重指)= 模板版本推进(入指纹)——
+    # 同会话重确认(不走订阅面:订阅面绑定闸会拒绝他场景 schemeId,
+    # 本腿验证的是 runner 级回落纵深防御,不是订阅闸)
+    from app.models.composer_scenario import ComposerScenario as _CS
+    async with db_module.SessionLocal() as db:
+        tpl_row = await db.get(IntegrationTask, tid)
+        scen = (await db.execute(_sel(_CS).where(
+            _CS.scenario_id == tpl_row.scenario_id))).scalar_one()
+        inst = (await db.execute(_sel(IntegrationTask).where(
+            IntegrationTask.template_id == tid))).scalars().one()
+        await ir.refresh_consent(db, tpl_row, scen, inst)
+        await db.commit()
     r = await client.post(f"/api/integration/tasks/{tid}/run", headers=h)
     assert r.status_code == 200, r.text
     # compose 被调到 = 没有因幽灵别名停在凭证段;注入变量为空 =

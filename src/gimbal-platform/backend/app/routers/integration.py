@@ -1147,6 +1147,14 @@ async def pause_my_subscription(
         raise _bad("not_found", "功能不存在", 404)
     await _subscribable(db, tpl, user)
     inst = await _my_subscription(db, tpl, user)
+    # 复核 P1:已处于强制暂停(非 _RESUMABLE 家族:scheme_blocked /
+    # template_changed / made_private / public_template / token_* /
+    # missing_credential)的订阅**不得被手动暂停改写原因** —— 否则
+    # 方案修复后原因已是 manual,普通恢复入口(方案已 ready)即可回
+    # idle,绕过重新确认;指纹同值时派发前比对也补不回这次确认。
+    # 幂等保持原原因返回(本就暂停,无写面)。
+    if inst.state == "paused" and inst.paused_reason not in _RESUMABLE:
+        return await _tpl_out_full(db, tpl, inst, user)
     if inst.state != "paused" or inst.paused_reason != "manual":
         inst.state = "paused"
         inst.paused_reason = "manual"
@@ -1197,7 +1205,8 @@ async def resume_my_subscription(
                     "完成后任务自动恢复")
         else:
             hint = ("该暂停(" + reason + ")不能由恢复操作解除:"
-                    "template_changed/made_private 请重新订阅确认,"
+                    "template_changed/made_private/scheme_blocked/"
+                    "public_template 请重新订阅确认,"
                     "missing_credential 请补配凭证,"
                     "precheck_config 请先修正环境/地址/条目标签配置")
         raise _bad("resume_not_allowed", hint, 409)
